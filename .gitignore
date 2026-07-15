@@ -1,0 +1,37 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
+doc/api/
+*.iml
+
+# Android
+android/.gradle/
+android/local.properties
+android/captures/
+android/app/debug/
+android/app/profile/
+android/app/release/
+*.jks
+*.keystore
+key.properties
+
+# Rust
+rust/target/
+target/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local planning / worktrees / secrets
+.superpowers/
+.worktrees/
+.env
+*.secret
+
