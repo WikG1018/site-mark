@@ -41,6 +41,7 @@ class LauncherIconGeneratorTest(unittest.TestCase):
                 self.assertEqual(image.size, (512, 512))
                 self.assertEqual(image.mode, "RGBA")
                 self.assertEqual(image.getchannel("A").getextrema(), (255, 255))
+                self.assertEqual(image.info.get("srgb"), 0)
 
             with Image.open(paths["foreground"]).convert("RGBA") as image:
                 self.assertEqual(image.size, (432, 432))

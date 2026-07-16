@@ -3,7 +3,7 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, PngImagePlugin
 
 ARTBOARD_DP = 108.0
 SAFE_ZONE_DP = (21.0, 21.0, 87.0, 87.0)
@@ -216,7 +216,13 @@ def write_assets(root: Path) -> dict[str, Path]:
     render_background(432).convert("RGB").save(paths["background"], optimize=True)
     render_foreground(432).save(paths["foreground"], optimize=True)
     render_foreground(432, monochrome=True).save(paths["monochrome"], optimize=True)
-    render_full_icon(512).convert("RGBA").save(paths["play"], optimize=True)
+    play_png_info = PngImagePlugin.PngInfo()
+    play_png_info.add(b"sRGB", b"\x00")
+    render_full_icon(512).convert("RGBA").save(
+        paths["play"],
+        optimize=True,
+        pnginfo=play_png_info,
+    )
     paths["master_svg"].write_text(build_master_svg(), encoding="utf-8")
     return paths
 
