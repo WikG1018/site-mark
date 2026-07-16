@@ -102,6 +102,35 @@ class AppStrings {
   String get filteredEmpty =>
       _english ? 'No records match the current filters' : '没有符合筛选条件的记录';
   String get retryProcessing => _english ? 'Retry processing' : '重新处理';
+
+  // Global settings and About
+  String get appearance => _english ? 'Appearance' : '外观';
+  String get theme => _english ? 'Theme' : '主题';
+  String get systemTheme => _english ? 'System' : '跟随系统';
+  String get lightTheme => _english ? 'Light' : '浅色';
+  String get darkTheme => _english ? 'Dark' : '深色';
+  String get language => _english ? 'Language' : '语言';
+  String get systemLanguage => _english ? 'System' : '跟随系统';
+  String get chinese => _english ? 'Chinese' : '简体中文';
+  String get english => _english ? 'English' : 'English';
+  String get newProjectDefaults =>
+      _english ? 'New-project watermark defaults' : '新建项目水印默认值';
+  String get about => _english ? 'About' : '关于';
+  String get version => _english ? 'Version' : '版本';
+  String get privacyStatements => _english
+      ? 'No ads · No account · No cloud · System camera only · Local storage only'
+      : '无广告 · 无账号 · 无云端 · 仅调用系统相机 · 仅保存在本机';
+  String get repository => _english ? 'Repository' : '代码仓库';
+  String get repositoryValue => 'WikG1018/site-mark';
+  String get privacySummary => _english
+      ? 'Offline by design. No account, no SiteMark server, no ads, no analytics SDK. Foreground location is requested once before capture and stored only with the local record.'
+      : '以离线使用为设计前提，不创建账号、不连接服务器、不展示广告、不含统计 SDK。拍摄前仅请求一次前台定位，结果只保存在本机记录中。';
+  String get license => _english ? 'License' : '许可证';
+  String get licenseValue => 'Apache-2.0';
+  String get licenses => _english ? 'Open-source licenses' : '开源许可证';
+  String get opacityHint => _english
+      ? 'Drag to set the new-project watermark opacity. Saved on release.'
+      : '拖动以设置新建项目的水印透明度，松开后保存。';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

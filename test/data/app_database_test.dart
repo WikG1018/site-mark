@@ -49,6 +49,57 @@ void main() {
     expect(updated.watermarkAccentColorArgb, 0xff1565c0);
   });
 
+  test(
+    'createProject stores provided watermark defaults and falls back to table defaults when omitted',
+    () async {
+      final withOverrides = await database.createProject(
+        id: 'project-a',
+        name: '屋面工程',
+        watermarkPosition: 'bottomRight',
+        watermarkOpacity: 0.64,
+        watermarkAccentColorArgb: 0xff1565c0,
+      );
+      expect(withOverrides.watermarkPosition, 'bottomRight');
+      expect(withOverrides.watermarkOpacity, 0.64);
+      expect(withOverrides.watermarkAccentColorArgb, 0xff1565c0);
+
+      final withDefaults = await database.createProject(
+        id: 'project-b',
+        name: '默认项目',
+      );
+      expect(withDefaults.watermarkPosition, 'bottomLeft');
+      expect(withDefaults.watermarkOpacity, 0.78);
+      expect(withDefaults.watermarkAccentColorArgb, 0xff37c58b);
+    },
+  );
+
+  test(
+    'changing global watermark defaults does not retroactively update existing projects',
+    () async {
+      // 1. Create a project that copies the current global defaults
+      //    (bottomLeft, 0.78, 0xff37c58b).
+      final created = await database.createProject(id: 'project', name: '既有项目');
+      expect(created.watermarkPosition, 'bottomLeft');
+      expect(created.watermarkOpacity, 0.78);
+      expect(created.watermarkAccentColorArgb, 0xff37c58b);
+
+      // 2. Change the global watermark defaults.
+      await database.updateAppSettings(
+        defaultWatermarkPosition: 'bottomRight',
+        defaultWatermarkOpacity: 0.64,
+        defaultWatermarkAccentColorArgb: 0xff1565c0,
+      );
+
+      // 3. Re-read the project and assert its watermark fields are unchanged:
+      //    global defaults affect newly created projects only.
+      final reloaded = await database.projectById('project');
+      expect(reloaded, isNotNull);
+      expect(reloaded!.watermarkPosition, 'bottomLeft');
+      expect(reloaded.watermarkOpacity, 0.78);
+      expect(reloaded.watermarkAccentColorArgb, 0xff37c58b);
+    },
+  );
+
   test('allocates a daily photo number only after capture succeeds', () async {
     await database.createProject(
       id: 'project',

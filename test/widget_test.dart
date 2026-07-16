@@ -366,6 +366,40 @@ void main() {
     expect(find.byType(CaptureRecordCard), findsWidgets);
     await disposeApp(tester);
   });
+
+  /// Drives the new-project form to create a project named [name] using the
+  /// shared widget-test fakes. Used by the global-defaults copy test below.
+  Future<void> createProjectThroughUi(
+    WidgetTester tester, {
+    required String name,
+  }) async {
+    await tester.pumpWidget(
+      MyApp(database: database, initialLocale: const Locale('zh')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('新建项目'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('project-name')), name);
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('new project copies current global watermark defaults', (
+    tester,
+  ) async {
+    await database.updateAppSettings(
+      defaultWatermarkPosition: 'bottomRight',
+      defaultWatermarkOpacity: 0.64,
+      defaultWatermarkAccentColorArgb: 0xff1565c0,
+    );
+    await createProjectThroughUi(tester, name: '屋面工程');
+    final project = (await database.getProjects()).single;
+    expect(project.watermarkPosition, 'bottomRight');
+    expect(project.watermarkOpacity, 0.64);
+    expect(project.watermarkAccentColorArgb, 0xff1565c0);
+    await disposeApp(tester);
+  });
 }
 
 class _WidgetTestPlatformServices implements PlatformServices {

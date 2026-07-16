@@ -7,6 +7,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/projects/project_form_screen.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
+import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_edit_screen.dart';
@@ -27,6 +28,28 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 final initialLocaleProvider = Provider<Locale?>((ref) => null);
 final startupRecoveryEnabledProvider = Provider<bool>((ref) => true);
+
+/// Streams the singleton `global` [AppSetting] row so the [SiteMarkApp]
+/// MaterialApp can react to persisted theme/locale/watermark-default changes.
+final appSettingsProvider = StreamProvider<AppSetting>((ref) {
+  return ref.watch(databaseProvider).watchAppSettings();
+});
+
+/// Maps a persisted `themeMode` string to [ThemeMode]. Unknown values fall
+/// back to [ThemeMode.system] so corrupt or missing data never breaks the UI.
+ThemeMode parseThemeMode(String value) => switch (value) {
+  'light' => ThemeMode.light,
+  'dark' => ThemeMode.dark,
+  _ => ThemeMode.system,
+};
+
+/// Maps a persisted `localeCode` string to a [Locale]. `null` (and any
+/// unrecognized code) yields `null`, meaning "follow the system locale".
+Locale? parseLocale(String? value) => switch (value) {
+  'zh' => const Locale('zh'),
+  'en' => const Locale('en'),
+  _ => null,
+};
 
 final platformServicesProvider = Provider<PlatformServices>(
   (ref) => PigeonPlatformServices(),
@@ -106,6 +129,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const AllCapturesScreen(),
           ),
           GoRoute(
+            path: 'settings',
+            builder: (context, state) => const GlobalSettingsScreen(),
+          ),
+          GoRoute(
             path: 'projects/:projectId',
             builder: (context, state) => ProjectDetailScreen(
               projectId: state.pathParameters['projectId']!,
@@ -176,10 +203,18 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = ref.watch(appSettingsProvider).value;
+    // `initialLocaleProvider` is null in production and only set by widget
+    // tests to force a locale; when set it takes precedence over persisted
+    // settings so existing tests keep driving the locale explicitly.
+    final forcedLocale = ref.watch(initialLocaleProvider);
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'SiteMark 工程印记',
-      locale: ref.watch(initialLocaleProvider),
+      themeMode: settings != null
+          ? parseThemeMode(settings.themeMode)
+          : ThemeMode.system,
+      locale: forcedLocale ?? parseLocale(settings?.localeCode),
       supportedLocales: AppStrings.supportedLocales,
       localizationsDelegates: const [
         AppStrings.delegate,

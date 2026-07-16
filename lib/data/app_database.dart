@@ -136,6 +136,9 @@ class AppDatabase extends _$AppDatabase {
     required String id,
     required String name,
     String? description,
+    String? watermarkPosition,
+    double? watermarkOpacity,
+    int? watermarkAccentColorArgb,
     DateTime? createdAt,
   }) {
     final timestamp = createdAt ?? DateTime.now();
@@ -144,6 +147,15 @@ class AppDatabase extends _$AppDatabase {
         id: id,
         name: name.trim(),
         description: Value(description?.trim()),
+        watermarkPosition: watermarkPosition == null
+            ? const Value.absent()
+            : Value(watermarkPosition),
+        watermarkOpacity: watermarkOpacity == null
+            ? const Value.absent()
+            : Value(watermarkOpacity),
+        watermarkAccentColorArgb: watermarkAccentColorArgb == null
+            ? const Value.absent()
+            : Value(watermarkAccentColorArgb),
         createdAt: timestamp,
         updatedAt: timestamp,
       ),
@@ -154,6 +166,15 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       projects,
     )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).watch();
+  }
+
+  /// One-shot read of all projects newest-first. Use this instead of
+  /// `watchProjects().first` in widget tests, because the watch stream's
+  /// stream-store timers do not fire under `FakeAsync` until frames are pumped.
+  Future<List<Project>> getProjects() {
+    return (select(
+      projects,
+    )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).get();
   }
 
   Future<CaptureRecord> createPendingCapture({
@@ -422,6 +443,17 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       appSettings,
     )..where((row) => row.id.equals('global'))).watchSingle();
+  }
+
+  /// One-shot read of the singleton `global` settings row. Use this instead of
+  /// `watchAppSettings().first` in contexts that must resolve on a single
+  /// microtask (e.g. widget-test `FutureBuilder`s and form save handlers),
+  /// because the watch stream's stream-store timers do not fire under
+  /// `FakeAsync` until frames are pumped.
+  Future<AppSetting> getAppSettings() {
+    return (select(
+      appSettings,
+    )..where((row) => row.id.equals('global'))).getSingle();
   }
 
   Future<AppSetting> updateAppSettings({

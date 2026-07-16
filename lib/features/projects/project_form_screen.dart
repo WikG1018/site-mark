@@ -28,15 +28,24 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-    await ref
-        .read(databaseProvider)
-        .createProject(
-          id: const Uuid().v4(),
-          name: _nameController.text,
-          description: _descriptionController.text.isEmpty
-              ? null
-              : _descriptionController.text,
-        );
+    final database = ref.read(databaseProvider);
+    // Copy the current global watermark defaults so each new project starts
+    // with the user's preferred template; existing projects are never
+    // retroactively updated when these defaults change later. A one-shot read
+    // is used (not the watch stream) so the future resolves on a single
+    // microtask and the save button's spinner does not stall `pumpAndSettle`
+    // in widget tests.
+    final settings = await database.getAppSettings();
+    await database.createProject(
+      id: const Uuid().v4(),
+      name: _nameController.text,
+      description: _descriptionController.text.isEmpty
+          ? null
+          : _descriptionController.text,
+      watermarkPosition: settings.defaultWatermarkPosition,
+      watermarkOpacity: settings.defaultWatermarkOpacity,
+      watermarkAccentColorArgb: settings.defaultWatermarkAccentColorArgb,
+    );
     if (mounted) context.go('/');
   }
 
