@@ -69,6 +69,7 @@ void main() {
         workContent: '风管安装检查',
         photographer: '张工',
         notes: '支架间距复核',
+        watermarkLocaleCode: 'zh',
       ),
     );
     await drainCoordinator();
@@ -87,6 +88,22 @@ void main() {
     expect(record?.publishedUri, isNull);
   });
 
+  test('captures watermark locale code from draft', () async {
+    final result = await workflow.capture(
+      const CaptureDraft(
+        projectId: 'project-1',
+        projectName: 'East Plant',
+        workLocation: 'Level 3',
+        workContent: 'Duct inspection',
+        photographer: 'Alex',
+        useLocationFallback: false,
+        watermarkLocaleCode: 'en',
+      ),
+    );
+    await drainCoordinator();
+    expect(result.capture?.watermarkLocaleCode, 'en');
+  });
+
   test(
     'removes the pending record when the system camera is cancelled',
     () async {
@@ -99,6 +116,7 @@ void main() {
           workLocation: 'A 区三层',
           workContent: '风管安装检查',
           photographer: '张工',
+          watermarkLocaleCode: 'zh',
         ),
       );
 
@@ -126,6 +144,7 @@ void main() {
           workLocation: 'A 区三层',
           workContent: '风管安装检查',
           photographer: '张工',
+          watermarkLocaleCode: 'zh',
         ),
       );
 
@@ -193,6 +212,7 @@ void main() {
         workLocation: 'A 区三层',
         workContent: '风管安装检查',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
       ),
     );
     await drainCoordinator();
@@ -241,6 +261,7 @@ void main() {
         workLocation: 'A 区三层',
         workContent: '风管安装检查',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
       ),
     );
     await drainCoordinator();

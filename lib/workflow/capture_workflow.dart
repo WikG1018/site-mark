@@ -13,6 +13,7 @@ class CaptureDraft {
     required this.workLocation,
     required this.workContent,
     required this.photographer,
+    required this.watermarkLocaleCode,
     this.notes,
     this.useLocationFallback = true,
   });
@@ -31,6 +32,10 @@ class CaptureDraft {
   /// permission is not `granted` so the capture button path never triggers a
   /// runtime permission request via `requestCurrentLocation`.
   final bool useLocationFallback;
+
+  /// Locale code snapshotted from the host UI at capture time so background
+  /// rendering reproduces the watermark in the user's selected language.
+  final String watermarkLocaleCode;
 }
 
 class CaptureEdits {
@@ -109,7 +114,7 @@ class CaptureWorkflow {
         workLocation: draft.workLocation,
         workContent: draft.workContent,
         photographer: draft.photographer,
-        watermarkLocaleCode: 'zh',
+        watermarkLocaleCode: draft.watermarkLocaleCode,
         notes: draft.notes,
         createdAt: _now(),
       );

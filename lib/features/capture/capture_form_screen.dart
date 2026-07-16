@@ -127,6 +127,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   Future<void> _capture(Project project) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _working = true);
+    final language = Localizations.localeOf(context).languageCode;
+    final watermarkLocaleCode = language == 'en' ? 'en' : 'zh';
     final result = await ref
         .read(captureWorkflowProvider)
         .capture(
@@ -139,6 +141,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
             notes: _notesController.text.trim().isEmpty
                 ? null
                 : _notesController.text.trim(),
+            watermarkLocaleCode: watermarkLocaleCode,
             // The capture button path must never trigger a runtime permission
             // request, so only attempt a location read when permission is
             // already granted.
