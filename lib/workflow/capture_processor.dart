@@ -157,6 +157,8 @@ final class CaptureProcessor {
           position: _watermarkPosition(project),
           opacity: project.watermarkOpacity,
           accentColorArgb: project.watermarkAccentColorArgb,
+          fontScale: project.watermarkFontScale,
+          localeCode: rendering.watermarkLocaleCode,
         ),
       );
       final publishedUri = await platform.publishJpeg(

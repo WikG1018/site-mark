@@ -102,6 +102,44 @@ void main() {
   });
 
   test(
+    'passes project font scale and capture locale to the renderer',
+    () async {
+      await database.updateProjectWatermarkSettings(
+        projectId: 'project-1',
+        position: 'bottomLeft',
+        opacity: 0.78,
+        accentColorArgb: 0xff37c58b,
+        fontScale: 1.35,
+      );
+      await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project-1',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'Level 3',
+        workContent: 'Duct inspection',
+        photographer: 'Alex',
+        watermarkLocaleCode: 'en',
+        createdAt: DateTime(2026, 7, 16, 9, 30),
+      );
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+      );
+      await database.resolveCaptureLocation(
+        captureId: 'capture-1',
+        resolution: 'unavailable',
+        outcome: 'unavailable',
+      );
+
+      final result = await processor.process('capture-1');
+
+      expect(result, CaptureProcessResult.succeeded);
+      expect(images.lastRenderRequest?.fontScale, 1.35);
+      expect(images.lastRenderRequest?.localeCode, 'en');
+    },
+  );
+
+  test(
     'processor resumes rendering idempotently and publishes once by name',
     () async {
       await seedRenderingCapture(attempts: 1);

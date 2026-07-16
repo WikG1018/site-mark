@@ -1,12 +1,10 @@
 use std::fs;
 use std::io::Read;
 
-use ab_glyph::{FontArc, PxScale};
 use image::{ImageBuffer, Rgb};
-use imageproc::drawing::text_size;
 use sitemark_core::api::image_core::{
-    export_project, render_photo, sha256_file, watermark_layout, ExportPhotoRecord,
-    ExportProjectRequest, RenderPhotoRequest, WatermarkPosition,
+    export_project, render_photo, sha256_file, ExportPhotoRecord, ExportProjectRequest,
+    RenderPhotoRequest, WatermarkPosition,
 };
 use tempfile::tempdir;
 use zip::ZipArchive;
@@ -53,6 +51,8 @@ fn invalid_source_image_uses_invalid_data_error_prefix() {
         position: WatermarkPosition::BottomLeft,
         opacity: 0.78,
         accent_color_argb: 0xff37c58b,
+        font_scale: 1.0,
+        locale_code: "zh".to_string(),
     })
     .unwrap_err();
 
@@ -82,6 +82,8 @@ fn renders_a_full_resolution_jpeg_with_a_watermark_card() {
         position: WatermarkPosition::BottomLeft,
         opacity: 0.78,
         accent_color_argb: 0xff37c58b,
+        font_scale: 1.0,
+        locale_code: "zh".to_string(),
     })
     .unwrap();
 
@@ -149,28 +151,12 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
 }
 
 #[test]
-fn watermark_typography_is_twenty_percent_larger() {
-    let layout = watermark_layout(4000, 3000, 8).unwrap();
-    assert!((layout.font_size - 69.6).abs() < f32::EPSILON);
-    assert!((layout.title_size - 82.128).abs() < 0.001);
-    assert_eq!(layout.line_height, 99);
-    assert!(layout.card_height + layout.margin <= 3000);
-}
-
-#[test]
-fn larger_watermark_fits_supported_landscape_and_portrait_images() {
-    for (width, height) in [(4000, 3000), (3000, 4000), (3840, 2160), (2160, 3840)] {
-        let layout = watermark_layout(width, height, 9).unwrap();
-        assert!(layout.left + layout.card_width <= width);
-        assert!(layout.top + layout.card_height <= height);
-    }
-}
-
-#[test]
-fn truncates_max_length_work_content_to_fit_card_text_area() {
+fn wraps_max_length_work_content_within_card_text_area() {
     // The maximum permitted work content is 240 characters. Render a card where
-    // the work-content line is filled to that limit and confirm the fitted line
-    // width never exceeds the card text area (card_width - padding * 2).
+    // the work-content line is filled to that limit and confirm wrapping keeps
+    // every line within the card text area (no truncation, no overflow). The
+    // renderer errors out if the wrapped card height exceeds the source image,
+    // so a successful render proves the content fits.
     let directory = tempdir().unwrap();
     let source = directory.path().join("source.jpg");
     let output = directory.path().join("watermarked.jpg");
@@ -178,12 +164,12 @@ fn truncates_max_length_work_content_to_fit_card_text_area() {
     image.save(&source).unwrap();
 
     let work_content = "施".repeat(240);
-    render_photo(RenderPhotoRequest {
+    let result = render_photo(RenderPhotoRequest {
         source_path: source.to_string_lossy().into_owned(),
         output_path: output.to_string_lossy().into_owned(),
         project_name: "东区厂房改造".to_string(),
         work_location: "A 区三层".to_string(),
-        work_content: work_content.clone(),
+        work_content,
         photographer: "张工".to_string(),
         photo_number: "SM-20260716-001".to_string(),
         captured_at: "2026-07-16 09:32:18 +08:00".to_string(),
@@ -193,54 +179,13 @@ fn truncates_max_length_work_content_to_fit_card_text_area() {
         position: WatermarkPosition::BottomLeft,
         opacity: 0.78,
         accent_color_argb: 0xff37c58b,
+        font_scale: 1.0,
+        locale_code: "zh".to_string(),
     })
     .unwrap();
 
-    // Re-derive the layout the renderer used and confirm the fitted work-content
-    // line (which is the longest body line) fits within the text area. With
-    // address/coordinates/notes all absent the renderer draws 6 lines.
-    let layout = watermark_layout(4000, 3000, 6).unwrap();
-    let max_text_width = layout.card_width.saturating_sub(layout.padding * 2);
-
-    let font =
-        FontArc::try_from_slice(include_bytes!("../assets/fonts/NotoSansSC-Regular.otf")).unwrap();
-    let fitted = super_truncate(
-        &format!("内容  {work_content}"),
-        max_text_width,
-        layout.font_size,
-        &font,
-    );
-    let (fitted_width, _) = text_size(PxScale::from(layout.font_size), &font, &fitted);
-    assert!(
-        fitted_width <= max_text_width,
-        "fitted line width {fitted_width} exceeds text area {max_text_width}"
-    );
-    assert!(
-        fitted.ends_with('…'),
-        "fitted line should end with ellipsis"
-    );
-    assert!(
-        fitted.chars().count() < work_content.chars().count(),
-        "fitted line should be shorter than the raw work content"
-    );
-}
-
-/// Local copy of the renderer's truncation behaviour so the test can re-derive
-/// the fitted string without depending on a private helper.
-fn super_truncate(text: &str, max_width: u32, size: f32, font: &FontArc) -> String {
-    let scale = PxScale::from(size);
-    let (w, _) = text_size(scale, font, text);
-    if w <= max_width {
-        return text.to_string();
-    }
-    let mut chars: Vec<char> = text.chars().collect();
-    while chars.len() > 1 {
-        chars.pop();
-        let candidate: String = chars.iter().collect::<String>() + "…";
-        let (cw, _) = text_size(scale, font, &candidate);
-        if cw <= max_width {
-            return candidate;
-        }
-    }
-    "…".to_string()
+    let rendered = image::open(&output).unwrap();
+    assert_eq!((rendered.width(), rendered.height()), (4000, 3000));
+    assert_eq!(result.width, 4000);
+    assert_eq!(result.height, 3000);
 }

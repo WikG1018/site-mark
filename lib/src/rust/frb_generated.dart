@@ -389,8 +389,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RenderPhotoRequest dco_decode_render_photo_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 14)
-      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
+    if (arr.length != 16)
+      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
     return RenderPhotoRequest(
       sourcePath: dco_decode_String(arr[0]),
       outputPath: dco_decode_String(arr[1]),
@@ -406,6 +406,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       position: dco_decode_watermark_position(arr[11]),
       opacity: dco_decode_f_64(arr[12]),
       accentColorArgb: dco_decode_u_32(arr[13]),
+      fontScale: dco_decode_f_64(arr[14]),
+      localeCode: dco_decode_String(arr[15]),
     );
   }
 
@@ -604,6 +606,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_position = sse_decode_watermark_position(deserializer);
     var var_opacity = sse_decode_f_64(deserializer);
     var var_accentColorArgb = sse_decode_u_32(deserializer);
+    var var_fontScale = sse_decode_f_64(deserializer);
+    var var_localeCode = sse_decode_String(deserializer);
     return RenderPhotoRequest(
       sourcePath: var_sourcePath,
       outputPath: var_outputPath,
@@ -619,6 +623,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       position: var_position,
       opacity: var_opacity,
       accentColorArgb: var_accentColorArgb,
+      fontScale: var_fontScale,
+      localeCode: var_localeCode,
     );
   }
 
@@ -802,6 +808,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_watermark_position(self.position, serializer);
     sse_encode_f_64(self.opacity, serializer);
     sse_encode_u_32(self.accentColorArgb, serializer);
+    sse_encode_f_64(self.fontScale, serializer);
+    sse_encode_String(self.localeCode, serializer);
   }
 
   @protected

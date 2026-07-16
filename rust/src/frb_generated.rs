@@ -396,6 +396,8 @@ impl SseDecode for crate::api::image_core::RenderPhotoRequest {
             <crate::api::image_core::WatermarkPosition>::sse_decode(deserializer);
         let mut var_opacity = <f64>::sse_decode(deserializer);
         let mut var_accentColorArgb = <u32>::sse_decode(deserializer);
+        let mut var_fontScale = <f64>::sse_decode(deserializer);
+        let mut var_localeCode = <String>::sse_decode(deserializer);
         return crate::api::image_core::RenderPhotoRequest {
             source_path: var_sourcePath,
             output_path: var_outputPath,
@@ -411,6 +413,8 @@ impl SseDecode for crate::api::image_core::RenderPhotoRequest {
             position: var_position,
             opacity: var_opacity,
             accent_color_argb: var_accentColorArgb,
+            font_scale: var_fontScale,
+            locale_code: var_localeCode,
         };
     }
 }
@@ -589,6 +593,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::RenderPhotoReques
             self.position.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
             self.accent_color_argb.into_into_dart().into_dart(),
+            self.font_scale.into_into_dart().into_dart(),
+            self.locale_code.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -761,6 +767,8 @@ impl SseEncode for crate::api::image_core::RenderPhotoRequest {
         <crate::api::image_core::WatermarkPosition>::sse_encode(self.position, serializer);
         <f64>::sse_encode(self.opacity, serializer);
         <u32>::sse_encode(self.accent_color_argb, serializer);
+        <f64>::sse_encode(self.font_scale, serializer);
+        <String>::sse_encode(self.locale_code, serializer);
     }
 }
 

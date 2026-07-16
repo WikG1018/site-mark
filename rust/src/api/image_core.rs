@@ -36,6 +36,8 @@ pub struct RenderPhotoRequest {
     pub position: WatermarkPosition,
     pub opacity: f64,
     pub accent_color_argb: u32,
+    pub font_scale: f64,
+    pub locale_code: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -305,7 +307,81 @@ fn validate_render_request(request: &RenderPhotoRequest) -> Result<(), String> {
             "watermark opacity must be between 0.2 and 0.95",
         ));
     }
+    if !(0.80..=1.60).contains(&request.font_scale) {
+        return Err(invalid_data(
+            "validate render request",
+            "font scale must be between 0.80 and 1.60",
+        ));
+    }
+    if !matches!(request.locale_code.as_str(), "zh" | "en") {
+        return Err(invalid_data(
+            "validate render request",
+            "locale must be zh or en",
+        ));
+    }
     Ok(())
+}
+
+struct WatermarkLabels {
+    title: &'static str,
+    location: &'static str,
+    content: &'static str,
+    photographer: &'static str,
+    number: &'static str,
+    time: &'static str,
+    address: &'static str,
+    coordinates: &'static str,
+    notes: &'static str,
+}
+
+fn labels(locale: &str) -> WatermarkLabels {
+    if locale == "en" {
+        WatermarkLabels {
+            title: "Site record",
+            location: "Location",
+            content: "Work",
+            photographer: "Photographer",
+            number: "Number",
+            time: "Time",
+            address: "Address",
+            coordinates: "Coordinates",
+            notes: "Notes",
+        }
+    } else {
+        WatermarkLabels {
+            title: "现场记录",
+            location: "位置",
+            content: "内容",
+            photographer: "拍摄人",
+            number: "编号",
+            time: "时间",
+            address: "地址",
+            coordinates: "坐标",
+            notes: "备注",
+        }
+    }
+}
+
+fn logical_watermark_lines(request: &RenderPhotoRequest) -> Vec<String> {
+    let labels = labels(&request.locale_code);
+    let mut lines = vec![
+        format!("{} · {}", labels.title, request.project_name),
+        format!("{}  {}", labels.location, request.work_location),
+        format!("{}  {}", labels.content, request.work_content),
+        format!("{}  {}", labels.photographer, request.photographer),
+        format!("{}  {}", labels.number, request.photo_number),
+        format!("{}  {}", labels.time, request.captured_at),
+    ];
+    if let Some(address) = non_empty(&request.address) {
+        lines.push(format!("{}  {address}", labels.address));
+    }
+    if let Some(coordinates) = non_empty(&request.coordinates) {
+        lines.push(format!("{}  {coordinates}", labels.coordinates));
+    }
+    if let Some(notes) = non_empty(&request.notes) {
+        lines.push(format!("{}  {notes}", labels.notes));
+    }
+    lines
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -319,27 +395,42 @@ pub struct WatermarkLayout {
     pub card_height: u32,
     pub left: u32,
     pub top: u32,
+    pub max_text_width: u32,
 }
 
-/// Pure layout calculation for the engineering watermark card.
+/// Pure measured layout calculation for the engineering watermark card.
 ///
-/// `line_count` is the number of display lines that will be rendered. The
-/// returned `left`/`top` use the bottom-left anchor (the strictest horizontal
-/// fit: `left = margin`), which is the worst case for the `card_width + margin`
-/// constraint. Bottom-right rendering only ever shifts the card leftward, so it
-/// never exceeds the bounds validated here.
-pub fn watermark_layout(
+/// The card width is derived from the measured width of the wrapped display
+/// lines (plus padding and the accent strip), capped at 92% of the source
+/// width. `left`/`top` anchor the card for the request's position.
+fn layout_for_request(
     width: u32,
     height: u32,
-    line_count: usize,
+    request: &RenderPhotoRequest,
+    font: &FontArc,
 ) -> Result<WatermarkLayout, String> {
     let margin = ((width.min(height) as f32) * 0.025).round() as u32;
-    let padding = ((width as f32) * 0.0216).round().max(22.0) as u32;
-    let font_size = ((width as f32) * 0.0312).clamp(31.2, 69.6);
+    let scale = request.font_scale as f32;
+    let font_size = (((width as f32) * 0.0312).clamp(31.2, 69.6)) * scale;
     let title_size = font_size * 1.18;
     let line_height = (font_size * 1.42).round() as u32;
-    let card_width = ((width as f32) * 0.62).round() as u32;
-    let card_height = padding * 2 + line_height * line_count.max(1) as u32;
+    let padding = ((((width as f32) * 0.0216).round()).max(22.0) * scale).round() as u32;
+    let max_card_width = ((width as f32) * 0.92).round() as u32;
+    let max_text_width = max_card_width.saturating_sub(padding * 2);
+
+    let rendered_lines =
+        compute_rendered_lines(request, font, max_text_width, title_size, font_size);
+
+    let mut measured_text_width = 1u32;
+    for (index, line) in rendered_lines.iter().enumerate() {
+        let size = if index == 0 { title_size } else { font_size };
+        let (line_width, _) = text_size(PxScale::from(size), font, line);
+        measured_text_width = measured_text_width.max(line_width);
+    }
+    let accent_width = (font_size * 0.24).round() as u32;
+    let card_width = (measured_text_width + padding * 2 + accent_width).min(max_card_width);
+    let card_height = padding * 2 + line_height * rendered_lines.len() as u32;
+
     if width < margin || height < margin {
         return Err(invalid_data(
             "layout watermark",
@@ -352,7 +443,10 @@ pub fn watermark_layout(
             "source image is too small for the watermark card",
         ));
     }
-    let left = margin;
+    let left = match request.position {
+        WatermarkPosition::BottomLeft => margin,
+        WatermarkPosition::BottomRight => width - margin - card_width,
+    };
     let top = height - margin - card_height;
     Ok(WatermarkLayout {
         font_size,
@@ -364,62 +458,137 @@ pub fn watermark_layout(
         card_height,
         left,
         top,
+        max_text_width,
     })
 }
 
-fn fit_line(text: &str, max_width: u32, size: f32, font: &FontArc) -> String {
-    let scale = PxScale::from(size);
-    let (w, _) = text_size(scale, font, text);
-    if w <= max_width {
-        return text.to_string();
+fn compute_rendered_lines(
+    request: &RenderPhotoRequest,
+    font: &FontArc,
+    max_text_width: u32,
+    title_size: f32,
+    font_size: f32,
+) -> Vec<String> {
+    let logical_lines = logical_watermark_lines(request);
+    let mut rendered: Vec<String> = Vec::new();
+    for (index, line) in logical_lines.iter().enumerate() {
+        let size = if index == 0 { title_size } else { font_size };
+        rendered.extend(wrap_text(line, max_text_width, size, font));
     }
-    let mut chars: Vec<char> = text.chars().collect();
-    while chars.len() > 1 {
-        chars.pop();
-        let candidate: String = chars.iter().collect::<String>() + "…";
-        let (cw, _) = text_size(scale, font, &candidate);
-        if cw <= max_width {
-            return candidate;
+    rendered
+}
+
+/// Tokenize text for wrapping: ASCII words stay together as one token, each
+/// non-ASCII character is its own token, and each whitespace character is its
+/// own token so wrapped lines can drop leading spaces.
+fn tokenize(text: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut word = String::new();
+    for ch in text.chars() {
+        if ch.is_ascii_whitespace() {
+            if !word.is_empty() {
+                tokens.push(std::mem::take(&mut word));
+            }
+            tokens.push(ch.to_string());
+        } else if ch.is_ascii() {
+            word.push(ch);
+        } else {
+            if !word.is_empty() {
+                tokens.push(std::mem::take(&mut word));
+            }
+            tokens.push(ch.to_string());
         }
     }
-    "…".to_string()
+    if !word.is_empty() {
+        tokens.push(word);
+    }
+    tokens
+}
+
+/// Wrap text to fit within `max_width` using greedy line filling. Tokens that
+/// exceed the available width on their own are split by character so every
+/// emitted line fits within `max_width`.
+fn wrap_text(text: &str, max_width: u32, size: f32, font: &FontArc) -> Vec<String> {
+    let scale = PxScale::from(size);
+    let (full_width, _) = text_size(scale, font, text);
+    if full_width <= max_width || max_width == 0 {
+        return vec![text.to_string()];
+    }
+    let tokens = tokenize(text);
+    let mut lines: Vec<String> = Vec::new();
+    let mut current = String::new();
+
+    for token in tokens {
+        let is_space = token.chars().all(|c| c.is_ascii_whitespace());
+        if current.is_empty() && is_space {
+            continue;
+        }
+        let candidate = format!("{current}{token}");
+        let (cw, _) = text_size(scale, font, &candidate);
+        if cw <= max_width {
+            current = candidate;
+            continue;
+        }
+        if !current.is_empty() {
+            let trimmed = current.trim_end().to_string();
+            if !trimmed.is_empty() {
+                lines.push(trimmed);
+            }
+            current.clear();
+        }
+        if is_space {
+            continue;
+        }
+        let (tw, _) = text_size(scale, font, &token);
+        if tw <= max_width {
+            current = token;
+            continue;
+        }
+        let mut piece = String::new();
+        for ch in token.chars() {
+            let attempt = format!("{piece}{ch}");
+            let (pw, _) = text_size(scale, font, &attempt);
+            if pw <= max_width {
+                piece = attempt;
+                continue;
+            }
+            if !piece.is_empty() {
+                lines.push(std::mem::take(&mut piece));
+            }
+            piece = ch.to_string();
+        }
+        if !piece.is_empty() {
+            current = piece;
+        }
+    }
+    let trimmed = current.trim_end().to_string();
+    if !trimmed.is_empty() {
+        lines.push(trimmed);
+    }
+    if lines.is_empty() {
+        lines.push(text.to_string());
+    }
+    lines
 }
 
 fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> Result<(), String> {
     let (width, height) = canvas.dimensions();
-    let mut lines = vec![
-        format!("现场记录 · {}", request.project_name),
-        format!("位置  {}", request.work_location),
-        format!("内容  {}", request.work_content),
-        format!("拍摄人  {}", request.photographer),
-        format!("编号  {}", request.photo_number),
-        format!("时间  {}", request.captured_at),
-    ];
-    if let Some(address) = non_empty(&request.address) {
-        lines.push(format!("地址  {address}"));
-    }
-    if let Some(coordinates) = non_empty(&request.coordinates) {
-        lines.push(format!("坐标  {coordinates}"));
-    }
-    if let Some(notes) = non_empty(&request.notes) {
-        lines.push(format!("备注  {notes}"));
-    }
-    let layout = watermark_layout(width, height, lines.len())?;
+    let font = FontArc::try_from_slice(FONT_BYTES)
+        .map_err(|error| invalid_data("load bundled font", error))?;
+    let layout = layout_for_request(width, height, request, &font)?;
     let WatermarkLayout {
         font_size,
         title_size,
         line_height,
         padding,
-        margin,
+        margin: _,
         card_width,
         card_height,
-        ..
+        left,
+        top,
+        max_text_width,
     } = layout;
-    let left = match request.position {
-        WatermarkPosition::BottomLeft => margin,
-        WatermarkPosition::BottomRight => width - margin - card_width,
-    };
-    let top = height - margin - card_height;
+
     blend_rect(
         canvas,
         left,
@@ -435,19 +604,17 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
         accent,
     );
 
-    let font = FontArc::try_from_slice(FONT_BYTES)
-        .map_err(|error| invalid_data("load bundled font", error))?;
+    let rendered_lines =
+        compute_rendered_lines(request, &font, max_text_width, title_size, font_size);
     let text_left = (left + padding) as i32;
     let mut text_top = (top + padding) as i32;
-    let max_text_width = card_width.saturating_sub(padding * 2);
-    for (index, line) in lines.iter().enumerate() {
+    for (index, line) in rendered_lines.iter().enumerate() {
         let size = if index == 0 { title_size } else { font_size };
         let color = if index == 0 {
             Rgba([255, 255, 255, 255])
         } else {
             Rgba([238, 244, 242, 255])
         };
-        let fitted = fit_line(line, max_text_width, size, &font);
         draw_text_mut(
             canvas,
             color,
@@ -455,7 +622,7 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
             text_top,
             PxScale::from(size),
             &font,
-            &fitted,
+            line,
         );
         text_top += line_height as i32;
     }
@@ -522,4 +689,97 @@ fn add_file_to_zip(
     std::io::copy(&mut file, archive)
         .map_err(|error| io_failure(&format!("copy ZIP entry {destination}"), error))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod watermark_tests {
+    use super::*;
+
+    #[test]
+    fn english_labels_contain_no_fixed_chinese_labels() {
+        let request = sample_request("en", 1.0, "East Plant");
+        let lines = logical_watermark_lines(&request);
+        let joined = lines.join("\n");
+        assert!(joined.contains("Site record"));
+        assert!(joined.contains("Location"));
+        assert!(!joined.contains("现场记录"));
+        assert!(!joined.contains("位置"));
+    }
+
+    #[test]
+    fn short_content_produces_a_narrower_card_than_long_content() {
+        let font = FontArc::try_from_slice(FONT_BYTES).unwrap();
+        let short =
+            layout_for_request(4000, 3000, &sample_request("zh", 1.0, "甲"), &font).unwrap();
+        let long = layout_for_request(
+            4000,
+            3000,
+            &sample_request("zh", 1.0, "东区厂房通风空调系统综合改造工程"),
+            &font,
+        )
+        .unwrap();
+        assert!(short.card_width < long.card_width);
+        assert!(long.card_width <= (4000.0 * 0.92) as u32);
+    }
+
+    #[test]
+    fn font_scale_bounds_are_enforced() {
+        assert!(validate_render_request(&sample_request("zh", 0.79, "甲")).is_err());
+        assert!(validate_render_request(&sample_request("zh", 1.61, "甲")).is_err());
+        assert!(validate_render_request(&sample_request("en", 1.60, "A")).is_ok());
+    }
+
+    #[test]
+    fn watermark_typography_scales_with_font_scale() {
+        let font = FontArc::try_from_slice(FONT_BYTES).unwrap();
+        let layout = layout_for_request(
+            4000,
+            3000,
+            &sample_request("zh", 1.0, "东区厂房改造"),
+            &font,
+        )
+        .unwrap();
+        assert!((layout.font_size - 69.6).abs() < f32::EPSILON);
+        assert!((layout.title_size - 82.128).abs() < 0.001);
+        assert_eq!(layout.line_height, 99);
+        assert!(layout.card_height + layout.margin <= 3000);
+    }
+
+    #[test]
+    fn measured_layout_fits_supported_landscape_and_portrait_images() {
+        let font = FontArc::try_from_slice(FONT_BYTES).unwrap();
+        for (width, height) in [(4000, 3000), (3000, 4000), (3840, 2160), (2160, 3840)] {
+            let request = sample_request("zh", 1.0, "东区厂房改造");
+            let layout = layout_for_request(width, height, &request, &font).unwrap();
+            assert!(
+                layout.left + layout.card_width <= width,
+                "card overflows horizontally at {width}x{height}"
+            );
+            assert!(
+                layout.top + layout.card_height <= height,
+                "card overflows vertically at {width}x{height}"
+            );
+        }
+    }
+
+    fn sample_request(locale: &str, font_scale: f64, project: &str) -> RenderPhotoRequest {
+        RenderPhotoRequest {
+            source_path: "source.jpg".to_string(),
+            output_path: "output.jpg".to_string(),
+            project_name: project.to_string(),
+            work_location: "A 区三层".to_string(),
+            work_content: "风管安装检查".to_string(),
+            photographer: "张工".to_string(),
+            photo_number: "SM-20260716-001".to_string(),
+            captured_at: "2026-07-16 09:32:18 +08:00".to_string(),
+            address: None,
+            coordinates: None,
+            notes: None,
+            position: WatermarkPosition::BottomLeft,
+            opacity: 0.78,
+            accent_color_argb: 0xff37c58b,
+            font_scale,
+            locale_code: locale.to_string(),
+        }
+    }
 }
