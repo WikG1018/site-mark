@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use ab_glyph::{FontArc, PxScale};
 use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, GenericImageView, ImageDecoder, ImageReader, Pixel, Rgba, RgbaImage};
-use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut};
+use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut, text_size};
 use imageproc::rect::Rect;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -270,13 +270,79 @@ fn validate_render_request(request: &RenderPhotoRequest) -> Result<(), String> {
     Ok(())
 }
 
-fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> Result<(), String> {
-    let (width, height) = canvas.dimensions();
+#[derive(Clone, Copy, Debug)]
+pub struct WatermarkLayout {
+    pub font_size: f32,
+    pub title_size: f32,
+    pub line_height: u32,
+    pub padding: u32,
+    pub margin: u32,
+    pub card_width: u32,
+    pub card_height: u32,
+    pub left: u32,
+    pub top: u32,
+}
+
+/// Pure layout calculation for the engineering watermark card.
+///
+/// `line_count` is the number of display lines that will be rendered. The
+/// returned `left`/`top` use the bottom-left anchor (the strictest horizontal
+/// fit: `left = margin`), which is the worst case for the `card_width + margin`
+/// constraint. Bottom-right rendering only ever shifts the card leftward, so it
+/// never exceeds the bounds validated here.
+pub fn watermark_layout(
+    width: u32,
+    height: u32,
+    line_count: usize,
+) -> Result<WatermarkLayout, String> {
     let margin = ((width.min(height) as f32) * 0.025).round() as u32;
-    let padding = ((width as f32) * 0.018).round().max(18.0) as u32;
-    let font_size = ((width as f32) * 0.026).clamp(26.0, 58.0);
+    let padding = ((width as f32) * 0.0216).round().max(22.0) as u32;
+    let font_size = ((width as f32) * 0.0312).clamp(31.2, 69.6);
     let title_size = font_size * 1.18;
     let line_height = (font_size * 1.42).round() as u32;
+    let card_width = ((width as f32) * 0.62).round() as u32;
+    let card_height = padding * 2 + line_height * line_count.max(1) as u32;
+    if width < margin || height < margin {
+        return Err("source image is too small for the watermark card".to_string());
+    }
+    if card_width + margin > width || card_height + margin > height {
+        return Err("source image is too small for the watermark card".to_string());
+    }
+    let left = margin;
+    let top = height - margin - card_height;
+    Ok(WatermarkLayout {
+        font_size,
+        title_size,
+        line_height,
+        padding,
+        margin,
+        card_width,
+        card_height,
+        left,
+        top,
+    })
+}
+
+fn fit_line(text: &str, max_width: u32, size: f32, font: &FontArc) -> String {
+    let scale = PxScale::from(size);
+    let (w, _) = text_size(scale, font, text);
+    if w <= max_width {
+        return text.to_string();
+    }
+    let mut chars: Vec<char> = text.chars().collect();
+    while chars.len() > 1 {
+        chars.pop();
+        let candidate: String = chars.iter().collect::<String>() + "…";
+        let (cw, _) = text_size(scale, font, &candidate);
+        if cw <= max_width {
+            return candidate;
+        }
+    }
+    "…".to_string()
+}
+
+fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> Result<(), String> {
+    let (width, height) = canvas.dimensions();
     let mut lines = vec![
         format!("现场记录 · {}", request.project_name),
         format!("位置  {}", request.work_location),
@@ -294,11 +360,17 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
     if let Some(notes) = non_empty(&request.notes) {
         lines.push(format!("备注  {notes}"));
     }
-    let card_width = ((width as f32) * 0.62).round() as u32;
-    let card_height = padding * 2 + line_height * lines.len() as u32;
-    if card_width + margin > width || card_height + margin > height {
-        return Err("source image is too small for the watermark card".to_string());
-    }
+    let layout = watermark_layout(width, height, lines.len())?;
+    let WatermarkLayout {
+        font_size,
+        title_size,
+        line_height,
+        padding,
+        margin,
+        card_width,
+        card_height,
+        ..
+    } = layout;
     let left = match request.position {
         WatermarkPosition::BottomLeft => margin,
         WatermarkPosition::BottomRight => width - margin - card_width,
@@ -323,6 +395,7 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
         .map_err(|error| format!("load bundled font: {error}"))?;
     let text_left = (left + padding) as i32;
     let mut text_top = (top + padding) as i32;
+    let max_text_width = card_width.saturating_sub(padding * 2);
     for (index, line) in lines.iter().enumerate() {
         let size = if index == 0 { title_size } else { font_size };
         let color = if index == 0 {
@@ -330,6 +403,7 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
         } else {
             Rgba([238, 244, 242, 255])
         };
+        let fitted = fit_line(line, max_text_width, size, &font);
         draw_text_mut(
             canvas,
             color,
@@ -337,7 +411,7 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
             text_top,
             PxScale::from(size),
             &font,
-            line,
+            &fitted,
         );
         text_top += line_height as i32;
     }
