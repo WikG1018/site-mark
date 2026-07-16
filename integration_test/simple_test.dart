@@ -166,6 +166,26 @@ class _IntegrationPlatformServices implements PlatformServices {
   Future<LocationResult> requestCurrentLocation(int timeoutMillis) async {
     return LocationResult(outcome: LocationOutcome.permissionDenied);
   }
+
+  @override
+  Future<LocationPermissionState> getLocationPermissionState() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<LocationPermissionState> requestLocationPermission() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<void> openApplicationSettings() async {}
+
+  @override
+  Future<ImageMetadataResult> inspectImage(String path) async =>
+      ImageMetadataResult(
+        width: 0,
+        height: 0,
+        fileSizeBytes: 0,
+        mimeType: 'image/jpeg',
+      );
 }
 
 class _IntegrationImagePipeline implements ImagePipeline {

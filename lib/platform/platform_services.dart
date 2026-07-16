@@ -19,6 +19,14 @@ abstract interface class PlatformServices {
   Future<String> publishJpeg(String sourcePath, String displayName);
 
   Future<void> deletePublishedImage(String contentUri);
+
+  Future<LocationPermissionState> getLocationPermissionState();
+
+  Future<LocationPermissionState> requestLocationPermission();
+
+  Future<void> openApplicationSettings();
+
+  Future<ImageMetadataResult> inspectImage(String path);
 }
 
 class PigeonPlatformServices implements PlatformServices {
@@ -61,6 +69,26 @@ class PigeonPlatformServices implements PlatformServices {
   @override
   Future<LocationResult> requestCurrentLocation(int timeoutMillis) {
     return _api.requestCurrentLocation(timeoutMillis);
+  }
+
+  @override
+  Future<LocationPermissionState> getLocationPermissionState() {
+    return _api.getLocationPermissionState();
+  }
+
+  @override
+  Future<LocationPermissionState> requestLocationPermission() {
+    return _api.requestLocationPermission();
+  }
+
+  @override
+  Future<void> openApplicationSettings() {
+    return _api.openApplicationSettings();
+  }
+
+  @override
+  Future<ImageMetadataResult> inspectImage(String path) {
+    return _api.inspectImage(path);
   }
 }
 

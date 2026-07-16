@@ -245,6 +245,26 @@ class _FakePlatformServices implements PlatformServices {
       address: '福建省漳州市',
     );
   }
+
+  @override
+  Future<LocationPermissionState> getLocationPermissionState() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<LocationPermissionState> requestLocationPermission() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<void> openApplicationSettings() async {}
+
+  @override
+  Future<ImageMetadataResult> inspectImage(String path) async =>
+      ImageMetadataResult(
+        width: 0,
+        height: 0,
+        fileSizeBytes: 0,
+        mimeType: 'image/jpeg',
+      );
 }
 
 class _FakeImagePipeline implements ImagePipeline {
