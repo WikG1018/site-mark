@@ -2,6 +2,9 @@
 
 ## Automated
 
+- `python -m unittest tool/test_generate_launcher_icon.py -v`
+- `python -m unittest tool/test_verify_launcher_icon_resources.py -v`
+- `python tool/verify_launcher_icon_resources.py`
 - `flutter analyze`
 - `flutter test` (unit/widget tests)
 - `flutter test integration_test/` (requires a device or emulator)
@@ -33,6 +36,9 @@
 
 ## Device acceptance
 
+- Inspect the launcher icon under circle, squircle, and rounded-rectangle masks.
+- On Android 13+, enable themed icons and verify the monochrome `M` plus red-dot cutout.
+- Cold-start the app and verify the Android 12+ splash icon is centered and unclipped.
 - Test at least one Android 12 device and one Android 16 emulator/device.
 - `adb install -r` the debug APK over the existing v0.1.0 debug build and
   confirm projects and records survive the in-place upgrade.
