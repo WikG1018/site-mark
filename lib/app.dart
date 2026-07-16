@@ -15,6 +15,7 @@ import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 
@@ -75,11 +76,6 @@ final privateFileStoreProvider = Provider<PrivateFileStore>(
   (ref) => DartIoPrivateFileStore(),
 );
 
-/// Whether the app should initialize WorkManager and run startup recovery.
-/// Disabled in widget tests via [MyApp] overrides so the real WorkManager is
-/// never touched.
-final workManagerEnabledProvider = Provider<bool>((ref) => true);
-
 final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {
   return WorkmanagerBackgroundWorkClient();
 });
@@ -101,6 +97,15 @@ final captureWorkflowProvider = Provider<CaptureWorkflow>((ref) {
     outputPaths: ref.watch(captureOutputPathsProvider),
     fileStore: ref.watch(privateFileStoreProvider),
     scheduler: ref.watch(captureBackgroundSchedulerProvider),
+  );
+});
+
+final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
+  return AppStartupRecovery(
+    recoverCamera: () =>
+        ref.read(captureWorkflowProvider).recoverPendingCapture(),
+    reconcileQueue: () =>
+        ref.read(captureBackgroundSchedulerProvider).reconcilePending(),
   );
 });
 
@@ -189,15 +194,7 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
     super.initState();
     Future<void>.microtask(() async {
       if (!ref.read(startupRecoveryEnabledProvider)) return;
-      // Foreground camera recovery first (marks any pending capture and
-      // enqueues it), then reconcile any other captured/rendering rows that
-      // survived a crash.
-      await ref.read(captureWorkflowProvider).recoverPendingCapture();
-      if (ref.read(workManagerEnabledProvider)) {
-        final scheduler = ref.read(captureBackgroundSchedulerProvider);
-        await scheduler.initialize();
-        await scheduler.reconcilePending();
-      }
+      await ref.read(appStartupRecoveryProvider).run();
     });
   }
 
@@ -257,7 +254,7 @@ class MyApp extends StatelessWidget {
     this.privateFileStore,
     this.backgroundScheduler,
     this.backgroundWorkClient,
-    this.enableWorkManager = false,
+    this.startupRecovery,
   });
 
   final AppDatabase? database;
@@ -270,15 +267,17 @@ class MyApp extends StatelessWidget {
   final PrivateFileStore? privateFileStore;
   final CaptureBackgroundScheduler? backgroundScheduler;
   final BackgroundWorkClient? backgroundWorkClient;
-  final bool enableWorkManager;
+  final AppStartupRecovery? startupRecovery;
 
   @override
   Widget build(BuildContext context) {
     return ProviderScope(
       overrides: [
         if (database != null) databaseProvider.overrideWithValue(database!),
-        if (database != null)
+        if (database != null && startupRecovery == null)
           startupRecoveryEnabledProvider.overrideWithValue(false),
+        if (startupRecovery != null)
+          appStartupRecoveryProvider.overrideWithValue(startupRecovery!),
         if (initialLocale != null)
           initialLocaleProvider.overrideWithValue(initialLocale),
         if (platformServices != null)
@@ -299,7 +298,6 @@ class MyApp extends StatelessWidget {
           ),
         if (backgroundWorkClient != null)
           backgroundWorkClientProvider.overrideWithValue(backgroundWorkClient!),
-        workManagerEnabledProvider.overrideWithValue(enableWorkManager),
       ],
       child: const SiteMarkApp(),
     );

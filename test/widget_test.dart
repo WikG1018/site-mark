@@ -8,6 +8,7 @@ import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
+import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 
@@ -26,6 +27,28 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   }
+
+  testWidgets('production startup runs camera and queue recovery', (
+    tester,
+  ) async {
+    final events = <String>[];
+    final recovery = AppStartupRecovery(
+      recoverCamera: () async => events.add('camera'),
+      reconcileQueue: () async => events.add('queue'),
+    );
+
+    await tester.pumpWidget(
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        startupRecovery: recovery,
+      ),
+    );
+    await tester.pump();
+
+    expect(events, ['camera', 'queue']);
+    await disposeApp(tester);
+  });
 
   /// Seeds a fully `ready` capture under `project-1` so the carry-forward draft
   /// returned by `latestCapturedDraft` reflects these descriptive fields.
