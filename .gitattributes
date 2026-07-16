@@ -1,0 +1,17 @@
+* text=auto
+
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.gradle text eol=lf
+*.kts text eol=lf
+*.properties text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.otf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.zip binary
+*.apk binary
