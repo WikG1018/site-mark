@@ -110,7 +110,10 @@ final class CaptureProcessor {
     final _HashResult hashResult;
     try {
       hashResult = await _resolveOriginalSha256(attempted);
-    } on PathNotFoundException catch (error) {
+    } catch (error) {
+      if (_isTransient(error) && attempts < maxAttempts) {
+        return CaptureProcessResult.retry;
+      }
       await _failPermanently(captureId, error.toString());
       return CaptureProcessResult.failed;
     }
@@ -213,6 +216,9 @@ final class CaptureProcessor {
   }
 
   bool _isTransient(Object error) {
+    if (error is ImagePipelineException) {
+      return error.kind == ImagePipelineFailureKind.transientIo;
+    }
     // `PathNotFoundException` extends `FileSystemException`, but a missing
     // original at render time is a permanent failure (evidence is gone), so it
     // must be checked before the broader `FileSystemException` branch.

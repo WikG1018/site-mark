@@ -72,20 +72,60 @@ abstract interface class ImagePipeline {
   Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request);
 }
 
+enum ImagePipelineFailureKind { notFound, transientIo, invalidData }
+
+class ImagePipelineException implements Exception {
+  const ImagePipelineException(this.kind, this.message);
+
+  final ImagePipelineFailureKind kind;
+  final String message;
+
+  static ImagePipelineException? tryParseRustError(Object error) {
+    final message = error.toString();
+    const prefixes = <String, ImagePipelineFailureKind>{
+      'not_found:': ImagePipelineFailureKind.notFound,
+      'io:': ImagePipelineFailureKind.transientIo,
+      'invalid_data:': ImagePipelineFailureKind.invalidData,
+    };
+    for (final entry in prefixes.entries) {
+      if (message.startsWith(entry.key)) {
+        return ImagePipelineException(
+          entry.value,
+          message.substring(entry.key.length),
+        );
+      }
+    }
+    return null;
+  }
+
+  @override
+  String toString() => message;
+}
+
 class RustImagePipeline implements ImagePipeline {
   @override
   Future<rust.ExportProjectResult> export(rust.ExportProjectRequest request) {
-    return rust.exportProject(request: request);
+    return _translateRustError(() => rust.exportProject(request: request));
   }
 
   @override
   Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request) {
-    return rust.renderPhoto(request: request);
+    return _translateRustError(() => rust.renderPhoto(request: request));
   }
 
   @override
   Future<String> sha256(String path) {
-    return rust.sha256File(path: path);
+    return _translateRustError(() => rust.sha256File(path: path));
+  }
+
+  Future<T> _translateRustError<T>(Future<T> Function() operation) async {
+    try {
+      return await operation();
+    } catch (error) {
+      final translated = ImagePipelineException.tryParseRustError(error);
+      if (translated != null) throw translated;
+      rethrow;
+    }
   }
 }
 

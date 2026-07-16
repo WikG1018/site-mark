@@ -26,6 +26,40 @@ fn hashes_a_file_with_sha256() {
 }
 
 #[test]
+fn missing_file_uses_not_found_error_prefix() {
+    let error = sha256_file("definitely-missing-sitemark-file.jpg".into()).unwrap_err();
+    assert!(error.starts_with("not_found:"), "{error}");
+}
+
+#[test]
+fn invalid_source_image_uses_invalid_data_error_prefix() {
+    let directory = tempdir().unwrap();
+    let source = directory.path().join("invalid.jpg");
+    let output = directory.path().join("watermarked.jpg");
+    fs::write(&source, b"not a jpeg").unwrap();
+
+    let error = render_photo(RenderPhotoRequest {
+        source_path: source.to_string_lossy().into_owned(),
+        output_path: output.to_string_lossy().into_owned(),
+        project_name: "东区厂房改造".to_string(),
+        work_location: "A 区三层".to_string(),
+        work_content: "风管安装检查".to_string(),
+        photographer: "张工".to_string(),
+        photo_number: "SM-20260716-001".to_string(),
+        captured_at: "2026-07-16 09:32:18 +08:00".to_string(),
+        address: None,
+        coordinates: None,
+        notes: None,
+        position: WatermarkPosition::BottomLeft,
+        opacity: 0.78,
+        accent_color_argb: 0xff37c58b,
+    })
+    .unwrap_err();
+
+    assert!(error.starts_with("invalid_data:"), "{error}");
+}
+
+#[test]
 fn renders_a_full_resolution_jpeg_with_a_watermark_card() {
     let directory = tempdir().unwrap();
     let source = directory.path().join("source.jpg");

@@ -285,6 +285,61 @@ void main() {
     },
   );
 
+  test('transient Rust hash error retries below attempt budget', () async {
+    await seedCaptured(attempts: 0);
+    images.sha256Error = const ImagePipelineException(
+      ImagePipelineFailureKind.transientIo,
+      'temporary read error',
+    );
+
+    expect(await processor.process('capture-1'), CaptureProcessResult.retry);
+    final record = await database.captureById('capture-1');
+    expect(record?.status, CaptureStatus.captured);
+    expect(record?.processingAttempts, 1);
+    expect(platform.publishedNames, isEmpty);
+  });
+
+  test('third transient Rust hash error becomes final failure', () async {
+    await seedCaptured(attempts: 2);
+    images.sha256Error = const ImagePipelineException(
+      ImagePipelineFailureKind.transientIo,
+      'temporary read error',
+    );
+
+    expect(await processor.process('capture-1'), CaptureProcessResult.failed);
+    final record = await database.captureById('capture-1');
+    expect(record?.status, CaptureStatus.failed);
+    expect(record?.processingAttempts, 3);
+  });
+
+  test('not-found Rust hash error fails immediately', () async {
+    await seedCaptured(attempts: 0);
+    images.sha256Error = const ImagePipelineException(
+      ImagePipelineFailureKind.notFound,
+      'original is missing',
+    );
+
+    expect(await processor.process('capture-1'), CaptureProcessResult.failed);
+    expect(
+      (await database.captureById('capture-1'))?.status,
+      CaptureStatus.failed,
+    );
+  });
+
+  test('invalid-data Rust hash error fails immediately', () async {
+    await seedCaptured(attempts: 0);
+    images.sha256Error = const ImagePipelineException(
+      ImagePipelineFailureKind.invalidData,
+      'invalid image data',
+    );
+
+    expect(await processor.process('capture-1'), CaptureProcessResult.failed);
+    expect(
+      (await database.captureById('capture-1'))?.status,
+      CaptureStatus.failed,
+    );
+  });
+
   test(
     'socket error from render is transient (retry) below attempt budget',
     () async {
