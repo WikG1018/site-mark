@@ -522,7 +522,12 @@ class _InlineProcessingScheduler implements CaptureBackgroundScheduler {
   }
 
   @override
-  Future<void> retry(String captureId) => enqueue(captureId);
+  Future<void> retry(String captureId) async {
+    // Mirror the production scheduler: reset state/attempts before re-enqueueing
+    // so a `failed` record re-processes from a clean `captured` baseline.
+    await database.resetCaptureForRetry(captureId);
+    await enqueue(captureId);
+  }
 
   @override
   Future<void> reconcilePending() async {

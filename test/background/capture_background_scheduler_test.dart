@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_status.dart';
 
 void main() {
   late AppDatabase database;
@@ -57,6 +58,15 @@ void main() {
   );
 
   test('retry re-enqueues with the same queue and tag', () async {
+    // retry now resets the record before enqueueing, so seed a `failed`
+    // capture (the only state from which a manual retry is meaningful) first.
+    await seedCaptured('capture-1');
+    await database.markRendering(
+      captureId: 'capture-1',
+      originalSha256:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    await database.markFailed(captureId: 'capture-1', reason: 'boom');
     await scheduler.retry('capture-1');
 
     expect(client.appendCalls, hasLength(1));
@@ -64,6 +74,44 @@ void main() {
     expect(client.appendCalls.single.tag, 'capture:capture-1');
     expect(client.appendCalls.single.queueName, captureProcessingQueue);
   });
+
+  test(
+    'retry resets a failed record to captured with attempts cleared before enqueue',
+    () async {
+      // Seed a capture, drive it to `failed` with attempts exhausted, then
+      // exercise the manual retry path. Before the fix, `retry` enqueued the
+      // failed record as-is and the processor would either throw (failed ->
+      // rendering is illegal) or immediately re-fail (attempts >= maxAttempts).
+      await seedCaptured('capture-1');
+      await database.markRendering(
+        captureId: 'capture-1',
+        originalSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      await database.markFailed(captureId: 'capture-1', reason: 'boom');
+      await database.incrementProcessingAttempts('capture-1');
+      await database.incrementProcessingAttempts('capture-1');
+      await database.incrementProcessingAttempts('capture-1');
+      final beforeRetry = (await database.captureById('capture-1'))!;
+      expect(beforeRetry.status, CaptureStatus.failed);
+      expect(beforeRetry.processingAttempts, 3);
+      expect(beforeRetry.failureReason, 'boom');
+
+      await scheduler.retry('capture-1');
+
+      // The reset ran before enqueue, so the record is back to a clean
+      // `captured` baseline ready for the processor.
+      final afterRetry = (await database.captureById('capture-1'))!;
+      expect(afterRetry.status, CaptureStatus.captured);
+      expect(afterRetry.processingAttempts, 0);
+      expect(afterRetry.failureReason, isNull);
+      expect(afterRetry.originalSha256, isNull);
+      expect(afterRetry.publishedUri, isNull);
+      // And the capture was appended to the serial queue exactly once.
+      expect(client.appendCalls, hasLength(1));
+      expect(client.appendCalls.single.captureId, 'capture-1');
+    },
+  );
 
   test(
     'reconcilePending enqueues every captured and rendering row once',

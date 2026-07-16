@@ -307,6 +307,41 @@ void main() {
       expect(platform.publishedNames, ['SM-20260716-001']);
     },
   );
+
+  test(
+    'manual retry path: failed record reaches ready after resetCaptureForRetry',
+    () async {
+      // Regression for C1: a `failed` record (attempts=3) cannot be retried by
+      // the processor directly (`failed -> rendering` is illegal and attempts
+      // >= maxAttempts forces an immediate re-fail). The scheduler's `retry`
+      // must call `resetCaptureForRetry` first. This test simulates that
+      // sequence (reset then process) and asserts the record reaches `ready`.
+      await seedCaptured(attempts: 0);
+      await database.markRendering(
+        captureId: 'capture-1',
+        originalSha256: _digestA,
+      );
+      await database.markFailed(captureId: 'capture-1', reason: 'transient');
+      await database.incrementProcessingAttempts('capture-1');
+      await database.incrementProcessingAttempts('capture-1');
+      await database.incrementProcessingAttempts('capture-1');
+      final failed = (await database.captureById('capture-1'))!;
+      expect(failed.status, CaptureStatus.failed);
+      expect(failed.processingAttempts, 3);
+
+      // This is exactly what PersistentCaptureBackgroundScheduler.retry now
+      // does: reset, then enqueue (which runs the processor).
+      await database.resetCaptureForRetry('capture-1');
+      final result = await processor.process('capture-1');
+
+      expect(result, CaptureProcessResult.succeeded);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.ready);
+      expect(record?.publishedUri, 'content://media/site-mark/1');
+      // The reset zeroed attempts; the single successful pass leaves 1.
+      expect(record?.processingAttempts, 1);
+    },
+  );
 }
 
 class _ProcessorPlatformServices implements PlatformServices {

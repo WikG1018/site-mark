@@ -97,6 +97,7 @@ class CaptureImagePreview extends StatelessWidget {
   String? _statusOverlayLabel(CaptureStatus status, AppStrings strings) {
     switch (status) {
       case CaptureStatus.captured:
+        return strings.waitingForProcessing;
       case CaptureStatus.rendering:
         return strings.processing;
       case CaptureStatus.failed:

@@ -130,12 +130,12 @@ class CaptureRecordCard extends ConsumerWidget {
         Colors.orange,
       ),
       CaptureStatus.captured => (
-        strings.processing,
+        strings.waitingForProcessing,
         Icons.hourglass_top,
         Colors.orange,
       ),
       CaptureStatus.rendering => (
-        strings.rendering,
+        strings.processing,
         Icons.auto_awesome_outlined,
         Colors.blue,
       ),

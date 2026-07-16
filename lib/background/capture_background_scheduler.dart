@@ -77,7 +77,16 @@ final class PersistentCaptureBackgroundScheduler
   }
 
   @override
-  Future<void> retry(String captureId) => enqueue(captureId);
+  Future<void> retry(String captureId) async {
+    // Reset attempts to 0 and restore the status to `captured` before
+    // re-enqueueing. Without this, a `failed` record (status=failed,
+    // attempts=3) is re-queued as-is: the processor would increment attempts
+    // past `maxAttempts` (immediate re-fail) and `markRendering` would reject
+    // the `failed -> rendering` transition (StateError). The reset makes the
+    // manual retry behave like a fresh captured record, matching the spec.
+    await _database.resetCaptureForRetry(captureId);
+    await enqueue(captureId);
+  }
 
   @override
   Future<void> reconcilePending() async {

@@ -49,6 +49,11 @@ class AppStrings {
   String get failed => _english ? 'Failed' : '失败';
   String get pendingCamera => _english ? 'Waiting for camera' : '等待相机';
   String get processing => _english ? 'Processing' : '处理中';
+
+  /// `captured` records are waiting to be picked up by the background processor;
+  /// `rendering` records are actively being processed. The spec distinguishes the
+  /// two so the user can tell a queued shot from one currently being rendered.
+  String get waitingForProcessing => _english ? 'Waiting' : '等待处理';
   String get rendering => _english ? 'Rendering watermark' : '生成水印';
   String get captureFailed => _english ? 'Capture failed' : '拍摄失败';
   String get captureQueuedContinue => _english

@@ -31,6 +31,10 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
   AppSetting? _settings;
   String _version = _fallbackVersion;
   String _buildNumber = _fallbackBuild;
+  // Tracks the opacity slider position during an active drag so the thumb and
+  // percentage label follow the finger. Cleared on `onChangeEnd` (where the
+  // value is persisted); `null` means "not dragging - show the persisted value".
+  double? _dragValue;
 
   @override
   void initState() {
@@ -182,30 +186,56 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      strings.watermarkOpacity,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  Text('${(settings.defaultWatermarkOpacity * 100).round()}%'),
-                ],
-              ),
-              Slider(
-                key: const Key('opacity-slider'),
-                value: settings.defaultWatermarkOpacity.clamp(0.20, 0.95),
-                min: 0.20,
-                max: 0.95,
-                divisions: 75,
-                label: '${(settings.defaultWatermarkOpacity * 100).round()}%',
-                // Persist only on release to avoid hammering the database
-                // while the thumb is dragged.
-                onChangeEnd: (value) => _apply(
-                  (db) => db.updateAppSettings(defaultWatermarkOpacity: value),
-                ),
-                onChanged: (value) {},
+              Builder(
+                builder: (context) {
+                  // Resolve the displayed opacity: follow the finger while
+                  // dragging, otherwise reflect the persisted value.
+                  final opacity =
+                      (_dragValue ?? settings.defaultWatermarkOpacity).clamp(
+                        0.20,
+                        0.95,
+                      );
+                  final percent = (opacity * 100).round();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              strings.watermarkOpacity,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          Text('$percent%'),
+                        ],
+                      ),
+                      Slider(
+                        key: const Key('opacity-slider'),
+                        value: opacity,
+                        min: 0.20,
+                        max: 0.95,
+                        divisions: 75,
+                        label: '$percent%',
+                        // Live-drag feedback: track the thumb position without
+                        // hammering the database on every pixel of movement.
+                        onChanged: (value) {
+                          setState(() => _dragValue = value);
+                        },
+                        // Persist only on release, then drop back to the
+                        // persisted value as the source of truth.
+                        onChangeEnd: (value) {
+                          _apply(
+                            (db) => db.updateAppSettings(
+                              defaultWatermarkOpacity: value,
+                            ),
+                          );
+                          setState(() => _dragValue = null);
+                        },
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 8),
               Text(
