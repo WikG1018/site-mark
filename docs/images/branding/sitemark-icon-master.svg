@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#092F2A"/>
+      <stop offset="0.5" stop-color="#176B55"/>
+      <stop offset="1" stop-color="#258D6D"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.78"/>
+      <stop offset="0.5" stop-color="#D0FFEB" stop-opacity="0.4"/>
+      <stop offset="1" stop-color="#77E5B6" stop-opacity="0.25"/>
+    </linearGradient>
+    <linearGradient id="letter" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6FFFB"/>
+      <stop offset="0.5" stop-color="#D9FFF0"/>
+      <stop offset="1" stop-color="#93F2C9"/>
+    </linearGradient>
+    <mask id="camera-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="108" height="108">
+      <rect id="camera-body" x="21" y="32" width="66" height="48" rx="9" fill="#FFFFFF"/>
+      <rect id="camera-bump" x="43" y="25" width="22" height="13" rx="4" fill="#FFFFFF"/>
+    </mask>
+    <filter id="frost" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="7" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.7"/>
+      <feGaussianBlur stdDeviation="0.08"/>
+    </filter>
+  </defs>
+  <rect width="108" height="108" fill="url(#background)"/>
+  <rect id="camera-glass" width="108" height="108" fill="url(#glass)" mask="url(#camera-mask)" filter="url(#frost)"/>
+  <circle id="lens" cx="54" cy="54" r="16" fill="#0A493D" fill-opacity="0.77"/>
+  <polyline id="letter-m" points="45,62 45,46 54,56 63,46 63,62" fill="none" stroke="url(#letter)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle id="red-dot" cx="74" cy="42" r="3.5" fill="#FF4D4F"/>
+</svg>
