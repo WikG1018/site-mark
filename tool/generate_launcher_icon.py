@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import textwrap
 from pathlib import Path
 
@@ -40,11 +39,9 @@ def _mix(start: int, end: int, amount: float) -> int:
 
 
 def _three_stop_gradient(size: int, stops: tuple[tuple[int, int, int], ...]) -> Image.Image:
-    ramp = Image.linear_gradient("L").resize((size, size)).rotate(
-        315,
-        resample=Image.Resampling.BICUBIC,
-        expand=False,
-    )
+    vertical = Image.linear_gradient("L").resize((size, size))
+    horizontal = vertical.transpose(Image.Transpose.TRANSPOSE)
+    ramp = Image.blend(horizontal, vertical, 0.5)
     channels: list[Image.Image] = []
     for channel_index in range(3):
         values: list[int] = []
@@ -120,6 +117,11 @@ def render_foreground(size: int, monochrome: bool = False) -> Image.Image:
 
     softened = camera_mask.filter(ImageFilter.GaussianBlur(_px(0.9, size)))
     edge = ImageChops.subtract(camera_mask, softened).point(lambda value: min(255, value * 4))
+    highlight_region = Image.new("L", (size, size), 0)
+    highlight_draw = ImageDraw.Draw(highlight_region)
+    highlight_draw.ellipse(_rect_px((14.0, 15.0, 70.0, 58.0), size), fill=168)
+    highlight_region = highlight_region.filter(ImageFilter.GaussianBlur(_px(7.5, size)))
+    edge = ImageChops.multiply(edge, highlight_region)
     highlight = Image.new("RGBA", (size, size), (255, 255, 255, 0))
     highlight.putalpha(edge)
     result.alpha_composite(highlight)
@@ -171,14 +173,23 @@ def build_master_svg() -> str:
               <stop offset="0" stop-color="#F6FFFB"/>
               <stop offset="1" stop-color="#93F2C9"/>
             </linearGradient>
+            <linearGradient id="highlight" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+              <stop offset="0.75" stop-color="#FFFFFF" stop-opacity="0.16"/>
+              <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+            </linearGradient>
             <filter id="frost" x="-20%" y="-20%" width="140%" height="140%">
               <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="7" result="noise"/>
               <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.7"/>
               <feGaussianBlur stdDeviation="0.08"/>
             </filter>
+            <filter id="highlight-soft" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="0.18"/>
+            </filter>
           </defs>
           <rect width="108" height="108" fill="url(#background)"/>
           <path d="M30 32H43L47 25H61L65 32H78A9 9 0 0 1 87 41V71A9 9 0 0 1 78 80H30A9 9 0 0 1 21 71V41A9 9 0 0 1 30 32Z" fill="url(#glass)" filter="url(#frost)"/>
+          <path d="M24 58V42A7 7 0 0 1 31 35H42L47 28H59" fill="none" stroke="url(#highlight)" stroke-width="1.1" stroke-linecap="round" filter="url(#highlight-soft)"/>
           <circle cx="54" cy="54" r="16" fill="#0A493D" fill-opacity="0.77"/>
           <path d="M45 62V46L54 56L63 46V62" fill="none" stroke="url(#letter)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
           <circle cx="74" cy="42" r="3.5" fill="#FF4D4F"/>

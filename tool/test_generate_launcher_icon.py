@@ -4,6 +4,7 @@ import math
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 
 from PIL import Image
@@ -64,6 +65,47 @@ class LauncherIconGeneratorTest(unittest.TestCase):
             self.assertIn('cx="54" cy="54"', svg)
             self.assertIn('#FF4D4F', svg)
             self.assertNotIn('rx="22"', svg)
+
+    def test_background_gradient_reaches_every_corner_without_flat_fill(self) -> None:
+        image = icon.render_background(432).convert("RGB")
+        corner_size = 72
+        corner_boxes = {
+            "top_left": (0, 0, corner_size, corner_size),
+            "top_right": (432 - corner_size, 0, 432, corner_size),
+            "bottom_left": (0, 432 - corner_size, corner_size, 432),
+            "bottom_right": (432 - corner_size, 432 - corner_size, 432, 432),
+        }
+
+        for name, box in corner_boxes.items():
+            with self.subTest(corner=name):
+                pixels = image.crop(box).get_flattened_data()
+                most_common_count = Counter(pixels).most_common(1)[0][1]
+                self.assertLess(most_common_count / len(pixels), 0.20)
+
+    def test_camera_highlight_is_local_instead_of_a_continuous_white_outline(self) -> None:
+        image = icon.render_foreground(432).convert("RGBA")
+
+        def pixel_at_dp(x: float, y: float) -> tuple[int, int, int, int]:
+            return image.getpixel((round(x * 4), round(y * 4)))
+
+        def is_soft_highlight(pixel: tuple[int, int, int, int]) -> bool:
+            red, green, blue, alpha = pixel
+            return alpha >= 180 and min(red, green, blue) >= 220
+
+        def is_near_white_outline(pixel: tuple[int, int, int, int]) -> bool:
+            red, green, blue, alpha = pixel
+            return alpha >= 240 and min(red, green, blue) >= 245
+
+        local_highlight_points = ((30.0, 32.0), (46.0, 25.0), (54.0, 25.0))
+        nonlocal_outline_points = ((21.0, 56.0), (54.0, 80.0), (87.0, 56.0))
+
+        self.assertTrue(any(is_soft_highlight(pixel_at_dp(*point)) for point in local_highlight_points))
+        for point in nonlocal_outline_points:
+            with self.subTest(point=point):
+                self.assertFalse(is_near_white_outline(pixel_at_dp(*point)))
+
+        sampled_outline = local_highlight_points + nonlocal_outline_points
+        self.assertFalse(any(pixel_at_dp(*point) == (255, 255, 255, 255) for point in sampled_outline))
 
 
 if __name__ == "__main__":
