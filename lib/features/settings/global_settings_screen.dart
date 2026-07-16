@@ -38,6 +38,11 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
   // percentage label follow the finger. Cleared on `onChangeEnd` (where the
   // value is persisted); `null` means "not dragging - show the persisted value".
   double? _dragValue;
+  // Tracks the font-scale slider position during an active drag so the thumb
+  // and percentage label follow the finger. Cleared on `onChangeEnd` (where
+  // the value is persisted); `null` means "not dragging - show the persisted
+  // value".
+  double? _fontScaleDragValue;
 
   /// Cached location-permission view state. Loaded once during initialization
   /// and refreshed on app resume so the tile reflects permission changes the
@@ -301,6 +306,58 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
               const SizedBox(height: 8),
               Text(
                 strings.opacityHint,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 20),
+              Builder(
+                builder: (context) {
+                  // Resolve the displayed font scale: follow the finger while
+                  // dragging, otherwise reflect the persisted value.
+                  final fontScale =
+                      (_fontScaleDragValue ??
+                              settings.defaultWatermarkFontScale)
+                          .clamp(0.80, 1.60);
+                  final percent = (fontScale * 100).round();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              strings.watermarkFontSize,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          Text('$percent%'),
+                        ],
+                      ),
+                      Slider(
+                        key: const Key('default-font-scale-slider'),
+                        value: fontScale,
+                        min: 0.80,
+                        max: 1.60,
+                        divisions: 16,
+                        label: '$percent%',
+                        onChanged: (value) {
+                          setState(() => _fontScaleDragValue = value);
+                        },
+                        onChangeEnd: (value) {
+                          _apply(
+                            (db) => db.updateAppSettings(
+                              defaultWatermarkFontScale: value,
+                            ),
+                          );
+                          setState(() => _fontScaleDragValue = null);
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+              Text(
+                strings.fontScaleHint,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 20),

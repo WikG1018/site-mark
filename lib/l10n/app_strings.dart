@@ -88,6 +88,7 @@ class AppStrings {
   String get bottomLeft => _english ? 'Bottom left' : '左下';
   String get bottomRight => _english ? 'Bottom right' : '右下';
   String get watermarkOpacity => _english ? 'Card opacity' : '水印透明度';
+  String get watermarkFontSize => _english ? 'Font size' : '字体大小';
   String get accentColor => _english ? 'Accent color' : '强调色';
   String get green => _english ? 'Green' : '绿色';
   String get blue => _english ? 'Blue' : '蓝色';
@@ -136,6 +137,9 @@ class AppStrings {
   String get opacityHint => _english
       ? 'Drag to set the new-project watermark opacity. Saved on release.'
       : '拖动以设置新建项目的水印透明度，松开后保存。';
+  String get fontScaleHint => _english
+      ? 'Drag the slider to adjust watermark font size (80%–160%).'
+      : '拖动滑块调整水印字体大小（80%–160%）';
 
   // Non-blocking location permission UX
   String get locationPermissionExplanation => _english

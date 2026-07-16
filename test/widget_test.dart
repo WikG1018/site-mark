@@ -225,6 +225,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('水印设置'), findsOneWidget);
+    expect(find.byKey(const Key('project-font-scale-slider')), findsOneWidget);
     await tester.tap(find.text('右下'));
     await tester.tap(find.byKey(const Key('accent-blue')));
     await tester.tap(find.text('保存'));

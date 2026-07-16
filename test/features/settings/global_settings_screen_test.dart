@@ -95,6 +95,25 @@ void main() {
     },
   );
 
+  testWidgets('default font scale persists on release', (tester) async {
+    await pumpSettings(tester);
+    final sliderFinder = find.byKey(const Key('default-font-scale-slider'));
+    final scrollable = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(sliderFinder, 200, scrollable: scrollable);
+    // scrollUntilVisible stops once the slider is built, but ListView's
+    // off-screen cache extent can leave the thumb just below the viewport.
+    // ensureVisible scrolls it fully on-screen so the drag hit-tests it.
+    await tester.ensureVisible(sliderFinder);
+    await tester.pumpAndSettle();
+    await tester.timedDrag(
+      sliderFinder,
+      const Offset(500, 0),
+      const Duration(milliseconds: 200),
+    );
+    await tester.pumpAndSettle();
+    expect((await database.getAppSettings()).defaultWatermarkFontScale, 1.60);
+  });
+
   testWidgets('accent swatch selection persists', (tester) async {
     await pumpSettings(tester, db: database);
     await tester.scrollUntilVisible(
