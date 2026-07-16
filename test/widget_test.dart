@@ -6,6 +6,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
+import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 
@@ -24,6 +25,90 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   }
+
+  /// Seeds a fully `ready` capture under `project-1` so the carry-forward draft
+  /// returned by `latestCapturedDraft` reflects these descriptive fields.
+  Future<void> seedReadyCapture({
+    String workLocation = 'A 区三层',
+    String workContent = '风管安装检查',
+    String photographer = '张工',
+    String notes = '上一张备注',
+  }) async {
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final pending = await database.createPendingCapture(
+      id: 'seed-capture',
+      projectId: 'project-1',
+      originalPath: '/private/seed-capture.jpg',
+      workLocation: workLocation,
+      workContent: workContent,
+      photographer: photographer,
+      notes: notes,
+      createdAt: DateTime(2026, 7, 16, 9, 30),
+    );
+    final captured = await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 32),
+    );
+    final rendering = await database.markRendering(
+      captureId: captured.id,
+      originalSha256:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    await database.markReady(
+      captureId: rendering.id,
+      publishedUri: 'content://media/site-mark/seed',
+    );
+  }
+
+  /// Pumps [MyApp] wired with the standard widget-test fakes and navigates from
+  /// the project list into the capture form for `project-1`. [workflowResult]
+  /// documents the expected outcome of the next capture (the real workflow
+  /// returns `queued` because the fake camera always reports `captured`).
+  Future<void> openCaptureForm(
+    WidgetTester tester, {
+    CaptureWorkflowResult? workflowResult,
+  }) async {
+    final images = _WidgetTestImagePipeline();
+    final share = _WidgetTestShareService();
+    final platform = _WidgetTestPlatformServices();
+    final outputPaths = _WidgetTestOutputPaths();
+    final scheduler = _InlineProcessingScheduler(
+      database: database,
+      platform: platform,
+      images: images,
+      outputPaths: outputPaths,
+    );
+    await tester.pumpWidget(
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        platformServices: platform,
+        imagePipeline: images,
+        outputPaths: outputPaths,
+        projectExportPaths: _WidgetTestProjectExportPaths(),
+        shareService: share,
+        privateFileStore: _WidgetTestPrivateFileStore(),
+        backgroundScheduler: scheduler,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('拍摄'));
+    await tester.pumpAndSettle();
+  }
+
+  /// Reads the current text of the [TextFormField] found by [key].
+  String fieldText(WidgetTester tester, Key key) {
+    final field = tester.widget<TextFormField>(find.byKey(key));
+    return field.controller!.text;
+  }
+
+  /// Sentinel documenting that the next capture should resolve to `queued`.
+  final queuedResult = const CaptureWorkflowResult(
+    outcome: CaptureWorkflowOutcome.queued,
+  );
 
   testWidgets('shows the project-first empty state', (tester) async {
     await tester.pumpWidget(
@@ -137,6 +222,13 @@ void main() {
     await tester.tap(find.text('调用系统相机'));
     await tester.pumpAndSettle();
 
+    // The capture form now stays open for consecutive shooting and surfaces a
+    // queue-confirmation snackbar instead of navigating away. Return to the
+    // project detail to observe the inline-processed, ready record.
+    expect(find.text('照片已加入后台处理，可继续拍摄'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
     expect(find.textContaining('SM-'), findsOneWidget);
     expect(find.text('已完成'), findsOneWidget);
 
@@ -174,6 +266,53 @@ void main() {
     expect(find.text('暂无拍摄记录'), findsOneWidget);
     await disposeApp(tester);
   });
+
+  testWidgets(
+    'prefills three fields from latest capture and leaves notes blank',
+    (tester) async {
+      await seedReadyCapture(
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        notes: '上一张备注',
+      );
+      await openCaptureForm(tester);
+
+      expect(fieldText(tester, const Key('work-location')), 'A 区三层');
+      expect(fieldText(tester, const Key('work-content')), '风管安装检查');
+      expect(fieldText(tester, const Key('photographer')), '张工');
+      expect(fieldText(tester, const Key('notes')), '');
+      await disposeApp(tester);
+    },
+  );
+
+  testWidgets(
+    'queued capture stays on form, clears notes, and re-enables button',
+    (tester) async {
+      // Seed a prior ready capture so the three carry-forward fields are
+      // prefilled; the consecutive shot only needs per-photo notes.
+      await seedReadyCapture(
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+      );
+      await openCaptureForm(tester, workflowResult: queuedResult);
+      await tester.enterText(find.byKey(const Key('notes')), '本张备注');
+      await tester.tap(find.byKey(const Key('capture-button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('capture-form')), findsOneWidget);
+      expect(fieldText(tester, const Key('notes')), '');
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('capture-button')))
+            .onPressed,
+        isNotNull,
+      );
+      expect(find.text('照片已加入后台处理，可继续拍摄'), findsOneWidget);
+      await disposeApp(tester);
+    },
+  );
 }
 
 class _WidgetTestPlatformServices implements PlatformServices {

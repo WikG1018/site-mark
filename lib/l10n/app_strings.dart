@@ -51,6 +51,9 @@ class AppStrings {
   String get processing => _english ? 'Processing' : '处理中';
   String get rendering => _english ? 'Rendering watermark' : '生成水印';
   String get captureFailed => _english ? 'Capture failed' : '拍摄失败';
+  String get captureQueuedContinue => _english
+      ? 'Photo queued for background processing. Continue shooting.'
+      : '照片已加入后台处理，可继续拍摄';
   String get exportProject => _english ? 'Export project' : '导出项目';
   String get exportProjectData => _english ? 'Export project data' : '导出项目资料';
   String get includeOriginals =>

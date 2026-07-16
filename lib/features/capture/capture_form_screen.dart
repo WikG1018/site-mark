@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -22,6 +21,37 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
   final _photographerController = TextEditingController();
   final _notesController = TextEditingController();
   bool _working = false;
+
+  /// One-time initialization future that loads the project together with the
+  /// most recent non-pending capture of that project, so the three carry-forward
+  /// fields can be prefilled exactly once. Rebuilt only when [widget.projectId]
+  /// changes; never recomputed on every [build].
+  Future<_CaptureFormInit?>? _initFuture;
+
+  Future<_CaptureFormInit?> _loadInit() async {
+    final database = ref.read(databaseProvider);
+    final project = await database.projectById(widget.projectId);
+    if (project == null) return null;
+    final draft = await database.latestCapturedDraft(widget.projectId);
+    // Prefill the three carry-forward fields exactly once, alongside this
+    // single initialization pass. Notes stay blank by design.
+    _applyCarryForward(draft);
+    return _CaptureFormInit(project: project, draft: draft);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _initFuture ??= _loadInit();
+  }
+
+  void _applyCarryForward(CaptureCarryForwardDraft? draft) {
+    if (draft == null) return;
+    _locationController.text = draft.workLocation;
+    _contentController.text = draft.workContent;
+    _photographerController.text = draft.photographer;
+    // Notes are intentionally left blank so stale review notes never carry over.
+  }
 
   @override
   void dispose() {
@@ -50,28 +80,40 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
           ),
         );
     if (!mounted) return;
-    if (result.outcome == CaptureWorkflowOutcome.failed) {
-      setState(() => _working = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${AppStrings.of(context).captureFailed}: '
-            '${result.errorMessage ?? ''}',
+    final strings = AppStrings.of(context);
+    switch (result.outcome) {
+      case CaptureWorkflowOutcome.queued:
+        // Stay on the form for consecutive shooting: clear only notes so the
+        // retained location/content/photographer edits persist, re-enable the
+        // button, and surface the background-queue confirmation.
+        _notesController.clear();
+        setState(() => _working = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(strings.captureQueuedContinue)));
+      case CaptureWorkflowOutcome.cancelled:
+        // The camera was dismissed without a photo; stay on the form and
+        // re-enable the button without surfacing a confirmation.
+        setState(() => _working = false);
+      case CaptureWorkflowOutcome.failed:
+        setState(() => _working = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${strings.captureFailed}: ${result.errorMessage ?? ''}',
+            ),
           ),
-        ),
-      );
-      return;
+        );
     }
-    context.go('/projects/${project.id}');
   }
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return FutureBuilder<Project?>(
-      future: ref.read(databaseProvider).projectById(widget.projectId),
+    return FutureBuilder<_CaptureFormInit?>(
+      future: _initFuture,
       builder: (context, snapshot) {
-        final project = snapshot.data;
+        final project = snapshot.data?.project;
         return Scaffold(
           appBar: AppBar(title: Text(strings.newCapture)),
           body: project == null
@@ -82,71 +124,15 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
                       constraints: const BoxConstraints(maxWidth: 620),
                       child: Form(
                         key: _formKey,
-                        child: ListView(
-                          padding: const EdgeInsets.all(24),
-                          children: [
-                            _RequiredField(
-                              fieldKey: const Key('work-location'),
-                              controller: _locationController,
-                              label: strings.workLocation,
-                              error: strings.requiredField,
-                            ),
-                            const SizedBox(height: 16),
-                            _RequiredField(
-                              fieldKey: const Key('work-content'),
-                              controller: _contentController,
-                              label: strings.workContent,
-                              error: strings.requiredField,
-                              maxLines: 2,
-                            ),
-                            const SizedBox(height: 16),
-                            _RequiredField(
-                              fieldKey: const Key('photographer'),
-                              controller: _photographerController,
-                              label: strings.photographer,
-                              error: strings.requiredField,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _notesController,
-                              maxLines: 3,
-                              decoration: InputDecoration(
-                                labelText: strings.notesOptional,
-                                alignLabelWithHint: true,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Icon(Icons.location_on_outlined),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(strings.captureLocationHint),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            FilledButton.icon(
-                              onPressed: _working
-                                  ? null
-                                  : () => _capture(project),
-                              icon: _working
-                                  ? const SizedBox.square(
-                                      dimension: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.photo_camera_outlined),
-                              label: Text(strings.openSystemCamera),
-                            ),
-                          ],
+                        child: _CaptureFormBody(
+                          key: const Key('capture-form'),
+                          locationController: _locationController,
+                          contentController: _contentController,
+                          photographerController: _photographerController,
+                          notesController: _notesController,
+                          strings: strings,
+                          working: _working,
+                          onCapture: () => _capture(project),
                         ),
                       ),
                     ),
@@ -154,6 +140,102 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
                 ),
         );
       },
+    );
+  }
+}
+
+/// Bundle of the project and its most recent non-pending capture loaded once
+/// during [CaptureFormScreen] initialization.
+class _CaptureFormInit {
+  const _CaptureFormInit({required this.project, this.draft});
+
+  final Project project;
+  final CaptureCarryForwardDraft? draft;
+}
+
+class _CaptureFormBody extends StatelessWidget {
+  const _CaptureFormBody({
+    super.key,
+    required this.locationController,
+    required this.contentController,
+    required this.photographerController,
+    required this.notesController,
+    required this.strings,
+    required this.working,
+    required this.onCapture,
+  });
+
+  final TextEditingController locationController;
+  final TextEditingController contentController;
+  final TextEditingController photographerController;
+  final TextEditingController notesController;
+  final AppStrings strings;
+  final bool working;
+  final VoidCallback onCapture;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _RequiredField(
+          fieldKey: const Key('work-location'),
+          controller: locationController,
+          label: strings.workLocation,
+          error: strings.requiredField,
+        ),
+        const SizedBox(height: 16),
+        _RequiredField(
+          fieldKey: const Key('work-content'),
+          controller: contentController,
+          label: strings.workContent,
+          error: strings.requiredField,
+          maxLines: 2,
+        ),
+        const SizedBox(height: 16),
+        _RequiredField(
+          fieldKey: const Key('photographer'),
+          controller: photographerController,
+          label: strings.photographer,
+          error: strings.requiredField,
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          key: const Key('notes'),
+          controller: notesController,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: strings.notesOptional,
+            alignLabelWithHint: true,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on_outlined),
+                const SizedBox(width: 12),
+                Expanded(child: Text(strings.captureLocationHint)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          key: const Key('capture-button'),
+          onPressed: working ? null : onCapture,
+          icon: working
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.photo_camera_outlined),
+          label: Text(strings.openSystemCamera),
+        ),
+      ],
     );
   }
 }
