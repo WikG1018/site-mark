@@ -151,11 +151,15 @@ void main() {
       expect(updated.themeMode, 'light');
 
       // A `failed` capture (seeded as such in the fixture) can be retried back
-      // to `captured`, clearing render metadata and resetting attempts to 0.
+      // to `captured`, preserving evidence and resetting attempts to 0.
       final retried = await database.resetCaptureForRetry('capture-1');
       expect(retried.processingAttempts, 0);
       expect(retried.status, CaptureStatus.captured);
-      expect(retried.publishedUri, isNull);
+      expect(retried.publishedUri, 'content://media/photo/1');
+      expect(
+        retried.originalSha256,
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
     },
   );
 

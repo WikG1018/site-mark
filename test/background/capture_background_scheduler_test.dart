@@ -99,13 +99,16 @@ void main() {
 
       await scheduler.retry('capture-1');
 
-      // The reset ran before enqueue, so the record is back to a clean
-      // `captured` baseline ready for the processor.
+      // The reset ran before enqueue, so the record is back to `captured`
+      // with its immutable evidence retained for tamper verification.
       final afterRetry = (await database.captureById('capture-1'))!;
       expect(afterRetry.status, CaptureStatus.captured);
       expect(afterRetry.processingAttempts, 0);
       expect(afterRetry.failureReason, isNull);
-      expect(afterRetry.originalSha256, isNull);
+      expect(
+        afterRetry.originalSha256,
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
       expect(afterRetry.publishedUri, isNull);
       // And the capture was appended to the serial queue exactly once.
       expect(client.appendCalls, hasLength(1));
