@@ -1,8 +1,8 @@
+import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
-import 'package:sitemark/platform/system_api.g.dart';
-import 'package:sitemark/src/rust/api/image_core.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:uuid/uuid.dart';
 
 class CaptureDraft {
@@ -37,7 +37,11 @@ class CaptureEdits {
   final String? notes;
 }
 
-enum CaptureWorkflowOutcome { ready, cancelled, failed }
+/// Outcome of a foreground capture coordination step.
+///
+/// `queued` means the capture was marked `captured` and enqueued for background
+/// rendering/publishing; the UI should not wait for the watermarked result.
+enum CaptureWorkflowOutcome { queued, cancelled, failed }
 
 class CaptureWorkflowResult {
   const CaptureWorkflowResult({
@@ -55,6 +59,7 @@ class CaptureWorkflow {
   CaptureWorkflow({
     required this.database,
     required this.platform,
+    required this.scheduler,
     required this.images,
     required this.outputPaths,
     PrivateFileStore? fileStore,
@@ -66,6 +71,7 @@ class CaptureWorkflow {
 
   final AppDatabase database;
   final PlatformServices platform;
+  final CaptureBackgroundScheduler scheduler;
   final ImagePipeline images;
   final CaptureOutputPaths outputPaths;
   final PrivateFileStore _fileStore;
@@ -115,10 +121,9 @@ class CaptureWorkflow {
           );
         case CameraOutcome.captured:
           keepOriginalOnFailure = true;
-          return _renderAndPublish(
+          return _captureAndEnqueue(
             captureId: captureId,
             originalPath: originalPath,
-            draft: draft,
           );
       }
     } catch (error) {
@@ -171,17 +176,9 @@ class CaptureWorkflow {
       );
     }
     try {
-      return await _renderAndPublish(
+      return await _captureAndEnqueue(
         captureId: recovered.captureId,
         originalPath: recovered.outputPath,
-        draft: CaptureDraft(
-          projectId: project.id,
-          projectName: project.name,
-          workLocation: record.workLocation,
-          workContent: record.workContent,
-          photographer: record.photographer,
-          notes: record.notes,
-        ),
       );
     } catch (error) {
       CaptureRecord failed = record;
@@ -205,50 +202,36 @@ class CaptureWorkflow {
     }
   }
 
+  /// Updates editable fields, resets processing state, and re-enqueues the
+  /// capture for background re-rendering. The record is returned in the
+  /// `captured` status; the caller should observe the `ready` transition via
+  /// [AppDatabase.watchCaptureById] rather than waiting inline.
   Future<CaptureRecord> regenerateCapture({
     required String captureId,
     required CaptureEdits edits,
   }) async {
     final record = await database.captureById(captureId);
     if (record == null) throw StateError('Capture record does not exist');
-    if (record.status != CaptureStatus.ready) {
-      throw StateError('Only completed captures can be regenerated');
+    // Regeneration is allowed from `ready` (re-publish with edits) or `failed`
+    // (retry after a permanent failure). Other states are not editable here.
+    if (record.status != CaptureStatus.ready &&
+        record.status != CaptureStatus.failed) {
+      throw StateError('Only completed or failed captures can be regenerated');
     }
-    final project = await database.projectById(record.projectId);
-    if (project == null) throw StateError('Project does not exist');
-    final expectedHash = record.originalSha256;
-    if (expectedHash == null) throw StateError('Original hash is missing');
-    final actualHash = await images.sha256(record.originalPath);
-    if (actualHash.toLowerCase() != expectedHash.toLowerCase()) {
-      throw StateError('Original photo hash verification failed');
-    }
-    final renderedPath = await outputPaths.renderedPhotoPath(captureId);
-    final rendered = await images.render(
-      RenderPhotoRequest(
-        sourcePath: record.originalPath,
-        outputPath: renderedPath,
-        projectName: project.name,
-        workLocation: edits.workLocation,
-        workContent: edits.workContent,
-        photographer: edits.photographer,
-        photoNumber: record.photoNumber!,
-        capturedAt: _formatLocalTimestamp(record.capturedAt!),
-        address: record.address,
-        coordinates: _coordinates(record),
-        notes: edits.notes,
-        position: _watermarkPosition(project),
-        opacity: project.watermarkOpacity,
-        accentColorArgb: project.watermarkAccentColorArgb,
-      ),
-    );
-    await platform.publishJpeg(rendered.outputPath, record.photoNumber!);
-    return database.updateCaptureDescription(
+    // Apply the descriptive edits first so they survive the state reset.
+    await database.updateCaptureDescription(
       captureId: captureId,
       workLocation: edits.workLocation,
       workContent: edits.workContent,
       photographer: edits.photographer,
       notes: edits.notes,
     );
+    // Reset attempts and state to `captured` so the processor re-renders from
+    // scratch (clearing the stale published URI and hash). The edited
+    // description fields persist because the reset does not touch them.
+    final reset = await database.resetCaptureForRetry(captureId);
+    await scheduler.enqueue(captureId);
+    return reset;
   }
 
   Future<void> deleteCapture(String captureId) async {
@@ -264,54 +247,21 @@ class CaptureWorkflow {
     await database.deleteCapture(captureId);
   }
 
-  Future<CaptureWorkflowResult> _renderAndPublish({
+  /// Marks the capture `captured`, finishes the camera target keeping the
+  /// original, enqueues background processing, and returns the queued result.
+  Future<CaptureWorkflowResult> _captureAndEnqueue({
     required String captureId,
     required String originalPath,
-    required CaptureDraft draft,
   }) async {
-    final project = await database.projectById(draft.projectId);
-    if (project == null) throw StateError('Project does not exist');
-    final capturedAt = _now();
     final captured = await database.markCaptured(
       captureId: captureId,
-      capturedAt: capturedAt,
-    );
-    final originalSha256 = await images.sha256(originalPath);
-    await database.markRendering(
-      captureId: captureId,
-      originalSha256: originalSha256,
-    );
-    final renderedPath = await outputPaths.renderedPhotoPath(captureId);
-    final renderResult = await images.render(
-      RenderPhotoRequest(
-        sourcePath: originalPath,
-        outputPath: renderedPath,
-        projectName: draft.projectName,
-        workLocation: draft.workLocation,
-        workContent: draft.workContent,
-        photographer: draft.photographer,
-        photoNumber: captured.photoNumber!,
-        capturedAt: _formatLocalTimestamp(capturedAt),
-        address: captured.address,
-        coordinates: _coordinates(captured),
-        notes: draft.notes,
-        position: _watermarkPosition(project),
-        opacity: project.watermarkOpacity,
-        accentColorArgb: project.watermarkAccentColorArgb,
-      ),
-    );
-    final publishedUri = await platform.publishJpeg(
-      renderResult.outputPath,
-      captured.photoNumber!,
-    );
-    final ready = await database.markReady(
-      captureId: captureId,
-      publishedUri: publishedUri,
+      capturedAt: _now(),
     );
     await platform.finishCameraCapture(captureId, true);
+    await scheduler.enqueue(captureId);
     return CaptureWorkflowResult(
-      outcome: CaptureWorkflowOutcome.ready,
-      capture: ready,
+      outcome: CaptureWorkflowOutcome.queued,
+      capture: captured,
     );
   }
 
@@ -324,31 +274,5 @@ class CaptureWorkflow {
         errorMessage: error.toString(),
       );
     }
-  }
-
-  String? _coordinates(CaptureRecord capture) {
-    if (capture.latitude == null || capture.longitude == null) return null;
-    return '${capture.latitude!.toStringAsFixed(6)}, '
-        '${capture.longitude!.toStringAsFixed(6)}'
-        '${capture.accuracyMeters == null ? '' : ' · ±${capture.accuracyMeters!.round()}m'}';
-  }
-
-  WatermarkPosition _watermarkPosition(Project project) {
-    return project.watermarkPosition == 'bottomRight'
-        ? WatermarkPosition.bottomRight
-        : WatermarkPosition.bottomLeft;
-  }
-
-  String _formatLocalTimestamp(DateTime value) {
-    final offset = value.timeZoneOffset;
-    final sign = offset.isNegative ? '-' : '+';
-    final absoluteMinutes = offset.inMinutes.abs();
-    final offsetHours = (absoluteMinutes ~/ 60).toString().padLeft(2, '0');
-    final offsetMinutes = (absoluteMinutes % 60).toString().padLeft(2, '0');
-    String two(int part) => part.toString().padLeft(2, '0');
-    return '${value.year.toString().padLeft(4, '0')}-'
-        '${two(value.month)}-${two(value.day)} '
-        '${two(value.hour)}:${two(value.minute)}:${two(value.second)} '
-        '$sign$offsetHours:$offsetMinutes';
   }
 }

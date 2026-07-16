@@ -767,6 +767,17 @@ class $CaptureRecordsTable extends CaptureRecords
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _processingAttemptsMeta =
+      const VerificationMeta('processingAttempts');
+  @override
+  late final GeneratedColumn<int> processingAttempts = GeneratedColumn<int>(
+    'processing_attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -788,6 +799,7 @@ class $CaptureRecordsTable extends CaptureRecords
     accuracyMeters,
     address,
     locationOutcome,
+    processingAttempts,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -950,6 +962,15 @@ class $CaptureRecordsTable extends CaptureRecords
         ),
       );
     }
+    if (data.containsKey('processing_attempts')) {
+      context.handle(
+        _processingAttemptsMeta,
+        processingAttempts.isAcceptableOrUnknown(
+          data['processing_attempts']!,
+          _processingAttemptsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1037,6 +1058,10 @@ class $CaptureRecordsTable extends CaptureRecords
         DriftSqlType.string,
         data['${effectivePrefix}location_outcome'],
       ),
+      processingAttempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}processing_attempts'],
+      )!,
     );
   }
 
@@ -1069,6 +1094,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
   final double? accuracyMeters;
   final String? address;
   final String? locationOutcome;
+  final int processingAttempts;
   const CaptureRecord({
     required this.id,
     required this.projectId,
@@ -1089,6 +1115,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     this.accuracyMeters,
     this.address,
     this.locationOutcome,
+    required this.processingAttempts,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1138,6 +1165,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     if (!nullToAbsent || locationOutcome != null) {
       map['location_outcome'] = Variable<String>(locationOutcome);
     }
+    map['processing_attempts'] = Variable<int>(processingAttempts);
     return map;
   }
 
@@ -1184,6 +1212,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       locationOutcome: locationOutcome == null && nullToAbsent
           ? const Value.absent()
           : Value(locationOutcome),
+      processingAttempts: Value(processingAttempts),
     );
   }
 
@@ -1212,6 +1241,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       accuracyMeters: serializer.fromJson<double?>(json['accuracyMeters']),
       address: serializer.fromJson<String?>(json['address']),
       locationOutcome: serializer.fromJson<String?>(json['locationOutcome']),
+      processingAttempts: serializer.fromJson<int>(json['processingAttempts']),
     );
   }
   @override
@@ -1237,6 +1267,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       'accuracyMeters': serializer.toJson<double?>(accuracyMeters),
       'address': serializer.toJson<String?>(address),
       'locationOutcome': serializer.toJson<String?>(locationOutcome),
+      'processingAttempts': serializer.toJson<int>(processingAttempts),
     };
   }
 
@@ -1260,6 +1291,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     Value<double?> accuracyMeters = const Value.absent(),
     Value<String?> address = const Value.absent(),
     Value<String?> locationOutcome = const Value.absent(),
+    int? processingAttempts,
   }) => CaptureRecord(
     id: id ?? this.id,
     projectId: projectId ?? this.projectId,
@@ -1288,6 +1320,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     locationOutcome: locationOutcome.present
         ? locationOutcome.value
         : this.locationOutcome,
+    processingAttempts: processingAttempts ?? this.processingAttempts,
   );
   CaptureRecord copyWithCompanion(CaptureRecordsCompanion data) {
     return CaptureRecord(
@@ -1332,6 +1365,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       locationOutcome: data.locationOutcome.present
           ? data.locationOutcome.value
           : this.locationOutcome,
+      processingAttempts: data.processingAttempts.present
+          ? data.processingAttempts.value
+          : this.processingAttempts,
     );
   }
 
@@ -1356,7 +1392,8 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
           ..write('longitude: $longitude, ')
           ..write('accuracyMeters: $accuracyMeters, ')
           ..write('address: $address, ')
-          ..write('locationOutcome: $locationOutcome')
+          ..write('locationOutcome: $locationOutcome, ')
+          ..write('processingAttempts: $processingAttempts')
           ..write(')'))
         .toString();
   }
@@ -1382,6 +1419,7 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     accuracyMeters,
     address,
     locationOutcome,
+    processingAttempts,
   );
   @override
   bool operator ==(Object other) =>
@@ -1405,7 +1443,8 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
           other.longitude == this.longitude &&
           other.accuracyMeters == this.accuracyMeters &&
           other.address == this.address &&
-          other.locationOutcome == this.locationOutcome);
+          other.locationOutcome == this.locationOutcome &&
+          other.processingAttempts == this.processingAttempts);
 }
 
 class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
@@ -1428,6 +1467,7 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
   final Value<double?> accuracyMeters;
   final Value<String?> address;
   final Value<String?> locationOutcome;
+  final Value<int> processingAttempts;
   final Value<int> rowid;
   const CaptureRecordsCompanion({
     this.id = const Value.absent(),
@@ -1449,6 +1489,7 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     this.accuracyMeters = const Value.absent(),
     this.address = const Value.absent(),
     this.locationOutcome = const Value.absent(),
+    this.processingAttempts = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CaptureRecordsCompanion.insert({
@@ -1471,6 +1512,7 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     this.accuracyMeters = const Value.absent(),
     this.address = const Value.absent(),
     this.locationOutcome = const Value.absent(),
+    this.processingAttempts = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        projectId = Value(projectId),
@@ -1500,6 +1542,7 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     Expression<double>? accuracyMeters,
     Expression<String>? address,
     Expression<String>? locationOutcome,
+    Expression<int>? processingAttempts,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1522,6 +1565,7 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
       if (accuracyMeters != null) 'accuracy_meters': accuracyMeters,
       if (address != null) 'address': address,
       if (locationOutcome != null) 'location_outcome': locationOutcome,
+      if (processingAttempts != null) 'processing_attempts': processingAttempts,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1546,6 +1590,7 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     Value<double?>? accuracyMeters,
     Value<String?>? address,
     Value<String?>? locationOutcome,
+    Value<int>? processingAttempts,
     Value<int>? rowid,
   }) {
     return CaptureRecordsCompanion(
@@ -1568,6 +1613,7 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
       accuracyMeters: accuracyMeters ?? this.accuracyMeters,
       address: address ?? this.address,
       locationOutcome: locationOutcome ?? this.locationOutcome,
+      processingAttempts: processingAttempts ?? this.processingAttempts,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1634,6 +1680,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     if (locationOutcome.present) {
       map['location_outcome'] = Variable<String>(locationOutcome.value);
     }
+    if (processingAttempts.present) {
+      map['processing_attempts'] = Variable<int>(processingAttempts.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1662,6 +1711,519 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
           ..write('accuracyMeters: $accuracyMeters, ')
           ..write('address: $address, ')
           ..write('locationOutcome: $locationOutcome, ')
+          ..write('processingAttempts: $processingAttempts, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AppSettingsTable extends AppSettings
+    with TableInfo<$AppSettingsTable, AppSetting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AppSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('global'),
+  );
+  static const VerificationMeta _themeModeMeta = const VerificationMeta(
+    'themeMode',
+  );
+  @override
+  late final GeneratedColumn<String> themeMode = GeneratedColumn<String>(
+    'theme_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('system'),
+  );
+  static const VerificationMeta _localeCodeMeta = const VerificationMeta(
+    'localeCode',
+  );
+  @override
+  late final GeneratedColumn<String> localeCode = GeneratedColumn<String>(
+    'locale_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _defaultWatermarkPositionMeta =
+      const VerificationMeta('defaultWatermarkPosition');
+  @override
+  late final GeneratedColumn<String> defaultWatermarkPosition =
+      GeneratedColumn<String>(
+        'default_watermark_position',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('bottomLeft'),
+      );
+  static const VerificationMeta _defaultWatermarkOpacityMeta =
+      const VerificationMeta('defaultWatermarkOpacity');
+  @override
+  late final GeneratedColumn<double> defaultWatermarkOpacity =
+      GeneratedColumn<double>(
+        'default_watermark_opacity',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0.78),
+      );
+  static const VerificationMeta _defaultWatermarkAccentColorArgbMeta =
+      const VerificationMeta('defaultWatermarkAccentColorArgb');
+  @override
+  late final GeneratedColumn<int> defaultWatermarkAccentColorArgb =
+      GeneratedColumn<int>(
+        'default_watermark_accent_color_argb',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0xff37c58b),
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    themeMode,
+    localeCode,
+    defaultWatermarkPosition,
+    defaultWatermarkOpacity,
+    defaultWatermarkAccentColorArgb,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'app_settings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AppSetting> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('theme_mode')) {
+      context.handle(
+        _themeModeMeta,
+        themeMode.isAcceptableOrUnknown(data['theme_mode']!, _themeModeMeta),
+      );
+    }
+    if (data.containsKey('locale_code')) {
+      context.handle(
+        _localeCodeMeta,
+        localeCode.isAcceptableOrUnknown(data['locale_code']!, _localeCodeMeta),
+      );
+    }
+    if (data.containsKey('default_watermark_position')) {
+      context.handle(
+        _defaultWatermarkPositionMeta,
+        defaultWatermarkPosition.isAcceptableOrUnknown(
+          data['default_watermark_position']!,
+          _defaultWatermarkPositionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_watermark_opacity')) {
+      context.handle(
+        _defaultWatermarkOpacityMeta,
+        defaultWatermarkOpacity.isAcceptableOrUnknown(
+          data['default_watermark_opacity']!,
+          _defaultWatermarkOpacityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_watermark_accent_color_argb')) {
+      context.handle(
+        _defaultWatermarkAccentColorArgbMeta,
+        defaultWatermarkAccentColorArgb.isAcceptableOrUnknown(
+          data['default_watermark_accent_color_argb']!,
+          _defaultWatermarkAccentColorArgbMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AppSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AppSetting(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      themeMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}theme_mode'],
+      )!,
+      localeCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}locale_code'],
+      ),
+      defaultWatermarkPosition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_watermark_position'],
+      )!,
+      defaultWatermarkOpacity: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}default_watermark_opacity'],
+      )!,
+      defaultWatermarkAccentColorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}default_watermark_accent_color_argb'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AppSettingsTable createAlias(String alias) {
+    return $AppSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class AppSetting extends DataClass implements Insertable<AppSetting> {
+  final String id;
+  final String themeMode;
+  final String? localeCode;
+  final String defaultWatermarkPosition;
+  final double defaultWatermarkOpacity;
+  final int defaultWatermarkAccentColorArgb;
+  final DateTime updatedAt;
+  const AppSetting({
+    required this.id,
+    required this.themeMode,
+    this.localeCode,
+    required this.defaultWatermarkPosition,
+    required this.defaultWatermarkOpacity,
+    required this.defaultWatermarkAccentColorArgb,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['theme_mode'] = Variable<String>(themeMode);
+    if (!nullToAbsent || localeCode != null) {
+      map['locale_code'] = Variable<String>(localeCode);
+    }
+    map['default_watermark_position'] = Variable<String>(
+      defaultWatermarkPosition,
+    );
+    map['default_watermark_opacity'] = Variable<double>(
+      defaultWatermarkOpacity,
+    );
+    map['default_watermark_accent_color_argb'] = Variable<int>(
+      defaultWatermarkAccentColorArgb,
+    );
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  AppSettingsCompanion toCompanion(bool nullToAbsent) {
+    return AppSettingsCompanion(
+      id: Value(id),
+      themeMode: Value(themeMode),
+      localeCode: localeCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localeCode),
+      defaultWatermarkPosition: Value(defaultWatermarkPosition),
+      defaultWatermarkOpacity: Value(defaultWatermarkOpacity),
+      defaultWatermarkAccentColorArgb: Value(defaultWatermarkAccentColorArgb),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory AppSetting.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AppSetting(
+      id: serializer.fromJson<String>(json['id']),
+      themeMode: serializer.fromJson<String>(json['themeMode']),
+      localeCode: serializer.fromJson<String?>(json['localeCode']),
+      defaultWatermarkPosition: serializer.fromJson<String>(
+        json['defaultWatermarkPosition'],
+      ),
+      defaultWatermarkOpacity: serializer.fromJson<double>(
+        json['defaultWatermarkOpacity'],
+      ),
+      defaultWatermarkAccentColorArgb: serializer.fromJson<int>(
+        json['defaultWatermarkAccentColorArgb'],
+      ),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'themeMode': serializer.toJson<String>(themeMode),
+      'localeCode': serializer.toJson<String?>(localeCode),
+      'defaultWatermarkPosition': serializer.toJson<String>(
+        defaultWatermarkPosition,
+      ),
+      'defaultWatermarkOpacity': serializer.toJson<double>(
+        defaultWatermarkOpacity,
+      ),
+      'defaultWatermarkAccentColorArgb': serializer.toJson<int>(
+        defaultWatermarkAccentColorArgb,
+      ),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  AppSetting copyWith({
+    String? id,
+    String? themeMode,
+    Value<String?> localeCode = const Value.absent(),
+    String? defaultWatermarkPosition,
+    double? defaultWatermarkOpacity,
+    int? defaultWatermarkAccentColorArgb,
+    DateTime? updatedAt,
+  }) => AppSetting(
+    id: id ?? this.id,
+    themeMode: themeMode ?? this.themeMode,
+    localeCode: localeCode.present ? localeCode.value : this.localeCode,
+    defaultWatermarkPosition:
+        defaultWatermarkPosition ?? this.defaultWatermarkPosition,
+    defaultWatermarkOpacity:
+        defaultWatermarkOpacity ?? this.defaultWatermarkOpacity,
+    defaultWatermarkAccentColorArgb:
+        defaultWatermarkAccentColorArgb ?? this.defaultWatermarkAccentColorArgb,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  AppSetting copyWithCompanion(AppSettingsCompanion data) {
+    return AppSetting(
+      id: data.id.present ? data.id.value : this.id,
+      themeMode: data.themeMode.present ? data.themeMode.value : this.themeMode,
+      localeCode: data.localeCode.present
+          ? data.localeCode.value
+          : this.localeCode,
+      defaultWatermarkPosition: data.defaultWatermarkPosition.present
+          ? data.defaultWatermarkPosition.value
+          : this.defaultWatermarkPosition,
+      defaultWatermarkOpacity: data.defaultWatermarkOpacity.present
+          ? data.defaultWatermarkOpacity.value
+          : this.defaultWatermarkOpacity,
+      defaultWatermarkAccentColorArgb:
+          data.defaultWatermarkAccentColorArgb.present
+          ? data.defaultWatermarkAccentColorArgb.value
+          : this.defaultWatermarkAccentColorArgb,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSetting(')
+          ..write('id: $id, ')
+          ..write('themeMode: $themeMode, ')
+          ..write('localeCode: $localeCode, ')
+          ..write('defaultWatermarkPosition: $defaultWatermarkPosition, ')
+          ..write('defaultWatermarkOpacity: $defaultWatermarkOpacity, ')
+          ..write(
+            'defaultWatermarkAccentColorArgb: $defaultWatermarkAccentColorArgb, ',
+          )
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    themeMode,
+    localeCode,
+    defaultWatermarkPosition,
+    defaultWatermarkOpacity,
+    defaultWatermarkAccentColorArgb,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AppSetting &&
+          other.id == this.id &&
+          other.themeMode == this.themeMode &&
+          other.localeCode == this.localeCode &&
+          other.defaultWatermarkPosition == this.defaultWatermarkPosition &&
+          other.defaultWatermarkOpacity == this.defaultWatermarkOpacity &&
+          other.defaultWatermarkAccentColorArgb ==
+              this.defaultWatermarkAccentColorArgb &&
+          other.updatedAt == this.updatedAt);
+}
+
+class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
+  final Value<String> id;
+  final Value<String> themeMode;
+  final Value<String?> localeCode;
+  final Value<String> defaultWatermarkPosition;
+  final Value<double> defaultWatermarkOpacity;
+  final Value<int> defaultWatermarkAccentColorArgb;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const AppSettingsCompanion({
+    this.id = const Value.absent(),
+    this.themeMode = const Value.absent(),
+    this.localeCode = const Value.absent(),
+    this.defaultWatermarkPosition = const Value.absent(),
+    this.defaultWatermarkOpacity = const Value.absent(),
+    this.defaultWatermarkAccentColorArgb = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AppSettingsCompanion.insert({
+    this.id = const Value.absent(),
+    this.themeMode = const Value.absent(),
+    this.localeCode = const Value.absent(),
+    this.defaultWatermarkPosition = const Value.absent(),
+    this.defaultWatermarkOpacity = const Value.absent(),
+    this.defaultWatermarkAccentColorArgb = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : updatedAt = Value(updatedAt);
+  static Insertable<AppSetting> custom({
+    Expression<String>? id,
+    Expression<String>? themeMode,
+    Expression<String>? localeCode,
+    Expression<String>? defaultWatermarkPosition,
+    Expression<double>? defaultWatermarkOpacity,
+    Expression<int>? defaultWatermarkAccentColorArgb,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (themeMode != null) 'theme_mode': themeMode,
+      if (localeCode != null) 'locale_code': localeCode,
+      if (defaultWatermarkPosition != null)
+        'default_watermark_position': defaultWatermarkPosition,
+      if (defaultWatermarkOpacity != null)
+        'default_watermark_opacity': defaultWatermarkOpacity,
+      if (defaultWatermarkAccentColorArgb != null)
+        'default_watermark_accent_color_argb': defaultWatermarkAccentColorArgb,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AppSettingsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? themeMode,
+    Value<String?>? localeCode,
+    Value<String>? defaultWatermarkPosition,
+    Value<double>? defaultWatermarkOpacity,
+    Value<int>? defaultWatermarkAccentColorArgb,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return AppSettingsCompanion(
+      id: id ?? this.id,
+      themeMode: themeMode ?? this.themeMode,
+      localeCode: localeCode ?? this.localeCode,
+      defaultWatermarkPosition:
+          defaultWatermarkPosition ?? this.defaultWatermarkPosition,
+      defaultWatermarkOpacity:
+          defaultWatermarkOpacity ?? this.defaultWatermarkOpacity,
+      defaultWatermarkAccentColorArgb:
+          defaultWatermarkAccentColorArgb ??
+          this.defaultWatermarkAccentColorArgb,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (themeMode.present) {
+      map['theme_mode'] = Variable<String>(themeMode.value);
+    }
+    if (localeCode.present) {
+      map['locale_code'] = Variable<String>(localeCode.value);
+    }
+    if (defaultWatermarkPosition.present) {
+      map['default_watermark_position'] = Variable<String>(
+        defaultWatermarkPosition.value,
+      );
+    }
+    if (defaultWatermarkOpacity.present) {
+      map['default_watermark_opacity'] = Variable<double>(
+        defaultWatermarkOpacity.value,
+      );
+    }
+    if (defaultWatermarkAccentColorArgb.present) {
+      map['default_watermark_accent_color_argb'] = Variable<int>(
+        defaultWatermarkAccentColorArgb.value,
+      );
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AppSettingsCompanion(')
+          ..write('id: $id, ')
+          ..write('themeMode: $themeMode, ')
+          ..write('localeCode: $localeCode, ')
+          ..write('defaultWatermarkPosition: $defaultWatermarkPosition, ')
+          ..write('defaultWatermarkOpacity: $defaultWatermarkOpacity, ')
+          ..write(
+            'defaultWatermarkAccentColorArgb: $defaultWatermarkAccentColorArgb, ',
+          )
+          ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1673,6 +2235,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ProjectsTable projects = $ProjectsTable(this);
   late final $CaptureRecordsTable captureRecords = $CaptureRecordsTable(this);
+  late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1680,6 +2243,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     projects,
     captureRecords,
+    appSettings,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -2081,6 +2645,7 @@ typedef $$CaptureRecordsTableCreateCompanionBuilder =
       Value<double?> accuracyMeters,
       Value<String?> address,
       Value<String?> locationOutcome,
+      Value<int> processingAttempts,
       Value<int> rowid,
     });
 typedef $$CaptureRecordsTableUpdateCompanionBuilder =
@@ -2104,6 +2669,7 @@ typedef $$CaptureRecordsTableUpdateCompanionBuilder =
       Value<double?> accuracyMeters,
       Value<String?> address,
       Value<String?> locationOutcome,
+      Value<int> processingAttempts,
       Value<int> rowid,
     });
 
@@ -2233,6 +2799,11 @@ class $$CaptureRecordsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get processingAttempts => $composableBuilder(
+    column: $table.processingAttempts,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ProjectsTableFilterComposer get projectId {
     final $$ProjectsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -2356,6 +2927,11 @@ class $$CaptureRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get processingAttempts => $composableBuilder(
+    column: $table.processingAttempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -2465,6 +3041,11 @@ class $$CaptureRecordsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get processingAttempts => $composableBuilder(
+    column: $table.processingAttempts,
+    builder: (column) => column,
+  );
+
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -2538,6 +3119,7 @@ class $$CaptureRecordsTableTableManager
                 Value<double?> accuracyMeters = const Value.absent(),
                 Value<String?> address = const Value.absent(),
                 Value<String?> locationOutcome = const Value.absent(),
+                Value<int> processingAttempts = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CaptureRecordsCompanion(
                 id: id,
@@ -2559,6 +3141,7 @@ class $$CaptureRecordsTableTableManager
                 accuracyMeters: accuracyMeters,
                 address: address,
                 locationOutcome: locationOutcome,
+                processingAttempts: processingAttempts,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2582,6 +3165,7 @@ class $$CaptureRecordsTableTableManager
                 Value<double?> accuracyMeters = const Value.absent(),
                 Value<String?> address = const Value.absent(),
                 Value<String?> locationOutcome = const Value.absent(),
+                Value<int> processingAttempts = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CaptureRecordsCompanion.insert(
                 id: id,
@@ -2603,6 +3187,7 @@ class $$CaptureRecordsTableTableManager
                 accuracyMeters: accuracyMeters,
                 address: address,
                 locationOutcome: locationOutcome,
+                processingAttempts: processingAttempts,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2673,6 +3258,258 @@ typedef $$CaptureRecordsTableProcessedTableManager =
       CaptureRecord,
       PrefetchHooks Function({bool projectId})
     >;
+typedef $$AppSettingsTableCreateCompanionBuilder =
+    AppSettingsCompanion Function({
+      Value<String> id,
+      Value<String> themeMode,
+      Value<String?> localeCode,
+      Value<String> defaultWatermarkPosition,
+      Value<double> defaultWatermarkOpacity,
+      Value<int> defaultWatermarkAccentColorArgb,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$AppSettingsTableUpdateCompanionBuilder =
+    AppSettingsCompanion Function({
+      Value<String> id,
+      Value<String> themeMode,
+      Value<String?> localeCode,
+      Value<String> defaultWatermarkPosition,
+      Value<double> defaultWatermarkOpacity,
+      Value<int> defaultWatermarkAccentColorArgb,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$AppSettingsTableFilterComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get themeMode => $composableBuilder(
+    column: $table.themeMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localeCode => $composableBuilder(
+    column: $table.localeCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultWatermarkPosition => $composableBuilder(
+    column: $table.defaultWatermarkPosition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get defaultWatermarkOpacity => $composableBuilder(
+    column: $table.defaultWatermarkOpacity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get defaultWatermarkAccentColorArgb => $composableBuilder(
+    column: $table.defaultWatermarkAccentColorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AppSettingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get themeMode => $composableBuilder(
+    column: $table.themeMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localeCode => $composableBuilder(
+    column: $table.localeCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get defaultWatermarkPosition => $composableBuilder(
+    column: $table.defaultWatermarkPosition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get defaultWatermarkOpacity => $composableBuilder(
+    column: $table.defaultWatermarkOpacity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get defaultWatermarkAccentColorArgb =>
+      $composableBuilder(
+        column: $table.defaultWatermarkAccentColorArgb,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AppSettingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AppSettingsTable> {
+  $$AppSettingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get themeMode =>
+      $composableBuilder(column: $table.themeMode, builder: (column) => column);
+
+  GeneratedColumn<String> get localeCode => $composableBuilder(
+    column: $table.localeCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultWatermarkPosition => $composableBuilder(
+    column: $table.defaultWatermarkPosition,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get defaultWatermarkOpacity => $composableBuilder(
+    column: $table.defaultWatermarkOpacity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get defaultWatermarkAccentColorArgb =>
+      $composableBuilder(
+        column: $table.defaultWatermarkAccentColorArgb,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$AppSettingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AppSettingsTable,
+          AppSetting,
+          $$AppSettingsTableFilterComposer,
+          $$AppSettingsTableOrderingComposer,
+          $$AppSettingsTableAnnotationComposer,
+          $$AppSettingsTableCreateCompanionBuilder,
+          $$AppSettingsTableUpdateCompanionBuilder,
+          (
+            AppSetting,
+            BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>,
+          ),
+          AppSetting,
+          PrefetchHooks Function()
+        > {
+  $$AppSettingsTableTableManager(_$AppDatabase db, $AppSettingsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AppSettingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AppSettingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AppSettingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> themeMode = const Value.absent(),
+                Value<String?> localeCode = const Value.absent(),
+                Value<String> defaultWatermarkPosition = const Value.absent(),
+                Value<double> defaultWatermarkOpacity = const Value.absent(),
+                Value<int> defaultWatermarkAccentColorArgb =
+                    const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AppSettingsCompanion(
+                id: id,
+                themeMode: themeMode,
+                localeCode: localeCode,
+                defaultWatermarkPosition: defaultWatermarkPosition,
+                defaultWatermarkOpacity: defaultWatermarkOpacity,
+                defaultWatermarkAccentColorArgb:
+                    defaultWatermarkAccentColorArgb,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> themeMode = const Value.absent(),
+                Value<String?> localeCode = const Value.absent(),
+                Value<String> defaultWatermarkPosition = const Value.absent(),
+                Value<double> defaultWatermarkOpacity = const Value.absent(),
+                Value<int> defaultWatermarkAccentColorArgb =
+                    const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => AppSettingsCompanion.insert(
+                id: id,
+                themeMode: themeMode,
+                localeCode: localeCode,
+                defaultWatermarkPosition: defaultWatermarkPosition,
+                defaultWatermarkOpacity: defaultWatermarkOpacity,
+                defaultWatermarkAccentColorArgb:
+                    defaultWatermarkAccentColorArgb,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AppSettingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AppSettingsTable,
+      AppSetting,
+      $$AppSettingsTableFilterComposer,
+      $$AppSettingsTableOrderingComposer,
+      $$AppSettingsTableAnnotationComposer,
+      $$AppSettingsTableCreateCompanionBuilder,
+      $$AppSettingsTableUpdateCompanionBuilder,
+      (
+        AppSetting,
+        BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>,
+      ),
+      AppSetting,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2681,4 +3518,6 @@ class $AppDatabaseManager {
       $$ProjectsTableTableManager(_db, _db.projects);
   $$CaptureRecordsTableTableManager get captureRecords =>
       $$CaptureRecordsTableTableManager(_db, _db.captureRecords);
+  $$AppSettingsTableTableManager get appSettings =>
+      $$AppSettingsTableTableManager(_db, _db.appSettings);
 }

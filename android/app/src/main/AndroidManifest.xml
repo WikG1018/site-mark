@@ -1,4 +1,19 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Security boundary: SiteMark is a fully offline app. No ads, analytics,
+         accounts, cloud sync, remote APIs, Google Play Services, or network
+         access of any kind. The workmanager_android plugin (Task 3) pulls in
+         androidx.work:work-runtime, whose manifest declares ACCESS_NETWORK_STATE,
+         and the debug/profile build variants declare INTERNET for Flutter dev
+         tools. We strip both at manifest-merge time so they never reach the
+         shipped APK, even in debug builds. WAKE_LOCK, RECEIVE_BOOT_COMPLETED,
+         and FOREGROUND_SERVICE are kept because WorkManager uses them for local
+         on-device background processing and boot reconciliation, none of which
+         grants network access. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
@@ -7,11 +22,6 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round">
-        <provider
-            android:name=".CaptureContentProvider"
-            android:authorities="${applicationId}.capture"
-            android:exported="false"
-            android:grantUriPermissions="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -2,7 +2,7 @@
 // See also: https://pub.dev/packages/pigeon
 @file:Suppress("UNCHECKED_CAST", "ArrayInDataClass")
 
-package io.github.wikg1018.sitemark.bridge
+package io.github.wikg1018.sitemark.system
 
 import android.util.Log
 import io.flutter.plugin.common.BasicMessageChannel
@@ -490,7 +490,7 @@ interface SiteMarkSystemApi {
     fun setUp(binaryMessenger: BinaryMessenger, api: SiteMarkSystemApi?, messageChannelSuffix: String = "") {
       val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark.SiteMarkSystemApi.createCameraTarget$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.createCameraTarget$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
@@ -507,7 +507,7 @@ interface SiteMarkSystemApi {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark.SiteMarkSystemApi.launchCamera$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.launchCamera$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
@@ -527,7 +527,7 @@ interface SiteMarkSystemApi {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark.SiteMarkSystemApi.recoverCameraCapture$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.recoverCameraCapture$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
@@ -542,7 +542,7 @@ interface SiteMarkSystemApi {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark.SiteMarkSystemApi.finishCameraCapture$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.finishCameraCapture$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
@@ -561,7 +561,7 @@ interface SiteMarkSystemApi {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark.SiteMarkSystemApi.requestCurrentLocation$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestCurrentLocation$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
@@ -581,7 +581,7 @@ interface SiteMarkSystemApi {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark.SiteMarkSystemApi.publishJpeg$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.publishJpeg$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
@@ -602,7 +602,7 @@ interface SiteMarkSystemApi {
         }
       }
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark.SiteMarkSystemApi.deletePublishedImage$separatedMessageChannelSuffix", codec)
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.deletePublishedImage$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>

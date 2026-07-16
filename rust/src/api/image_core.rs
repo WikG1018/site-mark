@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use ab_glyph::{FontArc, PxScale};
 use image::codecs::jpeg::JpegEncoder;
 use image::{DynamicImage, GenericImageView, ImageDecoder, ImageReader, Pixel, Rgba, RgbaImage};
-use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut};
+use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut, text_size};
 use imageproc::rect::Rect;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -101,15 +101,42 @@ struct CsvRow<'a> {
     original_sha256: &'a str,
 }
 
+fn io_failure(context: &str, error: std::io::Error) -> String {
+    let prefix = if error.kind() == std::io::ErrorKind::NotFound {
+        "not_found:"
+    } else {
+        "io:"
+    };
+    format!("{prefix}{context}: {error}")
+}
+
+fn invalid_data(context: &str, error: impl std::fmt::Display) -> String {
+    format!("invalid_data:{context}: {error}")
+}
+
+fn image_failure(context: &str, error: image::ImageError) -> String {
+    match error {
+        image::ImageError::IoError(error) => io_failure(context, error),
+        error => invalid_data(context, error),
+    }
+}
+
+fn zip_failure(context: &str, error: zip::result::ZipError) -> String {
+    match error {
+        zip::result::ZipError::Io(error) => io_failure(context, error),
+        error => invalid_data(context, error),
+    }
+}
+
 pub fn sha256_file(path: String) -> Result<String, String> {
-    let file = File::open(&path).map_err(|error| format!("open {path}: {error}"))?;
+    let file = File::open(&path).map_err(|error| io_failure(&format!("open {path}"), error))?;
     let mut reader = BufReader::new(file);
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];
     loop {
         let count = reader
             .read(&mut buffer)
-            .map_err(|error| format!("read {path}: {error}"))?;
+            .map_err(|error| io_failure(&format!("read {path}"), error))?;
         if count == 0 {
             break;
         }
@@ -125,28 +152,28 @@ pub fn verify_file(path: String, expected_sha256: String) -> Result<bool, String
 pub fn render_photo(request: RenderPhotoRequest) -> Result<RenderPhotoResult, String> {
     validate_render_request(&request)?;
     let mut decoder = ImageReader::open(&request.source_path)
-        .map_err(|error| format!("open source image: {error}"))?
+        .map_err(|error| io_failure("open source image", error))?
         .into_decoder()
-        .map_err(|error| format!("decode source image: {error}"))?;
+        .map_err(|error| image_failure("decode source image", error))?;
     let orientation = decoder
         .orientation()
-        .map_err(|error| format!("read image orientation: {error}"))?;
+        .map_err(|error| image_failure("read image orientation", error))?;
     let mut image = DynamicImage::from_decoder(decoder)
-        .map_err(|error| format!("decode source pixels: {error}"))?;
+        .map_err(|error| image_failure("decode source pixels", error))?;
     image.apply_orientation(orientation);
     let (width, height) = image.dimensions();
     let mut canvas = image.to_rgba8();
     draw_watermark_card(&mut canvas, &request)?;
     let output = Path::new(&request.output_path);
     if let Some(parent) = output.parent() {
-        fs::create_dir_all(parent).map_err(|error| format!("create output directory: {error}"))?;
+        fs::create_dir_all(parent).map_err(|error| io_failure("create output directory", error))?;
     }
-    let file = File::create(output).map_err(|error| format!("create output image: {error}"))?;
+    let file = File::create(output).map_err(|error| io_failure("create output image", error))?;
     let writer = BufWriter::new(file);
     let mut encoder = JpegEncoder::new_with_quality(writer, 92);
     encoder
         .encode_image(&DynamicImage::ImageRgba8(canvas))
-        .map_err(|error| format!("encode output JPEG: {error}"))?;
+        .map_err(|error| image_failure("encode output JPEG", error))?;
 
     Ok(RenderPhotoResult {
         output_path: request.output_path.clone(),
@@ -158,13 +185,16 @@ pub fn render_photo(request: RenderPhotoRequest) -> Result<RenderPhotoResult, St
 
 pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResult, String> {
     if request.project_name.trim().is_empty() {
-        return Err("project name is required".to_string());
+        return Err(invalid_data(
+            "validate export request",
+            "project name is required",
+        ));
     }
     let output = Path::new(&request.output_zip_path);
     if let Some(parent) = output.parent() {
-        fs::create_dir_all(parent).map_err(|error| format!("create export directory: {error}"))?;
+        fs::create_dir_all(parent).map_err(|error| io_failure("create export directory", error))?;
     }
-    let file = File::create(output).map_err(|error| format!("create ZIP: {error}"))?;
+    let file = File::create(output).map_err(|error| io_failure("create ZIP", error))?;
     let mut archive = ZipWriter::new(BufWriter::new(file));
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
 
@@ -177,10 +207,12 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
             options,
         )?;
         if request.include_originals {
-            let original = photo
-                .original_path
-                .as_deref()
-                .ok_or_else(|| format!("missing original for {}", photo.photo_number))?;
+            let original = photo.original_path.as_deref().ok_or_else(|| {
+                invalid_data(
+                    "validate export request",
+                    format!("missing original for {}", photo.photo_number),
+                )
+            })?;
             let extension = Path::new(original)
                 .extension()
                 .and_then(|value| value.to_str())
@@ -213,17 +245,17 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
                 notes: photo.notes.as_deref().unwrap_or(""),
                 original_sha256: &photo.original_sha256,
             })
-            .map_err(|error| format!("write CSV record: {error}"))?;
+            .map_err(|error| invalid_data("write CSV record", error))?;
         }
         csv.flush()
-            .map_err(|error| format!("finish CSV: {error}"))?;
+            .map_err(|error| io_failure("finish CSV", error))?;
     }
     archive
         .start_file("records.csv", options)
-        .map_err(|error| format!("start CSV entry: {error}"))?;
+        .map_err(|error| zip_failure("start CSV entry", error))?;
     archive
         .write_all(&csv_bytes)
-        .map_err(|error| format!("write CSV entry: {error}"))?;
+        .map_err(|error| io_failure("write CSV entry", error))?;
 
     let manifest = serde_json::to_vec_pretty(&ExportManifest {
         schema_version: 1,
@@ -233,16 +265,16 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         includes_originals: request.include_originals,
         photos: &request.photos,
     })
-    .map_err(|error| format!("serialize manifest: {error}"))?;
+    .map_err(|error| invalid_data("serialize manifest", error))?;
     archive
         .start_file("manifest.json", options)
-        .map_err(|error| format!("start manifest entry: {error}"))?;
+        .map_err(|error| zip_failure("start manifest entry", error))?;
     archive
         .write_all(&manifest)
-        .map_err(|error| format!("write manifest entry: {error}"))?;
+        .map_err(|error| io_failure("write manifest entry", error))?;
     archive
         .finish()
-        .map_err(|error| format!("finish ZIP: {error}"))?;
+        .map_err(|error| zip_failure("finish ZIP", error))?;
 
     Ok(ExportProjectResult {
         output_zip_path: request.output_zip_path.clone(),
@@ -261,22 +293,100 @@ fn validate_render_request(request: &RenderPhotoRequest) -> Result<(), String> {
         ("capture time", request.captured_at.as_str()),
     ] {
         if value.trim().is_empty() {
-            return Err(format!("{label} is required"));
+            return Err(invalid_data(
+                "validate render request",
+                format!("{label} is required"),
+            ));
         }
     }
     if !(0.2..=0.95).contains(&request.opacity) {
-        return Err("watermark opacity must be between 0.2 and 0.95".to_string());
+        return Err(invalid_data(
+            "validate render request",
+            "watermark opacity must be between 0.2 and 0.95",
+        ));
     }
     Ok(())
 }
 
-fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> Result<(), String> {
-    let (width, height) = canvas.dimensions();
+#[derive(Clone, Copy, Debug)]
+pub struct WatermarkLayout {
+    pub font_size: f32,
+    pub title_size: f32,
+    pub line_height: u32,
+    pub padding: u32,
+    pub margin: u32,
+    pub card_width: u32,
+    pub card_height: u32,
+    pub left: u32,
+    pub top: u32,
+}
+
+/// Pure layout calculation for the engineering watermark card.
+///
+/// `line_count` is the number of display lines that will be rendered. The
+/// returned `left`/`top` use the bottom-left anchor (the strictest horizontal
+/// fit: `left = margin`), which is the worst case for the `card_width + margin`
+/// constraint. Bottom-right rendering only ever shifts the card leftward, so it
+/// never exceeds the bounds validated here.
+pub fn watermark_layout(
+    width: u32,
+    height: u32,
+    line_count: usize,
+) -> Result<WatermarkLayout, String> {
     let margin = ((width.min(height) as f32) * 0.025).round() as u32;
-    let padding = ((width as f32) * 0.018).round().max(18.0) as u32;
-    let font_size = ((width as f32) * 0.026).clamp(26.0, 58.0);
+    let padding = ((width as f32) * 0.0216).round().max(22.0) as u32;
+    let font_size = ((width as f32) * 0.0312).clamp(31.2, 69.6);
     let title_size = font_size * 1.18;
     let line_height = (font_size * 1.42).round() as u32;
+    let card_width = ((width as f32) * 0.62).round() as u32;
+    let card_height = padding * 2 + line_height * line_count.max(1) as u32;
+    if width < margin || height < margin {
+        return Err(invalid_data(
+            "layout watermark",
+            "source image is too small for the watermark card",
+        ));
+    }
+    if card_width + margin > width || card_height + margin > height {
+        return Err(invalid_data(
+            "layout watermark",
+            "source image is too small for the watermark card",
+        ));
+    }
+    let left = margin;
+    let top = height - margin - card_height;
+    Ok(WatermarkLayout {
+        font_size,
+        title_size,
+        line_height,
+        padding,
+        margin,
+        card_width,
+        card_height,
+        left,
+        top,
+    })
+}
+
+fn fit_line(text: &str, max_width: u32, size: f32, font: &FontArc) -> String {
+    let scale = PxScale::from(size);
+    let (w, _) = text_size(scale, font, text);
+    if w <= max_width {
+        return text.to_string();
+    }
+    let mut chars: Vec<char> = text.chars().collect();
+    while chars.len() > 1 {
+        chars.pop();
+        let candidate: String = chars.iter().collect::<String>() + "…";
+        let (cw, _) = text_size(scale, font, &candidate);
+        if cw <= max_width {
+            return candidate;
+        }
+    }
+    "…".to_string()
+}
+
+fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> Result<(), String> {
+    let (width, height) = canvas.dimensions();
     let mut lines = vec![
         format!("现场记录 · {}", request.project_name),
         format!("位置  {}", request.work_location),
@@ -294,11 +404,17 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
     if let Some(notes) = non_empty(&request.notes) {
         lines.push(format!("备注  {notes}"));
     }
-    let card_width = ((width as f32) * 0.62).round() as u32;
-    let card_height = padding * 2 + line_height * lines.len() as u32;
-    if card_width + margin > width || card_height + margin > height {
-        return Err("source image is too small for the watermark card".to_string());
-    }
+    let layout = watermark_layout(width, height, lines.len())?;
+    let WatermarkLayout {
+        font_size,
+        title_size,
+        line_height,
+        padding,
+        margin,
+        card_width,
+        card_height,
+        ..
+    } = layout;
     let left = match request.position {
         WatermarkPosition::BottomLeft => margin,
         WatermarkPosition::BottomRight => width - margin - card_width,
@@ -320,9 +436,10 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
     );
 
     let font = FontArc::try_from_slice(FONT_BYTES)
-        .map_err(|error| format!("load bundled font: {error}"))?;
+        .map_err(|error| invalid_data("load bundled font", error))?;
     let text_left = (left + padding) as i32;
     let mut text_top = (top + padding) as i32;
+    let max_text_width = card_width.saturating_sub(padding * 2);
     for (index, line) in lines.iter().enumerate() {
         let size = if index == 0 { title_size } else { font_size };
         let color = if index == 0 {
@@ -330,6 +447,7 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
         } else {
             Rgba([238, 244, 242, 255])
         };
+        let fitted = fit_line(line, max_text_width, size, &font);
         draw_text_mut(
             canvas,
             color,
@@ -337,7 +455,7 @@ fn draw_watermark_card(canvas: &mut RgbaImage, request: &RenderPhotoRequest) -> 
             text_top,
             PxScale::from(size),
             &font,
-            line,
+            &fitted,
         );
         text_top += line_height as i32;
     }
@@ -381,7 +499,10 @@ fn safe_archive_component(value: &str) -> Result<&str, String> {
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
     {
-        return Err(format!("unsafe archive file name: {value}"));
+        return Err(invalid_data(
+            "validate archive file name",
+            format!("unsafe archive file name: {value}"),
+        ));
     }
     Ok(value)
 }
@@ -394,11 +515,11 @@ fn add_file_to_zip(
 ) -> Result<(), String> {
     let source_path = PathBuf::from(source);
     let mut file = File::open(&source_path)
-        .map_err(|error| format!("open {}: {error}", source_path.display()))?;
+        .map_err(|error| io_failure(&format!("open {}", source_path.display()), error))?;
     archive
         .start_file(destination, options)
-        .map_err(|error| format!("start ZIP entry {destination}: {error}"))?;
+        .map_err(|error| zip_failure(&format!("start ZIP entry {destination}"), error))?;
     std::io::copy(&mut file, archive)
-        .map_err(|error| format!("copy ZIP entry {destination}: {error}"))?;
+        .map_err(|error| io_failure(&format!("copy ZIP entry {destination}"), error))?;
     Ok(())
 }

@@ -7,6 +7,8 @@ build/
 coverage/
 doc/api/
 *.iml
+__pycache__/
+*.py[cod]
 
 # Android
 android/.gradle/

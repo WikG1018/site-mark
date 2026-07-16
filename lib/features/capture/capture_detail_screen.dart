@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 class CaptureDetailScreen extends ConsumerWidget {
@@ -18,15 +22,23 @@ class CaptureDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = AppStrings.of(context);
-    return FutureBuilder<CaptureRecord?>(
-      future: ref.watch(databaseProvider).captureById(captureId),
+    return StreamBuilder<CaptureRecord?>(
+      stream: ref.watch(databaseProvider).watchCaptureById(captureId),
       builder: (context, snapshot) {
         final capture = snapshot.data;
+        final isBusy =
+            capture != null &&
+            (capture.status == CaptureStatus.captured ||
+                capture.status == CaptureStatus.rendering);
+        final canRetry =
+            capture != null &&
+            capture.status == CaptureStatus.failed &&
+            File(capture.originalPath).existsSync();
         return Scaffold(
           appBar: AppBar(
             title: Text(capture?.photoNumber ?? strings.captureDetail),
             actions: [
-              if (capture != null) ...[
+              if (capture != null && !isBusy) ...[
                 IconButton(
                   onPressed: () => context.go(
                     '/projects/$projectId/captures/$captureId/edit',
@@ -47,6 +59,26 @@ class CaptureDetailScreen extends ConsumerWidget {
               : ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
+                    if (canRetry)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: FilledButton.icon(
+                          onPressed: () => _retry(context, ref),
+                          icon: const Icon(Icons.refresh),
+                          label: Text(strings.retryProcessing),
+                        ),
+                      ),
+                    AspectRatio(
+                      aspectRatio: 4 / 3,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: CaptureImagePreview(
+                          capture: capture,
+                          outputPaths: ref.watch(captureOutputPathsProvider),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     _DetailCard(
                       children: [
                         _DetailRow(
@@ -78,7 +110,7 @@ class CaptureDetailScreen extends ConsumerWidget {
                         _DetailRow(
                           icon: Icons.schedule_outlined,
                           label: strings.capturedAt,
-                          value: capture.capturedAt?.toIso8601String() ?? '—',
+                          value: capture.capturedAt?.toIso8601String() ?? '-',
                         ),
                         if (capture.latitude != null)
                           _DetailRow(
@@ -91,7 +123,7 @@ class CaptureDetailScreen extends ConsumerWidget {
                         _DetailRow(
                           icon: Icons.fingerprint,
                           label: strings.originalSha256,
-                          value: capture.originalSha256 ?? '—',
+                          value: capture.originalSha256 ?? '-',
                           selectable: true,
                         ),
                       ],
@@ -101,6 +133,10 @@ class CaptureDetailScreen extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _retry(BuildContext context, WidgetRef ref) async {
+    await ref.read(captureBackgroundSchedulerProvider).retry(captureId);
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {

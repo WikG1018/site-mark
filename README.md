@@ -9,9 +9,9 @@ manufacturer camera experience.
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![Offline](https://img.shields.io/badge/Network-offline--first-176B55)
-![Status](https://img.shields.io/badge/status-v0.1.0--alpha-orange)
+![Status](https://img.shields.io/badge/status-v0.2.0--alpha-orange)
 
-**当前状态：`v0.1.0-alpha`。尚未发布生产签名 APK，欢迎开发者参与测试。**
+**当前状态：`v0.2.0-alpha`。尚未发布生产签名 APK，欢迎开发者参与测试。**
 
 ## 实际效果 / Screenshots
 
@@ -42,6 +42,11 @@ SiteMark 不在应用里重做一套相机界面，而是通过 Android 标准 I
 - **离线优先**：照片、水印和项目数据都在手机本地处理，不依赖云服务。
 - **原图与成片分离**：原图保存在应用私有目录，只把完成的水印 JPEG 发布到相册。
 - **面向工程归档**：按项目组织记录，自动编号，并可导出照片、CSV 和 JSON 清单。
+- **连续拍摄不打断**：拍完一张立刻回到表单，工程部位、工作内容、拍摄人自动保留，
+  仅清空备注；照片进入后台处理队列，不阻塞下一张。
+- **后台串行处理**：水印渲染通过 WorkManager 在后台串行执行、持久化、最多重试三次，
+  覆盖同一 MediaStore 条目；应用被划掉或重启后可继续完成未处理项。后台启动时间由
+  系统调度决定；Android “强制停止”会暂停计划任务，重新打开应用后恢复。
 
 ## 核心能力
 
@@ -51,20 +56,31 @@ SiteMark 不在应用里重做一套相机界面，而是通过 Android 标准 I
 | 全程本地处理 | Flutter/Kotlin 协调流程，Rust 处理方向、水印和哈希 | 无需账号、云端或网络即可完成拍摄归档 |
 | 私有保存原图 | 原始照片留在应用私有目录 | 避免原图直接暴露给其他应用或相册扫描 |
 | 发布水印成片 | 仅将完成的 JPEG 写入 `Pictures/SiteMark` | 相册、文件管理器和工程交付流程可直接使用 |
+| 连续拍摄保留字段 | 拍摄后表单保留工程部位/工作内容/拍摄人，仅清空备注 | 连续多张拍摄时无需重复录入，专注每张备注 |
+| 后台串行处理队列 | WorkManager 串行链、持久化、三次重试、MediaStore 覆盖 | 拍摄不等待渲染；崩溃或重启后能继续完成 |
+| 图片预览 | 列表缩略图 + 详情页全屏放大查看 | 快速核对成片，不必离开应用 |
+| 日期与项目筛选 | 项目详情与全局「全部记录」共享同一筛选卡，支持年/月/日级联 | 按日期或工程快速定位记录 |
+| 全局设置 | 主题、语言、新建项目水印默认值与关于信息 | 统一外观与默认值，现有项目设置不受影响 |
 | 固化采集证据 | 保存照片编号、拍摄时间、坐标和原图 SHA-256 | 为后续核对提供可追溯元数据，不提供司法鉴定结论 |
-| 受约束的水印设置 | 每个项目可调整左右位置、卡片透明度和强调色 | 保持项目内版式一致，同时适配不同画面 |
+| 受约束的水印设置 | 每个项目可调整左右位置、卡片透明度和强调色；水印字号较 v0.1.0 放大 20% | 保持项目内版式一致，同时适配不同画面 |
 | 开放源代码 | Apache License 2.0 | 代码、权限和数据流均可审查，也便于二次开发 |
 
 支持简体中文和英文界面。
 
 ## 使用流程
 
-1. **新建项目**：按工程组织照片和水印设置。
+1. **新建项目**：按工程组织照片和水印设置；新建项目会复制当前全局水印默认值。
 2. **填写现场信息**：录入工程部位、工作内容、拍摄人和可选备注。
 3. **选择位置授权**：拍摄前仅请求一次前台位置；拒绝授权也可以继续拍摄。
 4. **调用系统相机**：由手机厂商相机完成取景、拍照和确认。
-5. **生成工程成片**：校正 EXIF 方向、渲染全分辨率水印、计算 SHA-256，随后发布到系统相册。
-6. **归档与导出**：按项目查看记录，必要时修正描述字段并重新生成，或导出完整项目包。
+5. **后台生成工程成片**：照片加入后台串行队列，校正 EXIF 方向、渲染全分辨率水印、
+   计算 SHA-256，随后发布到系统相册。拍摄表单立刻恢复可用，三项描述字段保留、备注清空。
+6. **浏览与筛选**：在项目详情或全局「全部记录」中按年/月/日和项目筛选，缩略图点击可
+   全屏放大查看；列表会从等待/处理中过渡到已完成，缩略图随后切换为水印成片。
+7. **归档与导出**：按项目查看记录，必要时修正描述字段并重新生成，或导出完整项目包。
+8. **全局设置**：在设置中切换主题（浅色/深色/跟随系统）与语言（简体中文/English），
+   调整新建项目水印默认值，或在关于页查看版本与隐私声明。后台处理由系统调度，
+   Android「强制停止」会暂停计划任务，重新打开应用后恢复。
 
 ## 安装与当前状态
 
@@ -81,17 +97,22 @@ SiteMark 目前处于 **alpha 开发阶段**，还没有面向普通用户的生
 
 ## 隐私与权限
 
-Release 构建只声明以下用户可见权限：
+应用声明的用户可见权限：
 
 | 权限 | 用途 | 是否阻塞拍照 |
 | --- | --- | --- |
 | `ACCESS_COARSE_LOCATION` | 可选的前台近似位置 | 否 |
 | `ACCESS_FINE_LOCATION` | 可选的前台精确位置 | 否 |
+| `WAKE_LOCK`、`RECEIVE_BOOT_COMPLETED` | WorkManager 本地后台处理与重启补偿 | 否 |
+| `FOREGROUND_SERVICE` | WorkManager 后台任务执行 | 否 |
 
-Release 构建**不申请** `CAMERA`、`INTERNET`、`ACCESS_BACKGROUND_LOCATION`、
-`READ_MEDIA_IMAGES` 或传统存储权限。相机由外部系统应用持有；SiteMark 只通过 Android
-URI 授权机制临时提供一个拍摄目标。Debug/Profile 构建中的 `INTERNET` 仅用于 Flutter
-开发工具，不会进入 Release 构建。
+以上权限均为本地后台处理所需，不涉及网络访问。
+
+所有构建变体（Release、Debug、Profile）**均不申请** `CAMERA`、`INTERNET`、
+`ACCESS_NETWORK_STATE`、`ACCESS_BACKGROUND_LOCATION`、`READ_MEDIA_IMAGES` 或传统存储权限。
+`INTERNET` 与 `ACCESS_NETWORK_STATE` 通过 `tools:node="remove"` 在 main、debug、profile
+清单中统一剥离，确保离线边界在所有变体生效。相机由外部系统应用持有；SiteMark 只通过 Android
+URI 授权机制临时提供一个拍摄目标。
 
 完整说明见 [隐私政策 / Privacy Policy](PRIVACY.md) 和
 [安全政策 / Security Policy](SECURITY.md)。
@@ -115,9 +136,10 @@ SHA-256 仅用于原图一致性核对和追溯；SiteMark 不提供司法鉴定
 
 | 层 | 技术 | 职责 |
 | --- | --- | --- |
-| 应用与界面 | Flutter、Material 3、Riverpod、GoRouter、Drift/SQLite | 中英文界面、项目/记录状态、本地数据库与流程编排 |
+| 应用与界面 | Flutter、Material 3、Riverpod、GoRouter、Drift/SQLite | 中英文界面、项目/记录状态、本地数据库、连续拍摄字段保留与全局设置 |
+| 后台处理 | Kotlin、WorkManager | 串行渲染队列、持久化、三次重试、开机与崩溃后恢复 |
 | Android 集成 | Kotlin、Intent、ContentProvider、LocationManager、MediaStore | 系统相机调用、进程恢复标记、可选位置和相册发布 |
-| 图像与导出 | Rust、flutter_rust_bridge | EXIF 方向、全分辨率水印、SHA-256、CSV/JSON/ZIP 导出 |
+| 图像与导出 | Rust、flutter_rust_bridge | EXIF 方向、全分辨率水印（字号较 v0.1.0 放大 20%）、SHA-256、CSV/JSON/ZIP 导出 |
 
 详细设计与决策记录：
 
@@ -144,20 +166,24 @@ flutter build apk --debug
 
 ## 验证状态与路线图
 
-`v0.1.0-alpha` 已完成：
+`v0.2.0-alpha` 已完成（自动化验证，Windows 主机）：
 
-- Flutter 静态检查与 22 项测试；
-- Rust 格式、Clippy 和 3 项测试；
-- Android 单元测试、Debug/Release APK 构建与 Release 权限检查；
-- Android 16 / API 36 模拟器端到端验收：系统相机、私有原图、Rust 水印、MediaStore、
-  本地持久化和项目导出链路。
+- Flutter 静态检查无问题，87 项 Dart 测试通过；
+- Rust 格式检查与 6 项测试通过，包含水印字号放大 20% 与横竖版适配；
+- Android 单元测试与 Debug APK 构建通过；
+- 数据库 v2 -> v3 迁移、后台串行处理与重试幂等性、日期/项目筛选、全局设置持久化、
+  水印几何尺寸均有对应自动化测试通过；
+- Debug Alpha APK（`0.2.0+2`）已生成并校验包名、版本、权限与签名。
+
+实体机设备验收（连续拍摄、后台处理、重启恢复、多厂商相机兼容性等 8 项）尚未在本
+环境执行，详见 [v0.2.0-alpha 验证记录](docs/verification-v0.2.0-alpha.md)。
+
+`v0.1.0-alpha` 已完成的模拟器端到端验收见
+[v0.1.0-alpha 验证记录](docs/verification-v0.1.0-alpha.md)。
 
 稳定发布前仍需完成：Android 12 实体机，以及 Samsung、Xiaomi/Redmi、OPPO/OnePlus、
 vivo、Honor、Pixel 等代表性厂商相机的兼容性矩阵；位置授权分支、相机中断恢复、原位
 重生成和签名发布也需要在实体机上复核。
-
-详见 [v0.1.0-alpha 验证记录](docs/verification-v0.1.0-alpha.md)。模拟器验收证明了
-集成链路，不等同于完成全部厂商相机兼容性验证。
 
 ## 参与贡献
 

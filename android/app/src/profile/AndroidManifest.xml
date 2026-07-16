@@ -1,7 +1,10 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The INTERNET permission is required for development. Specifically,
-         the Flutter tool needs it to communicate with the running application
-         to allow setting breakpoints, to provide hot reload, etc.
-    -->
-    <uses-permission android:name="android.permission.INTERNET"/>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Security boundary: SiteMark is a fully offline app. INTERNET is
+         forbidden even in profile builds. Flutter's default profile
+         manifest declares INTERNET for profiling tooling; we strip it
+         at merge time. The main manifest also carries a
+         tools:node="remove" for INTERNET to cover library manifests. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
 </manifest>

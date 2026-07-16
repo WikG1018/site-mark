@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 
 part 'app_database.g.dart';
@@ -24,6 +25,24 @@ class Projects extends Table {
   IntColumn get watermarkAccentColorArgb =>
       integer().withDefault(const Constant(0xff37c58b))();
   DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Application-wide settings stored as a singleton row with id `'global'`.
+@DataClassName('AppSetting')
+class AppSettings extends Table {
+  TextColumn get id => text().withDefault(const Constant('global'))();
+  TextColumn get themeMode => text().withDefault(const Constant('system'))();
+  TextColumn get localeCode => text().nullable()();
+  TextColumn get defaultWatermarkPosition =>
+      text().withDefault(const Constant('bottomLeft'))();
+  RealColumn get defaultWatermarkOpacity =>
+      real().withDefault(const Constant(0.78))();
+  IntColumn get defaultWatermarkAccentColorArgb =>
+      integer().withDefault(const Constant(0xff37c58b))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -55,19 +74,21 @@ class CaptureRecords extends Table {
   RealColumn get accuracyMeters => real().nullable()();
   TextColumn get address => text().nullable()();
   TextColumn get locationOutcome => text().nullable()();
+  IntColumn get processingAttempts =>
+      integer().withDefault(const Constant(0))();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Projects, CaptureRecords])
+@DriftDatabase(tables: [Projects, CaptureRecords, AppSettings])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'sitemark'));
 
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -78,13 +99,46 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(projects, projects.watermarkOpacity);
         await migrator.addColumn(projects, projects.watermarkAccentColorArgb);
       }
+      if (from < 3) {
+        await migrator.createTable(appSettings);
+        await migrator.addColumn(
+          captureRecords,
+          captureRecords.processingAttempts,
+        );
+        await _ensureGlobalSettingsRow();
+      }
+    },
+    beforeOpen: (details) async {
+      await _ensureGlobalSettingsRow();
     },
   );
+
+  /// Inserts the default `global` settings row if it does not already exist.
+  ///
+  /// Uses `INSERT OR IGNORE` semantics so existing settings (including those
+  /// carried across a v2 -> v3 upgrade) are never overwritten.
+  Future<void> _ensureGlobalSettingsRow() async {
+    final now = DateTime.now();
+    await into(appSettings).insert(
+      AppSettingsCompanion.insert(
+        id: const Value('global'),
+        themeMode: const Value('system'),
+        defaultWatermarkPosition: const Value('bottomLeft'),
+        defaultWatermarkOpacity: const Value(0.78),
+        defaultWatermarkAccentColorArgb: const Value(0xff37c58b),
+        updatedAt: now,
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+  }
 
   Future<Project> createProject({
     required String id,
     required String name,
     String? description,
+    String? watermarkPosition,
+    double? watermarkOpacity,
+    int? watermarkAccentColorArgb,
     DateTime? createdAt,
   }) {
     final timestamp = createdAt ?? DateTime.now();
@@ -93,6 +147,15 @@ class AppDatabase extends _$AppDatabase {
         id: id,
         name: name.trim(),
         description: Value(description?.trim()),
+        watermarkPosition: watermarkPosition == null
+            ? const Value.absent()
+            : Value(watermarkPosition),
+        watermarkOpacity: watermarkOpacity == null
+            ? const Value.absent()
+            : Value(watermarkOpacity),
+        watermarkAccentColorArgb: watermarkAccentColorArgb == null
+            ? const Value.absent()
+            : Value(watermarkAccentColorArgb),
         createdAt: timestamp,
         updatedAt: timestamp,
       ),
@@ -103,6 +166,15 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       projects,
     )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).watch();
+  }
+
+  /// One-shot read of all projects newest-first. Use this instead of
+  /// `watchProjects().first` in widget tests, because the watch stream's
+  /// stream-store timers do not fire under `FakeAsync` until frames are pumped.
+  Future<List<Project>> getProjects() {
+    return (select(
+      projects,
+    )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).get();
   }
 
   Future<CaptureRecord> createPendingCapture({
@@ -366,4 +438,223 @@ class AppDatabase extends _$AppDatabase {
       )..where((row) => row.id.equals(captureId))).getSingle();
     });
   }
+
+  Stream<AppSetting> watchAppSettings() {
+    return (select(
+      appSettings,
+    )..where((row) => row.id.equals('global'))).watchSingle();
+  }
+
+  /// One-shot read of the singleton `global` settings row. Use this instead of
+  /// `watchAppSettings().first` in contexts that must resolve on a single
+  /// microtask (e.g. widget-test `FutureBuilder`s and form save handlers),
+  /// because the watch stream's stream-store timers do not fire under
+  /// `FakeAsync` until frames are pumped.
+  Future<AppSetting> getAppSettings() {
+    return (select(
+      appSettings,
+    )..where((row) => row.id.equals('global'))).getSingle();
+  }
+
+  Future<AppSetting> updateAppSettings({
+    String? themeMode,
+    String? localeCode,
+    String? defaultWatermarkPosition,
+    double? defaultWatermarkOpacity,
+    int? defaultWatermarkAccentColorArgb,
+  }) async {
+    final companion = AppSettingsCompanion(
+      themeMode: themeMode == null ? const Value.absent() : Value(themeMode),
+      localeCode: localeCode == null
+          ? const Value.absent()
+          : Value(localeCode.isEmpty ? null : localeCode),
+      defaultWatermarkPosition: defaultWatermarkPosition == null
+          ? const Value.absent()
+          : Value(defaultWatermarkPosition),
+      defaultWatermarkOpacity: defaultWatermarkOpacity == null
+          ? const Value.absent()
+          : Value(defaultWatermarkOpacity),
+      defaultWatermarkAccentColorArgb: defaultWatermarkAccentColorArgb == null
+          ? const Value.absent()
+          : Value(defaultWatermarkAccentColorArgb),
+      updatedAt: Value(DateTime.now()),
+    );
+    await (update(
+      appSettings,
+    )..where((row) => row.id.equals('global'))).write(companion);
+    return (select(
+      appSettings,
+    )..where((row) => row.id.equals('global'))).getSingle();
+  }
+
+  Future<CaptureCarryForwardDraft?> latestCapturedDraft(String projectId) {
+    final query = select(captureRecords)
+      ..where(
+        (row) =>
+            row.projectId.equals(projectId) &
+            row.status.equals(CaptureStatus.pendingCamera.name).not(),
+      )
+      ..orderBy([
+        (row) => OrderingTerm(
+          expression: coalesce([row.capturedAt, row.createdAt]),
+          mode: OrderingMode.desc,
+        ),
+      ])
+      ..limit(1);
+    return query.map((row) => row.toCarryForwardDraft()).getSingleOrNull();
+  }
+
+  Stream<CaptureRecord?> watchCaptureById(String captureId) {
+    return (select(
+      captureRecords,
+    )..where((row) => row.id.equals(captureId))).watchSingleOrNull();
+  }
+
+  Stream<List<CaptureSummary>> watchCaptureSummaries(CaptureFilter filter) {
+    return _captureSummarySelectable(filter).watch();
+  }
+
+  /// Unfiltered summary stream used to derive available filter options
+  /// (projects, years, months, days) without applying the user's selection.
+  Stream<List<CaptureSummary>> watchAllCaptureSummaries() {
+    return _captureSummarySelectable(null).watch();
+  }
+
+  /// Returns captures in the `captured` or `rendering` states for startup
+  /// reconciliation. Ordered oldest-first so pending work resumes in order.
+  Future<List<CaptureRecord>> capturesAwaitingProcessing() {
+    return (select(captureRecords)
+          ..where(
+            (row) =>
+                row.status.equals(CaptureStatus.captured.name) |
+                row.status.equals(CaptureStatus.rendering.name),
+          )
+          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+        .get();
+  }
+
+  Future<CaptureRecord> incrementProcessingAttempts(String captureId) async {
+    return transaction(() async {
+      final current = await (select(
+        captureRecords,
+      )..where((row) => row.id.equals(captureId))).getSingle();
+      await (update(
+        captureRecords,
+      )..where((row) => row.id.equals(captureId))).write(
+        CaptureRecordsCompanion(
+          processingAttempts: Value(current.processingAttempts + 1),
+        ),
+      );
+      return (select(
+        captureRecords,
+      )..where((row) => row.id.equals(captureId))).getSingle();
+    });
+  }
+
+  Future<CaptureRecord> resetCaptureForRetry(String captureId) async {
+    return transaction(() async {
+      final current = await (select(
+        captureRecords,
+      )..where((row) => row.id.equals(captureId))).getSingle();
+      final target = CaptureStatus.captured;
+      if (!current.status.canTransitionTo(target)) {
+        throw StateError(
+          'Cannot transition ${current.status.name} to ${target.name}',
+        );
+      }
+      await (update(
+        captureRecords,
+      )..where((row) => row.id.equals(captureId))).write(
+        CaptureRecordsCompanion(
+          status: const Value(CaptureStatus.captured),
+          failureReason: const Value(null),
+          processingAttempts: const Value(0),
+        ),
+      );
+      return (select(
+        captureRecords,
+      )..where((row) => row.id.equals(captureId))).getSingle();
+    });
+  }
+
+  /// Shared select with a join on `captures.project_id = projects.id`,
+  /// excluding `pendingCamera` rows, applying an optional [filter], and
+  /// sorting by `coalesce(captured_at, created_at)` descending.
+  Selectable<CaptureSummary> _captureSummarySelectable(CaptureFilter? filter) {
+    final query =
+        select(captureRecords).join([
+            innerJoin(
+              projects,
+              projects.id.equalsExp(captureRecords.projectId),
+            ),
+          ])
+          ..where(
+            captureRecords.status
+                .equals(CaptureStatus.pendingCamera.name)
+                .not(),
+          )
+          ..orderBy([
+            OrderingTerm(
+              expression: coalesce([
+                captureRecords.capturedAt,
+                captureRecords.createdAt,
+              ]),
+              mode: OrderingMode.desc,
+            ),
+          ]);
+
+    if (filter != null) {
+      if (filter.projectId != null) {
+        query.where(captureRecords.projectId.equals(filter.projectId!));
+      }
+      final range = filter.localRange;
+      if (range != null) {
+        final sortKey = coalesce([
+          captureRecords.capturedAt,
+          captureRecords.createdAt,
+        ]);
+        query.where(sortKey.isBiggerOrEqualValue(range.start));
+        query.where(sortKey.isSmallerThanValue(range.end));
+      }
+    }
+    return query.map(
+      (row) => CaptureSummary(
+        capture: row.readTable(captureRecords),
+        projectName: row.read(projects.name)!,
+      ),
+    );
+  }
+}
+
+/// Joined view of a capture row together with its parent project name.
+class CaptureSummary {
+  const CaptureSummary({required this.capture, required this.projectName});
+
+  final CaptureRecord capture;
+  final String projectName;
+}
+
+/// Subset of capture fields carried forward when creating a new capture from
+/// the most recent non-pending record of a project. [notes] is always `null`
+/// so stale review notes never leak into a fresh draft.
+class CaptureCarryForwardDraft {
+  const CaptureCarryForwardDraft({
+    required this.workLocation,
+    required this.workContent,
+    required this.photographer,
+  });
+
+  final String workLocation;
+  final String workContent;
+  final String photographer;
+
+  String? get notes => null;
+}
+
+extension _CaptureCarryForward on CaptureRecord {
+  CaptureCarryForwardDraft toCarryForwardDraft() => CaptureCarryForwardDraft(
+    workLocation: workLocation,
+    workContent: workContent,
+    photographer: photographer,
+  );
 }

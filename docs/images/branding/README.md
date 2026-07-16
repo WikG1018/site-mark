@@ -14,6 +14,7 @@ On Windows, regenerate all source and Android launcher assets from the repositor
 root with:
 
 ```powershell
+python -m pip install -r tool/icon-requirements.txt
 pwsh.exe -NoLogo -NoProfile -File tool/generate_launcher_icons.ps1
 ```
 
