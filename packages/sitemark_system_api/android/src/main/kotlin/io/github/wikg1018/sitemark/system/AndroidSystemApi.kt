@@ -1,4 +1,4 @@
-package io.github.wikg1018.sitemark
+package io.github.wikg1018.sitemark.system
 
 import android.Manifest
 import android.app.Activity
@@ -15,23 +15,32 @@ import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
-import io.github.wikg1018.sitemark.bridge.CameraCaptureResult
-import io.github.wikg1018.sitemark.bridge.CameraOutcome
-import io.github.wikg1018.sitemark.bridge.LocationOutcome
-import io.github.wikg1018.sitemark.bridge.LocationResult
-import io.github.wikg1018.sitemark.bridge.MediaPublishResult
-import io.github.wikg1018.sitemark.bridge.RecoveredCameraCapture
-import io.github.wikg1018.sitemark.bridge.SiteMarkSystemApi
 import java.io.File
 import java.util.concurrent.Executors
 
+/**
+ * Headless-safe implementation of the Pigeon [SiteMarkSystemApi].
+ *
+ * Constructed with an application [Context] alone, which is enough for the
+ * file-target, recovery-preferences and MediaStore publish/delete paths used by
+ * background work. Camera launch and runtime location permission requests
+ * require a foreground [Activity]; attach one with [attachActivity] and detach
+ * it with [detachActivity]. When no activity is attached, the camera/location
+ * paths fail fast with a clear [IllegalStateException] from [requireActivity]
+ * rather than NPE-ing on a null activity.
+ *
+ * All Pigeon callbacks are dispatched on the main looper via [mainHandler]
+ * (never `activity.runOnUiThread`), so the API works without an activity.
+ */
 class AndroidSystemApi(
-    private val activity: MainActivity,
+    private val context: Context,
 ) : SiteMarkSystemApi {
-    private val preferences = activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
-    private val locationManager = activity.getSystemService(LocationManager::class.java)
+    private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+    private val locationManager = context.getSystemService(LocationManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor = Executors.newSingleThreadExecutor()
+
+    private var activity: Activity? = null
 
     private var cameraCallback: ((Result<CameraCaptureResult>) -> Unit)? = null
     private var locationCallback: ((Result<LocationResult>) -> Unit)? = null
@@ -39,8 +48,26 @@ class AndroidSystemApi(
     private var locationTimeout: Runnable? = null
     private var requestedLocationTimeoutMillis: Long = DEFAULT_LOCATION_TIMEOUT_MILLIS
 
+    /** Attaches a foreground [Activity] enabling camera launch and permission requests. */
+    fun attachActivity(activity: Activity) {
+        this.activity = activity
+    }
+
+    /** Detaches the foreground [Activity]; the API remains usable for headless paths. */
+    fun detachActivity() {
+        this.activity = null
+    }
+
+    /**
+     * Returns the attached [Activity] or throws a clear error. Used by every
+     * path that genuinely requires a foreground activity (camera launch,
+     * runtime permission request).
+     */
+    private fun requireActivity(): Activity =
+        activity ?: error("System camera requires a foreground activity")
+
     override fun createCameraTarget(captureId: String): String {
-        val directory = File(activity.filesDir, "originals").apply { mkdirs() }
+        val directory = File(context.filesDir, "originals").apply { mkdirs() }
         val target = File(directory, CaptureTargetPolicy.fileName(captureId))
         if (target.exists() && !target.delete()) {
             error("Unable to replace existing capture target")
@@ -60,10 +87,16 @@ class AndroidSystemApi(
             callback(Result.failure(IllegalStateException("A camera capture is already active")))
             return
         }
+        val activity = try {
+            requireActivity()
+        } catch (error: IllegalStateException) {
+            callback(Result.failure(error))
+            return
+        }
         val target = preparedTarget(captureId)
         val uri = Uri.Builder()
             .scheme("content")
-            .authority("${activity.packageName}.capture")
+            .authority("${context.packageName}.capture")
             .appendPath("capture")
             .appendPath(captureId)
             .build()
@@ -72,7 +105,7 @@ class AndroidSystemApi(
             clipData = ClipData.newRawUri("SiteMark capture", uri)
             addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        if (intent.resolveActivity(activity.packageManager) == null) {
+        if (intent.resolveActivity(context.packageManager) == null) {
             callback(
                 Result.success(
                     CameraCaptureResult(
@@ -145,6 +178,22 @@ class AndroidSystemApi(
         locationCallback = callback
         requestedLocationTimeoutMillis = timeoutMillis.coerceIn(1_000L, 30_000L)
         if (!hasLocationPermission()) {
+            // Runtime permission request requires a foreground activity.
+            val activity = try {
+                requireActivity()
+            } catch (error: IllegalStateException) {
+                finishLocation(
+                    LocationResult(
+                        outcome = LocationOutcome.PERMISSION_DENIED,
+                        latitude = null,
+                        longitude = null,
+                        accuracyMeters = null,
+                        address = null,
+                        errorMessage = error.message,
+                    ),
+                )
+                return
+            }
             activity.requestPermissions(
                 arrayOf(
                     Manifest.permission.ACCESS_FINE_LOCATION,
@@ -202,7 +251,7 @@ class AndroidSystemApi(
             locationManager.getCurrentLocation(
                 provider,
                 cancellation,
-                activity.mainExecutor,
+                context.mainExecutor,
             ) { location ->
                 if (location == null) {
                     finishLocation(
@@ -239,7 +288,7 @@ class AndroidSystemApi(
 
     private fun Location.toPigeonResult(): LocationResult {
         val outcome = if (
-            activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+            context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
         ) {
             LocationOutcome.PRECISE
@@ -271,51 +320,53 @@ class AndroidSystemApi(
         callback: (Result<MediaPublishResult>) -> Unit,
     ) {
         ioExecutor.execute {
-            val result = runCatching {
-                val source = validatedPrivateFile(sourcePath)
-                val safeName = normalizedJpegName(displayName)
-                val resolver = activity.contentResolver
-                val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                var created = false
-                val uri = findPublishedImage(collection, safeName) ?: run {
-                    created = true
-                    resolver.insert(
-                        collection,
-                        ContentValues().apply {
-                            put(MediaStore.Images.Media.DISPLAY_NAME, safeName)
-                            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                            put(MediaStore.Images.Media.RELATIVE_PATH, PUBLISHED_RELATIVE_PATH)
-                            put(MediaStore.Images.Media.IS_PENDING, 1)
-                        },
-                    ) ?: error("MediaStore did not create an image")
-                }
-                try {
-                    if (!created) {
-                        resolver.update(
-                            uri,
-                            ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 1) },
-                            null,
-                            null,
-                        )
-                    }
-                    source.inputStream().use { input ->
-                        resolver.openOutputStream(uri, "w")?.use { output ->
-                            input.copyTo(output)
-                        } ?: error("MediaStore did not open the output stream")
-                    }
-                    resolver.update(
-                        uri,
-                        ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
-                        null,
-                        null,
-                    )
-                    MediaPublishResult(uri.toString())
-                } catch (error: Throwable) {
-                    if (created) resolver.delete(uri, null, null)
-                    throw error
-                }
+            val result = runCatching { publishJpegInternal(sourcePath, displayName) }
+            mainHandler.post { callback(result) }
+        }
+    }
+
+    private fun publishJpegInternal(sourcePath: String, displayName: String): MediaPublishResult {
+        val source = validatedPrivateFile(sourcePath)
+        val safeName = normalizedJpegName(displayName)
+        val resolver = context.contentResolver
+        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        var created = false
+        val uri = findPublishedImage(collection, safeName) ?: run {
+            created = true
+            resolver.insert(
+                collection,
+                ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, safeName)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, PUBLISHED_RELATIVE_PATH)
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                },
+            ) ?: error("MediaStore did not create an image")
+        }
+        try {
+            if (!created) {
+                resolver.update(
+                    uri,
+                    ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 1) },
+                    null,
+                    null,
+                )
             }
-            activity.runOnUiThread { callback(result) }
+            source.inputStream().use { input ->
+                resolver.openOutputStream(uri, "w")?.use { output ->
+                    input.copyTo(output)
+                } ?: error("MediaStore did not open the output stream")
+            }
+            resolver.update(
+                uri,
+                ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
+                null,
+                null,
+            )
+            return MediaPublishResult(uri.toString())
+        } catch (error: Throwable) {
+            if (created) resolver.delete(uri, null, null)
+            throw error
         }
     }
 
@@ -324,10 +375,10 @@ class AndroidSystemApi(
             val result = runCatching {
                 val uri = Uri.parse(contentUri)
                 require(uri.scheme == "content") { "Expected a content URI" }
-                activity.contentResolver.delete(uri, null, null)
+                context.contentResolver.delete(uri, null, null)
                 Unit
             }
-            activity.runOnUiThread { callback(result) }
+            mainHandler.post { callback(result) }
         }
     }
 
@@ -343,21 +394,21 @@ class AndroidSystemApi(
         }
         val path = preferences.getString(KEY_CAPTURE_PATH, null)
             ?: error("Capture target path is missing")
-        val expected = File(File(activity.filesDir, "originals"), CaptureTargetPolicy.fileName(captureId))
+        val expected = File(File(context.filesDir, "originals"), CaptureTargetPolicy.fileName(captureId))
         val target = File(path)
         require(target.canonicalFile == expected.canonicalFile) { "Capture target is outside private storage" }
         return target
     }
 
     private fun hasLocationPermission(): Boolean {
-        return activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+        return context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED ||
-            activity.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
     }
 
     private fun preferredLocationProvider(): String? {
-        val hasFine = activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+        val hasFine = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
         if (hasFine && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             return LocationManager.GPS_PROVIDER
@@ -370,7 +421,7 @@ class AndroidSystemApi(
 
     private fun validatedPrivateFile(path: String): File {
         val file = File(path).canonicalFile
-        val dataDirectory = activity.dataDir.canonicalFile
+        val dataDirectory = context.dataDir.canonicalFile
         require(file.path.startsWith(dataDirectory.path + File.separator)) {
             "Source image must be in app-private storage"
         }
@@ -392,7 +443,7 @@ class AndroidSystemApi(
             "${MediaStore.Images.Media.DISPLAY_NAME} = ? AND " +
                 "${MediaStore.Images.Media.RELATIVE_PATH} = ?"
         val arguments = arrayOf(displayName, PUBLISHED_RELATIVE_PATH)
-        activity.contentResolver.query(collection, projection, selection, arguments, null)?.use { cursor ->
+        context.contentResolver.query(collection, projection, selection, arguments, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
                 return ContentUris.withAppendedId(collection, cursor.getLong(0))
             }
@@ -409,4 +460,22 @@ class AndroidSystemApi(
         private const val KEY_CAPTURE_PATH = "capture_path"
         private const val PUBLISHED_RELATIVE_PATH = "Pictures/SiteMark/"
     }
+
+    // ------------------------------------------------------------------
+    // Internal test adapters. These delegate directly to the production
+    // private methods/fields and are intentionally excluded from the Pigeon
+    // interface. They allow the headless-safety contract to be unit-tested
+    // without an instrumented Android runtime.
+    // ------------------------------------------------------------------
+
+    /** Test adapter for the [requireActivity] guard. */
+    internal fun requireActivityForTest(): Activity = requireActivity()
+
+    /**
+     * Test adapter for the synchronous publish body. Runs the validation +
+     * MediaStore write inline (no executor hop) so the headless-safety
+     * contract can be asserted without waiting on a background thread.
+     */
+    internal fun publishJpegForTest(sourcePath: String, displayName: String): MediaPublishResult =
+        publishJpegInternal(sourcePath, displayName)
 }

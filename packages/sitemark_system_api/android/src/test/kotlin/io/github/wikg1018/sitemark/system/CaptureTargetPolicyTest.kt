@@ -1,4 +1,4 @@
-package io.github.wikg1018.sitemark
+package io.github.wikg1018.sitemark.system
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows

@@ -6,11 +6,6 @@
         android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <provider
-            android:name=".CaptureContentProvider"
-            android:authorities="${applicationId}.capture"
-            android:exported="false"
-            android:grantUriPermissions="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

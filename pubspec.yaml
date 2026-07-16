@@ -38,6 +38,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   sitemark_core:
     path: rust_builder
+  sitemark_system_api:
+    path: packages/sitemark_system_api
   flutter_rust_bridge: 2.12.0
   flutter_riverpod: ^3.3.2
   go_router: ^17.3.0

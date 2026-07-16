@@ -2,12 +2,12 @@ import 'package:pigeon/pigeon.dart';
 
 @ConfigurePigeon(
   PigeonOptions(
-    dartOut: 'lib/platform/system_api.g.dart',
-    dartPackageName: 'sitemark',
+    dartOut: 'packages/sitemark_system_api/lib/src/system_api.g.dart',
+    dartPackageName: 'sitemark_system_api',
     dartOptions: DartOptions(),
     kotlinOut:
-        'android/app/src/main/kotlin/io/github/wikg1018/sitemark/bridge/SystemApi.g.kt',
-    kotlinOptions: KotlinOptions(package: 'io.github.wikg1018.sitemark.bridge'),
+        'packages/sitemark_system_api/android/src/main/kotlin/io/github/wikg1018/sitemark/system/SystemApi.g.kt',
+    kotlinOptions: KotlinOptions(package: 'io.github.wikg1018.sitemark.system'),
   ),
 )
 enum CameraOutcome { captured, cancelled, failed }

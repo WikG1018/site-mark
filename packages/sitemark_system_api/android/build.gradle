@@ -1,0 +1,48 @@
+// Android library build for the sitemark_system_api Flutter plugin.
+//
+// Discovered by the `dev.flutter.flutter-plugin-loader` in the host app's
+// settings.gradle.kts once this package is declared as a path dependency.
+
+// The Flutter Gradle Plugin exposes the `flutter` extension and resolves the
+// shared Kotlin/AGP versions from the host project.
+plugins {
+    id("com.android.library")
+    id("org.jetbrains.kotlin.android")
+}
+
+group = "io.github.wikg1018.sitemark.system"
+version = "0.1.0"
+
+android {
+    namespace = "io.github.wikg1018.sitemark.system"
+
+    // Bumping the plugin compileSdk requires all clients to bump theirs.
+    compileSdk = 36
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk = 31
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+        unitTests.includeAndroidResources = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+dependencies {
+    implementation("androidx.annotation:annotation:1.9.1")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+}

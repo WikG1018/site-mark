@@ -731,6 +731,13 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  sitemark_system_api:
+    dependency: "direct main"
+    description:
+      path: "packages/sitemark_system_api"
+      relative: true
+    source: path
+    version: "0.1.0"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -777,7 +784,7 @@ packages:
     source: hosted
     version: "0.7.0+eol"
   sqlite3:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: sqlite3
       sha256: "61c7930bebf32c552ac5808c91bf33802e66711c9216090d3b5579c9f862e80c"

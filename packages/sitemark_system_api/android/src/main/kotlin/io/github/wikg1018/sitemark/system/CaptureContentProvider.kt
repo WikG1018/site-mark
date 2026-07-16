@@ -1,4 +1,4 @@
-package io.github.wikg1018.sitemark
+package io.github.wikg1018.sitemark.system
 
 import android.content.ContentProvider
 import android.content.ContentValues
