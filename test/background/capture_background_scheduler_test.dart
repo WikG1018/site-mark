@@ -42,6 +42,14 @@ void main() {
       captureId: id,
       capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
     );
+    // Resolve the location so the row is eligible for processing. The
+    // coordinator marks pending-location rows as resolved/unavailable before
+    // enqueuing; `capturesAwaitingProcessing` excludes rows still pending.
+    await database.resolveCaptureLocation(
+      captureId: id,
+      resolution: 'unavailable',
+      outcome: 'unavailable',
+    );
   }
 
   test(
@@ -180,6 +188,32 @@ void main() {
     final pending = await database.capturesAwaitingProcessing();
 
     expect(pending.map((row) => row.id).toList(), ['capture-2', 'capture-1']);
+  });
+
+  test('capturesAwaitingProcessing excludes pending-location rows', () async {
+    // seedCaptured resolves the location, so capture-1 is eligible. A freshly
+    // captured record whose location is still pending must be excluded so the
+    // processor doesn't consume the render budget before the coordinator
+    // finalizes the location source.
+    await seedCaptured('capture-1');
+    await database.createPendingCapture(
+      id: 'capture-pending',
+      projectId: 'project-1',
+      originalPath: '/private/capture-pending.jpg',
+      workLocation: 'B 区',
+      workContent: '复查',
+      photographer: '李工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 10),
+    );
+    await database.markCaptured(
+      captureId: 'capture-pending',
+      capturedAt: DateTime(2026, 7, 16, 10, 5),
+    );
+
+    final pending = await database.capturesAwaitingProcessing();
+
+    expect(pending.map((row) => row.id).toList(), ['capture-1']);
   });
 }
 

@@ -596,9 +596,20 @@ class AppDatabase extends _$AppDatabase {
     return (select(captureRecords)
           ..where(
             (row) =>
-                row.status.equals(CaptureStatus.captured.name) |
-                row.status.equals(CaptureStatus.rendering.name),
+                (row.status.equals(CaptureStatus.captured.name) |
+                    row.status.equals(CaptureStatus.rendering.name)) &
+                row.locationResolution.equals('pending').not(),
           )
+          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+        .get();
+  }
+
+  /// Returns captures whose location source has not yet been resolved, ordered
+  /// oldest-first. Used by startup recovery to finalize pending-location rows
+  /// before queue reconciliation enqueues them for rendering.
+  Future<List<CaptureRecord>> capturesAwaitingLocationResolution() {
+    return (select(captureRecords)
+          ..where((row) => row.locationResolution.equals('pending'))
           ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
         .get();
   }

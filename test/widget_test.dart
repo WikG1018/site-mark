@@ -28,12 +28,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
-  testWidgets('production startup runs camera and queue recovery', (
+  testWidgets('production startup runs camera, location, and queue recovery', (
     tester,
   ) async {
     final events = <String>[];
     final recovery = AppStartupRecovery(
       recoverCamera: () async => events.add('camera'),
+      resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
     );
 
@@ -46,7 +47,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(events, ['camera', 'queue']);
+    expect(events, ['camera', 'location', 'queue']);
     await disposeApp(tester);
   });
 

@@ -1,12 +1,15 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/capture_location_coordinator.dart';
+import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
-import 'package:sitemark/workflow/capture_workflow.dart';
-import 'package:sitemark/background/capture_background_scheduler.dart';
 
 void main() {
   const digestA =
@@ -15,6 +18,7 @@ void main() {
   late _FakePlatformServices platform;
   late _FakeImagePipeline images;
   late _RecordingScheduler scheduler;
+  late CaptureLocationCoordinator coordinator;
   late CaptureWorkflow workflow;
 
   setUp(() async {
@@ -27,6 +31,11 @@ void main() {
     platform = _FakePlatformServices();
     images = _FakeImagePipeline();
     scheduler = _RecordingScheduler();
+    coordinator = CaptureLocationCoordinator(
+      database: database,
+      platform: platform,
+      scheduler: scheduler,
+    );
     workflow = CaptureWorkflow(
       database: database,
       platform: platform,
@@ -34,6 +43,7 @@ void main() {
       outputPaths: _FakeOutputPaths(),
       fileStore: _FakePrivateFileStore(),
       scheduler: scheduler,
+      locationCoordinator: coordinator,
       idFactory: () => 'capture-1',
       now: () => DateTime(2026, 7, 16, 9, 32, 18),
     );
@@ -42,6 +52,13 @@ void main() {
   tearDown(() async {
     await database.close();
   });
+
+  /// Drains the microtask queue so the coordinator's fire-and-forget
+  /// resolution + enqueue completes before assertions.
+  Future<void> drainCoordinator() async {
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+  }
 
   test('capture returns queued before hash render or publish', () async {
     final result = await workflow.capture(
@@ -54,6 +71,7 @@ void main() {
         notes: '支架间距复核',
       ),
     );
+    await drainCoordinator();
 
     final record = await database.captureById('capture-1');
 
@@ -93,6 +111,50 @@ void main() {
     },
   );
 
+  test(
+    'launchCamera runs before location resolves and workflow returns queued',
+    () async {
+      // Replace the location future with one we control so we can prove the
+      // camera launches before the location read completes.
+      final locationCompleter = Completer<LocationResult>();
+      platform.locationOverride = locationCompleter.future;
+
+      final result = await workflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+        ),
+      );
+
+      // The workflow returned queued and launchCamera was called, but the
+      // location future is still pending.
+      expect(result.outcome, CaptureWorkflowOutcome.queued);
+      expect(platform.events, contains('launchCamera'));
+      expect(locationCompleter.isCompleted, isFalse);
+
+      // Complete the location read; the coordinator should now resolve and
+      // enqueue the capture in the background.
+      locationCompleter.complete(
+        LocationResult(
+          outcome: LocationOutcome.precise,
+          latitude: 24.513,
+          longitude: 117.6471,
+          accuracyMeters: 8,
+          address: '福建省漳州市',
+        ),
+      );
+      await drainCoordinator();
+
+      expect(scheduler.enqueuedIds, ['capture-1']);
+      final record = await database.captureById('capture-1');
+      expect(record?.locationResolution, 'resolved');
+      expect(record?.locationOutcome, 'precise');
+    },
+  );
+
   test('recovers a non-empty camera target after process recreation', () async {
     await database.createPendingCapture(
       id: 'capture-1',
@@ -111,6 +173,7 @@ void main() {
     );
 
     final result = await workflow.recoverPendingCapture();
+    await drainCoordinator();
 
     expect(result?.outcome, CaptureWorkflowOutcome.queued);
     expect(
@@ -132,6 +195,7 @@ void main() {
         photographer: '张工',
       ),
     );
+    await drainCoordinator();
     // Simulate the background processor completing the first capture so the
     // record is ready and eligible for regeneration.
     await database.markRendering(
@@ -179,6 +243,7 @@ void main() {
         photographer: '张工',
       ),
     );
+    await drainCoordinator();
     // Simulate a published capture so delete has a URI to remove.
     await database.markRendering(
       captureId: 'capture-1',
@@ -199,9 +264,11 @@ void main() {
 class _FakePlatformServices implements PlatformServices {
   CameraOutcome cameraOutcome = CameraOutcome.captured;
   final List<String> publishedNames = [];
+  final List<String> events = [];
   (String, bool)? finishedCapture;
   RecoveredCameraCapture? recoveredCapture;
   String? deletedUri;
+  Future<LocationResult>? locationOverride;
 
   @override
   Future<String> createCameraTarget(String captureId) async =>
@@ -219,6 +286,7 @@ class _FakePlatformServices implements PlatformServices {
 
   @override
   Future<CameraCaptureResult> launchCamera(String captureId) async {
+    events.add('launchCamera');
     return CameraCaptureResult(
       outcome: cameraOutcome,
       outputPath: '/private/$captureId.jpg',
@@ -237,6 +305,9 @@ class _FakePlatformServices implements PlatformServices {
 
   @override
   Future<LocationResult> requestCurrentLocation(int timeoutMillis) async {
+    events.add('requestCurrentLocation');
+    final override = locationOverride;
+    if (override != null) return override;
     return LocationResult(
       outcome: LocationOutcome.precise,
       latitude: 24.513,

@@ -88,6 +88,14 @@ final class CaptureProcessor {
       return CaptureProcessResult.missing;
     }
 
+    // Guard: a capture whose location source is still pending must not consume
+    // the render budget. The CaptureLocationCoordinator enqueues the capture
+    // again once location is resolved or marked unavailable, so return `retry`
+    // without incrementing attempts.
+    if (record.locationResolution == 'pending') {
+      return CaptureProcessResult.retry;
+    }
+
     // Step 4: increment the attempt counter in a single transaction.
     final attempted = await database.incrementProcessingAttempts(captureId);
     final attempts = attempted.processingAttempts;

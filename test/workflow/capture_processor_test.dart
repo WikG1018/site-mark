@@ -42,7 +42,9 @@ void main() {
   });
 
   /// Seeds a capture that already has `captured` status and the photo number
-  /// assigned, with [attempts] prior processing attempts recorded.
+  /// assigned, with [attempts] prior processing attempts recorded. The location
+  /// is marked `unavailable` so the pending-location guard does not short-circuit
+  /// processing.
   Future<void> seedCaptured({int attempts = 0}) async {
     await database.createPendingCapture(
       id: 'capture-1',
@@ -57,6 +59,11 @@ void main() {
     final captured = await database.markCaptured(
       captureId: 'capture-1',
       capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+    );
+    await database.resolveCaptureLocation(
+      captureId: 'capture-1',
+      resolution: 'unavailable',
+      outcome: 'unavailable',
     );
     for (var i = 0; i < attempts; i++) {
       await database.incrementProcessingAttempts('capture-1');
@@ -192,6 +199,38 @@ void main() {
 
     expect(await processor.process('capture-1'), CaptureProcessResult.missing);
   });
+
+  test(
+    'pending location resolution returns retry without incrementing attempts',
+    () async {
+      // A capture whose location source is still pending must not consume the
+      // render budget. The coordinator enqueues the capture again once the
+      // location is resolved or marked unavailable, so the processor returns
+      // `retry` without touching the attempt counter.
+      await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project-1',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 16, 9, 30),
+      );
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+      );
+
+      final result = await processor.process('capture-1');
+
+      expect(result, CaptureProcessResult.retry);
+      final record = await database.captureById('capture-1');
+      expect(record?.processingAttempts, 0);
+      expect(record?.status, CaptureStatus.captured);
+      expect(platform.publishedNames, isEmpty);
+    },
+  );
 
   test('record whose project vanished (cascade) returns missing', () async {
     // The captures.project_id FK is ON DELETE CASCADE, so removing a project
