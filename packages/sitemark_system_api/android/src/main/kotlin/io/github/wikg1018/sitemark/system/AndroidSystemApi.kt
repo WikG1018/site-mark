@@ -8,6 +8,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.Settings
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
@@ -34,6 +35,7 @@ import java.util.concurrent.Executors
  */
 class AndroidSystemApi(
     private val context: Context,
+    private val metadataReader: ImageMetadataReader = AndroidXImageMetadataReader(),
 ) : SiteMarkSystemApi {
     private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
     private val locationManager = context.getSystemService(LocationManager::class.java)
@@ -46,6 +48,7 @@ class AndroidSystemApi(
     private var locationCallback: ((Result<LocationResult>) -> Unit)? = null
     private var locationCancellation: CancellationSignal? = null
     private var locationTimeout: Runnable? = null
+    private var permissionCallback: ((Result<LocationPermissionState>) -> Unit)? = null
     private var requestedLocationTimeoutMillis: Long = DEFAULT_LOCATION_TIMEOUT_MILLIS
 
     /** Attaches a foreground [Activity] enabling camera launch and permission requests. */
@@ -167,6 +170,67 @@ class AndroidSystemApi(
         }
     }
 
+    override fun getLocationPermissionState(): LocationPermissionState {
+        if (hasLocationPermission()) return LocationPermissionState.GRANTED
+        val asked = preferences.getBoolean(KEY_LOCATION_PERMISSION_REQUESTED, false)
+        val canExplain = activity?.shouldShowRequestPermissionRationale(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == true
+        return if (asked && !canExplain) {
+            LocationPermissionState.PERMANENTLY_DENIED
+        } else {
+            LocationPermissionState.DENIED
+        }
+    }
+
+    override fun requestLocationPermission(
+        callback: (Result<LocationPermissionState>) -> Unit,
+    ) {
+        if (hasLocationPermission()) {
+            callback(Result.success(LocationPermissionState.GRANTED))
+            return
+        }
+        val foreground = try {
+            requireActivity()
+        } catch (error: IllegalStateException) {
+            callback(Result.failure(error))
+            return
+        }
+        permissionCallback = callback
+        preferences.edit().putBoolean(KEY_LOCATION_PERMISSION_REQUESTED, true).apply()
+        foreground.requestPermissions(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ),
+            REQUEST_LOCATION_PERMISSION,
+        )
+    }
+
+    override fun openApplicationSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", context.packageName, null),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+
+    override fun inspectImage(
+        path: String,
+        callback: (Result<ImageMetadataResult>) -> Unit,
+    ) {
+        ioExecutor.execute {
+            val result = runCatching {
+                val file = validatedPrivateFile(path)
+                metadataReader.read(file)
+            }
+            mainHandler.post { callback(result) }
+        }
+    }
+
+    internal fun inspectImageForTest(path: String): ImageMetadataResult =
+        metadataReader.read(validatedPrivateFile(path))
+
     override fun requestCurrentLocation(
         timeoutMillis: Long,
         callback: (Result<LocationResult>) -> Unit,
@@ -178,39 +242,6 @@ class AndroidSystemApi(
         locationCallback = callback
         requestedLocationTimeoutMillis = timeoutMillis.coerceIn(1_000L, 30_000L)
         if (!hasLocationPermission()) {
-            // Runtime permission request requires a foreground activity.
-            val activity = try {
-                requireActivity()
-            } catch (error: IllegalStateException) {
-                finishLocation(
-                    LocationResult(
-                        outcome = LocationOutcome.PERMISSION_DENIED,
-                        latitude = null,
-                        longitude = null,
-                        accuracyMeters = null,
-                        address = null,
-                        errorMessage = error.message,
-                    ),
-                )
-                return
-            }
-            activity.requestPermissions(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                ),
-                REQUEST_LOCATION_PERMISSION,
-            )
-            return
-        }
-        startCurrentLocation()
-    }
-
-    fun onLocationPermissionResult() {
-        if (locationCallback == null) return
-        if (hasLocationPermission()) {
-            startCurrentLocation()
-        } else {
             finishLocation(
                 LocationResult(
                     outcome = LocationOutcome.PERMISSION_DENIED,
@@ -221,7 +252,15 @@ class AndroidSystemApi(
                     errorMessage = null,
                 ),
             )
+            return
         }
+        startCurrentLocation()
+    }
+
+    fun onLocationPermissionResult() {
+        val callback = permissionCallback ?: return
+        permissionCallback = null
+        callback(Result.success(getLocationPermissionState()))
     }
 
     private fun startCurrentLocation() {
@@ -458,6 +497,7 @@ class AndroidSystemApi(
         private const val PREFERENCES = "sitemark_capture_recovery"
         private const val KEY_CAPTURE_ID = "capture_id"
         private const val KEY_CAPTURE_PATH = "capture_path"
+        private const val KEY_LOCATION_PERMISSION_REQUESTED = "location_permission_requested"
         private const val PUBLISHED_RELATIVE_PATH = "Pictures/SiteMark/"
     }
 

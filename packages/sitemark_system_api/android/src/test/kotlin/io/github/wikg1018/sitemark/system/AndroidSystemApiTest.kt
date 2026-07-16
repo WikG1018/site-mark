@@ -38,12 +38,17 @@ class AndroidSystemApiTest {
         val editor = mock(SharedPreferences.Editor::class.java)
         `when`(prefs.edit()).thenReturn(editor)
         `when`(editor.putString(anyString(), anyString())).thenReturn(editor)
+        `when`(editor.putBoolean(anyString(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(editor)
         `when`(editor.remove(anyString())).thenReturn(editor)
         `when`(editor.apply()).then {} // no-op
         `when`(context.getSharedPreferences(anyString(), anyInt())).thenReturn(prefs)
         `when`(context.getSystemService(LocationManager::class.java)).thenReturn(mock(LocationManager::class.java))
         // Permission checks return denied so the API never believes it has GPS.
         `when`(context.checkPermission(anyString(), anyInt(), anyInt())).thenReturn(PackageManager.PERMISSION_DENIED)
+        `when`(context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION))
+            .thenReturn(PackageManager.PERMISSION_DENIED)
+        `when`(context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION))
+            .thenReturn(PackageManager.PERMISSION_DENIED)
         // Provide a real data dir so validatedPrivateFile reaches its
         // "outside private storage" guard rather than NPE-ing on a null dir.
         `when`(context.dataDir).thenReturn(java.io.File(System.getProperty("java.io.tmpdir")!!))
@@ -69,5 +74,27 @@ class AndroidSystemApiTest {
             api.requireActivityForTest()
         }
         assertEquals("System camera requires a foreground activity", error.message)
+    }
+
+    @Test
+    fun currentLocationWithoutPermissionReturnsDeniedWithoutRequestingPermission() {
+        `when`(context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION))
+            .thenReturn(PackageManager.PERMISSION_DENIED)
+        `when`(context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION))
+            .thenReturn(PackageManager.PERMISSION_DENIED)
+        val api = AndroidSystemApi(context)
+        var outcome: LocationOutcome? = null
+        api.requestCurrentLocation(1_000) { result ->
+            outcome = result.getOrThrow().outcome
+        }
+        assertEquals(LocationOutcome.PERMISSION_DENIED, outcome)
+    }
+
+    @Test
+    fun permissionStateIsGrantedWhenEitherForegroundPermissionExists() {
+        `when`(context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION))
+            .thenReturn(PackageManager.PERMISSION_GRANTED)
+        val api = AndroidSystemApi(context)
+        assertEquals(LocationPermissionState.GRANTED, api.getLocationPermissionState())
     }
 }
