@@ -48,6 +48,8 @@ dependencies:
   path_provider: ^2.1.6
   share_plus: ^13.2.1
   uuid: ^4.6.0
+  workmanager: 0.9.0+3
+  package_info_plus: 10.2.0
 
 dev_dependencies:
   flutter_test:

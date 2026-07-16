@@ -1,9 +1,11 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 
@@ -98,17 +100,27 @@ void main() {
     final images = _WidgetTestImagePipeline();
     final share = _WidgetTestShareService();
     final platform = _WidgetTestPlatformServices();
+    final outputPaths = _WidgetTestOutputPaths();
     await database.createProject(id: 'project-1', name: '东区厂房改造');
+    // A scheduler that runs the real CaptureProcessor inline so the widget test
+    // observes the ready transition without a real WorkManager isolate.
+    final scheduler = _InlineProcessingScheduler(
+      database: database,
+      platform: platform,
+      images: images,
+      outputPaths: outputPaths,
+    );
     await tester.pumpWidget(
       MyApp(
         database: database,
         initialLocale: const Locale('zh'),
         platformServices: platform,
         imagePipeline: images,
-        outputPaths: _WidgetTestOutputPaths(),
+        outputPaths: outputPaths,
         projectExportPaths: _WidgetTestProjectExportPaths(),
         shareService: share,
         privateFileStore: _WidgetTestPrivateFileStore(),
+        backgroundScheduler: scheduler,
       ),
     );
     await tester.pumpAndSettle();
@@ -251,4 +263,46 @@ class _WidgetTestShareService implements ShareFileService {
 class _WidgetTestPrivateFileStore implements PrivateFileStore {
   @override
   Future<void> deleteIfExists(String path) async {}
+}
+
+/// A [CaptureBackgroundScheduler] that runs the real [CaptureProcessor] inline
+/// on each enqueue/retry, simulating immediate WorkManager completion so widget
+/// tests can observe the `ready` transition without a background isolate.
+class _InlineProcessingScheduler implements CaptureBackgroundScheduler {
+  _InlineProcessingScheduler({
+    required this.database,
+    required this.platform,
+    required this.images,
+    required this.outputPaths,
+  });
+
+  final AppDatabase database;
+  final PlatformServices platform;
+  final ImagePipeline images;
+  final CaptureOutputPaths outputPaths;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> enqueue(String captureId) async {
+    final processor = CaptureProcessor(
+      database: database,
+      platform: platform,
+      images: images,
+      outputPaths: outputPaths,
+    );
+    await processor.process(captureId);
+  }
+
+  @override
+  Future<void> retry(String captureId) => enqueue(captureId);
+
+  @override
+  Future<void> reconcilePending() async {
+    final pending = await database.capturesAwaitingProcessing();
+    for (final record in pending) {
+      await enqueue(record.id);
+    }
+  }
 }

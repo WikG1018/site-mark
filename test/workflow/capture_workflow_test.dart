@@ -6,6 +6,7 @@ import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
+import 'package:sitemark/background/capture_background_scheduler.dart';
 
 void main() {
   const digestA =
@@ -13,6 +14,7 @@ void main() {
   late AppDatabase database;
   late _FakePlatformServices platform;
   late _FakeImagePipeline images;
+  late _RecordingScheduler scheduler;
   late CaptureWorkflow workflow;
 
   setUp(() async {
@@ -24,12 +26,14 @@ void main() {
     );
     platform = _FakePlatformServices();
     images = _FakeImagePipeline();
+    scheduler = _RecordingScheduler();
     workflow = CaptureWorkflow(
       database: database,
       platform: platform,
       images: images,
       outputPaths: _FakeOutputPaths(),
       fileStore: _FakePrivateFileStore(),
+      scheduler: scheduler,
       idFactory: () => 'capture-1',
       now: () => DateTime(2026, 7, 16, 9, 32, 18),
     );
@@ -39,13 +43,7 @@ void main() {
     await database.close();
   });
 
-  test('runs system camera through render and MediaStore publish', () async {
-    await database.updateProjectWatermarkSettings(
-      projectId: 'project-1',
-      position: 'bottomRight',
-      opacity: 0.64,
-      accentColorArgb: 0xff1565c0,
-    );
+  test('capture returns queued before hash render or publish', () async {
     final result = await workflow.capture(
       const CaptureDraft(
         projectId: 'project-1',
@@ -57,18 +55,18 @@ void main() {
       ),
     );
 
-    final records = await database.watchCapturesForProject('project-1').first;
-    expect(result.outcome, CaptureWorkflowOutcome.ready);
-    expect(records.single.status, CaptureStatus.ready);
-    expect(records.single.photoNumber, 'SM-20260716-001');
-    expect(records.single.originalSha256, digestA);
-    expect(records.single.publishedUri, 'content://media/site-mark/1');
-    expect(platform.publishedName, 'SM-20260716-001');
+    final record = await database.captureById('capture-1');
+
+    expect(result.outcome, CaptureWorkflowOutcome.queued);
+    expect(record?.status, CaptureStatus.captured);
+    expect(record?.photoNumber, 'SM-20260716-001');
+    expect(scheduler.enqueuedIds, ['capture-1']);
+    expect(images.lastRenderRequest, isNull);
+    expect(platform.publishedNames, isEmpty);
     expect(platform.finishedCapture, ('capture-1', true));
-    expect(images.lastRenderRequest?.sourcePath, '/private/capture-1.jpg');
-    expect(images.lastRenderRequest?.position, WatermarkPosition.bottomRight);
-    expect(images.lastRenderRequest?.opacity, 0.64);
-    expect(images.lastRenderRequest?.accentColorArgb, 0xff1565c0);
+    // Hashing and publishing are deferred to the background processor.
+    expect(record?.originalSha256, isNull);
+    expect(record?.publishedUri, isNull);
   });
 
   test(
@@ -91,6 +89,7 @@ void main() {
       expect(records, isEmpty);
       expect(platform.finishedCapture, ('capture-1', false));
       expect(images.lastRenderRequest, isNull);
+      expect(scheduler.enqueuedIds, isEmpty);
     },
   );
 
@@ -112,44 +111,62 @@ void main() {
 
     final result = await workflow.recoverPendingCapture();
 
-    expect(result?.outcome, CaptureWorkflowOutcome.ready);
+    expect(result?.outcome, CaptureWorkflowOutcome.queued);
     expect(
       (await database.captureById('capture-1'))?.status,
-      CaptureStatus.ready,
+      CaptureStatus.captured,
     );
     expect(platform.finishedCapture, ('capture-1', true));
+    expect(scheduler.enqueuedIds, ['capture-1']);
+    expect(images.lastRenderRequest, isNull);
   });
 
-  test(
-    'regenerates after descriptive edits while preserving evidence',
-    () async {
-      await workflow.capture(
-        const CaptureDraft(
-          projectId: 'project-1',
-          projectName: '东区厂房改造',
-          workLocation: 'A 区三层',
-          workContent: '风管安装检查',
-          photographer: '张工',
-        ),
-      );
+  test('regenerates after descriptive edits by re-enqueuing', () async {
+    await workflow.capture(
+      const CaptureDraft(
+        projectId: 'project-1',
+        projectName: '东区厂房改造',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+      ),
+    );
+    // Simulate the background processor completing the first capture so the
+    // record is ready and eligible for regeneration.
+    await database.markRendering(
+      captureId: 'capture-1',
+      originalSha256: digestA,
+    );
+    await database.markReady(
+      captureId: 'capture-1',
+      publishedUri: 'content://media/site-mark/1',
+    );
+    scheduler.enqueuedIds.clear();
 
-      final edited = await workflow.regenerateCapture(
-        captureId: 'capture-1',
-        edits: const CaptureEdits(
-          workLocation: 'B 区屋面',
-          workContent: '保温整改复查',
-          photographer: '李工',
-          notes: '复验合格',
-        ),
-      );
+    final edited = await workflow.regenerateCapture(
+      captureId: 'capture-1',
+      edits: const CaptureEdits(
+        workLocation: 'B 区屋面',
+        workContent: '保温整改复查',
+        photographer: '李工',
+        notes: '复验合格',
+      ),
+    );
 
-      expect(edited.workLocation, 'B 区屋面');
-      expect(edited.originalSha256, _FakeImagePipeline.digestA);
-      expect(edited.photoNumber, 'SM-20260716-001');
-      expect(platform.publishedName, 'SM-20260716-001');
-      expect(images.lastRenderRequest?.workContent, '保温整改复查');
-    },
-  );
+    expect(edited.workLocation, 'B 区屋面');
+    expect(edited.workContent, '保温整改复查');
+    expect(edited.photographer, '李工');
+    expect(edited.notes, '复验合格');
+    expect(edited.status, CaptureStatus.captured);
+    expect(edited.photoNumber, 'SM-20260716-001');
+    // Regeneration re-enqueues for background processing instead of rendering.
+    expect(scheduler.enqueuedIds, ['capture-1']);
+    expect(images.lastRenderRequest, isNull);
+    expect(platform.publishedNames, isEmpty);
+    expect(edited.processingAttempts, 0);
+    expect(edited.publishedUri, isNull);
+    expect(edited.originalSha256, isNull);
+  });
 
   test('deletes the published image and local capture record', () async {
     await workflow.capture(
@@ -161,6 +178,15 @@ void main() {
         photographer: '张工',
       ),
     );
+    // Simulate a published capture so delete has a URI to remove.
+    await database.markRendering(
+      captureId: 'capture-1',
+      originalSha256: digestA,
+    );
+    await database.markReady(
+      captureId: 'capture-1',
+      publishedUri: 'content://media/site-mark/1',
+    );
 
     await workflow.deleteCapture('capture-1');
 
@@ -171,7 +197,7 @@ void main() {
 
 class _FakePlatformServices implements PlatformServices {
   CameraOutcome cameraOutcome = CameraOutcome.captured;
-  String? publishedName;
+  final List<String> publishedNames = [];
   (String, bool)? finishedCapture;
   RecoveredCameraCapture? recoveredCapture;
   String? deletedUri;
@@ -200,7 +226,7 @@ class _FakePlatformServices implements PlatformServices {
 
   @override
   Future<String> publishJpeg(String sourcePath, String displayName) async {
-    publishedName = displayName;
+    publishedNames.add(displayName);
     return 'content://media/site-mark/1';
   }
 
@@ -223,8 +249,6 @@ class _FakePlatformServices implements PlatformServices {
 class _FakeImagePipeline implements ImagePipeline {
   static const digestA =
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-  static const digestB =
-      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   RenderPhotoRequest? lastRenderRequest;
 
   @override
@@ -239,7 +263,8 @@ class _FakeImagePipeline implements ImagePipeline {
     lastRenderRequest = request;
     return RenderPhotoResult(
       outputPath: request.outputPath,
-      outputSha256: digestB,
+      outputSha256:
+          'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       width: 4000,
       height: 3000,
     );
@@ -255,4 +280,24 @@ class _FakeOutputPaths implements CaptureOutputPaths {
 class _FakePrivateFileStore implements PrivateFileStore {
   @override
   Future<void> deleteIfExists(String path) async {}
+}
+
+class _RecordingScheduler implements CaptureBackgroundScheduler {
+  final List<String> enqueuedIds = [];
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> enqueue(String captureId) async {
+    enqueuedIds.add(captureId);
+  }
+
+  @override
+  Future<void> retry(String captureId) async {
+    enqueuedIds.add(captureId);
+  }
+
+  @override
+  Future<void> reconcilePending() async {}
 }

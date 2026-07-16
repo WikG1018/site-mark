@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/projects/project_form_screen.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
@@ -50,6 +51,24 @@ final privateFileStoreProvider = Provider<PrivateFileStore>(
   (ref) => DartIoPrivateFileStore(),
 );
 
+/// Whether the app should initialize WorkManager and run startup recovery.
+/// Disabled in widget tests via [MyApp] overrides so the real WorkManager is
+/// never touched.
+final workManagerEnabledProvider = Provider<bool>((ref) => true);
+
+final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {
+  return WorkmanagerBackgroundWorkClient();
+});
+
+final captureBackgroundSchedulerProvider = Provider<CaptureBackgroundScheduler>(
+  (ref) {
+    return PersistentCaptureBackgroundScheduler(
+      client: ref.watch(backgroundWorkClientProvider),
+      database: ref.watch(databaseProvider),
+    );
+  },
+);
+
 final captureWorkflowProvider = Provider<CaptureWorkflow>((ref) {
   return CaptureWorkflow(
     database: ref.watch(databaseProvider),
@@ -57,6 +76,7 @@ final captureWorkflowProvider = Provider<CaptureWorkflow>((ref) {
     images: ref.watch(imagePipelineProvider),
     outputPaths: ref.watch(captureOutputPathsProvider),
     fileStore: ref.watch(privateFileStoreProvider),
+    scheduler: ref.watch(captureBackgroundSchedulerProvider),
   );
 });
 
@@ -136,8 +156,15 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
   void initState() {
     super.initState();
     Future<void>.microtask(() async {
-      if (ref.read(startupRecoveryEnabledProvider)) {
-        await ref.read(captureWorkflowProvider).recoverPendingCapture();
+      if (!ref.read(startupRecoveryEnabledProvider)) return;
+      // Foreground camera recovery first (marks any pending capture and
+      // enqueues it), then reconcile any other captured/rendering rows that
+      // survived a crash.
+      await ref.read(captureWorkflowProvider).recoverPendingCapture();
+      if (ref.read(workManagerEnabledProvider)) {
+        final scheduler = ref.read(captureBackgroundSchedulerProvider);
+        await scheduler.initialize();
+        await scheduler.reconcilePending();
       }
     });
   }
@@ -188,6 +215,9 @@ class MyApp extends StatelessWidget {
     this.projectExportPaths,
     this.shareService,
     this.privateFileStore,
+    this.backgroundScheduler,
+    this.backgroundWorkClient,
+    this.enableWorkManager = false,
   });
 
   final AppDatabase? database;
@@ -198,6 +228,9 @@ class MyApp extends StatelessWidget {
   final ProjectExportPaths? projectExportPaths;
   final ShareFileService? shareService;
   final PrivateFileStore? privateFileStore;
+  final CaptureBackgroundScheduler? backgroundScheduler;
+  final BackgroundWorkClient? backgroundWorkClient;
+  final bool enableWorkManager;
 
   @override
   Widget build(BuildContext context) {
@@ -220,6 +253,13 @@ class MyApp extends StatelessWidget {
           shareFileServiceProvider.overrideWithValue(shareService!),
         if (privateFileStore != null)
           privateFileStoreProvider.overrideWithValue(privateFileStore!),
+        if (backgroundScheduler != null)
+          captureBackgroundSchedulerProvider.overrideWithValue(
+            backgroundScheduler!,
+          ),
+        if (backgroundWorkClient != null)
+          backgroundWorkClientProvider.overrideWithValue(backgroundWorkClient!),
+        workManagerEnabledProvider.overrideWithValue(enableWorkManager),
       ],
       child: const SiteMarkApp(),
     );
