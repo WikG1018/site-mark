@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
+import 'package:sitemark/workflow/location_permission_service.dart';
 
 class CaptureFormScreen extends ConsumerStatefulWidget {
   const CaptureFormScreen({super.key, required this.projectId});
@@ -14,7 +16,8 @@ class CaptureFormScreen extends ConsumerStatefulWidget {
   ConsumerState<CaptureFormScreen> createState() => _CaptureFormScreenState();
 }
 
-class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
+class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
+    with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   final _locationController = TextEditingController();
   final _contentController = TextEditingController();
@@ -28,6 +31,12 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
   /// changes; never recomputed on every [build].
   Future<_CaptureFormInit?>? _initFuture;
 
+  /// Cached location-permission view state. Loaded once during initialization
+  /// and refreshed whenever the app returns to the foreground so the
+  /// explanation card reflects any permission change the user made in the
+  /// system dialog or settings. `null` means the first load has not finished.
+  LocationPermissionViewState? _permissionState;
+
   Future<_CaptureFormInit?> _loadInit() async {
     final database = ref.read(databaseProvider);
     final project = await database.projectById(widget.projectId);
@@ -39,10 +48,39 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
     return _CaptureFormInit(project: project, draft: draft);
   }
 
+  Future<void> _loadPermission() async {
+    final state = await ref.read(locationPermissionServiceProvider).load();
+    if (!mounted) return;
+    setState(() => _permissionState = state);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Observe lifecycle so the permission card refreshes after the user
+    // returns from the system permission dialog or settings page.
+    WidgetsBinding.instance.addObserver(this);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _initFuture ??= _loadInit();
+    // Kick off the first permission load alongside the project init. Guarded
+    // by the null cache so repeated rebuilds do not re-trigger the load.
+    if (_permissionState == null) {
+      _loadPermission();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // The user may have toggled location permission while the app was paused;
+    // refresh on resume so the card and capture-draft fallback stay in sync.
+    if (state == AppLifecycleState.resumed) {
+      _loadPermission();
+    }
   }
 
   void _applyCarryForward(CaptureCarryForwardDraft? draft) {
@@ -55,11 +93,35 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _locationController.dispose();
     _contentController.dispose();
     _photographerController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _dismissPermissionPrompt() async {
+    await ref.read(locationPermissionServiceProvider).dismiss();
+    if (!mounted) return;
+    // Refresh from the source of truth so the persisted dismissal flag is
+    // reflected; load() returns showExplanation=false for a dismissed card.
+    await _loadPermission();
+  }
+
+  Future<void> _enableLocation() async {
+    final service = ref.read(locationPermissionServiceProvider);
+    final current = _permissionState;
+    if (current == null) return;
+    if (current.openSettings) {
+      // The platform reports `permanentlyDenied`; route to system settings.
+      // The resumed lifecycle callback refreshes state when the user returns.
+      await service.openSettings();
+      return;
+    }
+    final state = await service.request();
+    if (!mounted) return;
+    setState(() => _permissionState = state);
   }
 
   Future<void> _capture(Project project) async {
@@ -77,6 +139,10 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
             notes: _notesController.text.trim().isEmpty
                 ? null
                 : _notesController.text.trim(),
+            // The capture button path must never trigger a runtime permission
+            // request, so only attempt a location read when permission is
+            // already granted.
+            useLocationFallback: _permissionState?.locationEnabled ?? false,
           ),
         );
     if (!mounted) return;
@@ -114,6 +180,14 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
       future: _initFuture,
       builder: (context, snapshot) {
         final project = snapshot.data?.project;
+        final permission = _permissionState;
+        final prompt = permission != null && permission.showExplanation
+            ? LocationPermissionPrompt(
+                openSettings: permission.openSettings,
+                onDismiss: _dismissPermissionPrompt,
+                onEnable: _enableLocation,
+              )
+            : null;
         return Scaffold(
           appBar: AppBar(title: Text(strings.newCapture)),
           body: project == null
@@ -133,6 +207,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen> {
                           strings: strings,
                           working: _working,
                           onCapture: () => _capture(project),
+                          permissionPrompt: prompt,
                         ),
                       ),
                     ),
@@ -163,6 +238,7 @@ class _CaptureFormBody extends StatelessWidget {
     required this.strings,
     required this.working,
     required this.onCapture,
+    this.permissionPrompt,
   });
 
   final TextEditingController locationController;
@@ -173,11 +249,20 @@ class _CaptureFormBody extends StatelessWidget {
   final bool working;
   final VoidCallback onCapture;
 
+  /// Optional non-blocking location-permission card rendered at the top of the
+  /// form when the host permission is not granted and the user has not
+  /// dismissed the explanation.
+  final Widget? permissionPrompt;
+
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        if (permissionPrompt != null) ...[
+          permissionPrompt!,
+          const SizedBox(height: 16),
+        ],
         _RequiredField(
           fieldKey: const Key('work-location'),
           controller: locationController,

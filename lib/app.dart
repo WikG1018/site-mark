@@ -17,6 +17,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
+import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -54,6 +55,17 @@ Locale? parseLocale(String? value) => switch (value) {
 
 final platformServicesProvider = Provider<PlatformServices>(
   (ref) => PigeonPlatformServices(),
+);
+
+/// Non-blocking location-permission coordinator shared by the capture form and
+/// the global settings screen. Reads the host permission state and the
+/// persisted `locationPermissionPromptDismissed` flag; the capture button path
+/// never calls into this service at runtime.
+final locationPermissionServiceProvider = Provider<LocationPermissionService>(
+  (ref) => LocationPermissionService(
+    database: ref.watch(databaseProvider),
+    platform: ref.watch(platformServicesProvider),
+  ),
 );
 
 final imagePipelineProvider = Provider<ImagePipeline>(

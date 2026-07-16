@@ -13,6 +13,7 @@ class CaptureDraft {
     required this.workContent,
     required this.photographer,
     this.notes,
+    this.useLocationFallback = true,
   });
 
   final String projectId;
@@ -21,6 +22,14 @@ class CaptureDraft {
   final String workContent;
   final String photographer;
   final String? notes;
+
+  /// Whether the capture workflow may attempt a foreground location read.
+  ///
+  /// Defaults to `true` so callers that do not surface the non-blocking
+  /// permission UX keep the historical behaviour. Set to `false` when the host
+  /// permission is not `granted` so the capture button path never triggers a
+  /// runtime permission request via `requestCurrentLocation`.
+  final bool useLocationFallback;
 }
 
 class CaptureEdits {
@@ -80,7 +89,7 @@ class CaptureWorkflow {
 
   Future<CaptureWorkflowResult> capture(CaptureDraft draft) async {
     final captureId = _idFactory();
-    final location = await _safeLocation();
+    final location = await _safeLocation(draft.useLocationFallback);
     String? originalPath;
     var keepOriginalOnFailure = false;
     try {
@@ -266,7 +275,12 @@ class CaptureWorkflow {
     );
   }
 
-  Future<LocationResult> _safeLocation() async {
+  Future<LocationResult> _safeLocation(bool useLocationFallback) async {
+    // Skip the platform location read when the host permission is not granted
+    // so the capture button path never triggers a runtime permission request.
+    if (!useLocationFallback) {
+      return LocationResult(outcome: LocationOutcome.unavailable);
+    }
     try {
       return await platform.requestCurrentLocation(10_000);
     } catch (error) {

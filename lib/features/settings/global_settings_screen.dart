@@ -4,6 +4,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/workflow/location_permission_service.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 /// Fallback version/build used when [PackageInfo.fromPlatform] fails (e.g. in
 /// unit tests where no platform plugin is available).
@@ -26,7 +28,8 @@ class GlobalSettingsScreen extends ConsumerStatefulWidget {
       _GlobalSettingsScreenState();
 }
 
-class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
+class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
+    with WidgetsBindingObserver {
   late final Future<AppSetting> _initialSettings;
   AppSetting? _settings;
   String _version = _fallbackVersion;
@@ -36,6 +39,12 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
   // value is persisted); `null` means "not dragging - show the persisted value".
   double? _dragValue;
 
+  /// Cached location-permission view state. Loaded once during initialization
+  /// and refreshed on app resume so the tile reflects permission changes the
+  /// user made in the system dialog or settings. `null` means the first load
+  /// has not finished.
+  LocationPermissionViewState? _permissionState;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +52,52 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
     // the project watermark settings screen's FutureBuilder pattern).
     _initialSettings = ref.read(databaseProvider).getAppSettings();
     _loadPackageInfo();
+    _loadPermission();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Refresh after the user returns from the system permission dialog or
+    // settings page so the tile reflects the new permission state.
+    if (state == AppLifecycleState.resumed) {
+      _loadPermission();
+    }
+  }
+
+  Future<void> _loadPermission() async {
+    try {
+      final state = await ref.read(locationPermissionServiceProvider).load();
+      if (!mounted) return;
+      setState(() => _permissionState = state);
+    } catch (_) {
+      // The platform bridge is unavailable (e.g. in unit tests without a
+      // platform override). Default to a disabled, non-explanation state so
+      // the tile renders deterministically instead of spinning forever.
+      if (!mounted) return;
+      setState(() {
+        _permissionState = const LocationPermissionViewState(
+          permission: LocationPermissionState.denied,
+          showExplanation: false,
+        );
+      });
+    }
+  }
+
+  Future<void> _onLocationTapped() async {
+    final service = ref.read(locationPermissionServiceProvider);
+    final current = _permissionState;
+    if (current == null || current.locationEnabled) return;
+    if (current.openSettings) {
+      // Route to system settings; the resumed lifecycle callback refreshes
+      // the tile when the user returns.
+      await service.openSettings();
+      return;
+    }
+    final state = await service.request();
+    if (!mounted) return;
+    setState(() => _permissionState = state);
   }
 
   Future<void> _loadPackageInfo() async {
@@ -67,6 +122,12 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
     final updated = await op(ref.read(databaseProvider));
     if (!mounted) return;
     setState(() => _settings = updated);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   @override
@@ -268,6 +329,13 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
                 ],
               ),
               const SizedBox(height: 32),
+              _SectionHeader(label: strings.locationLabel),
+              const SizedBox(height: 8),
+              _LocationPermissionTile(
+                state: _permissionState,
+                onTap: _onLocationTapped,
+              ),
+              const SizedBox(height: 32),
               _AboutSection(version: _version, buildNumber: _buildNumber),
             ],
           );
@@ -289,6 +357,43 @@ class _SectionHeader extends StatelessWidget {
       style: Theme.of(context).textTheme.titleLarge?.copyWith(
         color: Theme.of(context).colorScheme.primary,
       ),
+    );
+  }
+}
+
+/// ListTile that surfaces the current location-permission state. When the
+/// permission is not granted, tapping the tile requests it (or opens system
+/// settings when the platform reports `permanentlyDenied`).
+class _LocationPermissionTile extends StatelessWidget {
+  const _LocationPermissionTile({required this.state, required this.onTap});
+
+  final LocationPermissionViewState? state;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final current = state;
+    final enabled = current?.locationEnabled ?? false;
+    return ListTile(
+      key: const Key('location-permission-setting'),
+      leading: const Icon(Icons.location_on_outlined),
+      title: Text(strings.locationLabel),
+      trailing: current == null
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Text(enabled ? strings.enabled : strings.disabled),
+      subtitle: current != null && !enabled
+          ? Text(
+              current.openSettings
+                  ? strings.locationPermanentlyDeniedHint
+                  : strings.locationDisabledHint,
+            )
+          : null,
+      onTap: current == null || enabled ? null : onTap,
     );
   }
 }

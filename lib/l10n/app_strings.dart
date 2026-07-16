@@ -136,6 +136,23 @@ class AppStrings {
   String get opacityHint => _english
       ? 'Drag to set the new-project watermark opacity. Saved on release.'
       : '拖动以设置新建项目的水印透明度，松开后保存。';
+
+  // Non-blocking location permission UX
+  String get locationPermissionExplanation => _english
+      ? 'Foreground location tags each capture with GPS coordinates. Capture still works if you decline; tap below to enable it once.'
+      : '前台定位为每张照片记录 GPS 坐标。拒绝授权也可继续拍摄，点击下方按钮可一次性开启。';
+  String get dismiss => _english ? 'Dismiss' : '关闭';
+  String get enableLocation => _english ? 'Enable location' : '开启定位';
+  String get openSettingsLabel => _english ? 'Open settings' : '打开设置';
+  String get locationLabel => _english ? 'Location' : '定位';
+  String get enabled => _english ? 'Enabled' : '已开启';
+  String get disabled => _english ? 'Disabled' : '未开启';
+  String get locationDisabledHint => _english
+      ? 'Tap to request foreground location permission.'
+      : '点击以请求前台定位授权。';
+  String get locationPermanentlyDeniedHint => _english
+      ? 'Location permission was denied. Open system settings to enable it.'
+      : '定位权限已被拒绝，请前往系统设置开启。';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

@@ -92,10 +92,11 @@ void main() {
   Future<void> openCaptureForm(
     WidgetTester tester, {
     CaptureWorkflowResult? workflowResult,
+    _WidgetTestPlatformServices? platformOverride,
   }) async {
     final images = _WidgetTestImagePipeline();
     final share = _WidgetTestShareService();
-    final platform = _WidgetTestPlatformServices();
+    final platform = platformOverride ?? _WidgetTestPlatformServices();
     final outputPaths = _WidgetTestOutputPaths();
     final scheduler = _InlineProcessingScheduler(
       database: database,
@@ -424,10 +425,105 @@ void main() {
     expect(project.watermarkAccentColorArgb, 0xff1565c0);
     await disposeApp(tester);
   });
+
+  testWidgets('granted location hides the explanation card', (tester) async {
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final platform = _WidgetTestPlatformServices()
+      ..permissionState = LocationPermissionState.granted;
+    await openCaptureForm(tester, platformOverride: platform);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('location-permission-prompt')), findsNothing);
+    expect(find.byKey(const Key('location-permission-enable')), findsNothing);
+    await disposeApp(tester);
+  });
+
+  testWidgets(
+    'capture button never triggers a runtime location permission request',
+    (tester) async {
+      await database.createProject(id: 'project-1', name: '东区厂房改造');
+      final platform = _WidgetTestPlatformServices()
+        ..permissionState = LocationPermissionState.denied;
+      await openCaptureForm(tester, platformOverride: platform);
+      await tester.pumpAndSettle();
+
+      // The non-blocking explanation card is shown because permission is
+      // denied and the user has not dismissed it.
+      expect(
+        find.byKey(const Key('location-permission-prompt')),
+        findsOneWidget,
+      );
+      expect(platform.requestLocationPermissionCount, 0);
+
+      await tester.enterText(find.byKey(const Key('work-location')), 'A 区');
+      await tester.enterText(find.byKey(const Key('work-content')), '检查');
+      await tester.enterText(find.byKey(const Key('photographer')), '张工');
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('capture-button')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('capture-button')));
+      await tester.pumpAndSettle();
+
+      // The capture button path must never request runtime permission or
+      // fire a location read when permission is not granted.
+      expect(platform.requestLocationPermissionCount, 0);
+      expect(platform.requestCurrentLocationCount, 0);
+      expect(find.text('照片已加入后台处理，可继续拍摄'), findsOneWidget);
+      await disposeApp(tester);
+    },
+  );
+
+  testWidgets('enable-location tap requests permission and dismisses on deny', (
+    tester,
+  ) async {
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final platform = _WidgetTestPlatformServices()
+      ..permissionState = LocationPermissionState.denied
+      ..requestResult = LocationPermissionState.denied;
+    await openCaptureForm(tester, platformOverride: platform);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('location-permission-prompt')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('location-permission-enable')));
+    await tester.pumpAndSettle();
+
+    expect(platform.requestLocationPermissionCount, 1);
+    // A denied result persists the dismissal and hides the card.
+    expect(find.byKey(const Key('location-permission-prompt')), findsNothing);
+    final settings = await database.getAppSettings();
+    expect(settings.locationPermissionPromptDismissed, isTrue);
+    await disposeApp(tester);
+  });
+
+  testWidgets(
+    'dismiss icon hides the explanation card and persists dismissal',
+    (tester) async {
+      await database.createProject(id: 'project-1', name: '东区厂房改造');
+      final platform = _WidgetTestPlatformServices()
+        ..permissionState = LocationPermissionState.denied;
+      await openCaptureForm(tester, platformOverride: platform);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('location-permission-dismiss')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('location-permission-prompt')), findsNothing);
+      final settings = await database.getAppSettings();
+      expect(settings.locationPermissionPromptDismissed, isTrue);
+      await disposeApp(tester);
+    },
+  );
 }
 
 class _WidgetTestPlatformServices implements PlatformServices {
   String? deletedUri;
+  LocationPermissionState permissionState = LocationPermissionState.granted;
+  LocationPermissionState requestResult = LocationPermissionState.denied;
+  int requestLocationPermissionCount = 0;
+  int requestCurrentLocationCount = 0;
+  int openApplicationSettingsCount = 0;
 
   @override
   Future<String> createCameraTarget(String captureId) async =>
@@ -458,19 +554,24 @@ class _WidgetTestPlatformServices implements PlatformServices {
 
   @override
   Future<LocationResult> requestCurrentLocation(int timeoutMillis) async {
+    requestCurrentLocationCount++;
     return LocationResult(outcome: LocationOutcome.permissionDenied);
   }
 
   @override
   Future<LocationPermissionState> getLocationPermissionState() async =>
-      LocationPermissionState.denied;
+      permissionState;
 
   @override
-  Future<LocationPermissionState> requestLocationPermission() async =>
-      LocationPermissionState.denied;
+  Future<LocationPermissionState> requestLocationPermission() async {
+    requestLocationPermissionCount++;
+    return requestResult;
+  }
 
   @override
-  Future<void> openApplicationSettings() async {}
+  Future<void> openApplicationSettings() async {
+    openApplicationSettingsCount++;
+  }
 
   @override
   Future<ImageMetadataResult> inspectImage(String path) async =>
