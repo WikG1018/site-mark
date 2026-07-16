@@ -10,9 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:meta/meta.dart' show immutable, protected, visibleForTesting;
 
 Object? _extractReplyValueOrThrow(
-  List<Object?>? replyList,
-  String channelName, {
-  required bool isNullValid,
+    List<Object?>? replyList,
+    String channelName, {
+    required bool isNullValid,
 }) {
   if (replyList == null) {
     throw PlatformException(
@@ -46,9 +46,8 @@ bool _deepEquals(Object? a, Object? b) {
   }
   if (a is List && b is List) {
     return a.length == b.length &&
-        a.indexed.every(
-          ((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]),
-        );
+        a.indexed
+            .every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
   }
   if (a is Map && b is Map) {
     if (a.length != b.length) {
@@ -97,7 +96,12 @@ int _deepHash(Object? value) {
   return value.hashCode;
 }
 
-enum CameraOutcome { captured, cancelled, failed }
+
+enum CameraOutcome {
+  captured,
+  cancelled,
+  failed,
+}
 
 enum LocationOutcome {
   precise,
@@ -108,7 +112,11 @@ enum LocationOutcome {
   unavailable,
 }
 
-enum LocationPermissionState { granted, denied, permanentlyDenied }
+enum LocationPermissionState {
+  granted,
+  denied,
+  permanentlyDenied,
+}
 
 class CameraCaptureResult {
   CameraCaptureResult({
@@ -124,12 +132,15 @@ class CameraCaptureResult {
   String? errorMessage;
 
   List<Object?> _toList() {
-    return <Object?>[outcome, outputPath, errorMessage];
+    return <Object?>[
+      outcome,
+      outputPath,
+      errorMessage,
+    ];
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static CameraCaptureResult decode(Object result) {
     result as List<Object?>;
@@ -149,9 +160,7 @@ class CameraCaptureResult {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(outcome, other.outcome) &&
-        _deepEquals(outputPath, other.outputPath) &&
-        _deepEquals(errorMessage, other.errorMessage);
+    return _deepEquals(outcome, other.outcome) && _deepEquals(outputPath, other.outputPath) && _deepEquals(errorMessage, other.errorMessage);
   }
 
   @override
@@ -178,12 +187,15 @@ class RecoveredCameraCapture {
   bool hasContent;
 
   List<Object?> _toList() {
-    return <Object?>[captureId, outputPath, hasContent];
+    return <Object?>[
+      captureId,
+      outputPath,
+      hasContent,
+    ];
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static RecoveredCameraCapture decode(Object result) {
     result as List<Object?>;
@@ -203,9 +215,7 @@ class RecoveredCameraCapture {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(captureId, other.captureId) &&
-        _deepEquals(outputPath, other.outputPath) &&
-        _deepEquals(hasContent, other.hasContent);
+    return _deepEquals(captureId, other.captureId) && _deepEquals(outputPath, other.outputPath) && _deepEquals(hasContent, other.hasContent);
   }
 
   @override
@@ -252,8 +262,7 @@ class LocationResult {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static LocationResult decode(Object result) {
     result as List<Object?>;
@@ -276,12 +285,7 @@ class LocationResult {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(outcome, other.outcome) &&
-        _deepEquals(latitude, other.latitude) &&
-        _deepEquals(longitude, other.longitude) &&
-        _deepEquals(accuracyMeters, other.accuracyMeters) &&
-        _deepEquals(address, other.address) &&
-        _deepEquals(errorMessage, other.errorMessage);
+    return _deepEquals(outcome, other.outcome) && _deepEquals(latitude, other.latitude) && _deepEquals(longitude, other.longitude) && _deepEquals(accuracyMeters, other.accuracyMeters) && _deepEquals(address, other.address) && _deepEquals(errorMessage, other.errorMessage);
   }
 
   @override
@@ -328,8 +332,7 @@ class ImageMetadataResult {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static ImageMetadataResult decode(Object result) {
     result as List<Object?>;
@@ -352,12 +355,7 @@ class ImageMetadataResult {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(width, other.width) &&
-        _deepEquals(height, other.height) &&
-        _deepEquals(fileSizeBytes, other.fileSizeBytes) &&
-        _deepEquals(mimeType, other.mimeType) &&
-        _deepEquals(latitude, other.latitude) &&
-        _deepEquals(longitude, other.longitude);
+    return _deepEquals(width, other.width) && _deepEquals(height, other.height) && _deepEquals(fileSizeBytes, other.fileSizeBytes) && _deepEquals(mimeType, other.mimeType) && _deepEquals(latitude, other.latitude) && _deepEquals(longitude, other.longitude);
   }
 
   @override
@@ -371,21 +369,26 @@ class ImageMetadataResult {
 }
 
 class MediaPublishResult {
-  MediaPublishResult({required this.contentUri});
+  MediaPublishResult({
+    required this.contentUri,
+  });
 
   String contentUri;
 
   List<Object?> _toList() {
-    return <Object?>[contentUri];
+    return <Object?>[
+      contentUri,
+    ];
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static MediaPublishResult decode(Object result) {
     result as List<Object?>;
-    return MediaPublishResult(contentUri: result[0]! as String);
+    return MediaPublishResult(
+      contentUri: result[0]! as String,
+    );
   }
 
   @override
@@ -410,6 +413,7 @@ class MediaPublishResult {
   }
 }
 
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -417,28 +421,28 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    } else if (value is CameraOutcome) {
+    }    else if (value is CameraOutcome) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    } else if (value is LocationOutcome) {
+    }    else if (value is LocationOutcome) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    } else if (value is LocationPermissionState) {
+    }    else if (value is LocationPermissionState) {
       buffer.putUint8(131);
       writeValue(buffer, value.index);
-    } else if (value is CameraCaptureResult) {
+    }    else if (value is CameraCaptureResult) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is RecoveredCameraCapture) {
+    }    else if (value is RecoveredCameraCapture) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is LocationResult) {
+    }    else if (value is LocationResult) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is ImageMetadataResult) {
+    }    else if (value is ImageMetadataResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is MediaPublishResult) {
+    }    else if (value is MediaPublishResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
     } else {
@@ -478,13 +482,9 @@ class SiteMarkSystemApi {
   /// Constructor for [SiteMarkSystemApi]. The [binaryMessenger] named argument is
   /// available for dependency injection. If it is left null, the default
   /// BinaryMessenger will be used which routes to the host platform.
-  SiteMarkSystemApi({
-    BinaryMessenger? binaryMessenger,
-    String messageChannelSuffix = '',
-  }) : pigeonVar_binaryMessenger = binaryMessenger,
-       pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty
-           ? '.$messageChannelSuffix'
-           : '';
+  SiteMarkSystemApi({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
+      : pigeonVar_binaryMessenger = binaryMessenger,
+        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
   final BinaryMessenger? pigeonVar_binaryMessenger;
 
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
@@ -492,50 +492,45 @@ class SiteMarkSystemApi {
   final String pigeonVar_messageChannelSuffix;
 
   Future<String> createCameraTarget(String captureId) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.createCameraTarget$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.createCameraTarget$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[captureId],
-    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[captureId]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as String;
   }
 
   Future<CameraCaptureResult> launchCamera(String captureId) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.launchCamera$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.launchCamera$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[captureId],
-    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[captureId]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as CameraCaptureResult;
   }
 
   Future<RecoveredCameraCapture?> recoverCameraCapture() async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.recoverCameraCapture$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.recoverCameraCapture$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -545,36 +540,34 @@ class SiteMarkSystemApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
     return pigeonVar_replyValue as RecoveredCameraCapture?;
   }
 
   Future<void> finishCameraCapture(String captureId, bool keepOriginal) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.finishCameraCapture$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.finishCameraCapture$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[captureId, keepOriginal],
-    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[captureId, keepOriginal]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<LocationPermissionState> getLocationPermissionState() async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.getLocationPermissionState$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.getLocationPermissionState$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -584,16 +577,16 @@ class SiteMarkSystemApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as LocationPermissionState;
   }
 
   Future<LocationPermissionState> requestLocationPermission() async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestLocationPermission$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestLocationPermission$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -603,16 +596,16 @@ class SiteMarkSystemApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as LocationPermissionState;
   }
 
   Future<void> openApplicationSettings() async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.openApplicationSettings$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.openApplicationSettings$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -622,95 +615,85 @@ class SiteMarkSystemApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<ImageMetadataResult> inspectImage(String path) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.inspectImage$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.inspectImage$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[path],
-    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[path]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as ImageMetadataResult;
   }
 
   Future<LocationResult> requestCurrentLocation(int timeoutMillis) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestCurrentLocation$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestCurrentLocation$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[timeoutMillis],
-    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[timeoutMillis]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as LocationResult;
   }
 
-  Future<MediaPublishResult> publishJpeg(
-    String sourcePath,
-    String displayName,
-  ) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.publishJpeg$pigeonVar_messageChannelSuffix';
+  Future<MediaPublishResult> publishJpeg(String sourcePath, String displayName) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.publishJpeg$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[sourcePath, displayName],
-    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourcePath, displayName]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as MediaPublishResult;
   }
 
   Future<void> deletePublishedImage(String contentUri) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.deletePublishedImage$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.deletePublishedImage$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[contentUri],
-    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[contentUri]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 }

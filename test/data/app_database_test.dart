@@ -668,6 +668,13 @@ void main() {
         captureId: captured.id,
         capturedAt: DateTime(2026, 7, 16, 10, 1),
       );
+      await database.resolveCaptureLocation(
+        captureId: captured.id,
+        resolution: 'resolved',
+        outcome: 'exif',
+        latitude: 24.5,
+        longitude: 117.6,
+      );
       final rendering = await database.createPendingCapture(
         id: 'rendering',
         projectId: 'project-1',
@@ -685,6 +692,13 @@ void main() {
       await database.markRendering(
         captureId: rendering.id,
         originalSha256: originalHash,
+      );
+      await database.resolveCaptureLocation(
+        captureId: rendering.id,
+        resolution: 'resolved',
+        outcome: 'exif',
+        latitude: 24.5,
+        longitude: 117.6,
       );
 
       final awaiting = await database.capturesAwaitingProcessing();
