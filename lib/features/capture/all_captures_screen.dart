@@ -12,10 +12,10 @@ import 'package:sitemark/l10n/app_strings.dart';
 ///
 /// Combines an optional project filter, the shared [CaptureDateFilterBar], and
 /// [CaptureRecordCard]s sourced from [AppDatabase.watchCaptureSummaries]. The
-/// unfiltered [AppDatabase.watchAllCaptureSummaries] stream drives both the
-/// project dropdown options and the cascading date options. Record taps route
-/// to the existing project-scoped capture detail using the IDs carried by each
-/// [CaptureSummary].
+/// unfiltered [AppDatabase.watchAllCaptureSummaries] stream drives the project
+/// dropdown and is narrowed to the selected project before supplying cascading
+/// date options. Record taps route to the existing project-scoped capture
+/// detail using the IDs carried by each [CaptureSummary].
 class AllCapturesScreen extends ConsumerStatefulWidget {
   const AllCapturesScreen({super.key});
 
@@ -40,6 +40,14 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
             builder: (context, allSnapshot) {
               final allSummaries = allSnapshot.data ?? const [];
               final projects = projectSnapshot.data ?? const [];
+              final dateOptionSummaries = _filter.projectId == null
+                  ? allSummaries
+                  : allSummaries
+                        .where(
+                          (summary) =>
+                              summary.capture.projectId == _filter.projectId,
+                        )
+                        .toList(growable: false);
               return Column(
                 children: [
                   _filterBar(
@@ -47,7 +55,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                     strings,
                     database,
                     projects,
-                    allSummaries,
+                    dateOptionSummaries,
                   ),
                   Expanded(
                     child: StreamBuilder<List<CaptureSummary>>(

@@ -228,4 +228,86 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     },
   );
+
+  testWidgets('all-records date options follow the selected project', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    await database.createProject(id: 'project-a', name: '甲项目');
+    await database.createProject(id: 'project-b', name: '乙项目');
+
+    Future<void> seedReadyCapture({
+      required String id,
+      required String projectId,
+      required DateTime capturedAt,
+    }) async {
+      final pending = await database.createPendingCapture(
+        id: id,
+        projectId: projectId,
+        originalPath: '/private/$id.jpg',
+        workLocation: 'A 区',
+        workContent: '风管',
+        photographer: '张工',
+        createdAt: capturedAt,
+      );
+      final captured = await database.markCaptured(
+        captureId: pending.id,
+        capturedAt: capturedAt,
+      );
+      final rendering = await database.markRendering(
+        captureId: captured.id,
+        originalSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      await database.markReady(
+        captureId: rendering.id,
+        publishedUri: 'content://media/site-mark/$id',
+      );
+    }
+
+    await seedReadyCapture(
+      id: 'capture-2025',
+      projectId: 'project-a',
+      capturedAt: DateTime(2025, 6, 1, 9),
+    );
+    await seedReadyCapture(
+      id: 'capture-2026',
+      projectId: 'project-b',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const AllCapturesScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('project-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '乙项目'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('filter-year')));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(MenuItemButton, '2026'), findsOneWidget);
+    expect(find.widgetWithText(MenuItemButton, '2025'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
 }
