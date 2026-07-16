@@ -17,6 +17,7 @@ LENS_CENTER_DP = (54.0, 54.0)
 LENS_RADIUS_DP = 16.0
 RED_DOT_CENTER_DP = (74.0, 42.0)
 RED_DOT_RADIUS_DP = 3.5
+ANDROID_NAMESPACE = "http://schemas.android.com/apk/res/android"
 
 
 class VerificationError(RuntimeError):
@@ -248,30 +249,95 @@ def _read_text(path: Path, root: Path) -> str:
         raise VerificationError(f"Cannot read {_relative(path, root)}: {error}") from error
 
 
+def _parse_xml(text: str, label: str) -> ElementTree.Element:
+    try:
+        return ElementTree.fromstring(text)
+    except ElementTree.ParseError as error:
+        raise VerificationError(f"Invalid {label}: {error}") from error
+
+
+def _single_child(parent: ElementTree.Element, tag: str, label: str) -> ElementTree.Element:
+    children = parent.findall(f"./{tag}")
+    _require(len(children) == 1, f"{label} must contain exactly one <{tag}> element")
+    return children[0]
+
+
+def _require_android_attribute(
+    element: ElementTree.Element,
+    attribute: str,
+    expected: str,
+    label: str,
+) -> None:
+    actual = element.get(f"{{{ANDROID_NAMESPACE}}}{attribute}")
+    _require(actual == expected, f"{label} android:{attribute} is {actual!r}, expected {expected!r}")
+
+
 def verify_launcher_icon_resources(root: Path) -> int:
     root = root.resolve()
     res = root / "android" / "app" / "src" / "main" / "res"
     manifest_path = root / "android" / "app" / "src" / "main" / "AndroidManifest.xml"
     manifest = _read_text(manifest_path, root)
-    _require('android:icon="@mipmap/ic_launcher"' in manifest, "Manifest launcher icon is not wired")
-    _require('android:roundIcon="@mipmap/ic_launcher_round"' in manifest, "Manifest round icon is not wired")
+    manifest_root = _parse_xml(manifest, "Android manifest XML")
+    _require(manifest_root.tag == "manifest", "Android manifest root must be <manifest>")
+    application = _single_child(manifest_root, "application", "Android manifest")
+    _require_android_attribute(
+        application,
+        "icon",
+        "@mipmap/ic_launcher",
+        "Manifest <application>",
+    )
+    _require_android_attribute(
+        application,
+        "roundIcon",
+        "@mipmap/ic_launcher_round",
+        "Manifest <application>",
+    )
 
     adaptive_xml = res / "mipmap-anydpi-v26" / "ic_launcher.xml"
     round_xml = res / "mipmap-anydpi-v26" / "ic_launcher_round.xml"
     xml = _read_text(adaptive_xml, root)
     round_text = _read_text(round_xml, root)
     _require(round_text == xml, "Adaptive legacy and round XML contents differ")
-    try:
-        ElementTree.fromstring(xml)
-    except ElementTree.ParseError as error:
-        raise VerificationError(f"Invalid adaptive icon XML: {error}") from error
-    for required in (
+    adaptive_root = _parse_xml(xml, "adaptive icon XML")
+    _require(adaptive_root.tag == "adaptive-icon", "Adaptive icon root must be <adaptive-icon>")
+
+    background = _single_child(adaptive_root, "background", "Adaptive icon")
+    _require_android_attribute(
+        background,
+        "drawable",
         "@drawable/ic_launcher_background",
+        "Adaptive <background>",
+    )
+
+    foreground = _single_child(adaptive_root, "foreground", "Adaptive icon")
+    foreground_inset = _single_child(foreground, "inset", "Adaptive <foreground>")
+    _require_android_attribute(
+        foreground_inset,
+        "drawable",
         "@drawable/ic_launcher_foreground",
+        "Adaptive <foreground><inset>",
+    )
+    _require_android_attribute(
+        foreground_inset,
+        "inset",
+        "0%",
+        "Adaptive <foreground><inset>",
+    )
+
+    monochrome = _single_child(adaptive_root, "monochrome", "Adaptive icon")
+    monochrome_inset = _single_child(monochrome, "inset", "Adaptive <monochrome>")
+    _require_android_attribute(
+        monochrome_inset,
+        "drawable",
         "@drawable/ic_launcher_monochrome",
-        'android:inset="0%"',
-    ):
-        _require(required in xml, f"Missing {required} in adaptive icon XML")
+        "Adaptive <monochrome><inset>",
+    )
+    _require_android_attribute(
+        monochrome_inset,
+        "inset",
+        "0%",
+        "Adaptive <monochrome><inset>",
+    )
 
     expected_paths: set[Path] = set()
     decoded_count = 0

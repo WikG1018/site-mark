@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -44,6 +45,15 @@ class LauncherIconResourceVerifierTest(unittest.TestCase):
             check=False,
         )
 
+    def _rewrite_adaptive_pair(self, root: Path, transform: Callable[[str], str]) -> None:
+        directory = root / "android/app/src/main/res/mipmap-anydpi-v26"
+        for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
+            path = directory / name
+            original = path.read_text(encoding="utf-8")
+            updated = transform(original)
+            self.assertNotEqual(updated, original)
+            path.write_text(updated, encoding="utf-8")
+
     def test_real_resources_pass_in_normal_and_optimized_python(self) -> None:
         for optimized in (False, True):
             with self.subTest(optimized=optimized):
@@ -77,11 +87,63 @@ class LauncherIconResourceVerifierTest(unittest.TestCase):
                 image.putpixel((0, 0), (255, 255, 255))
                 image.save(path)
 
+        def wrong_monochrome_inset(root: Path) -> None:
+            self._rewrite_adaptive_pair(
+                root,
+                lambda text: text.replace(
+                    'android:drawable="@drawable/ic_launcher_monochrome"\n          android:inset="0%"',
+                    'android:drawable="@drawable/ic_launcher_monochrome"\n          android:inset="12%"',
+                ),
+            )
+
+        def wrong_monochrome_drawable_hidden_by_comment(root: Path) -> None:
+            self._rewrite_adaptive_pair(
+                root,
+                lambda text: text.replace(
+                    '@drawable/ic_launcher_monochrome',
+                    '@drawable/not_launcher_monochrome',
+                    1,
+                ).replace(
+                    "  <monochrome>",
+                    "  <!-- @drawable/ic_launcher_monochrome -->\n  <monochrome>",
+                ),
+            )
+
+        def wrong_manifest_icon_hidden_by_comment(root: Path) -> None:
+            path = root / "android/app/src/main/AndroidManifest.xml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace(
+                'android:icon="@mipmap/ic_launcher"',
+                'android:icon="@mipmap/not_launcher"',
+                1,
+            ).replace(
+                "    <application",
+                '    <!-- android:icon="@mipmap/ic_launcher" -->\n    <application',
+            )
+            path.write_text(text, encoding="utf-8")
+
+        def foreground_values_only_on_wrong_node(root: Path) -> None:
+            self._rewrite_adaptive_pair(
+                root,
+                lambda text: text.replace(
+                    '@drawable/ic_launcher_foreground',
+                    '@drawable/not_launcher_foreground',
+                ).replace(
+                    "</adaptive-icon>",
+                    '  <metadata android:drawable="@drawable/ic_launcher_foreground" '
+                    'android:inset="0%" />\n</adaptive-icon>',
+                ),
+            )
+
         corruptions = {
             "blank foreground": blank_foreground,
             "old Flutter legacy": old_flutter_legacy,
             "missing monochrome cutouts": remove_monochrome_cutouts,
             "legacy round mismatch": mismatch_round_icon,
+            "wrong monochrome inset": wrong_monochrome_inset,
+            "wrong monochrome drawable hidden by comment": wrong_monochrome_drawable_hidden_by_comment,
+            "wrong manifest icon hidden by comment": wrong_manifest_icon_hidden_by_comment,
+            "foreground values only on wrong node": foreground_values_only_on_wrong_node,
         }
         for name, corrupt in corruptions.items():
             for optimized in (False, True):
