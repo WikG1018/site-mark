@@ -91,6 +91,17 @@ class AppStrings {
       ? 'Capture time, location result, photo number, and original hash remain unchanged.'
       : '拍摄时间、定位结果、照片编号和原图哈希不会被修改。';
   String get regenerationFailed => _english ? 'Regeneration failed' : '重新生成失败';
+  String get allRecords => _english ? 'All records' : '全部记录';
+  String get settings => _english ? 'Settings' : '设置';
+  String get allProjects => _english ? 'All projects' : '全部项目';
+  String get allYears => _english ? 'All years' : '全部年份';
+  String get allMonths => _english ? 'All months' : '全部月份';
+  String get allDays => _english ? 'All days' : '全部日期';
+  String get monthSuffix => _english ? '' : '月';
+  String get daySuffix => _english ? '' : '日';
+  String get filteredEmpty =>
+      _english ? 'No records match the current filters' : '没有符合筛选条件的记录';
+  String get retryProcessing => _english ? 'Retry processing' : '重新处理';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

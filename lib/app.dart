@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/projects/project_form_screen.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
@@ -99,6 +100,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'projects/new',
             builder: (context, state) => const ProjectFormScreen(),
+          ),
+          GoRoute(
+            path: 'records',
+            builder: (context, state) => const AllCapturesScreen(),
           ),
           GoRoute(
             path: 'projects/:projectId',

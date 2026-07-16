@@ -3,20 +3,35 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
-import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_filter.dart';
+import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
+import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
-class ProjectDetailScreen extends ConsumerWidget {
+class ProjectDetailScreen extends ConsumerStatefulWidget {
   const ProjectDetailScreen({super.key, required this.projectId});
 
   final String projectId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProjectDetailScreen> createState() =>
+      _ProjectDetailScreenState();
+}
+
+class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
+  CaptureFilter? _filter;
+
+  CaptureFilter _filterForProject() =>
+      _filter?.selectProject(widget.projectId) ??
+      CaptureFilter(projectId: widget.projectId);
+
+  @override
+  Widget build(BuildContext context) {
     final database = ref.watch(databaseProvider);
     final strings = AppStrings.of(context);
+    final filter = _filterForProject();
     return FutureBuilder<Project?>(
-      future: database.projectById(projectId),
+      future: database.projectById(widget.projectId),
       builder: (context, projectSnapshot) {
         final project = projectSnapshot.data;
         return Scaffold(
@@ -40,64 +55,115 @@ class ProjectDetailScreen extends ConsumerWidget {
           ),
           body: project == null
               ? const Center(child: CircularProgressIndicator())
-              : StreamBuilder<List<CaptureRecord>>(
-                  stream: database.watchCapturesForProject(projectId),
+              : StreamBuilder<List<CaptureSummary>>(
+                  stream: database.watchCaptureSummaries(filter),
                   builder: (context, captureSnapshot) {
                     if (!captureSnapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
                     final captures = captureSnapshot.data!;
-                    return CustomScrollView(
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-                            child: _ProjectHeader(project: project),
-                          ),
-                        ),
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                            child: Text(
-                              strings.captureRecords,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                        ),
-                        if (captures.isEmpty)
-                          SliverFillRemaining(
-                            hasScrollBody: false,
-                            child: Center(
-                              child: Text(
-                                strings.noCaptures,
-                                style: Theme.of(context).textTheme.bodyLarge,
+                    return StreamBuilder<List<CaptureSummary>>(
+                      stream: database.watchCaptureSummaries(
+                        CaptureFilter(projectId: widget.projectId),
+                      ),
+                      builder: (context, projectSummarySnapshot) {
+                        final allProjectSummaries =
+                            projectSummarySnapshot.data ?? const [];
+                        final hasAnyRecord = allProjectSummaries.isNotEmpty;
+                        return CustomScrollView(
+                          slivers: [
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  20,
+                                  16,
+                                  8,
+                                ),
+                                child: _ProjectHeader(project: project),
                               ),
                             ),
-                          )
-                        else
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                            sliver: SliverList.separated(
-                              itemCount: captures.length,
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(height: 10),
-                              itemBuilder: (context, index) => _CaptureCard(
-                                capture: captures[index],
-                                strings: strings,
-                                onTap: () => context.go(
-                                  '/projects/$projectId/captures/${captures[index].id}',
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  12,
+                                  20,
+                                  4,
+                                ),
+                                child: Text(
+                                  strings.captureRecords,
+                                  style: Theme.of(context).textTheme.titleLarge,
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                            if (hasAnyRecord)
+                              SliverToBoxAdapter(
+                                child: CaptureDateFilterBar(
+                                  filter: filter,
+                                  summaries: allProjectSummaries,
+                                  onChanged: (next) => setState(() {
+                                    _filter = next;
+                                  }),
+                                ),
+                              ),
+                            if (!hasAnyRecord)
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: Center(
+                                  child: Text(
+                                    strings.noCaptures,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge,
+                                  ),
+                                ),
+                              )
+                            else if (captures.isEmpty)
+                              SliverFillRemaining(
+                                hasScrollBody: false,
+                                child: Center(
+                                  child: Text(
+                                    strings.filteredEmpty,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge,
+                                  ),
+                                ),
+                              )
+                            else
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  16,
+                                  96,
+                                ),
+                                sliver: SliverList.separated(
+                                  itemCount: captures.length,
+                                  separatorBuilder: (_, _) =>
+                                      const SizedBox(height: 10),
+                                  itemBuilder: (context, index) =>
+                                      CaptureRecordCard(
+                                        summary: captures[index],
+                                        onTap: () => context.go(
+                                          '/projects/${widget.projectId}'
+                                          '/captures/${captures[index].capture.id}',
+                                        ),
+                                      ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
                     );
                   },
                 ),
           floatingActionButton: project == null
               ? null
               : FloatingActionButton.extended(
-                  onPressed: () => context.go('/projects/$projectId/capture'),
+                  onPressed: () =>
+                      context.go('/projects/${widget.projectId}/capture'),
                   icon: const Icon(Icons.photo_camera_outlined),
                   label: Text(strings.capture),
                 ),
@@ -199,86 +265,6 @@ class _ProjectHeader extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CaptureCard extends StatelessWidget {
-  const _CaptureCard({
-    required this.capture,
-    required this.strings,
-    required this.onTap,
-  });
-
-  final CaptureRecord capture;
-  final AppStrings strings;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, icon, color) = switch (capture.status) {
-      CaptureStatus.ready => (
-        strings.ready,
-        Icons.check_circle_outline,
-        Colors.green,
-      ),
-      CaptureStatus.failed => (strings.failed, Icons.error_outline, Colors.red),
-      CaptureStatus.pendingCamera => (
-        strings.pendingCamera,
-        Icons.photo_camera_outlined,
-        Colors.orange,
-      ),
-      CaptureStatus.captured => (
-        strings.processing,
-        Icons.hourglass_top,
-        Colors.orange,
-      ),
-      CaptureStatus.rendering => (
-        strings.rendering,
-        Icons.auto_awesome_outlined,
-        Colors.blue,
-      ),
-    };
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      capture.photoNumber ?? capture.workLocation,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  Icon(icon, size: 18, color: color),
-                  const SizedBox(width: 6),
-                  Text(label, style: TextStyle(color: color)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text('${capture.workLocation} · ${capture.workContent}'),
-              const SizedBox(height: 4),
-              Text(
-                capture.photographer,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              if (capture.failureReason != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  capture.failureReason!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-            ],
-          ),
         ),
       ),
     );

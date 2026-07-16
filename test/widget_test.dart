@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
@@ -103,6 +104,36 @@ void main() {
   String fieldText(WidgetTester tester, Key key) {
     final field = tester.widget<TextFormField>(find.byKey(key));
     return field.controller!.text;
+  }
+
+  /// Pumps [MyApp] with the standard widget-test fakes and a single ready
+  /// capture under `project-1` so the all-records surface has content to show.
+  Future<void> pumpAppWithRecords(WidgetTester tester) async {
+    await seedReadyCapture();
+    final images = _WidgetTestImagePipeline();
+    final share = _WidgetTestShareService();
+    final platform = _WidgetTestPlatformServices();
+    final outputPaths = _WidgetTestOutputPaths();
+    final scheduler = _InlineProcessingScheduler(
+      database: database,
+      platform: platform,
+      images: images,
+      outputPaths: outputPaths,
+    );
+    await tester.pumpWidget(
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        platformServices: platform,
+        imagePipeline: images,
+        outputPaths: outputPaths,
+        projectExportPaths: _WidgetTestProjectExportPaths(),
+        shareService: share,
+        privateFileStore: _WidgetTestPrivateFileStore(),
+        backgroundScheduler: scheduler,
+      ),
+    );
+    await tester.pumpAndSettle();
   }
 
   /// Sentinel documenting that the next capture should resolve to `queued`.
@@ -241,6 +272,14 @@ void main() {
 
     await tester.tap(find.textContaining('SM-'));
     await tester.pumpAndSettle();
+    // The detail screen now leads with a large image preview, so the evidence
+    // card is below the fold and must be scrolled into view before asserting.
+    await tester.scrollUntilVisible(
+      find.text('原图 SHA-256'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('原图 SHA-256'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
@@ -313,6 +352,20 @@ void main() {
       await disposeApp(tester);
     },
   );
+
+  testWidgets('home opens all records with project and date filters', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+
+    await tester.tap(find.byTooltip('全部记录'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year')), findsOneWidget);
+    expect(find.byType(CaptureRecordCard), findsWidgets);
+    await disposeApp(tester);
+  });
 }
 
 class _WidgetTestPlatformServices implements PlatformServices {

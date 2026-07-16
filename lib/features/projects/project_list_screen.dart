@@ -16,12 +16,15 @@ class ProjectListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(strings.appName),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Chip(
-              avatar: const Icon(Icons.shield_outlined, size: 18),
-              label: Text(strings.noAds),
-            ),
+          IconButton(
+            onPressed: () => context.go('/records'),
+            tooltip: strings.allRecords,
+            icon: const Icon(Icons.photo_library_outlined),
+          ),
+          IconButton(
+            onPressed: () => context.go('/settings'),
+            tooltip: strings.settings,
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
