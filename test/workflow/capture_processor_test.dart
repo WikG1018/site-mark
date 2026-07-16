@@ -235,6 +235,18 @@ void main() {
     expect(platform.publishedNames, isEmpty);
   });
 
+  test('manual retry preserves hash and rejects a modified original', () async {
+    await seedRenderingCapture(attempts: 0);
+    await database.markFailed(captureId: 'capture-1', reason: 'hash mismatch');
+    await database.resetCaptureForRetry('capture-1');
+    images.sha256ByPath = {'/private/capture-1.jpg': _digestB};
+
+    expect(await processor.process('capture-1'), CaptureProcessResult.failed);
+    final record = await database.captureById('capture-1');
+    expect(record?.originalSha256, _digestA);
+    expect(platform.publishedNames, isEmpty);
+  });
+
   test('original file not found at render time is permanent failure', () async {
     await seedCaptured(attempts: 0);
     images.renderError = PathNotFoundException(

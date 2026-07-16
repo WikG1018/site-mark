@@ -164,8 +164,8 @@ void main() {
     expect(images.lastRenderRequest, isNull);
     expect(platform.publishedNames, isEmpty);
     expect(edited.processingAttempts, 0);
-    expect(edited.publishedUri, isNull);
-    expect(edited.originalSha256, isNull);
+    expect(edited.publishedUri, 'content://media/site-mark/1');
+    expect(edited.originalSha256, digestA);
   });
 
   test('deletes the published image and local capture record', () async {

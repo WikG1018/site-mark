@@ -697,42 +697,43 @@ void main() {
     expect(second.processingAttempts, 2);
   });
 
-  test(
-    'resetCaptureForRetry clears render metadata and resets attempts',
-    () async {
-      await database.createProject(
-        id: 'project-1',
-        name: '东区厂房改造',
-        createdAt: DateTime.utc(2026, 7, 16),
-      );
-      final pending = await database.createPendingCapture(
-        id: 'capture-1',
-        projectId: 'project-1',
-        originalPath: '/private/capture-1.jpg',
-        workLocation: 'A 区',
-        workContent: '风管',
-        photographer: '张工',
-        createdAt: DateTime(2026, 7, 16, 9, 30),
-      );
-      await database.markCaptured(
-        captureId: pending.id,
-        capturedAt: DateTime(2026, 7, 16, 9, 32),
-      );
-      await database.markRendering(
-        captureId: pending.id,
-        originalSha256: originalHash,
-      );
-      await database.markFailed(captureId: pending.id, reason: 'boom');
-      await database.incrementProcessingAttempts(pending.id);
+  test('resetCaptureForRetry preserves evidence and resets attempts', () async {
+    await database.createProject(
+      id: 'project-1',
+      name: '东区厂房改造',
+      createdAt: DateTime.utc(2026, 7, 16),
+    );
+    final pending = await database.createPendingCapture(
+      id: 'capture-1',
+      projectId: 'project-1',
+      originalPath: '/private/capture-1.jpg',
+      workLocation: 'A 区',
+      workContent: '风管',
+      photographer: '张工',
+      createdAt: DateTime(2026, 7, 16, 9, 30),
+    );
+    await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 32),
+    );
+    await database.markRendering(
+      captureId: pending.id,
+      originalSha256: originalHash,
+    );
+    await database.markReady(
+      captureId: pending.id,
+      publishedUri: 'content://media/site-mark/1',
+    );
+    await database.incrementProcessingAttempts(pending.id);
 
-      final reset = await database.resetCaptureForRetry(pending.id);
+    final reset = await database.resetCaptureForRetry(pending.id);
 
-      expect(reset.status, CaptureStatus.captured);
-      expect(reset.failureReason, isNull);
-      expect(reset.publishedUri, isNull);
-      expect(reset.processingAttempts, 0);
-    },
-  );
+    expect(reset.status, CaptureStatus.captured);
+    expect(reset.failureReason, isNull);
+    expect(reset.originalSha256, originalHash);
+    expect(reset.publishedUri, 'content://media/site-mark/1');
+    expect(reset.processingAttempts, 0);
+  });
 
   test(
     'CaptureFilter enforces parent-child date invariant at construction',

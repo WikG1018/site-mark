@@ -567,8 +567,6 @@ class AppDatabase extends _$AppDatabase {
       )..where((row) => row.id.equals(captureId))).write(
         CaptureRecordsCompanion(
           status: const Value(CaptureStatus.captured),
-          publishedUri: const Value(null),
-          originalSha256: const Value(null),
           failureReason: const Value(null),
           processingAttempts: const Value(0),
         ),
