@@ -2,6 +2,8 @@
 
 ## Automated
 
+- `python -m unittest tool/test_generate_launcher_icon.py -v`
+- `python -m unittest tool/test_verify_launcher_icon_resources.py -v`
 - `python tool/verify_launcher_icon_resources.py`
 - `flutter analyze`
 - `flutter test`

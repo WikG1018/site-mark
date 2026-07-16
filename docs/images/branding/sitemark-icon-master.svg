@@ -3,36 +3,32 @@
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#092F2A"/>
-      <stop offset="0.55" stop-color="#176B55"/>
+      <stop offset="0.5" stop-color="#176B55"/>
       <stop offset="1" stop-color="#258D6D"/>
     </linearGradient>
     <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.78"/>
-      <stop offset="0.5" stop-color="#D0FFEB" stop-opacity="0.40"/>
+      <stop offset="0.5" stop-color="#D0FFEB" stop-opacity="0.4"/>
       <stop offset="1" stop-color="#77E5B6" stop-opacity="0.25"/>
     </linearGradient>
     <linearGradient id="letter" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#F6FFFB"/>
+      <stop offset="0.5" stop-color="#D9FFF0"/>
       <stop offset="1" stop-color="#93F2C9"/>
     </linearGradient>
-    <linearGradient id="highlight" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
-      <stop offset="0.75" stop-color="#FFFFFF" stop-opacity="0.16"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </linearGradient>
+    <mask id="camera-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="108" height="108">
+      <rect id="camera-body" x="21" y="32" width="66" height="48" rx="9" fill="#FFFFFF"/>
+      <rect id="camera-bump" x="43" y="25" width="22" height="13" rx="4" fill="#FFFFFF"/>
+    </mask>
     <filter id="frost" x="-20%" y="-20%" width="140%" height="140%">
       <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="7" result="noise"/>
       <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.7"/>
       <feGaussianBlur stdDeviation="0.08"/>
     </filter>
-    <filter id="highlight-soft" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="0.18"/>
-    </filter>
   </defs>
   <rect width="108" height="108" fill="url(#background)"/>
-  <path d="M30 32H43L47 25H61L65 32H78A9 9 0 0 1 87 41V71A9 9 0 0 1 78 80H30A9 9 0 0 1 21 71V41A9 9 0 0 1 30 32Z" fill="url(#glass)" filter="url(#frost)"/>
-  <path d="M24 58V42A7 7 0 0 1 31 35H42L47 28H59" fill="none" stroke="url(#highlight)" stroke-width="1.1" stroke-linecap="round" filter="url(#highlight-soft)"/>
-  <circle cx="54" cy="54" r="16" fill="#0A493D" fill-opacity="0.77"/>
-  <path d="M45 62V46L54 56L63 46V62" fill="none" stroke="url(#letter)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="74" cy="42" r="3.5" fill="#FF4D4F"/>
+  <rect id="camera-glass" width="108" height="108" fill="url(#glass)" mask="url(#camera-mask)" filter="url(#frost)"/>
+  <circle id="lens" cx="54" cy="54" r="16" fill="#0A493D" fill-opacity="0.77"/>
+  <polyline id="letter-m" points="45,62 45,46 54,56 63,46 63,62" fill="none" stroke="url(#letter)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle id="red-dot" cx="74" cy="42" r="3.5" fill="#FF4D4F"/>
 </svg>

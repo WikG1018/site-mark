@@ -26,6 +26,9 @@ try {
     $adaptive = Join-Path $root 'android/app/src/main/res/mipmap-anydpi-v26'
     Copy-Item -LiteralPath (Join-Path $adaptive 'ic_launcher.xml') `
         -Destination (Join-Path $adaptive 'ic_launcher_round.xml') -Force
+
+    & $Python tool/verify_launcher_icon_resources.py
+    if ($LASTEXITCODE -ne 0) { throw 'Launcher icon resource verification failed' }
 }
 finally {
     Pop-Location

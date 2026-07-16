@@ -1,28 +1,89 @@
 from __future__ import annotations
 
-import textwrap
+from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, PngImagePlugin
 
-ARTBOARD_DP = 108.0
-SAFE_ZONE_DP = (21.0, 21.0, 87.0, 87.0)
-CAMERA_BOUNDS_DP = (21.0, 25.0, 87.0, 80.0)
-CAMERA_BODY_DP = (21.0, 32.0, 87.0, 80.0)
-CAMERA_BUMP_DP = (43.0, 25.0, 65.0, 38.0)
-LENS_CENTER_DP = (54.0, 54.0)
-LENS_RADIUS_DP = 16.0
-RED_DOT_CENTER_DP = (74.0, 42.0)
-RED_DOT_RADIUS_DP = 3.5
-M_POINTS_DP = ((45.0, 62.0), (45.0, 46.0), (54.0, 56.0), (63.0, 46.0), (63.0, 62.0))
 
-BACKGROUND_STOPS = ((9, 47, 42), (23, 107, 85), (37, 141, 109))
-GLASS_STOPS = ((255, 255, 255), (208, 255, 235), (119, 229, 182))
-M_STOPS = ((246, 255, 251), (217, 255, 240), (147, 242, 201))
+Color = tuple[int, int, int]
+Point = tuple[float, float]
+Bounds = tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
+class RoundedRectangle:
+    bounds: Bounds
+    radius: float
+
+
+@dataclass(frozen=True)
+class Circle:
+    center: Point
+    radius: float
+    color: Color
+
+
+@dataclass(frozen=True)
+class Polyline:
+    points: tuple[Point, ...]
+    width: float
+
+
+@dataclass(frozen=True)
+class IconScene:
+    artboard: float
+    safe_zone: Bounds
+    camera_body: RoundedRectangle
+    camera_bump: RoundedRectangle
+    lens: Circle
+    letter: Polyline
+    red_dot: Circle
+    background_stops: tuple[Color, Color, Color]
+    glass_stops: tuple[Color, Color, Color]
+    letter_stops: tuple[Color, Color, Color]
+
+
+SCENE = IconScene(
+    artboard=108.0,
+    safe_zone=(21.0, 21.0, 87.0, 87.0),
+    camera_body=RoundedRectangle((21.0, 32.0, 87.0, 80.0), 9.0),
+    camera_bump=RoundedRectangle((43.0, 25.0, 65.0, 38.0), 4.0),
+    lens=Circle((54.0, 54.0), 16.0, (10, 73, 61)),
+    letter=Polyline(
+        ((45.0, 62.0), (45.0, 46.0), (54.0, 56.0), (63.0, 46.0), (63.0, 62.0)),
+        4.2,
+    ),
+    red_dot=Circle((74.0, 42.0), 3.5, (255, 77, 79)),
+    background_stops=((9, 47, 42), (23, 107, 85), (37, 141, 109)),
+    glass_stops=((255, 255, 255), (208, 255, 235), (119, 229, 182)),
+    letter_stops=((246, 255, 251), (217, 255, 240), (147, 242, 201)),
+)
+
+# Public acceptance constants remain available for tooling and documentation,
+# but every value is derived from the single scene used by both renderers.
+ARTBOARD_DP = SCENE.artboard
+SAFE_ZONE_DP = SCENE.safe_zone
+CAMERA_BODY_DP = SCENE.camera_body.bounds
+CAMERA_BUMP_DP = SCENE.camera_bump.bounds
+CAMERA_BOUNDS_DP = (
+    min(CAMERA_BODY_DP[0], CAMERA_BUMP_DP[0]),
+    min(CAMERA_BODY_DP[1], CAMERA_BUMP_DP[1]),
+    max(CAMERA_BODY_DP[2], CAMERA_BUMP_DP[2]),
+    max(CAMERA_BODY_DP[3], CAMERA_BUMP_DP[3]),
+)
+LENS_CENTER_DP = SCENE.lens.center
+LENS_RADIUS_DP = SCENE.lens.radius
+RED_DOT_CENTER_DP = SCENE.red_dot.center
+RED_DOT_RADIUS_DP = SCENE.red_dot.radius
+M_POINTS_DP = SCENE.letter.points
+BACKGROUND_STOPS = SCENE.background_stops
+GLASS_STOPS = SCENE.glass_stops
+M_STOPS = SCENE.letter_stops
 
 
 def _px(value: float, size: int) -> int:
-    return round(value / ARTBOARD_DP * size)
+    return round(value / SCENE.artboard * size)
 
 
 def _rect_px(rect: tuple[float, float, float, float], size: int) -> tuple[int, int, int, int]:
@@ -56,27 +117,32 @@ def _three_stop_gradient(size: int, stops: tuple[tuple[int, int, int], ...]) -> 
     return Image.merge("RGB", channels).convert("RGBA")
 
 
+def _deterministic_noise(size: int) -> Image.Image:
+    state = 0x53_49_54_45
+    pixels = bytearray(size * size)
+    for index in range(len(pixels)):
+        state = (1_664_525 * state + 1_013_904_223) & 0xFFFF_FFFF
+        pixels[index] = state >> 24
+    return Image.frombytes("L", (size, size), bytes(pixels))
+
+
 def _camera_mask(size: int) -> Image.Image:
     mask = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(mask)
-    draw.rounded_rectangle(
-        _rect_px(CAMERA_BODY_DP, size),
-        radius=_px(9.0, size),
-        fill=255,
-    )
-    draw.rounded_rectangle(
-        _rect_px(CAMERA_BUMP_DP, size),
-        radius=_px(4.0, size),
-        fill=255,
-    )
+    for primitive in (SCENE.camera_body, SCENE.camera_bump):
+        draw.rounded_rectangle(
+            _rect_px(primitive.bounds, size),
+            radius=_px(primitive.radius, size),
+            fill=255,
+        )
     return mask
 
 
 def _rounded_polyline_mask(size: int) -> Image.Image:
     mask = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(mask)
-    points = [(_px(x, size), _px(y, size)) for x, y in M_POINTS_DP]
-    width = _px(4.2, size)
+    points = [(_px(x, size), _px(y, size)) for x, y in SCENE.letter.points]
+    width = _px(SCENE.letter.width, size)
     radius = width // 2
     draw.line(points, fill=255, width=width, joint="curve")
     for x, y in points:
@@ -85,13 +151,13 @@ def _rounded_polyline_mask(size: int) -> Image.Image:
 
 
 def render_background(size: int) -> Image.Image:
-    return _three_stop_gradient(size, BACKGROUND_STOPS)
+    return _three_stop_gradient(size, SCENE.background_stops)
 
 
 def render_foreground(size: int, monochrome: bool = False) -> Image.Image:
     camera_mask = _camera_mask(size)
-    lens_box = _circle_box(LENS_CENTER_DP, LENS_RADIUS_DP, size)
-    red_dot_box = _circle_box(RED_DOT_CENTER_DP, RED_DOT_RADIUS_DP, size)
+    lens_box = _circle_box(SCENE.lens.center, SCENE.lens.radius, size)
+    red_dot_box = _circle_box(SCENE.red_dot.center, SCENE.red_dot.radius, size)
     m_mask = _rounded_polyline_mask(size)
 
     if monochrome:
@@ -107,8 +173,8 @@ def render_foreground(size: int, monochrome: bool = False) -> Image.Image:
         return result
 
     result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    glass = _three_stop_gradient(size, GLASS_STOPS)
-    noise = Image.effect_noise((size, size), 18).filter(
+    glass = _three_stop_gradient(size, SCENE.glass_stops)
+    noise = _deterministic_noise(size).filter(
         ImageFilter.GaussianBlur(_px(0.8, size))
     )
     noise_alpha = noise.point(lambda value: max(118, min(178, round(118 + value * 0.24))))
@@ -127,18 +193,18 @@ def render_foreground(size: int, monochrome: bool = False) -> Image.Image:
     result.alpha_composite(highlight)
 
     draw = ImageDraw.Draw(result)
-    draw.ellipse(lens_box, fill=(10, 73, 61, 196))
+    draw.ellipse(lens_box, fill=(*SCENE.lens.color, 196))
 
-    m_layer = _three_stop_gradient(size, M_STOPS)
+    m_layer = _three_stop_gradient(size, SCENE.letter_stops)
     m_layer.putalpha(m_mask)
     result.alpha_composite(m_layer)
 
     draw = ImageDraw.Draw(result)
-    draw.ellipse(red_dot_box, fill=(255, 77, 79, 255))
-    highlight_radius = RED_DOT_RADIUS_DP * 0.34
+    draw.ellipse(red_dot_box, fill=(*SCENE.red_dot.color, 255))
+    highlight_radius = SCENE.red_dot.radius * 0.34
     highlight_center = (
-        RED_DOT_CENTER_DP[0] - RED_DOT_RADIUS_DP * 0.28,
-        RED_DOT_CENTER_DP[1] - RED_DOT_RADIUS_DP * 0.28,
+        SCENE.red_dot.center[0] - SCENE.red_dot.radius * 0.28,
+        SCENE.red_dot.center[1] - SCENE.red_dot.radius * 0.28,
     )
     draw.ellipse(
         _circle_box(highlight_center, highlight_radius, size),
@@ -153,49 +219,63 @@ def render_full_icon(size: int) -> Image.Image:
     return result.convert("RGB")
 
 
-def build_master_svg() -> str:
-    return textwrap.dedent(
-        """\
-        <?xml version="1.0" encoding="UTF-8"?>
-        <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 108 108">
-          <defs>
-            <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#092F2A"/>
-              <stop offset="0.55" stop-color="#176B55"/>
-              <stop offset="1" stop-color="#258D6D"/>
-            </linearGradient>
-            <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.78"/>
-              <stop offset="0.5" stop-color="#D0FFEB" stop-opacity="0.40"/>
-              <stop offset="1" stop-color="#77E5B6" stop-opacity="0.25"/>
-            </linearGradient>
-            <linearGradient id="letter" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#F6FFFB"/>
-              <stop offset="1" stop-color="#93F2C9"/>
-            </linearGradient>
-            <linearGradient id="highlight" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
-              <stop offset="0.75" stop-color="#FFFFFF" stop-opacity="0.16"/>
-              <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-            </linearGradient>
-            <filter id="frost" x="-20%" y="-20%" width="140%" height="140%">
-              <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="7" result="noise"/>
-              <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.7"/>
-              <feGaussianBlur stdDeviation="0.08"/>
-            </filter>
-            <filter id="highlight-soft" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="0.18"/>
-            </filter>
-          </defs>
-          <rect width="108" height="108" fill="url(#background)"/>
-          <path d="M30 32H43L47 25H61L65 32H78A9 9 0 0 1 87 41V71A9 9 0 0 1 78 80H30A9 9 0 0 1 21 71V41A9 9 0 0 1 30 32Z" fill="url(#glass)" filter="url(#frost)"/>
-          <path d="M24 58V42A7 7 0 0 1 31 35H42L47 28H59" fill="none" stroke="url(#highlight)" stroke-width="1.1" stroke-linecap="round" filter="url(#highlight-soft)"/>
-          <circle cx="54" cy="54" r="16" fill="#0A493D" fill-opacity="0.77"/>
-          <path d="M45 62V46L54 56L63 46V62" fill="none" stroke="url(#letter)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="74" cy="42" r="3.5" fill="#FF4D4F"/>
-        </svg>
-        """
+def _svg_number(value: float) -> str:
+    return f"{value:g}"
+
+
+def _svg_color(color: Color) -> str:
+    return "#" + "".join(f"{channel:02X}" for channel in color)
+
+
+def _svg_stops(colors: tuple[Color, Color, Color], opacities: tuple[float, ...] | None = None) -> str:
+    offsets = ("0", "0.5", "1")
+    lines: list[str] = []
+    for index, (offset, color) in enumerate(zip(offsets, colors)):
+        opacity = "" if opacities is None else f' stop-opacity="{_svg_number(opacities[index])}"'
+        lines.append(f'      <stop offset="{offset}" stop-color="{_svg_color(color)}"{opacity}/>')
+    return "\n".join(lines)
+
+
+def _svg_rounded_rectangle(identifier: str, primitive: RoundedRectangle) -> str:
+    left, top, right, bottom = primitive.bounds
+    return (
+        f'<rect id="{identifier}" x="{_svg_number(left)}" y="{_svg_number(top)}" '
+        f'width="{_svg_number(right - left)}" height="{_svg_number(bottom - top)}" '
+        f'rx="{_svg_number(primitive.radius)}" fill="#FFFFFF"/>'
     )
+
+
+def build_master_svg() -> str:
+    points = " ".join(f"{_svg_number(x)},{_svg_number(y)}" for x, y in SCENE.letter.points)
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+{_svg_stops(SCENE.background_stops)}
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+{_svg_stops(SCENE.glass_stops, (0.78, 0.40, 0.25))}
+    </linearGradient>
+    <linearGradient id="letter" x1="0" y1="0" x2="1" y2="1">
+{_svg_stops(SCENE.letter_stops)}
+    </linearGradient>
+    <mask id="camera-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="108" height="108">
+      {_svg_rounded_rectangle("camera-body", SCENE.camera_body)}
+      {_svg_rounded_rectangle("camera-bump", SCENE.camera_bump)}
+    </mask>
+    <filter id="frost" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="7" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.7"/>
+      <feGaussianBlur stdDeviation="0.08"/>
+    </filter>
+  </defs>
+  <rect width="108" height="108" fill="url(#background)"/>
+  <rect id="camera-glass" width="108" height="108" fill="url(#glass)" mask="url(#camera-mask)" filter="url(#frost)"/>
+  <circle id="lens" cx="{_svg_number(SCENE.lens.center[0])}" cy="{_svg_number(SCENE.lens.center[1])}" r="{_svg_number(SCENE.lens.radius)}" fill="{_svg_color(SCENE.lens.color)}" fill-opacity="0.77"/>
+  <polyline id="letter-m" points="{points}" fill="none" stroke="url(#letter)" stroke-width="{_svg_number(SCENE.letter.width)}" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle id="red-dot" cx="{_svg_number(SCENE.red_dot.center[0])}" cy="{_svg_number(SCENE.red_dot.center[1])}" r="{_svg_number(SCENE.red_dot.radius)}" fill="{_svg_color(SCENE.red_dot.color)}"/>
+</svg>
+"""
 
 
 def write_assets(root: Path) -> dict[str, Path]:
