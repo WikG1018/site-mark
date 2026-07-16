@@ -14,7 +14,7 @@
 - `cargo fmt --check --manifest-path rust/Cargo.toml`
 - `cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings`
 - `cargo test --manifest-path rust/Cargo.toml`
-- `android/gradlew :app:testDebugUnitTest`
+- `android/gradlew :sitemark_system_api:testDebugUnitTest`
 - Build universal and arm64 release APKs with the release keystore.
 - Confirm the merged release manifest has no `INTERNET`, `CAMERA`, background
   location, or broad media permission. `INTERNET` and `ACCESS_NETWORK_STATE`

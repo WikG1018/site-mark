@@ -33,12 +33,15 @@ jobs:
           test -x "$SDKMANAGER"
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
       - run: flutter pub get
+      - run: python -m pip install -r tool/icon-requirements.txt
+      - run: python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources
+      - run: python tool/verify_launcher_icon_resources.py
       - run: flutter analyze
       - run: flutter test
       - run: cargo fmt --manifest-path rust/Cargo.toml --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path rust/Cargo.toml
-      - run: ./android/gradlew -p android :app:testDebugUnitTest
+      - run: ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest
       - run: flutter build apk --debug
       - uses: actions/upload-artifact@v6
         with:
