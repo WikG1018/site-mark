@@ -31,40 +31,49 @@ Every command below exited 0 on the Windows host.
 | Command | Result |
 | --- | --- |
 | `flutter pub get` | exit 0, dependencies resolved |
-| `dart run build_runner build --delete-conflicting-outputs` | exit 0, 81 outputs, no uncommitted generated diff (`app_database.g.dart` unchanged) |
+| `dart run build_runner build --delete-conflicting-outputs` | exit 0, 86 outputs, no generated content diff |
 | `dart run pigeon --input pigeons/system_api.dart` | exit 0, no uncommitted generated diff |
-| `dart format --output=none --set-exit-if-changed lib test integration_test` | exit 0, 41 files, 0 changed |
+| `dart format --output=none --set-exit-if-changed lib test integration_test` | exit 0, 44 files, 0 changed |
 | `flutter analyze` | exit 0, no issues found |
-| `flutter test` | exit 0, **87 tests passed** |
-| `cargo fmt --manifest-path rust/Cargo.toml -- --check` | exit 0, formatted |
-| `cargo test --manifest-path rust/Cargo.toml` | exit 0, **6 tests passed** |
-| `cd android && ./gradlew.bat test` | exit 0, BUILD SUCCESSFUL (`:app:testDebugUnitTest`, `:workmanager_android:testDebugUnitTest`) |
+| `flutter test` | exit 0, **98 tests passed** |
+| `cargo fmt --manifest-path rust/Cargo.toml --check` | exit 0, formatted |
+| `cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings` | exit 0, no warnings |
+| `cargo test --manifest-path rust/Cargo.toml` | exit 0, **8 tests passed** |
+| `python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources` | exit 0, **11 tests passed** (run locally with the system `py -3` launcher because `python` is shadowed by a separate Hermes environment) |
+| `python tool/verify_launcher_icon_resources.py` | exit 0, **25 Android PNG resources plus the Play icon verified** |
+| `cd android && ./gradlew.bat :sitemark_system_api:testDebugUnitTest` | exit 0, BUILD SUCCESSFUL, **7 Kotlin plugin tests passed** |
 | `flutter build apk --debug` | exit 0, `build/app/outputs/flutter-apk/app-debug.apk` built |
 
-### Dart test highlights (87 passing)
+### Dart test highlights (98 passing)
 
 - **Schema v2 -> v3 migration** (`app_database_migration_test.dart`, 3 tests):
   preserves captures and inserts default app settings, allows increments and
   retries on upgraded rows, and a fresh database still inserts default app
   settings on first open.
-- **Idempotency and retry** (`capture_processor_test.dart`, 14 tests): the
+- **Idempotency and retry** (`capture_processor_test.dart`, 20 tests): the
   processor is idempotent on `ready`, increments `processingAttempts`,
-  classifies transient vs. permanent failures, marks `failed` on the third
-  attempt, and re-publishes the same MediaStore entry on regeneration.
-- **Serial background queue** (`capture_background_scheduler_test.dart`, 6
+  classifies typed Rust I/O, missing-file, and invalid-data failures, marks
+  `failed` on the third transient attempt, preserves the original hash across
+  manual retry, and re-publishes the same MediaStore entry on regeneration.
+- **Serial background queue** (`capture_background_scheduler_test.dart`, 7
   tests): enqueue appends to the serial render queue with the capture tag and
   input, retry re-enqueues with the same queue/tag, and reconciliation
   enqueues every captured/rendering row once while skipping ready/failed.
 - **Filters** (`app_database_test.dart` + `capture_filter_ui_test.dart`): the
   capture summary uses the local half-open date range, respects the project
   filter, sorts by `coalesce(capturedAt, createdAt)` descending, and the
-  cascading year/month/day filter enforces the parent-child invariant.
+  cascading year/month/day filter enforces the parent-child invariant and
+  only exposes dates belonging to the selected project.
 - **Settings persistence** (`global_settings_screen_test.dart`, 7 tests): theme
   and language persist through database settings, the About section exposes
   the repository name and license, and new projects copy current global
   watermark defaults.
 - **Watermark geometry** (`rust/tests/core_test.rs`): the watermark typography
-  is exactly 20% larger and fits verified landscape and portrait outputs.
+  is exactly 20% larger, fits verified landscape and portrait outputs, and
+  emits stable cross-language error prefixes for missing and invalid images.
+- **Startup recovery** (`app_startup_recovery_test.dart` + `widget_test.dart`):
+  production startup restores a pending system-camera capture before
+  reconciling the persistent processing queue.
 - **Field retention** (`widget_test.dart`): queued capture stays on the form,
   clears notes, re-enables the button, and prefills the three carry-forward
   fields while leaving notes blank.
@@ -89,12 +98,11 @@ open all-records, select the 2026-07-16 date filter, and assert
 ## Alpha APK verification
 
 - File: `C:\Users\Administrator\Documents\水印相机\SiteMark-v0.2.0-alpha-debug.apk`
-- Size: 223,205,143 bytes (~213 MB; debug build bundles native libraries for
+- Size: 223,578,780 bytes (~213 MB; debug build bundles native libraries for
   multiple ABIs and includes debug symbols).
-- SHA-256: `a084de57a60c0dd962f548a35db8a4a2d13aaee3e6e904a44e8edaca6d54ae16`
-  (re-verified after the security-boundary fix that strips `INTERNET` and
-  `ACCESS_NETWORK_STATE` from the debug build; matches `certutil -hashfile`
-  on the Windows Chinese-named path and `sha256sum` on the ASCII copy.)
+- SHA-256: `c94c1610eb519e847171ba3be0b507d712f670191bd911291eb915d910f401fb`
+  (re-verified after the PR #2 review fixes and PR #3 launcher-icon merge;
+  the repository build output and the phone-test copy have the same digest.)
 - Build type: **debug-signed** (the existing phone-test APK is debug-signed and
   no release keystore is configured). This is a testing artifact, not a
   production-signed release.
@@ -107,6 +115,15 @@ open all-records, select the 2026-07-16 date filter, and assert
 - minSdkVersion: `31` (Android 12)
 - targetSdkVersion: `36` (Android 16)
 - application-label: `SiteMark`
+
+### Launcher and provider wiring
+
+- The packaged manifest contains both `android:icon` and `android:roundIcon`.
+- The APK contains adaptive `ic_launcher_round.xml` plus round PNG fallbacks
+  for mdpi, hdpi, xhdpi, xxhdpi, and xxxhdpi.
+- The packaged manifest contains the plugin-owned fully-qualified
+  `io.github.wikg1018.sitemark.system.CaptureContentProvider` once; the merge
+  did not reintroduce the obsolete application-level provider declaration.
 
 ### Permissions
 
