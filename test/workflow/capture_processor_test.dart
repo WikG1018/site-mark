@@ -51,6 +51,7 @@ void main() {
       workLocation: 'A 区三层',
       workContent: '风管安装检查',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     final captured = await database.markCaptured(
@@ -185,6 +186,7 @@ void main() {
       workLocation: 'A 区三层',
       workContent: '风管安装检查',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
 
@@ -208,6 +210,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '检查',
       photographer: '王工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 10),
     );
     await database.markCaptured(

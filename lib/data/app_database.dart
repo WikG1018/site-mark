@@ -24,6 +24,8 @@ class Projects extends Table {
   RealColumn get watermarkOpacity => real().withDefault(const Constant(0.78))();
   IntColumn get watermarkAccentColorArgb =>
       integer().withDefault(const Constant(0xff37c58b))();
+  RealColumn get watermarkFontScale =>
+      real().withDefault(const Constant(1.0))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -43,6 +45,10 @@ class AppSettings extends Table {
       real().withDefault(const Constant(0.78))();
   IntColumn get defaultWatermarkAccentColorArgb =>
       integer().withDefault(const Constant(0xff37c58b))();
+  RealColumn get defaultWatermarkFontScale =>
+      real().withDefault(const Constant(1.0))();
+  BoolColumn get locationPermissionPromptDismissed =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -76,6 +82,11 @@ class CaptureRecords extends Table {
   TextColumn get locationOutcome => text().nullable()();
   IntColumn get processingAttempts =>
       integer().withDefault(const Constant(0))();
+  TextColumn get watermarkLocaleCode =>
+      text().withDefault(const Constant('zh'))();
+  TextColumn get locationResolution =>
+      text().withDefault(const Constant('resolved'))();
+  DateTimeColumn get originalDeletedAt => dateTime().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -88,12 +99,17 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) => migrator.createAll(),
     onUpgrade: (migrator, from, to) async {
+      // When migrating from v2 directly to v4+, migrator.createTable creates
+      // `app_settings` with the *current* (v4) schema. The v4 addColumn calls
+      // for that table must therefore be skipped when the table was just
+      // created, otherwise SQLite raises "duplicate column name".
+      var appSettingsJustCreated = false;
       if (from < 2) {
         await migrator.addColumn(projects, projects.watermarkPosition);
         await migrator.addColumn(projects, projects.watermarkOpacity);
@@ -105,8 +121,34 @@ class AppDatabase extends _$AppDatabase {
           captureRecords,
           captureRecords.processingAttempts,
         );
-        await _ensureGlobalSettingsRow();
+        appSettingsJustCreated = true;
       }
+      if (from < 4) {
+        await migrator.addColumn(projects, projects.watermarkFontScale);
+        if (!appSettingsJustCreated) {
+          await migrator.addColumn(
+            appSettings,
+            appSettings.defaultWatermarkFontScale,
+          );
+          await migrator.addColumn(
+            appSettings,
+            appSettings.locationPermissionPromptDismissed,
+          );
+        }
+        await migrator.addColumn(
+          captureRecords,
+          captureRecords.watermarkLocaleCode,
+        );
+        await migrator.addColumn(
+          captureRecords,
+          captureRecords.locationResolution,
+        );
+        await migrator.addColumn(
+          captureRecords,
+          captureRecords.originalDeletedAt,
+        );
+      }
+      await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
       await _ensureGlobalSettingsRow();
@@ -126,6 +168,8 @@ class AppDatabase extends _$AppDatabase {
         defaultWatermarkPosition: const Value('bottomLeft'),
         defaultWatermarkOpacity: const Value(0.78),
         defaultWatermarkAccentColorArgb: const Value(0xff37c58b),
+        defaultWatermarkFontScale: const Value(1.0),
+        locationPermissionPromptDismissed: const Value(false),
         updatedAt: now,
       ),
       mode: InsertMode.insertOrIgnore,
@@ -139,6 +183,7 @@ class AppDatabase extends _$AppDatabase {
     String? watermarkPosition,
     double? watermarkOpacity,
     int? watermarkAccentColorArgb,
+    double? watermarkFontScale,
     DateTime? createdAt,
   }) {
     final timestamp = createdAt ?? DateTime.now();
@@ -156,6 +201,9 @@ class AppDatabase extends _$AppDatabase {
         watermarkAccentColorArgb: watermarkAccentColorArgb == null
             ? const Value.absent()
             : Value(watermarkAccentColorArgb),
+        watermarkFontScale: watermarkFontScale == null
+            ? const Value.absent()
+            : Value(_validatedFontScale(watermarkFontScale)),
         createdAt: timestamp,
         updatedAt: timestamp,
       ),
@@ -184,6 +232,7 @@ class AppDatabase extends _$AppDatabase {
     required String workLocation,
     required String workContent,
     required String photographer,
+    required String watermarkLocaleCode,
     String? notes,
     DateTime? createdAt,
     double? latitude,
@@ -191,7 +240,14 @@ class AppDatabase extends _$AppDatabase {
     double? accuracyMeters,
     String? address,
     String? locationOutcome,
+    String locationResolution = 'pending',
   }) {
+    if (!{'zh', 'en'}.contains(watermarkLocaleCode)) {
+      throw ArgumentError.value(watermarkLocaleCode, 'watermarkLocaleCode');
+    }
+    if (!{'pending', 'resolved', 'unavailable'}.contains(locationResolution)) {
+      throw ArgumentError.value(locationResolution, 'locationResolution');
+    }
     return into(captureRecords).insertReturning(
       CaptureRecordsCompanion.insert(
         id: id,
@@ -208,6 +264,8 @@ class AppDatabase extends _$AppDatabase {
         accuracyMeters: Value(accuracyMeters),
         address: Value(address),
         locationOutcome: Value(locationOutcome),
+        watermarkLocaleCode: Value(watermarkLocaleCode),
+        locationResolution: Value(locationResolution),
       ),
     );
   }
@@ -237,6 +295,7 @@ class AppDatabase extends _$AppDatabase {
     required String position,
     required double opacity,
     required int accentColorArgb,
+    required double fontScale,
   }) async {
     if (!{'bottomLeft', 'bottomRight'}.contains(position)) {
       throw ArgumentError.value(position, 'position');
@@ -244,11 +303,13 @@ class AppDatabase extends _$AppDatabase {
     if (opacity < 0.2 || opacity > 0.95) {
       throw ArgumentError.value(opacity, 'opacity');
     }
+    _validatedFontScale(fontScale);
     await (update(projects)..where((row) => row.id.equals(projectId))).write(
       ProjectsCompanion(
         watermarkPosition: Value(position),
         watermarkOpacity: Value(opacity),
         watermarkAccentColorArgb: Value(accentColorArgb),
+        watermarkFontScale: Value(fontScale),
         updatedAt: Value(DateTime.now()),
       ),
     );
@@ -462,6 +523,8 @@ class AppDatabase extends _$AppDatabase {
     String? defaultWatermarkPosition,
     double? defaultWatermarkOpacity,
     int? defaultWatermarkAccentColorArgb,
+    double? defaultWatermarkFontScale,
+    bool? locationPermissionPromptDismissed,
   }) async {
     final companion = AppSettingsCompanion(
       themeMode: themeMode == null ? const Value.absent() : Value(themeMode),
@@ -477,6 +540,13 @@ class AppDatabase extends _$AppDatabase {
       defaultWatermarkAccentColorArgb: defaultWatermarkAccentColorArgb == null
           ? const Value.absent()
           : Value(defaultWatermarkAccentColorArgb),
+      defaultWatermarkFontScale: defaultWatermarkFontScale == null
+          ? const Value.absent()
+          : Value(_validatedFontScale(defaultWatermarkFontScale)),
+      locationPermissionPromptDismissed:
+          locationPermissionPromptDismissed == null
+          ? const Value.absent()
+          : Value(locationPermissionPromptDismissed),
       updatedAt: Value(DateTime.now()),
     );
     await (update(
@@ -575,6 +645,75 @@ class AppDatabase extends _$AppDatabase {
         captureRecords,
       )..where((row) => row.id.equals(captureId))).getSingle();
     });
+  }
+
+  /// Validates that a watermark font scale is within the allowed 0.80-1.60
+  /// range. Throws [ArgumentError] for out-of-range values.
+  double _validatedFontScale(double value) {
+    if (value < 0.80 || value > 1.60) {
+      throw ArgumentError.value(value, 'fontScale');
+    }
+    return value;
+  }
+
+  /// Updates a capture's location resolution, outcome, and coordinates.
+  ///
+  /// [resolution] must be `'resolved'` or `'unavailable'`. Call this after
+  /// EXIF or GPS lookup completes (successfully or not) to transition the
+  /// capture out of the `'pending'` resolution state.
+  Future<CaptureRecord> resolveCaptureLocation({
+    required String captureId,
+    required String resolution,
+    required String outcome,
+    double? latitude,
+    double? longitude,
+    double? accuracyMeters,
+    String? address,
+  }) async {
+    if (!{'resolved', 'unavailable'}.contains(resolution)) {
+      throw ArgumentError.value(resolution, 'resolution');
+    }
+    await (update(
+      captureRecords,
+    )..where((row) => row.id.equals(captureId))).write(
+      CaptureRecordsCompanion(
+        locationResolution: Value(resolution),
+        locationOutcome: Value(outcome),
+        latitude: Value(latitude),
+        longitude: Value(longitude),
+        accuracyMeters: Value(accuracyMeters),
+        address: Value(address),
+      ),
+    );
+    return captureById(captureId).then((row) => row!);
+  }
+
+  /// Marks the original photo file as intentionally deleted at [deletedAt]
+  /// (defaults to now). Does NOT clear `originalSha256` so the evidence
+  /// hash survives cleanup.
+  Future<CaptureRecord> markOriginalDeleted(
+    String captureId, {
+    DateTime? deletedAt,
+  }) async {
+    await (update(
+      captureRecords,
+    )..where((row) => row.id.equals(captureId))).write(
+      CaptureRecordsCompanion(
+        originalDeletedAt: Value(deletedAt ?? DateTime.now()),
+      ),
+    );
+    return captureById(captureId).then((row) => row!);
+  }
+
+  /// Returns captures matching any of the provided IDs, ordered by
+  /// `createdAt` ascending. Returns an empty list for an empty input.
+  Future<List<CaptureRecord>> capturesByIds(Iterable<String> captureIds) {
+    final ids = captureIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return Future.value(const []);
+    return (select(captureRecords)
+          ..where((row) => row.id.isIn(ids))
+          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+        .get();
   }
 
   /// Shared select with a join on `captures.project_id = projects.id`,

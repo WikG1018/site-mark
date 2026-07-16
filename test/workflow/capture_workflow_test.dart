@@ -101,6 +101,7 @@ void main() {
       workLocation: 'A 区三层',
       workContent: '风管安装检查',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     platform.recoveredCapture = RecoveredCameraCapture(

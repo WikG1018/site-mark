@@ -20,6 +20,7 @@ class _ProjectWatermarkSettingsScreenState
   String? _position;
   double? _opacity;
   int? _accentColorArgb;
+  double? _fontScale;
   bool _saving = false;
 
   @override
@@ -38,6 +39,7 @@ class _ProjectWatermarkSettingsScreenState
           _position ??= project.watermarkPosition;
           _opacity ??= project.watermarkOpacity;
           _accentColorArgb ??= project.watermarkAccentColorArgb;
+          _fontScale ??= project.watermarkFontScale;
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -151,6 +153,7 @@ class _ProjectWatermarkSettingsScreenState
         position: _position!,
         opacity: _opacity!,
         accentColorArgb: _accentColorArgb!,
+        fontScale: _fontScale!,
       );
       if (mounted) context.pop();
     } finally {

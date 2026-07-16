@@ -34,6 +34,8 @@ CaptureRecord _record({
     createdAt: DateTime(2026, 7, 16, 9, 30),
     capturedAt: DateTime(2026, 7, 16, 9, 32),
     processingAttempts: 0,
+    watermarkLocaleCode: 'zh',
+    locationResolution: 'resolved',
   );
 }
 

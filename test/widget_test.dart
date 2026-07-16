@@ -66,6 +66,7 @@ void main() {
       workLocation: workLocation,
       workContent: workContent,
       photographer: photographer,
+      watermarkLocaleCode: 'zh',
       notes: notes,
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );

@@ -117,6 +117,113 @@ QueryExecutor openMigratedV2Fixture() {
   return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
 }
 
+/// Opens a raw in-memory sqlite database with the genuine v3 schema (including
+/// `processing_attempts` and `app_settings`), seeds one project, one `ready`
+/// capture, and one `global` settings row, then sets `PRAGMA user_version = 3`.
+///
+/// Returning a drift [QueryExecutor] over that pre-seeded connection means
+/// [AppDatabase.forTesting] will read `user_version = 3`, see the target
+/// `schemaVersion` of `4`, and run the real `onUpgrade(migrator, 3, 4)` path.
+QueryExecutor openMigratedV3Fixture() {
+  final db = sqlite3.openInMemory();
+  final projectCreated =
+      DateTime.utc(2026, 7, 16).millisecondsSinceEpoch ~/ 1000;
+  final captureCreated =
+      DateTime(2026, 7, 16, 9, 30).millisecondsSinceEpoch ~/ 1000;
+
+  db.execute('''
+    CREATE TABLE projects (
+      id TEXT NOT NULL PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+      watermark_opacity REAL NOT NULL DEFAULT 0.78,
+      watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE app_settings (
+      id TEXT NOT NULL PRIMARY KEY DEFAULT 'global',
+      theme_mode TEXT NOT NULL DEFAULT 'system',
+      locale_code TEXT,
+      default_watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+      default_watermark_opacity REAL NOT NULL DEFAULT 0.78,
+      default_watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      updated_at INTEGER NOT NULL
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE captures (
+      id TEXT NOT NULL PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+      photo_number TEXT,
+      work_location TEXT NOT NULL,
+      work_content TEXT NOT NULL,
+      photographer TEXT NOT NULL,
+      notes TEXT,
+      original_path TEXT NOT NULL,
+      published_uri TEXT,
+      original_sha256 TEXT,
+      status TEXT NOT NULL,
+      failure_reason TEXT,
+      created_at INTEGER NOT NULL,
+      captured_at INTEGER,
+      latitude REAL,
+      longitude REAL,
+      accuracy_meters REAL,
+      address TEXT,
+      location_outcome TEXT,
+      processing_attempts INTEGER NOT NULL DEFAULT 0
+    );
+  ''');
+  db.execute('INSERT INTO projects VALUES (?, ?, NULL, ?, ?, ?, ?, ?)', [
+    'project-1',
+    '东区厂房改造',
+    'bottomLeft',
+    0.78,
+    0xff37c58b,
+    projectCreated,
+    projectCreated,
+  ]);
+  db.execute('INSERT INTO app_settings VALUES (?, ?, ?, ?, ?, ?, ?)', [
+    'global',
+    'dark',
+    'en',
+    'bottomRight',
+    0.64,
+    0xff1565c0,
+    projectCreated,
+  ]);
+  db.execute(
+    '''
+    INSERT INTO captures (
+      id, project_id, photo_number, work_location, work_content, photographer,
+      original_path, published_uri, original_sha256, status, created_at,
+      captured_at, processing_attempts
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ''',
+    [
+      'capture-1',
+      'project-1',
+      'SM-20260716-001',
+      'A 区三层',
+      '风管安装检查',
+      '张工',
+      '/private/capture-1.jpg',
+      'content://media/photo/1',
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      CaptureStatus.ready.name,
+      captureCreated,
+      captureCreated,
+      2,
+    ],
+  );
+  db.execute('PRAGMA user_version = 3;');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
 void main() {
   test('v2 to v3 migration preserves captures and inserts defaults', () async {
     final database = AppDatabase.forTesting(openMigratedV2Fixture());
@@ -135,6 +242,30 @@ void main() {
     expect(settings.defaultWatermarkOpacity, 0.78);
     expect(settings.defaultWatermarkAccentColorArgb, 0xff37c58b);
   });
+
+  test(
+    'v3 to v4 migration preserves rows and adds field-test defaults',
+    () async {
+      final database = AppDatabase.forTesting(openMigratedV3Fixture());
+      addTearDown(database.close);
+
+      final project = await database.projectById('project-1');
+      final capture = await database.captureById('capture-1');
+      final settings = await database.getAppSettings();
+
+      expect(project?.name, '东区厂房改造');
+      expect(project?.watermarkFontScale, 1.0);
+      expect(settings.themeMode, 'dark');
+      expect(settings.localeCode, 'en');
+      expect(settings.defaultWatermarkFontScale, 1.0);
+      expect(settings.locationPermissionPromptDismissed, isFalse);
+      expect(capture?.photoNumber, 'SM-20260716-001');
+      expect(capture?.processingAttempts, 2);
+      expect(capture?.watermarkLocaleCode, 'zh');
+      expect(capture?.locationResolution, 'resolved');
+      expect(capture?.originalDeletedAt, isNull);
+    },
+  );
 
   test(
     'v2 to v3 migration allows increments and retries on upgraded rows',

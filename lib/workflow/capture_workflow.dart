@@ -92,6 +92,7 @@ class CaptureWorkflow {
         workLocation: draft.workLocation,
         workContent: draft.workContent,
         photographer: draft.photographer,
+        watermarkLocaleCode: 'zh',
         notes: draft.notes,
         createdAt: _now(),
         latitude: location.latitude,

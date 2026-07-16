@@ -24,6 +24,8 @@ CaptureRecord _record({required String id, required DateTime capturedAt}) {
     createdAt: capturedAt,
     capturedAt: capturedAt,
     processingAttempts: 0,
+    watermarkLocaleCode: 'zh',
+    locationResolution: 'resolved',
   );
 }
 
@@ -164,6 +166,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 9),
       );
       final captured = await database.markCaptured(
@@ -250,6 +253,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: capturedAt,
       );
       final captured = await database.markCaptured(

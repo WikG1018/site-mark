@@ -17,6 +17,7 @@ void main() {
       workLocation: 'A 区三层',
       workContent: '风管安装检查',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
     );
     await database.markCaptured(
       captureId: pending.id,
