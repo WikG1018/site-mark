@@ -823,7 +823,7 @@ fn safe_archive_component(value: &str) -> Result<&str, String> {
     if value.is_empty()
         || !value
             .chars()
-            .all(|character| character.is_alphanumeric() || matches!(character, '-' | '_'))
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
     {
         return Err(invalid_data(
             "validate archive file name",
@@ -1003,6 +1003,13 @@ mod archive_tests {
         assert!(safe_archive_component("project.1").is_err());
         assert!(safe_archive_component("project(1)").is_err());
         assert!(safe_archive_component("").is_err());
+    }
+
+    #[test]
+    fn project_id_rejects_unicode_letters() {
+        // is_alphanumeric accepts Unicode; contract requires ASCII only.
+        assert!(safe_archive_component("项目一").is_err());
+        assert!(safe_archive_component("１２３").is_err());
     }
 
     // --- photo_number: Dart-aligned blacklist (safe_photo_number_component) ---

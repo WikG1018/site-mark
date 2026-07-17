@@ -417,6 +417,7 @@ class AppDatabase extends _$AppDatabase {
           .fold(0, (highest, value) => value > highest ? value : highest);
       final number = formatPhotoNumber(
         projectName: project.name,
+        projectId: current.projectId,
         capturedAt: capturedAt,
         sequence: highestSequence + 1,
       );
