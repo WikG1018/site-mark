@@ -488,7 +488,6 @@ struct WatermarkLabels {
     location: &'static str,
     content: &'static str,
     photographer: &'static str,
-    number: &'static str,
     time: &'static str,
     address: &'static str,
     coordinates: &'static str,
@@ -502,7 +501,6 @@ fn labels(locale: &str) -> WatermarkLabels {
             location: "Location",
             content: "Work",
             photographer: "Photographer",
-            number: "Number",
             time: "Time",
             address: "Address",
             coordinates: "Coordinates",
@@ -514,7 +512,6 @@ fn labels(locale: &str) -> WatermarkLabels {
             location: "位置",
             content: "内容",
             photographer: "拍摄人",
-            number: "编号",
             time: "时间",
             address: "地址",
             coordinates: "坐标",
@@ -530,7 +527,6 @@ fn logical_watermark_lines(request: &RenderPhotoRequest) -> Vec<String> {
         format!("{}  {}", labels.location, request.work_location),
         format!("{}  {}", labels.content, request.work_content),
         format!("{}  {}", labels.photographer, request.photographer),
-        format!("{}  {}", labels.number, request.photo_number),
         format!("{}  {}", labels.time, request.captured_at),
     ];
     if let Some(address) = non_empty(&request.address) {
@@ -920,6 +916,20 @@ mod watermark_tests {
                 layout.top + layout.card_height <= height,
                 "card overflows vertically at {width}x{height}"
             );
+        }
+    }
+
+    #[test]
+    fn chinese_and_english_watermarks_omit_photo_number() {
+        for locale in ["zh", "en"] {
+            let request = sample_request(locale, 1.0, "东区厂房改造");
+            let lines = logical_watermark_lines(&request);
+            let text = lines.join("\n");
+
+            assert!(!text.contains(&request.photo_number), "{locale}: {text}");
+            assert!(!text.contains("编号"), "{locale}: {text}");
+            assert!(!text.contains("Number"), "{locale}: {text}");
+            assert_eq!(lines.len(), 5);
         }
     }
 
