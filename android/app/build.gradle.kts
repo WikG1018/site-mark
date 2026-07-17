@@ -44,6 +44,13 @@ android {
 
     buildTypes {
         release {
+            // Disable R8 code minification and resource shrinking. R8 obfuscation
+            // breaks flutter_rust_bridge FFI bindings and WorkManager callback
+            // dispatchers, causing the app to crash immediately on launch in
+            // release builds. SiteMark is an offline app, so APK size is not a
+            // critical concern.
+            isMinifyEnabled = false
+            isShrinkResources = false
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
