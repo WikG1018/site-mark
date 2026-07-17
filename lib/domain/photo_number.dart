@@ -42,22 +42,32 @@ String _trimToUtf8Bytes(String value, int maxBytes) {
   return result.toString();
 }
 
+/// Fallback project-name component used by [formatPhotoNumber] when the
+/// sanitized project name is empty. Exported so the suffix-length guard can
+/// account for it.
+const fallbackProjectName = 'Project';
+
 /// Formats a unique photo number for filesystem use.
 ///
-/// Format: `{safeProjectName}-{projectKey}-SM-{yyyyMMdd}-{seq}`
-/// where `projectKey` is the project ID with hyphens removed (so a 36-char
-/// UUID becomes its 32-char hex form). Embedding the *full* project ID —
-/// not a short prefix — guarantees that two distinct project IDs always
-/// produce distinct file names, even when the project display names are
-/// identical or sanitize to the same value. This prevents silent
-/// overwrites in the Android MediaStore and ZIP export.
+/// Format: `{safeProjectName}-{projectId}-SM-{yyyyMMdd}-{seq}`
+///
+/// `projectId` is embedded verbatim — hyphens are preserved — so the
+/// mapping from project ID to photo number is strictly one-to-one. Two
+/// distinct project IDs always produce distinct file names, even when the
+/// project display names are identical or sanitize to the same value. This
+/// prevents silent overwrites in the Android MediaStore and ZIP export.
 ///
 /// [projectId] must be a non-empty ASCII identifier matching
 /// `^[A-Za-z0-9_-]+$`. This matches the Rust `safe_archive_component`
 /// contract and prevents `/`, whitespace, or non-ASCII characters from
-/// being embedded in the file name. The byte budget for the project name
-/// is computed from the actual UTF-8 byte length of the suffix so the
-/// final JPEG name never exceeds 255 bytes.
+/// being embedded in the file name.
+///
+/// The byte budget for the project name is computed from the actual UTF-8
+/// byte length of the suffix (not `String.length`, which is UTF-16 code
+/// units). If the suffix alone is so long that even the
+/// [fallbackProjectName] would not fit within 255 bytes, an
+/// [ArgumentError] is thrown — the final JPEG name is guaranteed never to
+/// exceed 255 UTF-8 bytes.
 String formatPhotoNumber({
   required String projectName,
   required String projectId,
@@ -79,14 +89,31 @@ String formatPhotoNumber({
       '${capturedAt.year.toString().padLeft(4, '0')}'
       '${two(capturedAt.month)}${two(capturedAt.day)}';
   final seq = sequence.toString().padLeft(3, '0');
-  // Strip hyphens so a 36-char UUID collapses to its 32-char hex form.
-  // Two distinct UUIDs always differ in at least one hex digit, so the
-  // resulting photo numbers are deterministically distinct.
-  final projectKey = projectId.replaceAll('-', '');
+  // Use the projectId verbatim. Hyphens are already allowed by both the
+  // Dart and Rust whitelists, and preserving them keeps the project-ID to
+  // file-name mapping strictly one-to-one (e.g. "project-1" and "project1"
+  // stay distinct).
+  final projectKey = projectId;
   final suffix = '-$projectKey-SM-$date-$seq.jpg';
-  // Use UTF-8 byte length, not String.length (UTF-16 code units), so the
-  // budget stays correct even if a non-ASCII projectId is ever supplied.
   final suffixBytes = utf8.encode(suffix).length;
+  final fallbackBytes = utf8.encode(fallbackProjectName).length;
+  if (suffixBytes + fallbackBytes > 255) {
+    throw ArgumentError.value(
+      projectId,
+      'projectId',
+      'Project ID is too long for a valid JPEG file name (suffix would '
+          'leave no room for the project name within 255 UTF-8 bytes)',
+    );
+  }
   final safe = safePhotoProjectName(projectName, suffixReserve: suffixBytes);
-  return '$safe-$projectKey-SM-$date-$seq';
+  final number = '$safe-$projectKey-SM-$date-$seq';
+  // Defensive final check: never emit a number whose .jpg name would
+  // exceed the POSIX NAME_MAX of 255 bytes.
+  if (utf8.encode('$number.jpg').length > 255) {
+    throw StateError(
+      'Generated JPEG name exceeds 255 UTF-8 bytes '
+      '(got ${utf8.encode('$number.jpg').length})',
+    );
+  }
+  return number;
 }

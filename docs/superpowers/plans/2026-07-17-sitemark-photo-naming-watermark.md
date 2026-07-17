@@ -10,8 +10,8 @@
 
 ## Global Constraints
 
-- New numbers use `{safeProjectName}-{projectKey}-SM-{yyyyMMdd}-{sequence padded to at least 3 digits}`, where `projectKey` is the project ID with hyphens stripped (so a 36-char UUID collapses to its 32-char hex form). Embedding the full project ID — not a short prefix — guarantees distinct file names for distinct project IDs.
-- Validate `projectId` against `^[A-Za-z0-9_-]+$` (matches the Rust `safe_archive_component` ASCII contract) before generating the number.
+- New numbers use `{safeProjectName}-{projectId}-SM-{yyyyMMdd}-{sequence padded to at least 3 digits}`, where `projectId` is embedded **verbatim** (hyphens preserved). Preserving hyphens keeps the project-ID-to-file-name mapping strictly one-to-one — `project-1` and `project1` stay distinct — and two distinct project IDs always produce distinct file names.
+- Validate `projectId` against `^[A-Za-z0-9_-]+$` (matches the Rust `safe_archive_component` ASCII contract) before generating the number. Also reject `projectId` when the suffix bytes plus the `Project` fallback bytes would exceed 255, so the final JPEG name can never exceed the POSIX `NAME_MAX` of 255 bytes.
 - Replace control characters (incl. C1), Unicode whitespace, and `/ \ : * ? " < > |` with one underscore; collapse repeated underscores; trim leading/trailing dots, spaces, and underscores.
 - Truncate the sanitized project-name component to a UTF-8 byte budget of `255 - suffixBytes`, where `suffixBytes` is the UTF-8 byte length of `-{projectKey}-SM-{yyyyMMdd}-{seq}.jpg`. Truncation iterates Unicode runes so multi-byte characters (CJK, Emoji) are never split. Fall back to `Project` when empty.
 - Apply the new number only when a future capture reaches `markCaptured`; do not migrate or rename existing records or gallery files.
@@ -59,7 +59,7 @@ void main() {
         capturedAt: DateTime(2026, 7, 17, 9, 5),
         sequence: 1,
       ),
-      '东区厂房改造-project1-SM-20260717-001',
+      '东区厂房改造-project-1-SM-20260717-001',
     );
   });
 
@@ -164,7 +164,7 @@ git commit -m "feat: format project photo numbers"
 
 **Interfaces:**
 - Consumes: `formatPhotoNumber` from Task 1 and the parent `Project.name` read inside the existing `markCaptured` transaction.
-- Produces: persisted `CaptureRecord.photoNumber` values such as `东区厂房改造-project1-SM-20260717-001` (where `project1` is the project ID with hyphens stripped); `CaptureProcessor` continues passing that value to `RenderPhotoRequest.photoNumber` and `PlatformServices.publishJpeg`.
+- Produces: persisted `CaptureRecord.photoNumber` values such as `东区厂房改造-project-1-SM-20260717-001` (projectId verbatim, hyphens preserved); `CaptureProcessor` continues passing that value to `RenderPhotoRequest.photoNumber` and `PlatformServices.publishJpeg`.
 
 - [ ] **Step 1: Change allocation and publishing expectations first**
 
@@ -174,24 +174,24 @@ Update the generated-number assertions for projects named `车间改造` or `东
 expect(captured.photoNumber, '车间改造-project-SM-20260716-001');
 expect(captured.photoNumber, '车间改造-project-SM-20260716-003');
 expect(edited.photoNumber, '车间改造-project-SM-20260716-001');
-expect(updated?.photoNumber, '东区厂房改造-project1-SM-20260716-001');
+expect(updated?.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
 ```
 
 In `test/workflow/capture_workflow_test.dart`, use:
 
 ```dart
-expect(record?.photoNumber, '东区厂房改造-project1-SM-20260716-001');
-expect(edited.photoNumber, '东区厂房改造-project1-SM-20260716-001');
+expect(record?.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
+expect(edited.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
 ```
 
 In `test/workflow/capture_processor_test.dart`, use:
 
 ```dart
-expect(captured.photoNumber, '东区厂房改造-project1-SM-20260716-001');
-expect(platform.publishedNames, ['东区厂房改造-project1-SM-20260716-001']);
+expect(captured.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
+expect(platform.publishedNames, ['东区厂房改造-project-1-SM-20260716-001']);
 expect(
   images.lastRenderRequest?.photoNumber,
-  '东区厂房改造-project1-SM-20260716-001',
+  '东区厂房改造-project-1-SM-20260716-001',
 );
 ```
 
