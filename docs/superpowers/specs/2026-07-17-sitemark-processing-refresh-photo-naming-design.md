@@ -73,7 +73,7 @@
 1. 去除首尾空白。
 2. 将控制字符（含 C0、DEL、C1）、`~`（专用字段分隔符）、`/ \ : * ? " < > |` 以及 Unicode 空白（含 NBSP、EM SPACE、LINE SEPARATOR、ZWNBSP/BOM）替换为下划线。
 3. 连续下划线折叠为单个下划线。
-4. 按最终 JPEG 文件名的 UTF-8 字节预算截断：`255 - 后缀字节数`。后缀字节数按 `-{projectKey}-SM-{yyyyMMdd}-{三位流水号}.jpg` 的实际 UTF-8 字节长度动态计算。截断按 Unicode 码点遍历，不会从一个多字节字符（CJK、Emoji 等）的中间截断。
+4. 按最终 JPEG 文件名的 UTF-8 字节预算截断：`255 - 后缀字节数`。后缀字节数按 `~{projectId}-SM-{yyyyMMdd}-{三位流水号}.jpg` 的实际 UTF-8 字节长度动态计算。截断按 Unicode 码点遍历，不会从一个多字节字符（CJK、Emoji 等）的中间截断。
 5. 截断后去除处理结果首尾的句点、空格和下划线。
 6. 如果处理后为空，使用 `Project` 作为兜底名称。
 
@@ -122,7 +122,7 @@ Rust 渲染器从逻辑水印行中删除“编号”字段及其值。中文和
 ```text
 系统相机返回
   -> markCaptured 读取项目名称
-  -> 生成 项目名称-项目ID-SM-日期-流水号
+  -> 生成 项目名称~项目ID-SM-日期-流水号
   -> captured（前台列表开始条件轮询）
   -> WorkManager: rendering
   -> Rust 渲染不含编号的水印
@@ -143,7 +143,7 @@ Rust 渲染器从逻辑水印行中删除“编号”字段及其值。中文和
 
 ### Dart / Drift
 
-- 新拍照片生成 `项目名称-{projectKey}-SM-yyyyMMdd-001`，同项目同日继续递增。
+- 新拍照片生成 `项目名称~{projectId}-SM-yyyyMMdd-001`，同项目同日继续递增。
 - 两个不同项目 ID（含共享前 8 字符的 UUID、以及去连字符后会碰撞的 `project-1` 与 `project1`）一定产生不同照片编号；同名或清洗后同名项目不会相互覆盖。
 - 跨字段边界不碰撞：`(A, B-C)` 与 `(A-B, C)` 产生不同照片编号（`~` 分隔符保证）。
 - 非法 `projectId`（空、含 `/`、含非 ASCII 等）被 `formatPhotoNumber` 拒绝。

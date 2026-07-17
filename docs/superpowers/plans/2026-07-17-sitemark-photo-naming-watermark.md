@@ -13,7 +13,7 @@
 - New numbers use `{safeProjectName}~{projectId}-SM-{yyyyMMdd}-{sequence padded to at least 3 digits}`, where `~` is a **dedicated field separator** (blacklisted in `safePhotoProjectName`, excluded from the `projectId` ASCII whitelist) and `projectId` is embedded **verbatim** (hyphens preserved). This prevents cross-field collisions such as `(A, B-C)` vs `(A-B, C)`, and preserving hyphens keeps the project-ID-to-file-name mapping strictly one-to-one.
 - Validate `projectId` against `^[A-Za-z0-9_-]+$` (matches the Rust `safe_archive_component` ASCII contract) before generating the number. Also reject `projectId` when the suffix bytes plus the `Project` fallback bytes would exceed 255, so the final JPEG name can never exceed the POSIX `NAME_MAX` of 255 bytes.
 - Replace control characters (incl. C1), `~`, Unicode whitespace, and `/ \ : * ? " < > |` with one underscore; collapse repeated underscores; trim leading/trailing dots, spaces, and underscores.
-- Truncate the sanitized project-name component to a UTF-8 byte budget of `255 - suffixBytes`, where `suffixBytes` is the UTF-8 byte length of `-{projectKey}-SM-{yyyyMMdd}-{seq}.jpg`. Truncation iterates Unicode runes so multi-byte characters (CJK, Emoji) are never split. Fall back to `Project` when empty.
+- Truncate the sanitized project-name component to a UTF-8 byte budget of `255 - suffixBytes`, where `suffixBytes` is the UTF-8 byte length of `~{projectId}-SM-{yyyyMMdd}-{seq}.jpg`. Truncation iterates Unicode runes so multi-byte characters (CJK, Emoji) are never split. Fall back to `Project` when empty.
 - Apply the new number only when a future capture reaches `markCaptured`; do not migrate or rename existing records or gallery files.
 - Regenerating an existing photo preserves its stored number.
 - Remove the visible number row from both Chinese and English watermarks without removing the persisted `photoNumber` field.
@@ -320,7 +320,7 @@ dart format lib/domain/photo_number.dart test/domain/photo_number_test.dart
 flutter test test/domain/photo_number_test.dart
 ```
 
-Expected: all 18 formatter tests PASS.
+Expected: all 17 formatter tests PASS.
 
 - [ ] **Step 5: Commit the formatter**
 
