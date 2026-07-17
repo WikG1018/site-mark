@@ -323,9 +323,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('B 区屋面'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '删除记录'));
+    await tester.tap(find.widgetWithText(FilledButton, '全部删除'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
     expect(platform.deletedUri, 'content://media/site-mark/1');
@@ -724,7 +724,7 @@ class _WidgetTestShareService implements ShareFileService {
 
 class _WidgetTestPrivateFileStore implements PrivateFileStore {
   @override
-  Future<bool> exists(String path) async => false;
+  Future<bool> exists(String path) async => true;
 
   @override
   Future<void> deleteIfExists(String path) async {}

@@ -240,6 +240,14 @@ class CaptureWorkflow {
         record.status != CaptureStatus.failed) {
       throw StateError('Only completed or failed captures can be regenerated');
     }
+    // Regeneration requires the private original to be present on disk so the
+    // background processor can re-render the watermark from it. Clearing the
+    // original is irreversible; once cleared the row can no longer be
+    // regenerated.
+    if (record.originalDeletedAt != null ||
+        !await _fileStore.exists(record.originalPath)) {
+      throw StateError('Original photo is not available');
+    }
     // Apply the descriptive edits first so they survive the state reset.
     await database.updateCaptureDescription(
       captureId: captureId,

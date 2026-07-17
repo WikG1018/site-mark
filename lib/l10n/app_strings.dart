@@ -179,6 +179,18 @@ class AppStrings {
       ? 'Confirm permanently deleting $n photos? Originals, watermarked photos, published images and database records will be deleted.'
       : '确认彻底删除 $n 张照片？将删除原图、成片、已发布图片和数据库记录。';
   String get originalRetained => _english ? 'Original retained' : '原图已保留';
+  String get watermarkedPhoto => _english ? 'Watermarked' : '成片';
+  String get originalPhoto => _english ? 'Original' : '原图';
+  String get fileSize => _english ? 'File size' : '文件大小';
+  String get resolution => _english ? 'Resolution' : '分辨率';
+  String get format => _english ? 'Format' : '格式';
+  String get publishedStatus => _english ? 'Published' : '已发布';
+  String get publishedYes => _english ? 'Yes' : '是';
+  String get publishedNo => _english ? 'No' : '否';
+  String get watermarkedUnavailable =>
+      _english ? 'Watermarked photo not yet available' : '成片尚未生成';
+  String get originalClearedSnackbar => _english ? 'Original cleared' : '原图已清理';
+  String get deleteOriginal => _english ? 'Delete original' : '删除原图';
   String get originalCleared => _english ? 'Original cleared' : '原图已清理';
   String get originalMissing => _english ? 'Original missing' : '原图缺失';
 }

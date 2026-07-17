@@ -19,6 +19,7 @@ void main() {
   late _FakeImagePipeline images;
   late _RecordingScheduler scheduler;
   late CaptureLocationCoordinator coordinator;
+  late _FakePrivateFileStore fileStore;
   late CaptureWorkflow workflow;
 
   setUp(() async {
@@ -31,6 +32,7 @@ void main() {
     platform = _FakePlatformServices();
     images = _FakeImagePipeline();
     scheduler = _RecordingScheduler();
+    fileStore = _FakePrivateFileStore();
     coordinator = CaptureLocationCoordinator(
       database: database,
       platform: platform,
@@ -41,7 +43,7 @@ void main() {
       platform: platform,
       images: images,
       outputPaths: _FakeOutputPaths(),
-      fileStore: _FakePrivateFileStore(),
+      fileStore: fileStore,
       scheduler: scheduler,
       locationCoordinator: coordinator,
       idFactory: () => 'capture-1',
@@ -226,6 +228,9 @@ void main() {
       captureId: 'capture-1',
       publishedUri: 'content://media/site-mark/1',
     );
+    // The fake camera target writes to /private/capture-1.jpg; mark it as
+    // existing on disk so the regenerateCapture availability check passes.
+    fileStore.existing.add('/private/capture-1.jpg');
     scheduler.enqueuedIds.clear();
 
     final edited = await workflow.regenerateCapture(
@@ -252,6 +257,52 @@ void main() {
     expect(edited.publishedUri, 'content://media/site-mark/1');
     expect(edited.originalSha256, digestA);
   });
+
+  test(
+    'regenerateCapture throws when the original is cleared and does not enqueue',
+    () async {
+      await workflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+        ),
+      );
+      await drainCoordinator();
+      await database.markRendering(
+        captureId: 'capture-1',
+        originalSha256: digestA,
+      );
+      await database.markReady(
+        captureId: 'capture-1',
+        publishedUri: 'content://media/site-mark/1',
+      );
+      await database.markOriginalDeleted('capture-1');
+      scheduler.enqueuedIds.clear();
+
+      await expectLater(
+        workflow.regenerateCapture(
+          captureId: 'capture-1',
+          edits: const CaptureEdits(
+            workLocation: 'B 区屋面',
+            workContent: '保温整改复查',
+            photographer: '李工',
+          ),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'Original photo is not available',
+          ),
+        ),
+      );
+      expect(scheduler.enqueuedIds, isEmpty);
+    },
+  );
 
   test('deletes the published image and local capture record', () async {
     await workflow.capture(
@@ -395,11 +446,15 @@ class _FakeOutputPaths implements CaptureOutputPaths {
 }
 
 class _FakePrivateFileStore implements PrivateFileStore {
-  @override
-  Future<bool> exists(String path) async => false;
+  final Set<String> existing = {};
 
   @override
-  Future<void> deleteIfExists(String path) async {}
+  Future<bool> exists(String path) async => existing.contains(path);
+
+  @override
+  Future<void> deleteIfExists(String path) async {
+    existing.remove(path);
+  }
 }
 
 class _RecordingScheduler implements CaptureBackgroundScheduler {
