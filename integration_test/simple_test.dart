@@ -234,6 +234,9 @@ class _IntegrationShareService implements ShareFileService {
 
 class _IntegrationPrivateFileStore implements PrivateFileStore {
   @override
+  Future<bool> exists(String path) async => false;
+
+  @override
   Future<void> deleteIfExists(String path) async {}
 }
 

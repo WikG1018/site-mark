@@ -202,10 +202,15 @@ class SystemShareFileService implements ShareFileService {
 }
 
 abstract interface class PrivateFileStore {
+  Future<bool> exists(String path);
+
   Future<void> deleteIfExists(String path);
 }
 
 class DartIoPrivateFileStore implements PrivateFileStore {
+  @override
+  Future<bool> exists(String path) => File(path).exists();
+
   @override
   Future<void> deleteIfExists(String path) async {
     final file = File(path);

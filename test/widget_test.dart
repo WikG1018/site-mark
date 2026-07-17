@@ -635,6 +635,9 @@ class _WidgetTestShareService implements ShareFileService {
 
 class _WidgetTestPrivateFileStore implements PrivateFileStore {
   @override
+  Future<bool> exists(String path) async => false;
+
+  @override
   Future<void> deleteIfExists(String path) async {}
 }
 

@@ -17,6 +17,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
+import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
@@ -121,6 +122,15 @@ final captureWorkflowProvider = Provider<CaptureWorkflow>((ref) {
     fileStore: ref.watch(privateFileStoreProvider),
     scheduler: ref.watch(captureBackgroundSchedulerProvider),
     locationCoordinator: ref.watch(captureLocationCoordinatorProvider),
+  );
+});
+
+final captureMediaServiceProvider = Provider<CaptureMediaService>((ref) {
+  return CaptureMediaService(
+    database: ref.watch(databaseProvider),
+    platform: ref.watch(platformServicesProvider),
+    outputPaths: ref.watch(captureOutputPathsProvider),
+    files: ref.watch(privateFileStoreProvider),
   );
 });
 

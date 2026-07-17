@@ -392,6 +392,9 @@ class _FakeOutputPaths implements CaptureOutputPaths {
 
 class _FakePrivateFileStore implements PrivateFileStore {
   @override
+  Future<bool> exists(String path) async => false;
+
+  @override
   Future<void> deleteIfExists(String path) async {}
 }
 
