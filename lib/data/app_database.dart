@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/photo_number.dart';
 
 part 'app_database.g.dart';
 
@@ -373,6 +374,13 @@ class AppDatabase extends _$AppDatabase {
         );
       }
 
+      final project = await (select(
+        projects,
+      )..where((row) => row.id.equals(current.projectId))).getSingleOrNull();
+      if (project == null) {
+        throw StateError('Capture project does not exist');
+      }
+
       final startOfDay = DateTime(
         capturedAt.year,
         capturedAt.month,
@@ -393,12 +401,11 @@ class AppDatabase extends _$AppDatabase {
             (record) => int.tryParse(record.photoNumber!.split('-').last) ?? 0,
           )
           .fold(0, (highest, value) => value > highest ? value : highest);
-      final number =
-          'SM-'
-          '${capturedAt.year.toString().padLeft(4, '0')}'
-          '${capturedAt.month.toString().padLeft(2, '0')}'
-          '${capturedAt.day.toString().padLeft(2, '0')}-'
-          '${(highestSequence + 1).toString().padLeft(3, '0')}';
+      final number = formatPhotoNumber(
+        projectName: project.name,
+        capturedAt: capturedAt,
+        sequence: highestSequence + 1,
+      );
 
       await (update(
         captureRecords,
