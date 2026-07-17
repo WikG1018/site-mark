@@ -99,6 +99,10 @@ class AppStrings {
   String get regenerationFailed => _english ? 'Regeneration failed' : '重新生成失败';
   String get allRecords => _english ? 'All records' : '全部记录';
   String get settings => _english ? 'Settings' : '设置';
+  String get searchProjects => _english ? 'Search' : '搜索';
+  String get searchProjectsHint => _english ? 'Search project name' : '搜索项目名称';
+  String get noMatchingProjects =>
+      _english ? 'No matching projects' : '没有匹配的项目';
   String get allProjects => _english ? 'All projects' : '全部项目';
   String get allYears => _english ? 'All years' : '全部年份';
   String get allMonths => _english ? 'All months' : '全部月份';
