@@ -67,4 +67,17 @@ void main() {
       'A.B-SM-20260717-001',
     );
   });
+
+  test('sanitizes C1 controls and Unicode whitespace consistently', () {
+    // C1 control (U+0080) - must be sanitized like C0 controls.
+    expect(safePhotoProjectName('A\u0080B'), 'A_B');
+    // NBSP (U+00A0) - must be sanitized like ASCII space.
+    expect(safePhotoProjectName('A\u00A0B'), 'A_B');
+    // EM SPACE (U+2003) - must be sanitized.
+    expect(safePhotoProjectName('A\u2003B'), 'A_B');
+    // LINE SEPARATOR (U+2028) - must be sanitized.
+    expect(safePhotoProjectName('A\u2028B'), 'A_B');
+    // ZWNBSP / BOM (U+FEFF) - must be sanitized.
+    expect(safePhotoProjectName('A\uFEFFB'), 'A_B');
+  });
 }

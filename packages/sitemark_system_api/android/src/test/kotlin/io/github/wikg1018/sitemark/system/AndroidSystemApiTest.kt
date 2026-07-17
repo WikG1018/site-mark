@@ -190,4 +190,29 @@ class AndroidSystemApiTest {
             api.normalizedJpegName("project:SM-20260717-001")
         }
     }
+
+    @Test
+    fun normalizedJpegNameRejectsUnicodeWhitespaceAndControlChars() {
+        val api = AndroidSystemApi(context)
+        // C1 control (U+0080)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\u0080B-SM-001")
+        }
+        // NBSP (U+00A0)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\u00A0B-SM-001")
+        }
+        // EM SPACE (U+2003)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\u2003B-SM-001")
+        }
+        // LINE SEPARATOR (U+2028)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\u2028B-SM-001")
+        }
+        // ZWNBSP / BOM (U+FEFF)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\uFEFFB-SM-001")
+        }
+    }
 }
