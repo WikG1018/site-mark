@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:sitemark/data/conditional_polling_stream.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/photo_number.dart';
@@ -95,9 +96,22 @@ class CaptureRecords extends Table {
 
 @DriftDatabase(tables: [Projects, CaptureRecords, AppSettings])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(driftDatabase(name: 'sitemark'));
+  static const _defaultExternalRefreshInterval = Duration(seconds: 1);
 
-  AppDatabase.forTesting(super.executor);
+  final Duration externalRefreshInterval;
+
+  AppDatabase({this.externalRefreshInterval = _defaultExternalRefreshInterval})
+    : super(
+        driftDatabase(
+          name: 'sitemark',
+          native: const DriftNativeOptions(shareAcrossIsolates: true),
+        ),
+      );
+
+  AppDatabase.forTesting(
+    super.executor, {
+    this.externalRefreshInterval = _defaultExternalRefreshInterval,
+  });
 
   @override
   int get schemaVersion => 4;
@@ -582,19 +596,57 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<CaptureRecord?> watchCaptureById(String captureId) {
-    return (select(
-      captureRecords,
-    )..where((row) => row.id.equals(captureId))).watchSingleOrNull();
+    final query = select(captureRecords)
+      ..where((row) => row.id.equals(captureId));
+    return watchWithConditionalPolling(
+      source: query.watchSingleOrNull(),
+      load: () => query.getSingleOrNull(),
+      shouldPoll: (record) => record != null && _isProcessing(record.status),
+      pollInterval: externalRefreshInterval,
+    );
   }
 
   Stream<List<CaptureSummary>> watchCaptureSummaries(CaptureFilter filter) {
-    return _captureSummarySelectable(filter).watch();
+    final query = _captureSummarySelectable(filter);
+    return watchWithConditionalPolling(
+      source: query.watch(),
+      load: query.get,
+      shouldPoll: (rows) =>
+          rows.any((summary) => _isProcessing(summary.capture.status)),
+      equals: _sameCaptureSummaries,
+      pollInterval: externalRefreshInterval,
+    );
   }
 
   /// Unfiltered summary stream used to derive available filter options
   /// (projects, years, months, days) without applying the user's selection.
   Stream<List<CaptureSummary>> watchAllCaptureSummaries() {
-    return _captureSummarySelectable(null).watch();
+    final query = _captureSummarySelectable(null);
+    return watchWithConditionalPolling(
+      source: query.watch(),
+      load: query.get,
+      shouldPoll: (rows) =>
+          rows.any((summary) => _isProcessing(summary.capture.status)),
+      equals: _sameCaptureSummaries,
+      pollInterval: externalRefreshInterval,
+    );
+  }
+
+  bool _isProcessing(CaptureStatus status) =>
+      status == CaptureStatus.captured || status == CaptureStatus.rendering;
+
+  bool _sameCaptureSummaries(
+    List<CaptureSummary> previous,
+    List<CaptureSummary> next,
+  ) {
+    if (previous.length != next.length) return false;
+    for (var index = 0; index < previous.length; index++) {
+      if (previous[index].capture != next[index].capture ||
+          previous[index].projectName != next[index].projectName) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Returns captures in the `captured` or `rendering` states for startup
