@@ -821,7 +821,7 @@ fn safe_archive_component(value: &str) -> Result<&str, String> {
     if value.is_empty()
         || !value
             .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+            .all(|character| character.is_alphanumeric() || matches!(character, '-' | '_'))
     {
         return Err(invalid_data(
             "validate archive file name",
@@ -952,5 +952,31 @@ mod watermark_tests {
             font_scale,
             locale_code: locale.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod archive_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_unicode_photo_numbers() {
+        assert!(safe_archive_component("东区厂房改造-SM-20260717-001").is_ok());
+        assert!(safe_archive_component("Project-SM-20260717-001").is_ok());
+    }
+
+    #[test]
+    fn rejects_path_separators_and_shell_metacharacters() {
+        assert!(safe_archive_component("project/SM-001").is_err());
+        assert!(safe_archive_component("project\\SM-001").is_err());
+        assert!(safe_archive_component("project:SM-001").is_err());
+        assert!(safe_archive_component("project*SM-001").is_err());
+        assert!(safe_archive_component("project?SM-001").is_err());
+        assert!(safe_archive_component("project\"SM-001").is_err());
+        assert!(safe_archive_component("project<SM-001").is_err());
+        assert!(safe_archive_component("project>SM-001").is_err());
+        assert!(safe_archive_component("project|SM-001").is_err());
+        assert!(safe_archive_component("project SM-001").is_err());
+        assert!(safe_archive_component("").is_err());
     }
 }

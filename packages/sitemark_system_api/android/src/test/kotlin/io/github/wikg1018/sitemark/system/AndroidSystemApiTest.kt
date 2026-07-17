@@ -147,4 +147,31 @@ class AndroidSystemApiTest {
         assertEquals(23.123, secondLocation.latitude!!, 0.000001)
         assertEquals(113.456, secondLocation.longitude!!, 0.000001)
     }
+
+    @Test
+    fun normalizedJpegNameAcceptsChinesePhotoNumbers() {
+        val api = AndroidSystemApi(context)
+        assertEquals(
+            "东区厂房改造-SM-20260717-001.jpg",
+            api.normalizedJpegName("东区厂房改造-SM-20260717-001"),
+        )
+        assertEquals(
+            "Project-SM-20260717-001.jpg",
+            api.normalizedJpegName("Project-SM-20260717-001"),
+        )
+    }
+
+    @Test
+    fun normalizedJpegNameRejectsPathSeparators() {
+        val api = AndroidSystemApi(context)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("project/SM-20260717-001")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("project\\SM-20260717-001")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("project:SM-20260717-001")
+        }
+    }
 }

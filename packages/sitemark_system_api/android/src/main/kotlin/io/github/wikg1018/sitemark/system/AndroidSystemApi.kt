@@ -468,9 +468,9 @@ class AndroidSystemApi(
         return file
     }
 
-    private fun normalizedJpegName(displayName: String): String {
+    internal fun normalizedJpegName(displayName: String): String {
         val base = displayName.removeSuffix(".jpg").removeSuffix(".jpeg")
-        require(base.matches(Regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$"))) {
+        require(base.matches(Regex("^[\\p{L}\\p{N}][\\p{L}\\p{N}_-]{0,95}$"))) {
             "Invalid published image name"
         }
         return "$base.jpg"
