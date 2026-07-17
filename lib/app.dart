@@ -14,6 +14,7 @@ import 'package:sitemark/features/capture/capture_edit_screen.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
@@ -92,6 +93,10 @@ final shareFileServiceProvider = Provider<ShareFileService>(
 
 final privateFileStoreProvider = Provider<PrivateFileStore>(
   (ref) => DartIoPrivateFileStore(),
+);
+
+final externalLinkServiceProvider = Provider<ExternalLinkService>(
+  (ref) => const UrlLauncherExternalLinkService(),
 );
 
 final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {
@@ -294,6 +299,7 @@ class MyApp extends StatelessWidget {
     this.projectExportPaths,
     this.shareService,
     this.privateFileStore,
+    this.externalLinkService,
     this.backgroundScheduler,
     this.backgroundWorkClient,
     this.startupRecovery,
@@ -307,6 +313,7 @@ class MyApp extends StatelessWidget {
   final ProjectExportPaths? projectExportPaths;
   final ShareFileService? shareService;
   final PrivateFileStore? privateFileStore;
+  final ExternalLinkService? externalLinkService;
   final CaptureBackgroundScheduler? backgroundScheduler;
   final BackgroundWorkClient? backgroundWorkClient;
   final AppStartupRecovery? startupRecovery;
@@ -334,6 +341,8 @@ class MyApp extends StatelessWidget {
           shareFileServiceProvider.overrideWithValue(shareService!),
         if (privateFileStore != null)
           privateFileStoreProvider.overrideWithValue(privateFileStore!),
+        if (externalLinkService != null)
+          externalLinkServiceProvider.overrideWithValue(externalLinkService!),
         if (backgroundScheduler != null)
           captureBackgroundSchedulerProvider.overrideWithValue(
             backgroundScheduler!,
