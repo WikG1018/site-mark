@@ -320,7 +320,7 @@ dart format lib/domain/photo_number.dart test/domain/photo_number_test.dart
 flutter test test/domain/photo_number_test.dart
 ```
 
-Expected: all 17 formatter tests PASS.
+Expected: all formatter tests PASS.
 
 - [ ] **Step 5: Commit the formatter**
 
