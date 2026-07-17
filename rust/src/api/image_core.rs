@@ -230,7 +230,7 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
 
     for photo in &request.photos {
-        let safe_number = safe_archive_component(&photo.photo_number)?;
+        let safe_number = safe_photo_number_component(&photo.photo_number)?;
         add_file_to_zip(
             &mut archive,
             &photo.watermarked_path,
@@ -337,7 +337,7 @@ pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProject
             ));
         }
         for photo in &project.photos {
-            safe_archive_component(&photo.photo_number)?;
+            safe_photo_number_component(&photo.photo_number)?;
         }
     }
 
@@ -352,7 +352,7 @@ pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProject
     for project in &request.projects {
         let safe_project_id = safe_archive_component(&project.project_id)?;
         for photo in &project.photos {
-            let safe_number = safe_archive_component(&photo.photo_number)?;
+            let safe_number = safe_photo_number_component(&photo.photo_number)?;
             add_file_to_zip(
                 &mut archive,
                 &photo.watermarked_path,
@@ -488,7 +488,6 @@ struct WatermarkLabels {
     location: &'static str,
     content: &'static str,
     photographer: &'static str,
-    number: &'static str,
     time: &'static str,
     address: &'static str,
     coordinates: &'static str,
@@ -502,7 +501,6 @@ fn labels(locale: &str) -> WatermarkLabels {
             location: "Location",
             content: "Work",
             photographer: "Photographer",
-            number: "Number",
             time: "Time",
             address: "Address",
             coordinates: "Coordinates",
@@ -514,7 +512,6 @@ fn labels(locale: &str) -> WatermarkLabels {
             location: "位置",
             content: "内容",
             photographer: "拍摄人",
-            number: "编号",
             time: "时间",
             address: "地址",
             coordinates: "坐标",
@@ -530,7 +527,6 @@ fn logical_watermark_lines(request: &RenderPhotoRequest) -> Vec<String> {
         format!("{}  {}", labels.location, request.work_location),
         format!("{}  {}", labels.content, request.work_content),
         format!("{}  {}", labels.photographer, request.photographer),
-        format!("{}  {}", labels.number, request.photo_number),
         format!("{}  {}", labels.time, request.captured_at),
     ];
     if let Some(address) = non_empty(&request.address) {
@@ -821,6 +817,8 @@ fn non_empty(value: &Option<String>) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 
+/// Strict validation for app-generated identifiers (project IDs, UUIDs).
+/// Only ASCII alphanumeric, hyphen, and underscore are permitted.
 fn safe_archive_component(value: &str) -> Result<&str, String> {
     if value.is_empty()
         || !value
@@ -830,6 +828,31 @@ fn safe_archive_component(value: &str) -> Result<&str, String> {
         return Err(invalid_data(
             "validate archive file name",
             format!("unsafe archive file name: {value}"),
+        ));
+    }
+    Ok(value)
+}
+
+/// Blacklist validation for user-content-derived photo numbers.
+/// Accepts any character except: control chars (Cc incl. C1), Unicode
+/// whitespace, ZWNBSP/BOM (U+FEFF), and the path/shell metacharacters
+/// `/ \ : * ? " < > |`. This mirrors the Dart `safePhotoProjectName`
+/// forbidden set so names produced by Dart are always accepted.
+fn safe_photo_number_component(value: &str) -> Result<&str, String> {
+    if value.is_empty()
+        || value.chars().any(|character| {
+            character.is_control()
+                || character.is_whitespace()
+                || character == '\u{FEFF}'
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                )
+        })
+    {
+        return Err(invalid_data(
+            "validate photo number",
+            format!("unsafe photo number: {value}"),
         ));
     }
     Ok(value)
@@ -923,6 +946,20 @@ mod watermark_tests {
         }
     }
 
+    #[test]
+    fn chinese_and_english_watermarks_omit_photo_number() {
+        for locale in ["zh", "en"] {
+            let request = sample_request(locale, 1.0, "东区厂房改造");
+            let lines = logical_watermark_lines(&request);
+            let text = lines.join("\n");
+
+            assert!(!text.contains(&request.photo_number), "{locale}: {text}");
+            assert!(!text.contains("编号"), "{locale}: {text}");
+            assert!(!text.contains("Number"), "{locale}: {text}");
+            assert_eq!(lines.len(), 5);
+        }
+    }
+
     fn sample_request(locale: &str, font_scale: f64, project: &str) -> RenderPhotoRequest {
         RenderPhotoRequest {
             source_path: "source.jpg".to_string(),
@@ -942,5 +979,75 @@ mod watermark_tests {
             font_scale,
             locale_code: locale.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod archive_tests {
+    use super::*;
+
+    // --- project_id: strict whitelist (safe_archive_component) ---
+
+    #[test]
+    fn project_id_accepts_ascii_alphanumeric_hyphen_underscore() {
+        assert!(safe_archive_component("project-a").is_ok());
+        assert!(safe_archive_component("Project_1").is_ok());
+        assert!(safe_archive_component("a1b2c3").is_ok());
+    }
+
+    #[test]
+    fn project_id_rejects_path_navigation_and_punctuation() {
+        assert!(safe_archive_component(".").is_err());
+        assert!(safe_archive_component("..").is_err());
+        assert!(safe_archive_component("project/1").is_err());
+        assert!(safe_archive_component("project.1").is_err());
+        assert!(safe_archive_component("project(1)").is_err());
+        assert!(safe_archive_component("").is_err());
+    }
+
+    #[test]
+    fn project_id_rejects_unicode_letters() {
+        // is_alphanumeric accepts Unicode; contract requires ASCII only.
+        assert!(safe_archive_component("项目一").is_err());
+        assert!(safe_archive_component("１２３").is_err());
+    }
+
+    // --- photo_number: Dart-aligned blacklist (safe_photo_number_component) ---
+
+    #[test]
+    fn photo_number_accepts_punctuation_preserved_by_dart() {
+        assert!(safe_photo_number_component("东区厂房改造-SM-20260717-001").is_ok());
+        assert!(safe_photo_number_component("东区厂房改造（一期）-SM-20260717-001").is_ok());
+        assert!(safe_photo_number_component("A.B-SM-20260717-001").is_ok());
+        assert!(safe_photo_number_component("--A-SM-20260717-001").is_ok());
+        assert!(safe_photo_number_component("C&D-SM-20260717-001").is_ok());
+        assert!(safe_photo_number_component("Project-SM-20260717-001").is_ok());
+    }
+
+    #[test]
+    fn photo_number_rejects_path_separators_and_shell_metacharacters() {
+        assert!(safe_photo_number_component("project/SM-001").is_err());
+        assert!(safe_photo_number_component("project\\SM-001").is_err());
+        assert!(safe_photo_number_component("project:SM-001").is_err());
+        assert!(safe_photo_number_component("project*SM-001").is_err());
+        assert!(safe_photo_number_component("project?SM-001").is_err());
+        assert!(safe_photo_number_component("project<SM-001").is_err());
+        assert!(safe_photo_number_component("project>SM-001").is_err());
+        assert!(safe_photo_number_component("project|SM-001").is_err());
+        assert!(safe_photo_number_component("").is_err());
+    }
+
+    #[test]
+    fn photo_number_rejects_unicode_whitespace_and_control_chars() {
+        // C1 control (U+0080)
+        assert!(safe_photo_number_component("A\u{0080}B").is_err());
+        // NBSP (U+00A0)
+        assert!(safe_photo_number_component("A\u{00A0}B").is_err());
+        // EM SPACE (U+2003)
+        assert!(safe_photo_number_component("A\u{2003}B").is_err());
+        // LINE SEPARATOR (U+2028)
+        assert!(safe_photo_number_component("A\u{2028}B").is_err());
+        // ZWNBSP / BOM (U+FEFF)
+        assert!(safe_photo_number_component("A\u{FEFF}B").is_err());
     }
 }

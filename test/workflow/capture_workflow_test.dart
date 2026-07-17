@@ -80,7 +80,7 @@ void main() {
 
     expect(result.outcome, CaptureWorkflowOutcome.queued);
     expect(record?.status, CaptureStatus.captured);
-    expect(record?.photoNumber, 'SM-20260716-001');
+    expect(record?.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
     expect(scheduler.enqueuedIds, ['capture-1']);
     expect(images.lastRenderRequest, isNull);
     expect(platform.publishedNames, isEmpty);
@@ -248,7 +248,7 @@ void main() {
     expect(edited.photographer, '李工');
     expect(edited.notes, '复验合格');
     expect(edited.status, CaptureStatus.captured);
-    expect(edited.photoNumber, 'SM-20260716-001');
+    expect(edited.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
     // Regeneration re-enqueues for background processing instead of rendering.
     expect(scheduler.enqueuedIds, ['capture-1']);
     expect(images.lastRenderRequest, isNull);

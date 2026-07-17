@@ -147,4 +147,72 @@ class AndroidSystemApiTest {
         assertEquals(23.123, secondLocation.latitude!!, 0.000001)
         assertEquals(113.456, secondLocation.longitude!!, 0.000001)
     }
+
+    @Test
+    fun normalizedJpegNameAcceptsPhotoNumbersWithPunctuationPreservedByDart() {
+        val api = AndroidSystemApi(context)
+        assertEquals(
+            "东区厂房改造-SM-20260717-001.jpg",
+            api.normalizedJpegName("东区厂房改造-SM-20260717-001"),
+        )
+        assertEquals(
+            "东区厂房改造（一期）-SM-20260717-001.jpg",
+            api.normalizedJpegName("东区厂房改造（一期）-SM-20260717-001"),
+        )
+        assertEquals(
+            "A.B-SM-20260717-001.jpg",
+            api.normalizedJpegName("A.B-SM-20260717-001"),
+        )
+        assertEquals(
+            "--A-SM-20260717-001.jpg",
+            api.normalizedJpegName("--A-SM-20260717-001"),
+        )
+        assertEquals(
+            "C&D-SM-20260717-001.jpg",
+            api.normalizedJpegName("C&D-SM-20260717-001"),
+        )
+        assertEquals(
+            "Project-SM-20260717-001.jpg",
+            api.normalizedJpegName("Project-SM-20260717-001"),
+        )
+    }
+
+    @Test
+    fun normalizedJpegNameRejectsPathSeparators() {
+        val api = AndroidSystemApi(context)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("project/SM-20260717-001")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("project\\SM-20260717-001")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("project:SM-20260717-001")
+        }
+    }
+
+    @Test
+    fun normalizedJpegNameRejectsUnicodeWhitespaceAndControlChars() {
+        val api = AndroidSystemApi(context)
+        // C1 control (U+0080)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\u0080B-SM-001")
+        }
+        // NBSP (U+00A0)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\u00A0B-SM-001")
+        }
+        // EM SPACE (U+2003)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\u2003B-SM-001")
+        }
+        // LINE SEPARATOR (U+2028)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\u2028B-SM-001")
+        }
+        // ZWNBSP / BOM (U+FEFF)
+        assertThrows(IllegalArgumentException::class.java) {
+            api.normalizedJpegName("A\uFEFFB-SM-001")
+        }
+    }
 }

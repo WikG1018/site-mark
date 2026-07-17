@@ -276,3 +276,35 @@ fn exports_selection_zip_grouped_by_project_with_records_and_manifest() {
     assert!(manifest.contains("project-a"));
     assert!(manifest.contains("project-b"));
 }
+
+#[test]
+fn rejects_path_navigation_in_project_id() {
+    let directory = tempdir().unwrap();
+    let photo = directory.path().join("SM-001.jpg");
+    fs::write(&photo, b"jpeg").unwrap();
+    let archive_path = directory.path().join("traversal.zip");
+
+    let result = export_selection(ExportSelectionRequest {
+        output_zip_path: archive_path.to_string_lossy().into_owned(),
+        include_originals: false,
+        projects: vec![ExportSelectionProject {
+            project_id: "..".to_string(),
+            project_name: "traversal".to_string(),
+            photos: vec![ExportPhotoRecord {
+                photo_number: "SM-20260717-001".to_string(),
+                watermarked_path: photo.to_string_lossy().into_owned(),
+                original_path: None,
+                original_sha256: "0123456789abcdef".repeat(4),
+                captured_at: "2026-07-17 09:00:00 +08:00".to_string(),
+                work_location: "A".to_string(),
+                work_content: "B".to_string(),
+                photographer: "C".to_string(),
+                address: None,
+                coordinates: None,
+                notes: None,
+            }],
+        }],
+    });
+
+    assert!(result.is_err());
+}
