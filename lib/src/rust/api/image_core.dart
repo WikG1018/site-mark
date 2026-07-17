@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `draw_watermark_card`, `non_empty`, `safe_archive_component`, `validate_render_request`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `compute_rendered_lines`, `draw_watermark_card`, `image_failure`, `invalid_data`, `io_failure`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `safe_archive_component`, `tokenize`, `validate_render_request`, `wrap_text`, `zip_failure`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<String> sha256File({required String path}) =>
     RustLib.instance.api.crateApiImageCoreSha256File(path: path);
@@ -27,6 +27,10 @@ Future<RenderPhotoResult> renderPhoto({required RenderPhotoRequest request}) =>
 Future<ExportProjectResult> exportProject({
   required ExportProjectRequest request,
 }) => RustLib.instance.api.crateApiImageCoreExportProject(request: request);
+
+Future<ExportProjectResult> exportSelection({
+  required ExportSelectionRequest request,
+}) => RustLib.instance.api.crateApiImageCoreExportSelection(request: request);
 
 class ExportPhotoRecord {
   final String photoNumber;
@@ -147,6 +151,56 @@ class ExportProjectResult {
           photoCount == other.photoCount;
 }
 
+class ExportSelectionProject {
+  final String projectId;
+  final String projectName;
+  final List<ExportPhotoRecord> photos;
+
+  const ExportSelectionProject({
+    required this.projectId,
+    required this.projectName,
+    required this.photos,
+  });
+
+  @override
+  int get hashCode =>
+      projectId.hashCode ^ projectName.hashCode ^ photos.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportSelectionProject &&
+          runtimeType == other.runtimeType &&
+          projectId == other.projectId &&
+          projectName == other.projectName &&
+          photos == other.photos;
+}
+
+class ExportSelectionRequest {
+  final String outputZipPath;
+  final bool includeOriginals;
+  final List<ExportSelectionProject> projects;
+
+  const ExportSelectionRequest({
+    required this.outputZipPath,
+    required this.includeOriginals,
+    required this.projects,
+  });
+
+  @override
+  int get hashCode =>
+      outputZipPath.hashCode ^ includeOriginals.hashCode ^ projects.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportSelectionRequest &&
+          runtimeType == other.runtimeType &&
+          outputZipPath == other.outputZipPath &&
+          includeOriginals == other.includeOriginals &&
+          projects == other.projects;
+}
+
 class RenderPhotoRequest {
   final String sourcePath;
   final String outputPath;
@@ -162,6 +216,8 @@ class RenderPhotoRequest {
   final WatermarkPosition position;
   final double opacity;
   final int accentColorArgb;
+  final double fontScale;
+  final String localeCode;
 
   const RenderPhotoRequest({
     required this.sourcePath,
@@ -178,6 +234,8 @@ class RenderPhotoRequest {
     required this.position,
     required this.opacity,
     required this.accentColorArgb,
+    required this.fontScale,
+    required this.localeCode,
   });
 
   @override
@@ -195,7 +253,9 @@ class RenderPhotoRequest {
       notes.hashCode ^
       position.hashCode ^
       opacity.hashCode ^
-      accentColorArgb.hashCode;
+      accentColorArgb.hashCode ^
+      fontScale.hashCode ^
+      localeCode.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -215,7 +275,9 @@ class RenderPhotoRequest {
           notes == other.notes &&
           position == other.position &&
           opacity == other.opacity &&
-          accentColorArgb == other.accentColorArgb;
+          accentColorArgb == other.accentColorArgb &&
+          fontScale == other.fontScale &&
+          localeCode == other.localeCode;
 }
 
 class RenderPhotoResult {

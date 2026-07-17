@@ -5,27 +5,101 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
-class ProjectListScreen extends ConsumerWidget {
+class ProjectListScreen extends ConsumerStatefulWidget {
   const ProjectListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProjectListScreen> createState() => _ProjectListScreenState();
+}
+
+class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
+  bool _searching = false;
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  List<Project> _filteredProjects(List<Project> projects) {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return projects;
+    return projects
+        .where((project) => project.name.toLowerCase().contains(query))
+        .toList(growable: false);
+  }
+
+  void _startSearch() {
+    setState(() => _searching = true);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _searchFocus.requestFocus(),
+    );
+  }
+
+  void _closeSearch() {
+    _searchController.clear();
+    setState(() {
+      _query = '';
+      _searching = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final database = ref.watch(databaseProvider);
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.appName),
+        title: _searching
+            ? TextField(
+                key: const Key('project-search-field'),
+                controller: _searchController,
+                focusNode: _searchFocus,
+                decoration: InputDecoration(
+                  hintText: strings.searchProjectsHint,
+                  border: InputBorder.none,
+                ),
+                onChanged: (value) => setState(() => _query = value),
+              )
+            : Text(strings.appName),
         actions: [
-          IconButton(
-            onPressed: () => context.go('/records'),
-            tooltip: strings.allRecords,
-            icon: const Icon(Icons.photo_library_outlined),
-          ),
-          IconButton(
-            onPressed: () => context.go('/settings'),
-            tooltip: strings.settings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
+          if (_searching) ...[
+            if (_query.isNotEmpty)
+              IconButton(
+                key: const Key('clear-project-search'),
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _query = '');
+                },
+                icon: const Icon(Icons.clear),
+              ),
+            IconButton(
+              key: const Key('close-project-search'),
+              onPressed: _closeSearch,
+              icon: const Icon(Icons.close),
+            ),
+          ] else ...[
+            IconButton(
+              key: const Key('search-projects'),
+              onPressed: _startSearch,
+              tooltip: strings.searchProjects,
+              icon: const Icon(Icons.search),
+            ),
+            IconButton(
+              onPressed: () => context.go('/records'),
+              tooltip: strings.allRecords,
+              icon: const Icon(Icons.photo_library_outlined),
+            ),
+            IconButton(
+              onPressed: () => context.go('/settings'),
+              tooltip: strings.settings,
+              icon: const Icon(Icons.settings_outlined),
+            ),
+          ],
         ],
       ),
       body: StreamBuilder<List<Project>>(
@@ -38,12 +112,25 @@ class ProjectListScreen extends ConsumerWidget {
           if (projects.isEmpty) {
             return _EmptyState(strings: strings);
           }
+          final filtered = _filteredProjects(projects);
+          if (filtered.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(
+                  strings.noMatchingProjects,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            itemCount: projects.length,
+            itemCount: filtered.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final project = projects[index];
+              final project = filtered[index];
               return Card(
                 clipBehavior: Clip.antiAlias,
                 child: ListTile(

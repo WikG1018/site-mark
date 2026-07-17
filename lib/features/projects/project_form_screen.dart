@@ -45,6 +45,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
       watermarkPosition: settings.defaultWatermarkPosition,
       watermarkOpacity: settings.defaultWatermarkOpacity,
       watermarkAccentColorArgb: settings.defaultWatermarkAccentColorArgb,
+      watermarkFontScale: settings.defaultWatermarkFontScale,
     );
     if (mounted) context.go('/');
   }

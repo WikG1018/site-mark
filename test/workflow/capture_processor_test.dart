@@ -42,7 +42,9 @@ void main() {
   });
 
   /// Seeds a capture that already has `captured` status and the photo number
-  /// assigned, with [attempts] prior processing attempts recorded.
+  /// assigned, with [attempts] prior processing attempts recorded. The location
+  /// is marked `unavailable` so the pending-location guard does not short-circuit
+  /// processing.
   Future<void> seedCaptured({int attempts = 0}) async {
     await database.createPendingCapture(
       id: 'capture-1',
@@ -51,11 +53,17 @@ void main() {
       workLocation: 'A 区三层',
       workContent: '风管安装检查',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     final captured = await database.markCaptured(
       captureId: 'capture-1',
       capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+    );
+    await database.resolveCaptureLocation(
+      captureId: 'capture-1',
+      resolution: 'unavailable',
+      outcome: 'unavailable',
     );
     for (var i = 0; i < attempts; i++) {
       await database.incrementProcessingAttempts('capture-1');
@@ -92,6 +100,44 @@ void main() {
     expect(images.lastRenderRequest?.sourcePath, '/private/capture-1.jpg');
     expect(images.lastRenderRequest?.photoNumber, 'SM-20260716-001');
   });
+
+  test(
+    'passes project font scale and capture locale to the renderer',
+    () async {
+      await database.updateProjectWatermarkSettings(
+        projectId: 'project-1',
+        position: 'bottomLeft',
+        opacity: 0.78,
+        accentColorArgb: 0xff37c58b,
+        fontScale: 1.35,
+      );
+      await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project-1',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'Level 3',
+        workContent: 'Duct inspection',
+        photographer: 'Alex',
+        watermarkLocaleCode: 'en',
+        createdAt: DateTime(2026, 7, 16, 9, 30),
+      );
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+      );
+      await database.resolveCaptureLocation(
+        captureId: 'capture-1',
+        resolution: 'unavailable',
+        outcome: 'unavailable',
+      );
+
+      final result = await processor.process('capture-1');
+
+      expect(result, CaptureProcessResult.succeeded);
+      expect(images.lastRenderRequest?.fontScale, 1.35);
+      expect(images.lastRenderRequest?.localeCode, 'en');
+    },
+  );
 
   test(
     'processor resumes rendering idempotently and publishes once by name',
@@ -185,11 +231,44 @@ void main() {
       workLocation: 'A 区三层',
       workContent: '风管安装检查',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
 
     expect(await processor.process('capture-1'), CaptureProcessResult.missing);
   });
+
+  test(
+    'pending location resolution returns retry without incrementing attempts',
+    () async {
+      // A capture whose location source is still pending must not consume the
+      // render budget. The coordinator enqueues the capture again once the
+      // location is resolved or marked unavailable, so the processor returns
+      // `retry` without touching the attempt counter.
+      await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project-1',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 16, 9, 30),
+      );
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+      );
+
+      final result = await processor.process('capture-1');
+
+      expect(result, CaptureProcessResult.retry);
+      final record = await database.captureById('capture-1');
+      expect(record?.processingAttempts, 0);
+      expect(record?.status, CaptureStatus.captured);
+      expect(platform.publishedNames, isEmpty);
+    },
+  );
 
   test('record whose project vanished (cascade) returns missing', () async {
     // The captures.project_id FK is ON DELETE CASCADE, so removing a project
@@ -208,6 +287,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '检查',
       photographer: '王工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 10),
     );
     await database.markCaptured(
@@ -453,6 +533,26 @@ class _ProcessorPlatformServices implements PlatformServices {
       address: '福建省漳州市',
     );
   }
+
+  @override
+  Future<LocationPermissionState> getLocationPermissionState() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<LocationPermissionState> requestLocationPermission() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<void> openApplicationSettings() async {}
+
+  @override
+  Future<ImageMetadataResult> inspectImage(String path) async =>
+      ImageMetadataResult(
+        width: 0,
+        height: 0,
+        fileSizeBytes: 0,
+        mimeType: 'image/jpeg',
+      );
 }
 
 class _ProcessorImagePipeline implements ImagePipeline {
@@ -463,6 +563,10 @@ class _ProcessorImagePipeline implements ImagePipeline {
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
       throw UnimplementedError();
 
   @override

@@ -20,6 +20,7 @@ class _ProjectWatermarkSettingsScreenState
   String? _position;
   double? _opacity;
   int? _accentColorArgb;
+  double? _fontScale;
   bool _saving = false;
 
   @override
@@ -38,6 +39,7 @@ class _ProjectWatermarkSettingsScreenState
           _position ??= project.watermarkPosition;
           _opacity ??= project.watermarkOpacity;
           _accentColorArgb ??= project.watermarkAccentColorArgb;
+          _fontScale ??= project.watermarkFontScale;
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -88,6 +90,27 @@ class _ProjectWatermarkSettingsScreenState
                 divisions: 15,
                 label: '${(_opacity! * 100).round()}%',
                 onChanged: (value) => setState(() => _opacity = value),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      strings.watermarkFontSize,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  Text('${(_fontScale! * 100).round()}%'),
+                ],
+              ),
+              Slider(
+                key: const Key('project-font-scale-slider'),
+                value: _fontScale!,
+                min: 0.80,
+                max: 1.60,
+                divisions: 16,
+                label: '${(_fontScale! * 100).round()}%',
+                onChanged: (value) => setState(() => _fontScale = value),
               ),
               const SizedBox(height: 20),
               Text(
@@ -151,6 +174,7 @@ class _ProjectWatermarkSettingsScreenState
         position: _position!,
         opacity: _opacity!,
         accentColorArgb: _accentColorArgb!,
+        fontScale: _fontScale!,
       );
       if (mounted) context.pop();
     } finally {

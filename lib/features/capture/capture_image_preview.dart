@@ -6,6 +6,22 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 
+/// Selects which on-disk source [CaptureImagePreview] renders.
+///
+/// - [CapturePreviewSource.bestAvailable]: keep the historical fallback
+///   behaviour (rendered photo for `ready` rows when present, otherwise the
+///   private original, otherwise a status placeholder).
+/// - [CapturePreviewSource.watermarked]: resolve only the rendered watermark
+///   photo via [CaptureOutputPaths.renderedPhotoPath]. When the file is missing
+///   the preview shows a "watermarked not yet available" placeholder instead of
+///   silently falling back to the original.
+/// - [CapturePreviewSource.original]: resolve only the private original. When
+///   the original has been cleared ([CaptureRecord.originalDeletedAt] non-null)
+///   or is unexpectedly missing on disk, the preview shows the original-state
+///   placeholder. It must never silently render the watermarked photo under the
+///   "Original" tab.
+enum CapturePreviewSource { bestAvailable, watermarked, original }
+
 /// Reusable capture image preview.
 ///
 /// Resolves the on-disk source for [capture] in this order:
@@ -20,6 +36,11 @@ import 'package:sitemark/platform/platform_services.dart';
 /// full-screen [Dialog] with an [InteractiveViewer] (1x–4x). The async rendered
 /// path is resolved with a [FutureBuilder]; [fileExists] is overridable so
 /// widget tests can simulate on-disk state without touching the filesystem.
+///
+/// Pass an explicit [source] to render only the watermarked or original photo
+/// (used by the detail screen's segmented control). The default
+/// [CapturePreviewSource.bestAvailable] keeps the historical fallback behaviour
+/// used by list thumbnails.
 class CaptureImagePreview extends StatelessWidget {
   const CaptureImagePreview({
     super.key,
@@ -28,6 +49,7 @@ class CaptureImagePreview extends StatelessWidget {
     this.thumbnail = false,
     this.onOpen,
     this.fileExists,
+    this.source = CapturePreviewSource.bestAvailable,
   });
 
   final CaptureRecord capture;
@@ -40,11 +62,30 @@ class CaptureImagePreview extends StatelessWidget {
   /// branch the widget takes.
   final bool Function(String path)? fileExists;
 
+  /// Selects which on-disk source to render. See [CapturePreviewSource].
+  final CapturePreviewSource source;
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final bool Function(String path) exists =
         fileExists ?? (path) => File(path).existsSync();
+
+    switch (source) {
+      case CapturePreviewSource.watermarked:
+        return _buildWatermarked(context, strings, exists);
+      case CapturePreviewSource.original:
+        return _buildOriginal(context, strings, exists);
+      case CapturePreviewSource.bestAvailable:
+        return _buildBestAvailable(context, strings, exists);
+    }
+  }
+
+  Widget _buildBestAvailable(
+    BuildContext context,
+    AppStrings strings,
+    bool Function(String path) exists,
+  ) {
     final originalExists = exists(capture.originalPath);
 
     if (capture.status == CaptureStatus.ready) {
@@ -87,6 +128,58 @@ class CaptureImagePreview extends StatelessWidget {
       context,
       strings,
       label: _statusOverlayLabel(capture.status, strings) ?? strings.failed,
+    );
+  }
+
+  /// Renders only the watermarked photo. When the rendered file is missing the
+  /// preview shows a dedicated placeholder instead of falling back to the
+  /// original.
+  Widget _buildWatermarked(
+    BuildContext context,
+    AppStrings strings,
+    bool Function(String path) exists,
+  ) {
+    return FutureBuilder<String>(
+      future: outputPaths.renderedPhotoPath(capture.id),
+      builder: (context, snapshot) {
+        final renderedPath = snapshot.data;
+        if (renderedPath != null && exists(renderedPath)) {
+          return _image(
+            context,
+            path: renderedPath,
+            key: 'rendered-preview-${capture.id}',
+            overlay: null,
+          );
+        }
+        return _placeholder(
+          context,
+          strings,
+          label: strings.watermarkedUnavailable,
+        );
+      },
+    );
+  }
+
+  /// Renders only the private original. When the original has been cleared
+  /// (`originalDeletedAt` non-null) or is unexpectedly missing on disk, the
+  /// preview shows the original-state placeholder. It must never silently
+  /// render the watermarked photo under the "Original" tab.
+  Widget _buildOriginal(
+    BuildContext context,
+    AppStrings strings,
+    bool Function(String path) exists,
+  ) {
+    if (capture.originalDeletedAt != null) {
+      return _placeholder(context, strings, label: strings.originalCleared);
+    }
+    if (!exists(capture.originalPath)) {
+      return _placeholder(context, strings, label: strings.originalMissing);
+    }
+    return _image(
+      context,
+      path: capture.originalPath,
+      key: 'original-preview-${capture.id}',
+      overlay: null,
     );
   }
 

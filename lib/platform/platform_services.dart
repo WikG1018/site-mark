@@ -19,6 +19,14 @@ abstract interface class PlatformServices {
   Future<String> publishJpeg(String sourcePath, String displayName);
 
   Future<void> deletePublishedImage(String contentUri);
+
+  Future<LocationPermissionState> getLocationPermissionState();
+
+  Future<LocationPermissionState> requestLocationPermission();
+
+  Future<void> openApplicationSettings();
+
+  Future<ImageMetadataResult> inspectImage(String path);
 }
 
 class PigeonPlatformServices implements PlatformServices {
@@ -62,10 +70,34 @@ class PigeonPlatformServices implements PlatformServices {
   Future<LocationResult> requestCurrentLocation(int timeoutMillis) {
     return _api.requestCurrentLocation(timeoutMillis);
   }
+
+  @override
+  Future<LocationPermissionState> getLocationPermissionState() {
+    return _api.getLocationPermissionState();
+  }
+
+  @override
+  Future<LocationPermissionState> requestLocationPermission() {
+    return _api.requestLocationPermission();
+  }
+
+  @override
+  Future<void> openApplicationSettings() {
+    return _api.openApplicationSettings();
+  }
+
+  @override
+  Future<ImageMetadataResult> inspectImage(String path) {
+    return _api.inspectImage(path);
+  }
 }
 
 abstract interface class ImagePipeline {
   Future<rust.ExportProjectResult> export(rust.ExportProjectRequest request);
+
+  Future<rust.ExportProjectResult> exportSelection(
+    rust.ExportSelectionRequest request,
+  );
 
   Future<String> sha256(String path);
 
@@ -106,6 +138,13 @@ class RustImagePipeline implements ImagePipeline {
   @override
   Future<rust.ExportProjectResult> export(rust.ExportProjectRequest request) {
     return _translateRustError(() => rust.exportProject(request: request));
+  }
+
+  @override
+  Future<rust.ExportProjectResult> exportSelection(
+    rust.ExportSelectionRequest request,
+  ) {
+    return _translateRustError(() => rust.exportSelection(request: request));
   }
 
   @override
@@ -160,6 +199,22 @@ class AppProjectExportPaths implements ProjectExportPaths {
   }
 }
 
+abstract interface class SelectionExportPaths {
+  Future<String> selectionZipPath();
+}
+
+class AppSelectionExportPaths implements SelectionExportPaths {
+  @override
+  Future<String> selectionZipPath() async {
+    final root = await getApplicationDocumentsDirectory();
+    final directory = Directory('${root.path}${Platform.pathSeparator}exports');
+    await directory.create(recursive: true);
+    final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
+    return '${directory.path}${Platform.pathSeparator}'
+        'sitemark-selection-$timestamp.zip';
+  }
+}
+
 abstract interface class ShareFileService {
   Future<void> shareFile(String path);
 }
@@ -174,10 +229,15 @@ class SystemShareFileService implements ShareFileService {
 }
 
 abstract interface class PrivateFileStore {
+  Future<bool> exists(String path);
+
   Future<void> deleteIfExists(String path);
 }
 
 class DartIoPrivateFileStore implements PrivateFileStore {
+  @override
+  Future<bool> exists(String path) => File(path).exists();
+
   @override
   Future<void> deleteIfExists(String path) async {
     final file = File(path);

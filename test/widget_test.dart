@@ -28,12 +28,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
-  testWidgets('production startup runs camera and queue recovery', (
+  testWidgets('production startup runs camera, location, and queue recovery', (
     tester,
   ) async {
     final events = <String>[];
     final recovery = AppStartupRecovery(
       recoverCamera: () async => events.add('camera'),
+      resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
     );
 
@@ -46,7 +47,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(events, ['camera', 'queue']);
+    expect(events, ['camera', 'location', 'queue']);
     await disposeApp(tester);
   });
 
@@ -66,6 +67,7 @@ void main() {
       workLocation: workLocation,
       workContent: workContent,
       photographer: photographer,
+      watermarkLocaleCode: 'zh',
       notes: notes,
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
@@ -91,10 +93,11 @@ void main() {
   Future<void> openCaptureForm(
     WidgetTester tester, {
     CaptureWorkflowResult? workflowResult,
+    _WidgetTestPlatformServices? platformOverride,
   }) async {
     final images = _WidgetTestImagePipeline();
     final share = _WidgetTestShareService();
-    final platform = _WidgetTestPlatformServices();
+    final platform = platformOverride ?? _WidgetTestPlatformServices();
     final outputPaths = _WidgetTestOutputPaths();
     final scheduler = _InlineProcessingScheduler(
       database: database,
@@ -222,6 +225,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('水印设置'), findsOneWidget);
+    expect(find.byKey(const Key('project-font-scale-slider')), findsOneWidget);
     await tester.tap(find.text('右下'));
     await tester.tap(find.byKey(const Key('accent-blue')));
     await tester.tap(find.text('保存'));
@@ -319,9 +323,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('B 区屋面'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '删除记录'));
+    await tester.tap(find.widgetWithText(FilledButton, '全部删除'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
     expect(platform.deletedUri, 'content://media/site-mark/1');
@@ -423,10 +427,190 @@ void main() {
     expect(project.watermarkAccentColorArgb, 0xff1565c0);
     await disposeApp(tester);
   });
+
+  testWidgets('granted location hides the explanation card', (tester) async {
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final platform = _WidgetTestPlatformServices()
+      ..permissionState = LocationPermissionState.granted;
+    await openCaptureForm(tester, platformOverride: platform);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('location-permission-prompt')), findsNothing);
+    expect(find.byKey(const Key('location-permission-enable')), findsNothing);
+    await disposeApp(tester);
+  });
+
+  testWidgets(
+    'capture button never triggers a runtime location permission request',
+    (tester) async {
+      await database.createProject(id: 'project-1', name: '东区厂房改造');
+      final platform = _WidgetTestPlatformServices()
+        ..permissionState = LocationPermissionState.denied;
+      await openCaptureForm(tester, platformOverride: platform);
+      await tester.pumpAndSettle();
+
+      // The non-blocking explanation card is shown because permission is
+      // denied and the user has not dismissed it.
+      expect(
+        find.byKey(const Key('location-permission-prompt')),
+        findsOneWidget,
+      );
+      expect(platform.requestLocationPermissionCount, 0);
+
+      await tester.enterText(find.byKey(const Key('work-location')), 'A 区');
+      await tester.enterText(find.byKey(const Key('work-content')), '检查');
+      await tester.enterText(find.byKey(const Key('photographer')), '张工');
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('capture-button')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.byKey(const Key('capture-button')));
+      await tester.pumpAndSettle();
+
+      // The capture button path must never request runtime permission or
+      // fire a location read when permission is not granted.
+      expect(platform.requestLocationPermissionCount, 0);
+      expect(platform.requestCurrentLocationCount, 0);
+      expect(find.text('照片已加入后台处理，可继续拍摄'), findsOneWidget);
+      await disposeApp(tester);
+    },
+  );
+
+  testWidgets('enable-location tap requests permission and dismisses on deny', (
+    tester,
+  ) async {
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final platform = _WidgetTestPlatformServices()
+      ..permissionState = LocationPermissionState.denied
+      ..requestResult = LocationPermissionState.denied;
+    await openCaptureForm(tester, platformOverride: platform);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('location-permission-prompt')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('location-permission-enable')));
+    await tester.pumpAndSettle();
+
+    expect(platform.requestLocationPermissionCount, 1);
+    // A denied result persists the dismissal and hides the card.
+    expect(find.byKey(const Key('location-permission-prompt')), findsNothing);
+    final settings = await database.getAppSettings();
+    expect(settings.locationPermissionPromptDismissed, isTrue);
+    await disposeApp(tester);
+  });
+
+  testWidgets(
+    'dismiss icon hides the explanation card and persists dismissal',
+    (tester) async {
+      await database.createProject(id: 'project-1', name: '东区厂房改造');
+      final platform = _WidgetTestPlatformServices()
+        ..permissionState = LocationPermissionState.denied;
+      await openCaptureForm(tester, platformOverride: platform);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('location-permission-dismiss')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('location-permission-prompt')), findsNothing);
+      final settings = await database.getAppSettings();
+      expect(settings.locationPermissionPromptDismissed, isTrue);
+      await disposeApp(tester);
+    },
+  );
+
+  // Task 4: capture list edit mode and batch action bar.
+
+  testWidgets('project detail edit mode shows checkboxes and batch bar', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Checkbox), findsWidgets);
+    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('all records edit mode shows checkboxes and batch bar', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.byTooltip('全部记录'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Checkbox), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('changing date filter clears project detail selection', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    bool anyChecked() => tester
+        .widgetList<Checkbox>(find.byType(Checkbox))
+        .any((cb) => cb.value == true);
+    expect(anyChecked(), isTrue);
+
+    await tester.tap(find.byKey(const Key('filter-year')));
+    await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '2026'));
+    await tester.pumpAndSettle();
+
+    expect(anyChecked(), isFalse);
+    await disposeApp(tester);
+  });
+
+  testWidgets('project detail batch bar fits at 360dp', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester);
+  });
 }
 
 class _WidgetTestPlatformServices implements PlatformServices {
   String? deletedUri;
+  LocationPermissionState permissionState = LocationPermissionState.granted;
+  LocationPermissionState requestResult = LocationPermissionState.denied;
+  int requestLocationPermissionCount = 0;
+  int requestCurrentLocationCount = 0;
+  int openApplicationSettingsCount = 0;
 
   @override
   Future<String> createCameraTarget(String captureId) async =>
@@ -457,8 +641,33 @@ class _WidgetTestPlatformServices implements PlatformServices {
 
   @override
   Future<LocationResult> requestCurrentLocation(int timeoutMillis) async {
+    requestCurrentLocationCount++;
     return LocationResult(outcome: LocationOutcome.permissionDenied);
   }
+
+  @override
+  Future<LocationPermissionState> getLocationPermissionState() async =>
+      permissionState;
+
+  @override
+  Future<LocationPermissionState> requestLocationPermission() async {
+    requestLocationPermissionCount++;
+    return requestResult;
+  }
+
+  @override
+  Future<void> openApplicationSettings() async {
+    openApplicationSettingsCount++;
+  }
+
+  @override
+  Future<ImageMetadataResult> inspectImage(String path) async =>
+      ImageMetadataResult(
+        width: 0,
+        height: 0,
+        fileSizeBytes: 0,
+        mimeType: 'image/jpeg',
+      );
 }
 
 class _WidgetTestImagePipeline implements ImagePipeline {
@@ -471,6 +680,10 @@ class _WidgetTestImagePipeline implements ImagePipeline {
       photoCount: request.photos.length,
     );
   }
+
+  @override
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
+      throw UnimplementedError();
 
   @override
   Future<RenderPhotoResult> render(RenderPhotoRequest request) async {
@@ -510,6 +723,9 @@ class _WidgetTestShareService implements ShareFileService {
 }
 
 class _WidgetTestPrivateFileStore implements PrivateFileStore {
+  @override
+  Future<bool> exists(String path) async => true;
+
   @override
   Future<void> deleteIfExists(String path) async {}
 }

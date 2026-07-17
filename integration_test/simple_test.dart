@@ -166,6 +166,26 @@ class _IntegrationPlatformServices implements PlatformServices {
   Future<LocationResult> requestCurrentLocation(int timeoutMillis) async {
     return LocationResult(outcome: LocationOutcome.permissionDenied);
   }
+
+  @override
+  Future<LocationPermissionState> getLocationPermissionState() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<LocationPermissionState> requestLocationPermission() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<void> openApplicationSettings() async {}
+
+  @override
+  Future<ImageMetadataResult> inspectImage(String path) async =>
+      ImageMetadataResult(
+        width: 0,
+        height: 0,
+        fileSizeBytes: 0,
+        mimeType: 'image/jpeg',
+      );
 }
 
 class _IntegrationImagePipeline implements ImagePipeline {
@@ -178,6 +198,10 @@ class _IntegrationImagePipeline implements ImagePipeline {
       photoCount: request.photos.length,
     );
   }
+
+  @override
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
+      throw UnimplementedError();
 
   @override
   Future<RenderPhotoResult> render(RenderPhotoRequest request) async {
@@ -213,6 +237,9 @@ class _IntegrationShareService implements ShareFileService {
 }
 
 class _IntegrationPrivateFileStore implements PrivateFileStore {
+  @override
+  Future<bool> exists(String path) async => false;
+
   @override
   Future<void> deleteIfExists(String path) async {}
 }

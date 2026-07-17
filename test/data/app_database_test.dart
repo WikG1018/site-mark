@@ -42,6 +42,7 @@ void main() {
       position: 'bottomRight',
       opacity: 0.64,
       accentColorArgb: 0xff1565c0,
+      fontScale: 1.0,
     );
 
     expect(updated.watermarkPosition, 'bottomRight');
@@ -113,6 +114,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管安装',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
 
@@ -144,6 +146,7 @@ void main() {
           workLocation: 'A 区',
           workContent: '风管安装',
           photographer: '张工',
+          watermarkLocaleCode: 'zh',
           createdAt: DateTime(2026, 7, 16, 9, 30 + index),
         );
         await database.markCaptured(
@@ -159,6 +162,7 @@ void main() {
         workLocation: 'B 区',
         workContent: '保温检查',
         photographer: '李工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 10),
       );
       final captured = await database.markCaptured(
@@ -183,6 +187,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管安装',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
 
@@ -206,6 +211,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管安装',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 9, 30),
       );
       await database.markCaptured(
@@ -242,6 +248,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管安装',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
     );
 
     expect(
@@ -262,6 +269,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管安装',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
     );
     final capturedAt = DateTime(2026, 7, 16, 9, 32);
     await database.markCaptured(captureId: pending.id, capturedAt: capturedAt);
@@ -332,6 +340,7 @@ void main() {
         workLocation: 'X 区',
         workContent: '待拍摄',
         photographer: '王工',
+        watermarkLocaleCode: 'zh',
         notes: '占位备注',
         createdAt: DateTime(2026, 7, 16, 12),
       );
@@ -342,6 +351,7 @@ void main() {
         workLocation: 'A 区三层',
         workContent: '风管安装检查',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         notes: '临时备注',
         createdAt: DateTime(2026, 7, 16, 9, 30),
       );
@@ -374,6 +384,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
       );
 
       final draft = await database.latestCapturedDraft('project-1');
@@ -395,6 +406,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
 
@@ -431,6 +443,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 9, 30),
       );
       final captured = await database.createPendingCapture(
@@ -440,6 +453,7 @@ void main() {
         workLocation: 'A 区三层',
         workContent: '风管安装检查',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 9, 30),
       );
       await database.markCaptured(
@@ -469,6 +483,7 @@ void main() {
       workLocation: 'A 区三层',
       workContent: '风管安装检查',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     await database.markCaptured(
@@ -482,6 +497,7 @@ void main() {
       workLocation: 'B 区',
       workContent: '保温检查',
       photographer: '李工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 15, 9, 30),
     );
     await database.markCaptured(
@@ -516,6 +532,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     await database.markCaptured(
@@ -529,6 +546,7 @@ void main() {
       workLocation: 'B 区',
       workContent: '保温',
       photographer: '李工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 10, 30),
     );
     await database.markCaptured(
@@ -558,6 +576,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 8, 0),
       );
       await database.markCaptured(
@@ -571,6 +590,7 @@ void main() {
         workLocation: 'B 区',
         workContent: '保温',
         photographer: '李工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 9, 0),
       );
       await database.markCaptured(
@@ -602,6 +622,7 @@ void main() {
       workLocation: 'A 区三层',
       workContent: '风管安装检查',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     await database.markCaptured(
@@ -630,6 +651,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 9, 30),
       );
       final captured = await database.createPendingCapture(
@@ -639,11 +661,19 @@ void main() {
         workLocation: 'B 区',
         workContent: '保温',
         photographer: '李工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 10, 0),
       );
       await database.markCaptured(
         captureId: captured.id,
         capturedAt: DateTime(2026, 7, 16, 10, 1),
+      );
+      await database.resolveCaptureLocation(
+        captureId: captured.id,
+        resolution: 'resolved',
+        outcome: 'exif',
+        latitude: 24.5,
+        longitude: 117.6,
       );
       final rendering = await database.createPendingCapture(
         id: 'rendering',
@@ -652,6 +682,7 @@ void main() {
         workLocation: 'C 区',
         workContent: '验收',
         photographer: '王工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 11, 0),
       );
       await database.markCaptured(
@@ -661,6 +692,13 @@ void main() {
       await database.markRendering(
         captureId: rendering.id,
         originalSha256: originalHash,
+      );
+      await database.resolveCaptureLocation(
+        captureId: rendering.id,
+        resolution: 'resolved',
+        outcome: 'exif',
+        latitude: 24.5,
+        longitude: 117.6,
       );
 
       final awaiting = await database.capturesAwaitingProcessing();
@@ -683,6 +721,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     await database.markCaptured(
@@ -710,6 +749,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     await database.markCaptured(
@@ -771,6 +811,7 @@ void main() {
       workLocation: 'A 区',
       workContent: '风管',
       photographer: '张工',
+      watermarkLocaleCode: 'zh',
       createdAt: DateTime(2026, 7, 16, 9, 30),
     );
     await database.markCaptured(
@@ -788,4 +829,78 @@ void main() {
 
     expect(edited.processingAttempts, 1);
   });
+  test('persists constrained project and default font scales', () async {
+    final project = await database.createProject(
+      id: 'project',
+      name: '车间改造',
+      watermarkFontScale: 1.25,
+    );
+    expect(project.watermarkFontScale, 1.25);
+
+    final updated = await database.updateProjectWatermarkSettings(
+      projectId: 'project',
+      position: 'bottomLeft',
+      opacity: 0.78,
+      accentColorArgb: 0xff37c58b,
+      fontScale: 1.60,
+    );
+    expect(updated.watermarkFontScale, 1.60);
+    expect(
+      () => database.updateProjectWatermarkSettings(
+        projectId: 'project',
+        position: 'bottomLeft',
+        opacity: 0.78,
+        accentColorArgb: 0xff37c58b,
+        fontScale: 1.61,
+      ),
+      throwsArgumentError,
+    );
+
+    final settings = await database.updateAppSettings(
+      defaultWatermarkFontScale: 0.80,
+      locationPermissionPromptDismissed: true,
+    );
+    expect(settings.defaultWatermarkFontScale, 0.80);
+    expect(settings.locationPermissionPromptDismissed, isTrue);
+  });
+
+  test(
+    'resolves location and distinguishes intentional original cleanup',
+    () async {
+      await database.createProject(id: 'project', name: '车间改造');
+      final pending = await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'A 区',
+        workContent: '风管',
+        photographer: '张工',
+        watermarkLocaleCode: 'en',
+      );
+      expect(pending.watermarkLocaleCode, 'en');
+      expect(pending.locationResolution, 'pending');
+
+      final located = await database.resolveCaptureLocation(
+        captureId: pending.id,
+        resolution: 'resolved',
+        outcome: 'precise',
+        latitude: 24.513,
+        longitude: 117.6471,
+        accuracyMeters: 8,
+      );
+      expect(located.locationResolution, 'resolved');
+      expect(located.latitude, 24.513);
+
+      final deletedAt = DateTime(2026, 7, 16, 12);
+      final cleaned = await database.markOriginalDeleted(
+        pending.id,
+        deletedAt: deletedAt,
+      );
+      expect(cleaned.originalDeletedAt, deletedAt);
+      expect(cleaned.originalSha256, pending.originalSha256);
+
+      final rows = await database.capturesByIds(['capture-1', 'missing']);
+      expect(rows.map((row) => row.id), ['capture-1']);
+    },
+  );
 }

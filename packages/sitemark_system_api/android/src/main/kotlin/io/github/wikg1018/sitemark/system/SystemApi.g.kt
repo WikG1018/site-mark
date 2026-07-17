@@ -219,6 +219,18 @@ enum class LocationOutcome(val raw: Int) {
   }
 }
 
+enum class LocationPermissionState(val raw: Int) {
+  GRANTED(0),
+  DENIED(1),
+  PERMANENTLY_DENIED(2);
+
+  companion object {
+    fun ofRaw(raw: Int): LocationPermissionState? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class CameraCaptureResult (
   val outcome: CameraOutcome,
@@ -367,6 +379,63 @@ data class LocationResult (
 }
 
 /** Generated class from Pigeon that represents data sent in messages. */
+data class ImageMetadataResult (
+  val width: Long,
+  val height: Long,
+  val fileSizeBytes: Long,
+  val mimeType: String,
+  val latitude: Double? = null,
+  val longitude: Double? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): ImageMetadataResult {
+      val width = pigeonVar_list[0] as Long
+      val height = pigeonVar_list[1] as Long
+      val fileSizeBytes = pigeonVar_list[2] as Long
+      val mimeType = pigeonVar_list[3] as String
+      val latitude = pigeonVar_list[4] as Double?
+      val longitude = pigeonVar_list[5] as Double?
+      return ImageMetadataResult(width, height, fileSizeBytes, mimeType, latitude, longitude)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      width,
+      height,
+      fileSizeBytes,
+      mimeType,
+      latitude,
+      longitude,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as ImageMetadataResult
+    return SystemApiPigeonUtils.deepEquals(this.width, other.width) && SystemApiPigeonUtils.deepEquals(this.height, other.height) && SystemApiPigeonUtils.deepEquals(this.fileSizeBytes, other.fileSizeBytes) && SystemApiPigeonUtils.deepEquals(this.mimeType, other.mimeType) && SystemApiPigeonUtils.deepEquals(this.latitude, other.latitude) && SystemApiPigeonUtils.deepEquals(this.longitude, other.longitude)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.width)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.height)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.fileSizeBytes)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.mimeType)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.latitude)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.longitude)
+    return result
+  }
+  override fun toString(): String {
+    return "ImageMetadataResult(width=$width, height=$height, fileSizeBytes=$fileSizeBytes, mimeType=$mimeType, latitude=$latitude, longitude=$longitude)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
 data class MediaPublishResult (
   val contentUri: String
 )
@@ -416,21 +485,31 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
         }
       }
       131.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          CameraCaptureResult.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          LocationPermissionState.ofRaw(it.toInt())
         }
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RecoveredCameraCapture.fromList(it)
+          CameraCaptureResult.fromList(it)
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          LocationResult.fromList(it)
+          RecoveredCameraCapture.fromList(it)
         }
       }
       134.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          LocationResult.fromList(it)
+        }
+      }
+      135.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ImageMetadataResult.fromList(it)
+        }
+      }
+      136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           MediaPublishResult.fromList(it)
         }
@@ -448,20 +527,28 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
         stream.write(130)
         writeValue(stream, value.raw.toLong())
       }
-      is CameraCaptureResult -> {
+      is LocationPermissionState -> {
         stream.write(131)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is RecoveredCameraCapture -> {
+      is CameraCaptureResult -> {
         stream.write(132)
         writeValue(stream, value.toList())
       }
-      is LocationResult -> {
+      is RecoveredCameraCapture -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is MediaPublishResult -> {
+      is LocationResult -> {
         stream.write(134)
+        writeValue(stream, value.toList())
+      }
+      is ImageMetadataResult -> {
+        stream.write(135)
+        writeValue(stream, value.toList())
+      }
+      is MediaPublishResult -> {
+        stream.write(136)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -476,6 +563,10 @@ interface SiteMarkSystemApi {
   fun launchCamera(captureId: String, callback: (Result<CameraCaptureResult>) -> Unit)
   fun recoverCameraCapture(): RecoveredCameraCapture?
   fun finishCameraCapture(captureId: String, keepOriginal: Boolean)
+  fun getLocationPermissionState(): LocationPermissionState
+  fun requestLocationPermission(callback: (Result<LocationPermissionState>) -> Unit)
+  fun openApplicationSettings()
+  fun inspectImage(path: String, callback: (Result<ImageMetadataResult>) -> Unit)
   fun requestCurrentLocation(timeoutMillis: Long, callback: (Result<LocationResult>) -> Unit)
   fun publishJpeg(sourcePath: String, displayName: String, callback: (Result<MediaPublishResult>) -> Unit)
   fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit)
@@ -555,6 +646,75 @@ interface SiteMarkSystemApi {
               SystemApiPigeonUtils.wrapError(exception)
             }
             reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.getLocationPermissionState$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getLocationPermissionState())
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestLocationPermission$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.requestLocationPermission{ result: Result<LocationPermissionState> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SystemApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SystemApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.openApplicationSettings$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.openApplicationSettings()
+              listOf(null)
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.inspectImage$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val pathArg = args[0] as String
+            api.inspectImage(pathArg) { result: Result<ImageMetadataResult> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SystemApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SystemApiPigeonUtils.wrapResult(data))
+              }
+            }
           }
         } else {
           channel.setMessageHandler(null)

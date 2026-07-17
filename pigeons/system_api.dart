@@ -21,6 +21,8 @@ enum LocationOutcome {
   unavailable,
 }
 
+enum LocationPermissionState { granted, denied, permanentlyDenied }
+
 class CameraCaptureResult {
   CameraCaptureResult({
     required this.outcome,
@@ -63,6 +65,24 @@ class LocationResult {
   String? errorMessage;
 }
 
+class ImageMetadataResult {
+  ImageMetadataResult({
+    required this.width,
+    required this.height,
+    required this.fileSizeBytes,
+    required this.mimeType,
+    this.latitude,
+    this.longitude,
+  });
+
+  int width;
+  int height;
+  int fileSizeBytes;
+  String mimeType;
+  double? latitude;
+  double? longitude;
+}
+
 class MediaPublishResult {
   MediaPublishResult({required this.contentUri});
 
@@ -79,6 +99,16 @@ abstract class SiteMarkSystemApi {
   RecoveredCameraCapture? recoverCameraCapture();
 
   void finishCameraCapture(String captureId, bool keepOriginal);
+
+  LocationPermissionState getLocationPermissionState();
+
+  @async
+  LocationPermissionState requestLocationPermission();
+
+  void openApplicationSettings();
+
+  @async
+  ImageMetadataResult inspectImage(String path);
 
   @async
   LocationResult requestCurrentLocation(int timeoutMillis);

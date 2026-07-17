@@ -1,3 +1,4 @@
+import 'dart:math' show max, min;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -8,6 +9,8 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
+import 'package:sitemark/features/capture/capture_record_card.dart';
+import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
@@ -24,6 +27,8 @@ CaptureRecord _record({required String id, required DateTime capturedAt}) {
     createdAt: capturedAt,
     capturedAt: capturedAt,
     processingAttempts: 0,
+    watermarkLocaleCode: 'zh',
+    locationResolution: 'resolved',
   );
 }
 
@@ -164,6 +169,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: DateTime(2026, 7, 16, 9),
       );
       final captured = await database.markCaptured(
@@ -250,6 +256,7 @@ void main() {
         workLocation: 'A 区',
         workContent: '风管',
         photographer: '张工',
+        watermarkLocaleCode: 'zh',
         createdAt: capturedAt,
       );
       final captured = await database.markCaptured(
@@ -309,5 +316,312 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
+  });
+  testWidgets('date controls share one row at 360dp', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final filter = ValueNotifier(const CaptureFilter());
+    await tester.pumpWidget(filterHarnessLive(filter));
+    await tester.pumpAndSettle();
+    final tops = [
+      tester.getTopLeft(find.byKey(const Key('filter-year'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-month'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-day'))).dy,
+    ];
+    expect(tops.reduce(max) - tops.reduce(min), lessThan(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('all-records controls share one row at 360dp', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final pending = await database.createPendingCapture(
+      id: 'capture-a',
+      projectId: 'project-1',
+      originalPath: '/private/capture-a.jpg',
+      workLocation: 'A 区',
+      workContent: '风管',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 9),
+    );
+    final captured = await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 30),
+    );
+    final rendering = await database.markRendering(
+      captureId: captured.id,
+      originalSha256:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    await database.markReady(
+      captureId: rendering.id,
+      publishedUri: 'content://media/site-mark/capture-a',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const AllCapturesScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final tops = [
+      tester.getTopLeft(find.byKey(const Key('project-filter'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-year'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-month'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-day'))).dy,
+    ];
+    expect(tops.reduce(max) - tops.reduce(min), lessThan(1));
+    expect(tester.takeException(), isNull);
+
+    // Unmount the tree so the StreamBuilder subscriptions to the Drift
+    // streams are cancelled before the database closes.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+  // Task 4: capture list edit mode and batch action bar.
+
+  Future<void> seedReadyCaptureForFilterTest(
+    AppDatabase database, {
+    required String id,
+    required String projectId,
+    required DateTime capturedAt,
+  }) async {
+    final pending = await database.createPendingCapture(
+      id: id,
+      projectId: projectId,
+      originalPath: '/private/$id.jpg',
+      workLocation: 'A 区',
+      workContent: '风管',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      createdAt: capturedAt,
+    );
+    final captured = await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: capturedAt,
+    );
+    final rendering = await database.markRendering(
+      captureId: captured.id,
+      originalSha256:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    await database.markReady(
+      captureId: rendering.id,
+      publishedUri: 'content://media/site-mark/$id',
+    );
+  }
+
+  Widget pumpAllCaptures(AppDatabase database) {
+    return ProviderScope(
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const AllCapturesScreen(),
+      ),
+    );
+  }
+
+  Widget pumpProjectDetail(AppDatabase database, String projectId) {
+    return ProviderScope(
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ProjectDetailScreen(projectId: projectId),
+      ),
+    );
+  }
+
+  Future<void> unmountTree(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  }
+
+  testWidgets('all-records edit mode shows checkboxes and batch bar', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Checkbox), findsWidgets);
+    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets('all-records changing date filter clears selection', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    bool anyChecked() => tester
+        .widgetList<Checkbox>(find.byType(Checkbox))
+        .any((cb) => cb.value == true);
+    expect(anyChecked(), isTrue);
+
+    await tester.tap(find.byKey(const Key('filter-year')));
+    await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '2026'));
+    await tester.pumpAndSettle();
+
+    expect(anyChecked(), isFalse);
+    await unmountTree(tester);
+  });
+
+  testWidgets('all-records batch bar fits at 360dp', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await unmountTree(tester);
+  });
+
+  testWidgets('project detail edit mode shows checkboxes and batch bar', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+
+    await tester.pumpWidget(pumpProjectDetail(database, 'project-1'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Checkbox), findsWidgets);
+    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets('busy record tap is disabled while editing', (tester) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final pending = await database.createPendingCapture(
+      id: 'capture-busy',
+      projectId: 'project-1',
+      originalPath: '/private/capture-busy.jpg',
+      workLocation: 'A 区',
+      workContent: '风管检查',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      locationResolution: 'resolved',
+    );
+    await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).onChanged, isNull);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(CaptureRecordCard),
+        matching: find.byType(InkWell),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    await unmountTree(tester);
   });
 }

@@ -14,9 +14,13 @@ import 'package:sitemark/features/capture/capture_edit_screen.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
+import 'package:sitemark/workflow/capture_location_coordinator.dart';
+import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
+import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -56,6 +60,17 @@ final platformServicesProvider = Provider<PlatformServices>(
   (ref) => PigeonPlatformServices(),
 );
 
+/// Non-blocking location-permission coordinator shared by the capture form and
+/// the global settings screen. Reads the host permission state and the
+/// persisted `locationPermissionPromptDismissed` flag; the capture button path
+/// never calls into this service at runtime.
+final locationPermissionServiceProvider = Provider<LocationPermissionService>(
+  (ref) => LocationPermissionService(
+    database: ref.watch(databaseProvider),
+    platform: ref.watch(platformServicesProvider),
+  ),
+);
+
 final imagePipelineProvider = Provider<ImagePipeline>(
   (ref) => RustImagePipeline(),
 );
@@ -68,12 +83,20 @@ final projectExportPathsProvider = Provider<ProjectExportPaths>(
   (ref) => AppProjectExportPaths(),
 );
 
+final selectionExportPathsProvider = Provider<SelectionExportPaths>(
+  (ref) => AppSelectionExportPaths(),
+);
+
 final shareFileServiceProvider = Provider<ShareFileService>(
   (ref) => SystemShareFileService(),
 );
 
 final privateFileStoreProvider = Provider<PrivateFileStore>(
   (ref) => DartIoPrivateFileStore(),
+);
+
+final externalLinkServiceProvider = Provider<ExternalLinkService>(
+  (ref) => const UrlLauncherExternalLinkService(),
 );
 
 final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {
@@ -89,6 +112,16 @@ final captureBackgroundSchedulerProvider = Provider<CaptureBackgroundScheduler>(
   },
 );
 
+final captureLocationCoordinatorProvider = Provider<CaptureLocationCoordinator>(
+  (ref) {
+    return CaptureLocationCoordinator(
+      database: ref.watch(databaseProvider),
+      platform: ref.watch(platformServicesProvider),
+      scheduler: ref.watch(captureBackgroundSchedulerProvider),
+    );
+  },
+);
+
 final captureWorkflowProvider = Provider<CaptureWorkflow>((ref) {
   return CaptureWorkflow(
     database: ref.watch(databaseProvider),
@@ -97,6 +130,16 @@ final captureWorkflowProvider = Provider<CaptureWorkflow>((ref) {
     outputPaths: ref.watch(captureOutputPathsProvider),
     fileStore: ref.watch(privateFileStoreProvider),
     scheduler: ref.watch(captureBackgroundSchedulerProvider),
+    locationCoordinator: ref.watch(captureLocationCoordinatorProvider),
+  );
+});
+
+final captureMediaServiceProvider = Provider<CaptureMediaService>((ref) {
+  return CaptureMediaService(
+    database: ref.watch(databaseProvider),
+    platform: ref.watch(platformServicesProvider),
+    outputPaths: ref.watch(captureOutputPathsProvider),
+    files: ref.watch(privateFileStoreProvider),
   );
 });
 
@@ -104,6 +147,9 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
   return AppStartupRecovery(
     recoverCamera: () =>
         ref.read(captureWorkflowProvider).recoverPendingCapture(),
+    resolveLocations: () => ref
+        .read(captureLocationCoordinatorProvider)
+        .reconcilePendingLocations(),
     reconcileQueue: () =>
         ref.read(captureBackgroundSchedulerProvider).reconcilePending(),
   );
@@ -115,6 +161,7 @@ final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
     images: ref.watch(imagePipelineProvider),
     capturePaths: ref.watch(captureOutputPathsProvider),
     exportPaths: ref.watch(projectExportPathsProvider),
+    selectionExportPaths: ref.watch(selectionExportPathsProvider),
   );
 });
 
@@ -252,6 +299,7 @@ class MyApp extends StatelessWidget {
     this.projectExportPaths,
     this.shareService,
     this.privateFileStore,
+    this.externalLinkService,
     this.backgroundScheduler,
     this.backgroundWorkClient,
     this.startupRecovery,
@@ -265,6 +313,7 @@ class MyApp extends StatelessWidget {
   final ProjectExportPaths? projectExportPaths;
   final ShareFileService? shareService;
   final PrivateFileStore? privateFileStore;
+  final ExternalLinkService? externalLinkService;
   final CaptureBackgroundScheduler? backgroundScheduler;
   final BackgroundWorkClient? backgroundWorkClient;
   final AppStartupRecovery? startupRecovery;
@@ -292,6 +341,8 @@ class MyApp extends StatelessWidget {
           shareFileServiceProvider.overrideWithValue(shareService!),
         if (privateFileStore != null)
           privateFileStoreProvider.overrideWithValue(privateFileStore!),
+        if (externalLinkService != null)
+          externalLinkServiceProvider.overrideWithValue(externalLinkService!),
         if (backgroundScheduler != null)
           captureBackgroundSchedulerProvider.overrideWithValue(
             backgroundScheduler!,

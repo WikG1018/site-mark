@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:sitemark/domain/app_links.dart';
 
 class AppStrings {
   const AppStrings(this.locale);
@@ -88,6 +89,7 @@ class AppStrings {
   String get bottomLeft => _english ? 'Bottom left' : '左下';
   String get bottomRight => _english ? 'Bottom right' : '右下';
   String get watermarkOpacity => _english ? 'Card opacity' : '水印透明度';
+  String get watermarkFontSize => _english ? 'Font size' : '字体大小';
   String get accentColor => _english ? 'Accent color' : '强调色';
   String get green => _english ? 'Green' : '绿色';
   String get blue => _english ? 'Blue' : '蓝色';
@@ -98,6 +100,10 @@ class AppStrings {
   String get regenerationFailed => _english ? 'Regeneration failed' : '重新生成失败';
   String get allRecords => _english ? 'All records' : '全部记录';
   String get settings => _english ? 'Settings' : '设置';
+  String get searchProjects => _english ? 'Search' : '搜索';
+  String get searchProjectsHint => _english ? 'Search project name' : '搜索项目名称';
+  String get noMatchingProjects =>
+      _english ? 'No matching projects' : '没有匹配的项目';
   String get allProjects => _english ? 'All projects' : '全部项目';
   String get allYears => _english ? 'All years' : '全部年份';
   String get allMonths => _english ? 'All months' : '全部月份';
@@ -125,8 +131,10 @@ class AppStrings {
   String get privacyStatements => _english
       ? 'No ads · No account · No cloud · System camera only · Local storage only'
       : '无广告 · 无账号 · 无云端 · 仅调用系统相机 · 仅保存在本机';
-  String get repository => _english ? 'Repository' : '代码仓库';
-  String get repositoryValue => 'WikG1018/site-mark';
+  String get repository => _english ? 'GitHub Repository' : 'GitHub 代码仓库';
+  String get repositoryValue => siteMarkRepositoryUrl;
+  String get openLinkFailed =>
+      _english ? 'Could not open the browser' : '无法打开浏览器';
   String get privacySummary => _english
       ? 'Offline by design. No account, no SiteMark server, no ads, no analytics SDK. Foreground location is requested once before capture and stored only with the local record.'
       : '以离线使用为设计前提，不创建账号、不连接服务器、不展示广告、不含统计 SDK。拍摄前仅请求一次前台定位，结果只保存在本机记录中。';
@@ -136,6 +144,62 @@ class AppStrings {
   String get opacityHint => _english
       ? 'Drag to set the new-project watermark opacity. Saved on release.'
       : '拖动以设置新建项目的水印透明度，松开后保存。';
+  String get fontScaleHint => _english
+      ? 'Drag the slider to adjust watermark font size (80%–160%).'
+      : '拖动滑块调整水印字体大小（80%–160%）';
+
+  // Non-blocking location permission UX
+  String get locationPermissionExplanation => _english
+      ? 'Foreground location tags each capture with GPS coordinates. Capture still works if you decline; tap below to enable it once.'
+      : '前台定位为每张照片记录 GPS 坐标。拒绝授权也可继续拍摄，点击下方按钮可一次性开启。';
+  String get dismiss => _english ? 'Dismiss' : '关闭';
+  String get enableLocation => _english ? 'Enable location' : '开启定位';
+  String get openSettingsLabel => _english ? 'Open settings' : '打开设置';
+  String get locationLabel => _english ? 'Location' : '定位';
+  String get enabled => _english ? 'Enabled' : '已开启';
+  String get disabled => _english ? 'Disabled' : '未开启';
+  String get locationDisabledHint => _english
+      ? 'Tap to request foreground location permission.'
+      : '点击以请求前台定位授权。';
+  String get locationPermanentlyDeniedHint => _english
+      ? 'Location permission was denied. Open system settings to enable it.'
+      : '定位权限已被拒绝，请前往系统设置开启。';
+
+  // Capture list edit mode and batch actions (Task 4)
+  String get editRecords => _english ? 'Edit records' : '编辑记录';
+  String get done => _english ? 'Done' : '完成';
+  String get selectAll => _english ? 'Select all' : '全选';
+  String get exportSelection => _english ? 'Export selection' : '导出所选';
+  String get saveToGallery => _english ? 'Save to gallery' : '保存到相册';
+  String get clearOriginals => _english ? 'Clear originals' : '清理原图';
+  String get deleteAll => _english ? 'Delete all' : '全部删除';
+  String selectedCount(int n) => _english ? '$n selected' : '已选 $n 张';
+  String actionProgress(int completed, int total) =>
+      _english ? 'Processing $completed/$total' : '正在处理 $completed/$total';
+  String actionResult(int succeeded, int skipped, int failed) => _english
+      ? 'Succeeded $succeeded, skipped $skipped, failed $failed'
+      : '成功 $succeeded，跳过 $skipped，失败 $failed';
+  String confirmClearOriginals(int n) => _english
+      ? 'Confirm clearing $n originals? Watermarked photos, published images, database records and photo numbers are preserved.'
+      : '确认清理 $n 张原图？水印成片、已发布图片、数据库记录和编号会保留。';
+  String confirmDeleteAll(int n) => _english
+      ? 'Confirm permanently deleting $n photos? Originals, watermarked photos, published images and database records will be deleted.'
+      : '确认彻底删除 $n 张照片？将删除原图、成片、已发布图片和数据库记录。';
+  String get originalRetained => _english ? 'Original retained' : '原图已保留';
+  String get watermarkedPhoto => _english ? 'Watermarked' : '成片';
+  String get originalPhoto => _english ? 'Original' : '原图';
+  String get fileSize => _english ? 'File size' : '文件大小';
+  String get resolution => _english ? 'Resolution' : '分辨率';
+  String get format => _english ? 'Format' : '格式';
+  String get publishedStatus => _english ? 'Published' : '已发布';
+  String get publishedYes => _english ? 'Yes' : '是';
+  String get publishedNo => _english ? 'No' : '否';
+  String get watermarkedUnavailable =>
+      _english ? 'Watermarked photo not yet available' : '成片尚未生成';
+  String get originalClearedSnackbar => _english ? 'Original cleared' : '原图已清理';
+  String get deleteOriginal => _english ? 'Delete original' : '删除原图';
+  String get originalCleared => _english ? 'Original cleared' : '原图已清理';
+  String get originalMissing => _english ? 'Original missing' : '原图缺失';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

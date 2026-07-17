@@ -78,6 +78,18 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         requiredDuringInsert: false,
         defaultValue: const Constant(0xff37c58b),
       );
+  static const VerificationMeta _watermarkFontScaleMeta =
+      const VerificationMeta('watermarkFontScale');
+  @override
+  late final GeneratedColumn<double> watermarkFontScale =
+      GeneratedColumn<double>(
+        'watermark_font_scale',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(1.0),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -108,6 +120,7 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     watermarkPosition,
     watermarkOpacity,
     watermarkAccentColorArgb,
+    watermarkFontScale,
     createdAt,
     updatedAt,
   ];
@@ -172,6 +185,15 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         ),
       );
     }
+    if (data.containsKey('watermark_font_scale')) {
+      context.handle(
+        _watermarkFontScaleMeta,
+        watermarkFontScale.isAcceptableOrUnknown(
+          data['watermark_font_scale']!,
+          _watermarkFontScaleMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -221,6 +243,10 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.int,
         data['${effectivePrefix}watermark_accent_color_argb'],
       )!,
+      watermarkFontScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}watermark_font_scale'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -245,6 +271,7 @@ class Project extends DataClass implements Insertable<Project> {
   final String watermarkPosition;
   final double watermarkOpacity;
   final int watermarkAccentColorArgb;
+  final double watermarkFontScale;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Project({
@@ -254,6 +281,7 @@ class Project extends DataClass implements Insertable<Project> {
     required this.watermarkPosition,
     required this.watermarkOpacity,
     required this.watermarkAccentColorArgb,
+    required this.watermarkFontScale,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -270,6 +298,7 @@ class Project extends DataClass implements Insertable<Project> {
     map['watermark_accent_color_argb'] = Variable<int>(
       watermarkAccentColorArgb,
     );
+    map['watermark_font_scale'] = Variable<double>(watermarkFontScale);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -285,6 +314,7 @@ class Project extends DataClass implements Insertable<Project> {
       watermarkPosition: Value(watermarkPosition),
       watermarkOpacity: Value(watermarkOpacity),
       watermarkAccentColorArgb: Value(watermarkAccentColorArgb),
+      watermarkFontScale: Value(watermarkFontScale),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -304,6 +334,9 @@ class Project extends DataClass implements Insertable<Project> {
       watermarkAccentColorArgb: serializer.fromJson<int>(
         json['watermarkAccentColorArgb'],
       ),
+      watermarkFontScale: serializer.fromJson<double>(
+        json['watermarkFontScale'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -320,6 +353,7 @@ class Project extends DataClass implements Insertable<Project> {
       'watermarkAccentColorArgb': serializer.toJson<int>(
         watermarkAccentColorArgb,
       ),
+      'watermarkFontScale': serializer.toJson<double>(watermarkFontScale),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -332,6 +366,7 @@ class Project extends DataClass implements Insertable<Project> {
     String? watermarkPosition,
     double? watermarkOpacity,
     int? watermarkAccentColorArgb,
+    double? watermarkFontScale,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Project(
@@ -342,6 +377,7 @@ class Project extends DataClass implements Insertable<Project> {
     watermarkOpacity: watermarkOpacity ?? this.watermarkOpacity,
     watermarkAccentColorArgb:
         watermarkAccentColorArgb ?? this.watermarkAccentColorArgb,
+    watermarkFontScale: watermarkFontScale ?? this.watermarkFontScale,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -361,6 +397,9 @@ class Project extends DataClass implements Insertable<Project> {
       watermarkAccentColorArgb: data.watermarkAccentColorArgb.present
           ? data.watermarkAccentColorArgb.value
           : this.watermarkAccentColorArgb,
+      watermarkFontScale: data.watermarkFontScale.present
+          ? data.watermarkFontScale.value
+          : this.watermarkFontScale,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -375,6 +414,7 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('watermarkPosition: $watermarkPosition, ')
           ..write('watermarkOpacity: $watermarkOpacity, ')
           ..write('watermarkAccentColorArgb: $watermarkAccentColorArgb, ')
+          ..write('watermarkFontScale: $watermarkFontScale, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -389,6 +429,7 @@ class Project extends DataClass implements Insertable<Project> {
     watermarkPosition,
     watermarkOpacity,
     watermarkAccentColorArgb,
+    watermarkFontScale,
     createdAt,
     updatedAt,
   );
@@ -402,6 +443,7 @@ class Project extends DataClass implements Insertable<Project> {
           other.watermarkPosition == this.watermarkPosition &&
           other.watermarkOpacity == this.watermarkOpacity &&
           other.watermarkAccentColorArgb == this.watermarkAccentColorArgb &&
+          other.watermarkFontScale == this.watermarkFontScale &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -413,6 +455,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<String> watermarkPosition;
   final Value<double> watermarkOpacity;
   final Value<int> watermarkAccentColorArgb;
+  final Value<double> watermarkFontScale;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -423,6 +466,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.watermarkPosition = const Value.absent(),
     this.watermarkOpacity = const Value.absent(),
     this.watermarkAccentColorArgb = const Value.absent(),
+    this.watermarkFontScale = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -434,6 +478,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.watermarkPosition = const Value.absent(),
     this.watermarkOpacity = const Value.absent(),
     this.watermarkAccentColorArgb = const Value.absent(),
+    this.watermarkFontScale = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -448,6 +493,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<String>? watermarkPosition,
     Expression<double>? watermarkOpacity,
     Expression<int>? watermarkAccentColorArgb,
+    Expression<double>? watermarkFontScale,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -460,6 +506,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       if (watermarkOpacity != null) 'watermark_opacity': watermarkOpacity,
       if (watermarkAccentColorArgb != null)
         'watermark_accent_color_argb': watermarkAccentColorArgb,
+      if (watermarkFontScale != null)
+        'watermark_font_scale': watermarkFontScale,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -473,6 +521,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<String>? watermarkPosition,
     Value<double>? watermarkOpacity,
     Value<int>? watermarkAccentColorArgb,
+    Value<double>? watermarkFontScale,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -485,6 +534,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       watermarkOpacity: watermarkOpacity ?? this.watermarkOpacity,
       watermarkAccentColorArgb:
           watermarkAccentColorArgb ?? this.watermarkAccentColorArgb,
+      watermarkFontScale: watermarkFontScale ?? this.watermarkFontScale,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -514,6 +564,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
         watermarkAccentColorArgb.value,
       );
     }
+    if (watermarkFontScale.present) {
+      map['watermark_font_scale'] = Variable<double>(watermarkFontScale.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -535,6 +588,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('watermarkPosition: $watermarkPosition, ')
           ..write('watermarkOpacity: $watermarkOpacity, ')
           ..write('watermarkAccentColorArgb: $watermarkAccentColorArgb, ')
+          ..write('watermarkFontScale: $watermarkFontScale, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -778,6 +832,42 @@ class $CaptureRecordsTable extends CaptureRecords
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _watermarkLocaleCodeMeta =
+      const VerificationMeta('watermarkLocaleCode');
+  @override
+  late final GeneratedColumn<String> watermarkLocaleCode =
+      GeneratedColumn<String>(
+        'watermark_locale_code',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('zh'),
+      );
+  static const VerificationMeta _locationResolutionMeta =
+      const VerificationMeta('locationResolution');
+  @override
+  late final GeneratedColumn<String> locationResolution =
+      GeneratedColumn<String>(
+        'location_resolution',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('resolved'),
+      );
+  static const VerificationMeta _originalDeletedAtMeta = const VerificationMeta(
+    'originalDeletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> originalDeletedAt =
+      GeneratedColumn<DateTime>(
+        'original_deleted_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -800,6 +890,9 @@ class $CaptureRecordsTable extends CaptureRecords
     address,
     locationOutcome,
     processingAttempts,
+    watermarkLocaleCode,
+    locationResolution,
+    originalDeletedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -971,6 +1064,33 @@ class $CaptureRecordsTable extends CaptureRecords
         ),
       );
     }
+    if (data.containsKey('watermark_locale_code')) {
+      context.handle(
+        _watermarkLocaleCodeMeta,
+        watermarkLocaleCode.isAcceptableOrUnknown(
+          data['watermark_locale_code']!,
+          _watermarkLocaleCodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('location_resolution')) {
+      context.handle(
+        _locationResolutionMeta,
+        locationResolution.isAcceptableOrUnknown(
+          data['location_resolution']!,
+          _locationResolutionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('original_deleted_at')) {
+      context.handle(
+        _originalDeletedAtMeta,
+        originalDeletedAt.isAcceptableOrUnknown(
+          data['original_deleted_at']!,
+          _originalDeletedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1062,6 +1182,18 @@ class $CaptureRecordsTable extends CaptureRecords
         DriftSqlType.int,
         data['${effectivePrefix}processing_attempts'],
       )!,
+      watermarkLocaleCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}watermark_locale_code'],
+      )!,
+      locationResolution: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}location_resolution'],
+      )!,
+      originalDeletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}original_deleted_at'],
+      ),
     );
   }
 
@@ -1095,6 +1227,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
   final String? address;
   final String? locationOutcome;
   final int processingAttempts;
+  final String watermarkLocaleCode;
+  final String locationResolution;
+  final DateTime? originalDeletedAt;
   const CaptureRecord({
     required this.id,
     required this.projectId,
@@ -1116,6 +1251,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     this.address,
     this.locationOutcome,
     required this.processingAttempts,
+    required this.watermarkLocaleCode,
+    required this.locationResolution,
+    this.originalDeletedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1166,6 +1304,11 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       map['location_outcome'] = Variable<String>(locationOutcome);
     }
     map['processing_attempts'] = Variable<int>(processingAttempts);
+    map['watermark_locale_code'] = Variable<String>(watermarkLocaleCode);
+    map['location_resolution'] = Variable<String>(locationResolution);
+    if (!nullToAbsent || originalDeletedAt != null) {
+      map['original_deleted_at'] = Variable<DateTime>(originalDeletedAt);
+    }
     return map;
   }
 
@@ -1213,6 +1356,11 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
           ? const Value.absent()
           : Value(locationOutcome),
       processingAttempts: Value(processingAttempts),
+      watermarkLocaleCode: Value(watermarkLocaleCode),
+      locationResolution: Value(locationResolution),
+      originalDeletedAt: originalDeletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originalDeletedAt),
     );
   }
 
@@ -1242,6 +1390,15 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       address: serializer.fromJson<String?>(json['address']),
       locationOutcome: serializer.fromJson<String?>(json['locationOutcome']),
       processingAttempts: serializer.fromJson<int>(json['processingAttempts']),
+      watermarkLocaleCode: serializer.fromJson<String>(
+        json['watermarkLocaleCode'],
+      ),
+      locationResolution: serializer.fromJson<String>(
+        json['locationResolution'],
+      ),
+      originalDeletedAt: serializer.fromJson<DateTime?>(
+        json['originalDeletedAt'],
+      ),
     );
   }
   @override
@@ -1268,6 +1425,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       'address': serializer.toJson<String?>(address),
       'locationOutcome': serializer.toJson<String?>(locationOutcome),
       'processingAttempts': serializer.toJson<int>(processingAttempts),
+      'watermarkLocaleCode': serializer.toJson<String>(watermarkLocaleCode),
+      'locationResolution': serializer.toJson<String>(locationResolution),
+      'originalDeletedAt': serializer.toJson<DateTime?>(originalDeletedAt),
     };
   }
 
@@ -1292,6 +1452,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     Value<String?> address = const Value.absent(),
     Value<String?> locationOutcome = const Value.absent(),
     int? processingAttempts,
+    String? watermarkLocaleCode,
+    String? locationResolution,
+    Value<DateTime?> originalDeletedAt = const Value.absent(),
   }) => CaptureRecord(
     id: id ?? this.id,
     projectId: projectId ?? this.projectId,
@@ -1321,6 +1484,11 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
         ? locationOutcome.value
         : this.locationOutcome,
     processingAttempts: processingAttempts ?? this.processingAttempts,
+    watermarkLocaleCode: watermarkLocaleCode ?? this.watermarkLocaleCode,
+    locationResolution: locationResolution ?? this.locationResolution,
+    originalDeletedAt: originalDeletedAt.present
+        ? originalDeletedAt.value
+        : this.originalDeletedAt,
   );
   CaptureRecord copyWithCompanion(CaptureRecordsCompanion data) {
     return CaptureRecord(
@@ -1368,6 +1536,15 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       processingAttempts: data.processingAttempts.present
           ? data.processingAttempts.value
           : this.processingAttempts,
+      watermarkLocaleCode: data.watermarkLocaleCode.present
+          ? data.watermarkLocaleCode.value
+          : this.watermarkLocaleCode,
+      locationResolution: data.locationResolution.present
+          ? data.locationResolution.value
+          : this.locationResolution,
+      originalDeletedAt: data.originalDeletedAt.present
+          ? data.originalDeletedAt.value
+          : this.originalDeletedAt,
     );
   }
 
@@ -1393,13 +1570,16 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
           ..write('accuracyMeters: $accuracyMeters, ')
           ..write('address: $address, ')
           ..write('locationOutcome: $locationOutcome, ')
-          ..write('processingAttempts: $processingAttempts')
+          ..write('processingAttempts: $processingAttempts, ')
+          ..write('watermarkLocaleCode: $watermarkLocaleCode, ')
+          ..write('locationResolution: $locationResolution, ')
+          ..write('originalDeletedAt: $originalDeletedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     projectId,
     photoNumber,
@@ -1420,7 +1600,10 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     address,
     locationOutcome,
     processingAttempts,
-  );
+    watermarkLocaleCode,
+    locationResolution,
+    originalDeletedAt,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1444,7 +1627,10 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
           other.accuracyMeters == this.accuracyMeters &&
           other.address == this.address &&
           other.locationOutcome == this.locationOutcome &&
-          other.processingAttempts == this.processingAttempts);
+          other.processingAttempts == this.processingAttempts &&
+          other.watermarkLocaleCode == this.watermarkLocaleCode &&
+          other.locationResolution == this.locationResolution &&
+          other.originalDeletedAt == this.originalDeletedAt);
 }
 
 class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
@@ -1468,6 +1654,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
   final Value<String?> address;
   final Value<String?> locationOutcome;
   final Value<int> processingAttempts;
+  final Value<String> watermarkLocaleCode;
+  final Value<String> locationResolution;
+  final Value<DateTime?> originalDeletedAt;
   final Value<int> rowid;
   const CaptureRecordsCompanion({
     this.id = const Value.absent(),
@@ -1490,6 +1679,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     this.address = const Value.absent(),
     this.locationOutcome = const Value.absent(),
     this.processingAttempts = const Value.absent(),
+    this.watermarkLocaleCode = const Value.absent(),
+    this.locationResolution = const Value.absent(),
+    this.originalDeletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CaptureRecordsCompanion.insert({
@@ -1513,6 +1705,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     this.address = const Value.absent(),
     this.locationOutcome = const Value.absent(),
     this.processingAttempts = const Value.absent(),
+    this.watermarkLocaleCode = const Value.absent(),
+    this.locationResolution = const Value.absent(),
+    this.originalDeletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        projectId = Value(projectId),
@@ -1543,6 +1738,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     Expression<String>? address,
     Expression<String>? locationOutcome,
     Expression<int>? processingAttempts,
+    Expression<String>? watermarkLocaleCode,
+    Expression<String>? locationResolution,
+    Expression<DateTime>? originalDeletedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1566,6 +1764,10 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
       if (address != null) 'address': address,
       if (locationOutcome != null) 'location_outcome': locationOutcome,
       if (processingAttempts != null) 'processing_attempts': processingAttempts,
+      if (watermarkLocaleCode != null)
+        'watermark_locale_code': watermarkLocaleCode,
+      if (locationResolution != null) 'location_resolution': locationResolution,
+      if (originalDeletedAt != null) 'original_deleted_at': originalDeletedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1591,6 +1793,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     Value<String?>? address,
     Value<String?>? locationOutcome,
     Value<int>? processingAttempts,
+    Value<String>? watermarkLocaleCode,
+    Value<String>? locationResolution,
+    Value<DateTime?>? originalDeletedAt,
     Value<int>? rowid,
   }) {
     return CaptureRecordsCompanion(
@@ -1614,6 +1819,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
       address: address ?? this.address,
       locationOutcome: locationOutcome ?? this.locationOutcome,
       processingAttempts: processingAttempts ?? this.processingAttempts,
+      watermarkLocaleCode: watermarkLocaleCode ?? this.watermarkLocaleCode,
+      locationResolution: locationResolution ?? this.locationResolution,
+      originalDeletedAt: originalDeletedAt ?? this.originalDeletedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1683,6 +1891,17 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     if (processingAttempts.present) {
       map['processing_attempts'] = Variable<int>(processingAttempts.value);
     }
+    if (watermarkLocaleCode.present) {
+      map['watermark_locale_code'] = Variable<String>(
+        watermarkLocaleCode.value,
+      );
+    }
+    if (locationResolution.present) {
+      map['location_resolution'] = Variable<String>(locationResolution.value);
+    }
+    if (originalDeletedAt.present) {
+      map['original_deleted_at'] = Variable<DateTime>(originalDeletedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1712,6 +1931,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
           ..write('address: $address, ')
           ..write('locationOutcome: $locationOutcome, ')
           ..write('processingAttempts: $processingAttempts, ')
+          ..write('watermarkLocaleCode: $watermarkLocaleCode, ')
+          ..write('locationResolution: $locationResolution, ')
+          ..write('originalDeletedAt: $originalDeletedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1793,6 +2015,33 @@ class $AppSettingsTable extends AppSettings
         requiredDuringInsert: false,
         defaultValue: const Constant(0xff37c58b),
       );
+  static const VerificationMeta _defaultWatermarkFontScaleMeta =
+      const VerificationMeta('defaultWatermarkFontScale');
+  @override
+  late final GeneratedColumn<double> defaultWatermarkFontScale =
+      GeneratedColumn<double>(
+        'default_watermark_font_scale',
+        aliasedName,
+        false,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(1.0),
+      );
+  static const VerificationMeta _locationPermissionPromptDismissedMeta =
+      const VerificationMeta('locationPermissionPromptDismissed');
+  @override
+  late final GeneratedColumn<bool> locationPermissionPromptDismissed =
+      GeneratedColumn<bool>(
+        'location_permission_prompt_dismissed',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("location_permission_prompt_dismissed" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -1812,6 +2061,8 @@ class $AppSettingsTable extends AppSettings
     defaultWatermarkPosition,
     defaultWatermarkOpacity,
     defaultWatermarkAccentColorArgb,
+    defaultWatermarkFontScale,
+    locationPermissionPromptDismissed,
     updatedAt,
   ];
   @override
@@ -1868,6 +2119,24 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('default_watermark_font_scale')) {
+      context.handle(
+        _defaultWatermarkFontScaleMeta,
+        defaultWatermarkFontScale.isAcceptableOrUnknown(
+          data['default_watermark_font_scale']!,
+          _defaultWatermarkFontScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('location_permission_prompt_dismissed')) {
+      context.handle(
+        _locationPermissionPromptDismissedMeta,
+        locationPermissionPromptDismissed.isAcceptableOrUnknown(
+          data['location_permission_prompt_dismissed']!,
+          _locationPermissionPromptDismissedMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -1909,6 +2178,14 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.int,
         data['${effectivePrefix}default_watermark_accent_color_argb'],
       )!,
+      defaultWatermarkFontScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}default_watermark_font_scale'],
+      )!,
+      locationPermissionPromptDismissed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}location_permission_prompt_dismissed'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -1929,6 +2206,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   final String defaultWatermarkPosition;
   final double defaultWatermarkOpacity;
   final int defaultWatermarkAccentColorArgb;
+  final double defaultWatermarkFontScale;
+  final bool locationPermissionPromptDismissed;
   final DateTime updatedAt;
   const AppSetting({
     required this.id,
@@ -1937,6 +2216,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     required this.defaultWatermarkPosition,
     required this.defaultWatermarkOpacity,
     required this.defaultWatermarkAccentColorArgb,
+    required this.defaultWatermarkFontScale,
+    required this.locationPermissionPromptDismissed,
     required this.updatedAt,
   });
   @override
@@ -1956,6 +2237,12 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     map['default_watermark_accent_color_argb'] = Variable<int>(
       defaultWatermarkAccentColorArgb,
     );
+    map['default_watermark_font_scale'] = Variable<double>(
+      defaultWatermarkFontScale,
+    );
+    map['location_permission_prompt_dismissed'] = Variable<bool>(
+      locationPermissionPromptDismissed,
+    );
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -1970,6 +2257,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       defaultWatermarkPosition: Value(defaultWatermarkPosition),
       defaultWatermarkOpacity: Value(defaultWatermarkOpacity),
       defaultWatermarkAccentColorArgb: Value(defaultWatermarkAccentColorArgb),
+      defaultWatermarkFontScale: Value(defaultWatermarkFontScale),
+      locationPermissionPromptDismissed: Value(
+        locationPermissionPromptDismissed,
+      ),
       updatedAt: Value(updatedAt),
     );
   }
@@ -1992,6 +2283,12 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       defaultWatermarkAccentColorArgb: serializer.fromJson<int>(
         json['defaultWatermarkAccentColorArgb'],
       ),
+      defaultWatermarkFontScale: serializer.fromJson<double>(
+        json['defaultWatermarkFontScale'],
+      ),
+      locationPermissionPromptDismissed: serializer.fromJson<bool>(
+        json['locationPermissionPromptDismissed'],
+      ),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -2011,6 +2308,12 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'defaultWatermarkAccentColorArgb': serializer.toJson<int>(
         defaultWatermarkAccentColorArgb,
       ),
+      'defaultWatermarkFontScale': serializer.toJson<double>(
+        defaultWatermarkFontScale,
+      ),
+      'locationPermissionPromptDismissed': serializer.toJson<bool>(
+        locationPermissionPromptDismissed,
+      ),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -2022,6 +2325,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     String? defaultWatermarkPosition,
     double? defaultWatermarkOpacity,
     int? defaultWatermarkAccentColorArgb,
+    double? defaultWatermarkFontScale,
+    bool? locationPermissionPromptDismissed,
     DateTime? updatedAt,
   }) => AppSetting(
     id: id ?? this.id,
@@ -2033,6 +2338,11 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
         defaultWatermarkOpacity ?? this.defaultWatermarkOpacity,
     defaultWatermarkAccentColorArgb:
         defaultWatermarkAccentColorArgb ?? this.defaultWatermarkAccentColorArgb,
+    defaultWatermarkFontScale:
+        defaultWatermarkFontScale ?? this.defaultWatermarkFontScale,
+    locationPermissionPromptDismissed:
+        locationPermissionPromptDismissed ??
+        this.locationPermissionPromptDismissed,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
@@ -2052,6 +2362,13 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           data.defaultWatermarkAccentColorArgb.present
           ? data.defaultWatermarkAccentColorArgb.value
           : this.defaultWatermarkAccentColorArgb,
+      defaultWatermarkFontScale: data.defaultWatermarkFontScale.present
+          ? data.defaultWatermarkFontScale.value
+          : this.defaultWatermarkFontScale,
+      locationPermissionPromptDismissed:
+          data.locationPermissionPromptDismissed.present
+          ? data.locationPermissionPromptDismissed.value
+          : this.locationPermissionPromptDismissed,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -2067,6 +2384,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write(
             'defaultWatermarkAccentColorArgb: $defaultWatermarkAccentColorArgb, ',
           )
+          ..write('defaultWatermarkFontScale: $defaultWatermarkFontScale, ')
+          ..write(
+            'locationPermissionPromptDismissed: $locationPermissionPromptDismissed, ',
+          )
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -2080,6 +2401,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     defaultWatermarkPosition,
     defaultWatermarkOpacity,
     defaultWatermarkAccentColorArgb,
+    defaultWatermarkFontScale,
+    locationPermissionPromptDismissed,
     updatedAt,
   );
   @override
@@ -2093,6 +2416,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.defaultWatermarkOpacity == this.defaultWatermarkOpacity &&
           other.defaultWatermarkAccentColorArgb ==
               this.defaultWatermarkAccentColorArgb &&
+          other.defaultWatermarkFontScale == this.defaultWatermarkFontScale &&
+          other.locationPermissionPromptDismissed ==
+              this.locationPermissionPromptDismissed &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -2103,6 +2429,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<String> defaultWatermarkPosition;
   final Value<double> defaultWatermarkOpacity;
   final Value<int> defaultWatermarkAccentColorArgb;
+  final Value<double> defaultWatermarkFontScale;
+  final Value<bool> locationPermissionPromptDismissed;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const AppSettingsCompanion({
@@ -2112,6 +2440,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.defaultWatermarkPosition = const Value.absent(),
     this.defaultWatermarkOpacity = const Value.absent(),
     this.defaultWatermarkAccentColorArgb = const Value.absent(),
+    this.defaultWatermarkFontScale = const Value.absent(),
+    this.locationPermissionPromptDismissed = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2122,6 +2452,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.defaultWatermarkPosition = const Value.absent(),
     this.defaultWatermarkOpacity = const Value.absent(),
     this.defaultWatermarkAccentColorArgb = const Value.absent(),
+    this.defaultWatermarkFontScale = const Value.absent(),
+    this.locationPermissionPromptDismissed = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : updatedAt = Value(updatedAt);
@@ -2132,6 +2464,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<String>? defaultWatermarkPosition,
     Expression<double>? defaultWatermarkOpacity,
     Expression<int>? defaultWatermarkAccentColorArgb,
+    Expression<double>? defaultWatermarkFontScale,
+    Expression<bool>? locationPermissionPromptDismissed,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -2145,6 +2479,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         'default_watermark_opacity': defaultWatermarkOpacity,
       if (defaultWatermarkAccentColorArgb != null)
         'default_watermark_accent_color_argb': defaultWatermarkAccentColorArgb,
+      if (defaultWatermarkFontScale != null)
+        'default_watermark_font_scale': defaultWatermarkFontScale,
+      if (locationPermissionPromptDismissed != null)
+        'location_permission_prompt_dismissed':
+            locationPermissionPromptDismissed,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2157,6 +2496,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<String>? defaultWatermarkPosition,
     Value<double>? defaultWatermarkOpacity,
     Value<int>? defaultWatermarkAccentColorArgb,
+    Value<double>? defaultWatermarkFontScale,
+    Value<bool>? locationPermissionPromptDismissed,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -2171,6 +2512,11 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       defaultWatermarkAccentColorArgb:
           defaultWatermarkAccentColorArgb ??
           this.defaultWatermarkAccentColorArgb,
+      defaultWatermarkFontScale:
+          defaultWatermarkFontScale ?? this.defaultWatermarkFontScale,
+      locationPermissionPromptDismissed:
+          locationPermissionPromptDismissed ??
+          this.locationPermissionPromptDismissed,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2203,6 +2549,16 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         defaultWatermarkAccentColorArgb.value,
       );
     }
+    if (defaultWatermarkFontScale.present) {
+      map['default_watermark_font_scale'] = Variable<double>(
+        defaultWatermarkFontScale.value,
+      );
+    }
+    if (locationPermissionPromptDismissed.present) {
+      map['location_permission_prompt_dismissed'] = Variable<bool>(
+        locationPermissionPromptDismissed.value,
+      );
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -2222,6 +2578,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write('defaultWatermarkOpacity: $defaultWatermarkOpacity, ')
           ..write(
             'defaultWatermarkAccentColorArgb: $defaultWatermarkAccentColorArgb, ',
+          )
+          ..write('defaultWatermarkFontScale: $defaultWatermarkFontScale, ')
+          ..write(
+            'locationPermissionPromptDismissed: $locationPermissionPromptDismissed, ',
           )
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -2265,6 +2625,7 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       Value<String> watermarkPosition,
       Value<double> watermarkOpacity,
       Value<int> watermarkAccentColorArgb,
+      Value<double> watermarkFontScale,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -2277,6 +2638,7 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String> watermarkPosition,
       Value<double> watermarkOpacity,
       Value<int> watermarkAccentColorArgb,
+      Value<double> watermarkFontScale,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -2341,6 +2703,11 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<int> get watermarkAccentColorArgb => $composableBuilder(
     column: $table.watermarkAccentColorArgb,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get watermarkFontScale => $composableBuilder(
+    column: $table.watermarkFontScale,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2419,6 +2786,11 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get watermarkFontScale => $composableBuilder(
+    column: $table.watermarkFontScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2462,6 +2834,11 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<int> get watermarkAccentColorArgb => $composableBuilder(
     column: $table.watermarkAccentColorArgb,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get watermarkFontScale => $composableBuilder(
+    column: $table.watermarkFontScale,
     builder: (column) => column,
   );
 
@@ -2531,6 +2908,7 @@ class $$ProjectsTableTableManager
                 Value<String> watermarkPosition = const Value.absent(),
                 Value<double> watermarkOpacity = const Value.absent(),
                 Value<int> watermarkAccentColorArgb = const Value.absent(),
+                Value<double> watermarkFontScale = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2541,6 +2919,7 @@ class $$ProjectsTableTableManager
                 watermarkPosition: watermarkPosition,
                 watermarkOpacity: watermarkOpacity,
                 watermarkAccentColorArgb: watermarkAccentColorArgb,
+                watermarkFontScale: watermarkFontScale,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -2553,6 +2932,7 @@ class $$ProjectsTableTableManager
                 Value<String> watermarkPosition = const Value.absent(),
                 Value<double> watermarkOpacity = const Value.absent(),
                 Value<int> watermarkAccentColorArgb = const Value.absent(),
+                Value<double> watermarkFontScale = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -2563,6 +2943,7 @@ class $$ProjectsTableTableManager
                 watermarkPosition: watermarkPosition,
                 watermarkOpacity: watermarkOpacity,
                 watermarkAccentColorArgb: watermarkAccentColorArgb,
+                watermarkFontScale: watermarkFontScale,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -2646,6 +3027,9 @@ typedef $$CaptureRecordsTableCreateCompanionBuilder =
       Value<String?> address,
       Value<String?> locationOutcome,
       Value<int> processingAttempts,
+      Value<String> watermarkLocaleCode,
+      Value<String> locationResolution,
+      Value<DateTime?> originalDeletedAt,
       Value<int> rowid,
     });
 typedef $$CaptureRecordsTableUpdateCompanionBuilder =
@@ -2670,6 +3054,9 @@ typedef $$CaptureRecordsTableUpdateCompanionBuilder =
       Value<String?> address,
       Value<String?> locationOutcome,
       Value<int> processingAttempts,
+      Value<String> watermarkLocaleCode,
+      Value<String> locationResolution,
+      Value<DateTime?> originalDeletedAt,
       Value<int> rowid,
     });
 
@@ -2804,6 +3191,21 @@ class $$CaptureRecordsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get watermarkLocaleCode => $composableBuilder(
+    column: $table.watermarkLocaleCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get locationResolution => $composableBuilder(
+    column: $table.locationResolution,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get originalDeletedAt => $composableBuilder(
+    column: $table.originalDeletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$ProjectsTableFilterComposer get projectId {
     final $$ProjectsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -2932,6 +3334,21 @@ class $$CaptureRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get watermarkLocaleCode => $composableBuilder(
+    column: $table.watermarkLocaleCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get locationResolution => $composableBuilder(
+    column: $table.locationResolution,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get originalDeletedAt => $composableBuilder(
+    column: $table.originalDeletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProjectsTableOrderingComposer get projectId {
     final $$ProjectsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -3046,6 +3463,21 @@ class $$CaptureRecordsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get watermarkLocaleCode => $composableBuilder(
+    column: $table.watermarkLocaleCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get locationResolution => $composableBuilder(
+    column: $table.locationResolution,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get originalDeletedAt => $composableBuilder(
+    column: $table.originalDeletedAt,
+    builder: (column) => column,
+  );
+
   $$ProjectsTableAnnotationComposer get projectId {
     final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -3120,6 +3552,9 @@ class $$CaptureRecordsTableTableManager
                 Value<String?> address = const Value.absent(),
                 Value<String?> locationOutcome = const Value.absent(),
                 Value<int> processingAttempts = const Value.absent(),
+                Value<String> watermarkLocaleCode = const Value.absent(),
+                Value<String> locationResolution = const Value.absent(),
+                Value<DateTime?> originalDeletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CaptureRecordsCompanion(
                 id: id,
@@ -3142,6 +3577,9 @@ class $$CaptureRecordsTableTableManager
                 address: address,
                 locationOutcome: locationOutcome,
                 processingAttempts: processingAttempts,
+                watermarkLocaleCode: watermarkLocaleCode,
+                locationResolution: locationResolution,
+                originalDeletedAt: originalDeletedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3166,6 +3604,9 @@ class $$CaptureRecordsTableTableManager
                 Value<String?> address = const Value.absent(),
                 Value<String?> locationOutcome = const Value.absent(),
                 Value<int> processingAttempts = const Value.absent(),
+                Value<String> watermarkLocaleCode = const Value.absent(),
+                Value<String> locationResolution = const Value.absent(),
+                Value<DateTime?> originalDeletedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CaptureRecordsCompanion.insert(
                 id: id,
@@ -3188,6 +3629,9 @@ class $$CaptureRecordsTableTableManager
                 address: address,
                 locationOutcome: locationOutcome,
                 processingAttempts: processingAttempts,
+                watermarkLocaleCode: watermarkLocaleCode,
+                locationResolution: locationResolution,
+                originalDeletedAt: originalDeletedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3266,6 +3710,8 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<String> defaultWatermarkPosition,
       Value<double> defaultWatermarkOpacity,
       Value<int> defaultWatermarkAccentColorArgb,
+      Value<double> defaultWatermarkFontScale,
+      Value<bool> locationPermissionPromptDismissed,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -3277,6 +3723,8 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<String> defaultWatermarkPosition,
       Value<double> defaultWatermarkOpacity,
       Value<int> defaultWatermarkAccentColorArgb,
+      Value<double> defaultWatermarkFontScale,
+      Value<bool> locationPermissionPromptDismissed,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -3319,6 +3767,17 @@ class $$AppSettingsTableFilterComposer
     column: $table.defaultWatermarkAccentColorArgb,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<double> get defaultWatermarkFontScale => $composableBuilder(
+    column: $table.defaultWatermarkFontScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get locationPermissionPromptDismissed =>
+      $composableBuilder(
+        column: $table.locationPermissionPromptDismissed,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
@@ -3366,6 +3825,17 @@ class $$AppSettingsTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<double> get defaultWatermarkFontScale => $composableBuilder(
+    column: $table.defaultWatermarkFontScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get locationPermissionPromptDismissed =>
+      $composableBuilder(
+        column: $table.locationPermissionPromptDismissed,
+        builder: (column) => ColumnOrderings(column),
+      );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -3405,6 +3875,17 @@ class $$AppSettingsTableAnnotationComposer
   GeneratedColumn<int> get defaultWatermarkAccentColorArgb =>
       $composableBuilder(
         column: $table.defaultWatermarkAccentColorArgb,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<double> get defaultWatermarkFontScale => $composableBuilder(
+    column: $table.defaultWatermarkFontScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get locationPermissionPromptDismissed =>
+      $composableBuilder(
+        column: $table.locationPermissionPromptDismissed,
         builder: (column) => column,
       );
 
@@ -3450,6 +3931,9 @@ class $$AppSettingsTableTableManager
                 Value<double> defaultWatermarkOpacity = const Value.absent(),
                 Value<int> defaultWatermarkAccentColorArgb =
                     const Value.absent(),
+                Value<double> defaultWatermarkFontScale = const Value.absent(),
+                Value<bool> locationPermissionPromptDismissed =
+                    const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AppSettingsCompanion(
@@ -3460,6 +3944,9 @@ class $$AppSettingsTableTableManager
                 defaultWatermarkOpacity: defaultWatermarkOpacity,
                 defaultWatermarkAccentColorArgb:
                     defaultWatermarkAccentColorArgb,
+                defaultWatermarkFontScale: defaultWatermarkFontScale,
+                locationPermissionPromptDismissed:
+                    locationPermissionPromptDismissed,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -3472,6 +3959,9 @@ class $$AppSettingsTableTableManager
                 Value<double> defaultWatermarkOpacity = const Value.absent(),
                 Value<int> defaultWatermarkAccentColorArgb =
                     const Value.absent(),
+                Value<double> defaultWatermarkFontScale = const Value.absent(),
+                Value<bool> locationPermissionPromptDismissed =
+                    const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => AppSettingsCompanion.insert(
@@ -3482,6 +3972,9 @@ class $$AppSettingsTableTableManager
                 defaultWatermarkOpacity: defaultWatermarkOpacity,
                 defaultWatermarkAccentColorArgb:
                     defaultWatermarkAccentColorArgb,
+                defaultWatermarkFontScale: defaultWatermarkFontScale,
+                locationPermissionPromptDismissed:
+                    locationPermissionPromptDismissed,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
