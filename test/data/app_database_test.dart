@@ -420,7 +420,7 @@ void main() {
 
     final updated = await database.watchCaptureById(pending.id).first;
     expect(updated?.status, CaptureStatus.captured);
-    expect(updated?.photoNumber, '东区厂房改造-project--SM-20260716-001');
+    expect(updated?.photoNumber, '东区厂房改造-project1-SM-20260716-001');
   });
 
   test('watchCaptureById emits null for unknown id', () async {

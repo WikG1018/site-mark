@@ -4,17 +4,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/domain/photo_number.dart';
 
 void main() {
-  test('formats a project-prefixed daily photo number with project id', () {
-    expect(
-      formatPhotoNumber(
-        projectName: '东区厂房改造',
-        projectId: 'project-1',
-        capturedAt: DateTime(2026, 7, 17, 9, 5),
-        sequence: 1,
-      ),
-      '东区厂房改造-project--SM-20260717-001',
-    );
-  });
+  test(
+    'formats a project-prefixed daily photo number with full project id',
+    () {
+      expect(
+        formatPhotoNumber(
+          projectName: '东区厂房改造',
+          projectId: 'project-1',
+          capturedAt: DateTime(2026, 7, 17, 9, 5),
+          sequence: 1,
+        ),
+        '东区厂房改造-project1-SM-20260717-001',
+      );
+    },
+  );
 
   test('sanitizes unsafe characters and repeated separators', () {
     expect(safePhotoProjectName('  A 区 / 风管::检查  '), 'A_区_风管_检查');
@@ -44,6 +47,45 @@ void main() {
     );
   });
 
+  test('rejects project ids that are not safe ASCII', () {
+    expect(
+      () => formatPhotoNumber(
+        projectName: '项目',
+        projectId: '',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => formatPhotoNumber(
+        projectName: '项目',
+        projectId: 'a/b',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => formatPhotoNumber(
+        projectName: '项目',
+        projectId: '项目一',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => formatPhotoNumber(
+        projectName: '项目',
+        projectId: 'a b',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('preserves punctuation outside the forbidden set', () {
     expect(safePhotoProjectName('东区厂房改造（一期）'), '东区厂房改造（一期）');
     expect(safePhotoProjectName('A.B'), 'A.B');
@@ -59,7 +101,7 @@ void main() {
         capturedAt: DateTime(2026, 7, 17),
         sequence: 1,
       ),
-      '东区厂房改造（一期）-project--SM-20260717-001',
+      '东区厂房改造（一期）-project1-SM-20260717-001',
     );
     expect(
       formatPhotoNumber(
@@ -68,7 +110,7 @@ void main() {
         capturedAt: DateTime(2026, 7, 17),
         sequence: 1,
       ),
-      'A.B-project--SM-20260717-001',
+      'A.B-project1-SM-20260717-001',
     );
   });
 
@@ -100,8 +142,9 @@ void main() {
   test(
     'different project ids with same sanitized name produce different numbers',
     () {
-      // Two projects whose names sanitize to the same value but whose
-      // IDs differ in the first 8 characters produce distinct file names.
+      // Two projects whose names sanitize to the same value but whose IDs
+      // differ produce distinct file names because the full project ID
+      // (hyphens stripped) is embedded.
       final a = formatPhotoNumber(
         projectName: 'A/B',
         projectId: 'aaaa1111-2222-3333-4444-555566667777',
@@ -114,8 +157,8 @@ void main() {
         capturedAt: DateTime(2026, 7, 17),
         sequence: 1,
       );
-      expect(a, 'A_B-aaaa1111-SM-20260717-001');
-      expect(b, 'A_B-bbbb2222-SM-20260717-001');
+      expect(a, 'A_B-aaaa1111222233334444555566667777-SM-20260717-001');
+      expect(b, 'A_B-bbbb2222333344445555666677778888-SM-20260717-001');
       expect(a, isNot(equals(b)));
       // The JPEG display names passed to MediaStore are also distinct, so
       // the Android lookup-by-DISPLAY_NAME cannot silently overwrite one
@@ -128,7 +171,7 @@ void main() {
     'different project ids with identical project names produce different numbers',
     () {
       // Two projects with exactly the same display name must still produce
-      // distinct file names because the short project id is embedded.
+      // distinct file names because the full project ID is embedded.
       final a = formatPhotoNumber(
         projectName: '东区厂房改造',
         projectId: 'aaaa1111-2222-3333-4444-555566667777',
@@ -141,10 +184,31 @@ void main() {
         capturedAt: DateTime(2026, 7, 17),
         sequence: 1,
       );
-      expect(a, '东区厂房改造-aaaa1111-SM-20260717-001');
-      expect(b, '东区厂房改造-bbbb2222-SM-20260717-001');
+      expect(a, '东区厂房改造-aaaa1111222233334444555566667777-SM-20260717-001');
+      expect(b, '东区厂房改造-bbbb2222333344445555666677778888-SM-20260717-001');
       expect(a, isNot(equals(b)));
       expect('$a.jpg', isNot(equals('$b.jpg')));
     },
   );
+
+  test('different ids sharing first 8 chars stay distinct', () {
+    // Regression: a short prefix would collide here. Using the full UUID
+    // (hyphens stripped) keeps the two project keys distinct.
+    final a = formatPhotoNumber(
+      projectName: '同名项目',
+      projectId: 'aaaaaaaa-1111-2222-3333-444444444444',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    final b = formatPhotoNumber(
+      projectName: '同名项目',
+      projectId: 'aaaaaaaa-9999-8888-7777-666666666666',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    expect(a, '同名项目-aaaaaaaa111122223333444444444444-SM-20260717-001');
+    expect(b, '同名项目-aaaaaaaa999988887777666666666666-SM-20260717-001');
+    expect(a, isNot(b));
+    expect('$a.jpg', isNot(equals('$b.jpg')));
+  });
 }

@@ -17,11 +17,8 @@ String safePhotoProjectName(
     '_',
   );
   safe = safe.replaceAll(RegExp(r'_+'), '_');
-  // Truncate by code points first as a coarse upper bound, then refine by
-  // the UTF-8 byte budget below.
   final byteBudget = maxJpegNameBytes - suffixReserve;
   if (byteBudget < 1) {
-    // If the reserve is somehow too large, fall back to a small budget.
     return _trimToUtf8Bytes(safe, 1);
   }
   safe = _trimToUtf8Bytes(safe, byteBudget);
@@ -47,11 +44,20 @@ String _trimToUtf8Bytes(String value, int maxBytes) {
 
 /// Formats a unique photo number for filesystem use.
 ///
-/// Format: `{safeProjectName}-{projectIdShort}-SM-{yyyyMMdd}-{seq}`
-/// where `projectIdShort` is the first 8 characters of the project ID.
-/// This ensures two projects with the same (or sanitized-to-same) name
-/// produce different file names, preventing silent overwrites in the
-/// Android MediaStore and ZIP export.
+/// Format: `{safeProjectName}-{projectKey}-SM-{yyyyMMdd}-{seq}`
+/// where `projectKey` is the project ID with hyphens removed (so a 36-char
+/// UUID becomes its 32-char hex form). Embedding the *full* project ID —
+/// not a short prefix — guarantees that two distinct project IDs always
+/// produce distinct file names, even when the project display names are
+/// identical or sanitize to the same value. This prevents silent
+/// overwrites in the Android MediaStore and ZIP export.
+///
+/// [projectId] must be a non-empty ASCII identifier matching
+/// `^[A-Za-z0-9_-]+$`. This matches the Rust `safe_archive_component`
+/// contract and prevents `/`, whitespace, or non-ASCII characters from
+/// being embedded in the file name. The byte budget for the project name
+/// is computed from the actual UTF-8 byte length of the suffix so the
+/// final JPEG name never exceeds 255 bytes.
 String formatPhotoNumber({
   required String projectName,
   required String projectId,
@@ -61,17 +67,26 @@ String formatPhotoNumber({
   if (sequence < 1) {
     throw ArgumentError.value(sequence, 'sequence', 'Must be positive');
   }
+  if (projectId.isEmpty || !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(projectId)) {
+    throw ArgumentError.value(
+      projectId,
+      'projectId',
+      'Expected a non-empty ASCII identifier (A-Z, a-z, 0-9, _, -)',
+    );
+  }
   String two(int value) => value.toString().padLeft(2, '0');
   final date =
       '${capturedAt.year.toString().padLeft(4, '0')}'
       '${two(capturedAt.month)}${two(capturedAt.day)}';
   final seq = sequence.toString().padLeft(3, '0');
-  // Suffix = "-{projectIdShort}-SM-{date}-{seq}.jpg"
-  // Compute reserve dynamically from the actual suffix length.
-  final projectIdShort = projectId.length >= 8
-      ? projectId.substring(0, 8)
-      : projectId;
-  final suffix = '-$projectIdShort-SM-$date-$seq.jpg';
-  final safe = safePhotoProjectName(projectName, suffixReserve: suffix.length);
-  return '$safe-$projectIdShort-SM-$date-$seq';
+  // Strip hyphens so a 36-char UUID collapses to its 32-char hex form.
+  // Two distinct UUIDs always differ in at least one hex digit, so the
+  // resulting photo numbers are deterministically distinct.
+  final projectKey = projectId.replaceAll('-', '');
+  final suffix = '-$projectKey-SM-$date-$seq.jpg';
+  // Use UTF-8 byte length, not String.length (UTF-16 code units), so the
+  // budget stays correct even if a non-ASCII projectId is ever supplied.
+  final suffixBytes = utf8.encode(suffix).length;
+  final safe = safePhotoProjectName(projectName, suffixReserve: suffixBytes);
+  return '$safe-$projectKey-SM-$date-$seq';
 }

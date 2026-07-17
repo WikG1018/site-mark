@@ -68,7 +68,7 @@ void main() {
     for (var i = 0; i < attempts; i++) {
       await database.incrementProcessingAttempts('capture-1');
     }
-    expect(captured.photoNumber, '东区厂房改造-project--SM-20260716-001');
+    expect(captured.photoNumber, '东区厂房改造-project1-SM-20260716-001');
   }
 
   /// Seeds a capture stuck in `rendering` with the original hash already
@@ -96,9 +96,9 @@ void main() {
     expect(record?.originalSha256, _digestA);
     expect(record?.publishedUri, 'content://media/site-mark/1');
     expect(record?.processingAttempts, 1);
-    expect(platform.publishedNames, ['东区厂房改造-project--SM-20260716-001']);
+    expect(platform.publishedNames, ['东区厂房改造-project1-SM-20260716-001']);
     expect(images.lastRenderRequest?.sourcePath, '/private/capture-1.jpg');
-    expect(images.lastRenderRequest?.photoNumber, '东区厂房改造-project--SM-20260716-001');
+    expect(images.lastRenderRequest?.photoNumber, '东区厂房改造-project1-SM-20260716-001');
   });
 
   test(
@@ -148,7 +148,7 @@ void main() {
 
       expect(first, CaptureProcessResult.succeeded);
       expect(second, CaptureProcessResult.alreadyComplete);
-      expect(platform.publishedNames, ['东区厂房改造-project--SM-20260716-001']);
+      expect(platform.publishedNames, ['东区厂房改造-project1-SM-20260716-001']);
       expect(
         (await database.captureById('capture-1'))?.status,
         CaptureStatus.ready,
@@ -451,7 +451,7 @@ void main() {
       final record = await database.captureById('capture-1');
       expect(record?.status, CaptureStatus.ready);
       expect(record?.originalSha256, _digestA);
-      expect(platform.publishedNames, ['东区厂房改造-project--SM-20260716-001']);
+      expect(platform.publishedNames, ['东区厂房改造-project1-SM-20260716-001']);
     },
   );
 
