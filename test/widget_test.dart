@@ -517,6 +517,91 @@ void main() {
       await disposeApp(tester);
     },
   );
+
+  // Task 4: capture list edit mode and batch action bar.
+
+  testWidgets('project detail edit mode shows checkboxes and batch bar', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Checkbox), findsWidgets);
+    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('all records edit mode shows checkboxes and batch bar', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.byTooltip('全部记录'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Checkbox), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('changing date filter clears project detail selection', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    bool anyChecked() => tester
+        .widgetList<Checkbox>(find.byType(Checkbox))
+        .any((cb) => cb.value == true);
+    expect(anyChecked(), isTrue);
+
+    await tester.tap(find.byKey(const Key('filter-year')));
+    await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '2026'));
+    await tester.pumpAndSettle();
+
+    expect(anyChecked(), isFalse);
+    await disposeApp(tester);
+  });
+
+  testWidgets('project detail batch bar fits at 360dp', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester);
+  });
 }
 
 class _WidgetTestPlatformServices implements PlatformServices {

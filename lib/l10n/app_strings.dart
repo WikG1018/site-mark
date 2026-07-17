@@ -157,6 +157,30 @@ class AppStrings {
   String get locationPermanentlyDeniedHint => _english
       ? 'Location permission was denied. Open system settings to enable it.'
       : '定位权限已被拒绝，请前往系统设置开启。';
+
+  // Capture list edit mode and batch actions (Task 4)
+  String get editRecords => _english ? 'Edit records' : '编辑记录';
+  String get done => _english ? 'Done' : '完成';
+  String get selectAll => _english ? 'Select all' : '全选';
+  String get exportSelection => _english ? 'Export selection' : '导出所选';
+  String get saveToGallery => _english ? 'Save to gallery' : '保存到相册';
+  String get clearOriginals => _english ? 'Clear originals' : '清理原图';
+  String get deleteAll => _english ? 'Delete all' : '全部删除';
+  String selectedCount(int n) => _english ? '$n selected' : '已选 $n 张';
+  String actionProgress(int completed, int total) =>
+      _english ? 'Processing $completed/$total' : '正在处理 $completed/$total';
+  String actionResult(int succeeded, int skipped, int failed) => _english
+      ? 'Succeeded $succeeded, skipped $skipped, failed $failed'
+      : '成功 $succeeded，跳过 $skipped，失败 $failed';
+  String confirmClearOriginals(int n) => _english
+      ? 'Confirm clearing $n originals? Watermarked photos, published images, database records and photo numbers are preserved.'
+      : '确认清理 $n 张原图？水印成片、已发布图片、数据库记录和编号会保留。';
+  String confirmDeleteAll(int n) => _english
+      ? 'Confirm permanently deleting $n photos? Originals, watermarked photos, published images and database records will be deleted.'
+      : '确认彻底删除 $n 张照片？将删除原图、成片、已发布图片和数据库记录。';
+  String get originalRetained => _english ? 'Original retained' : '原图已保留';
+  String get originalCleared => _english ? 'Original cleared' : '原图已清理';
+  String get originalMissing => _english ? 'Original missing' : '原图缺失';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

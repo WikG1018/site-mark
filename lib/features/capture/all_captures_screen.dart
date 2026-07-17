@@ -4,8 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
+import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
+import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
@@ -26,13 +29,82 @@ class AllCapturesScreen extends ConsumerStatefulWidget {
 
 class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   CaptureFilter _filter = const CaptureFilter();
+  final CaptureSelectionController _selectionController =
+      CaptureSelectionController();
+
+  /// Latest filtered captures emitted by the inner StreamBuilder. Updated
+  /// synchronously during build (no `setState`) so the AppBar's select-all
+  /// action and the bottom action bar can resolve status without an extra
+  /// async hop. Stays empty until the first emit.
+  List<CaptureSummary> _latestCaptures = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectionController.addListener(_onSelectionChanged);
+  }
+
+  void _onSelectionChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _selectionController.removeListener(_onSelectionChanged);
+    _selectionController.dispose();
+    super.dispose();
+  }
+
+  void _onFilterChanged(CaptureFilter next) {
+    setState(() {
+      _filter = next;
+      _selectionController.clearForFilterChange();
+    });
+  }
+
+  List<String> _selectableIds(List<CaptureSummary> captures) {
+    return captures
+        .where(
+          (summary) =>
+              summary.capture.status == CaptureStatus.ready ||
+              summary.capture.status == CaptureStatus.failed,
+        )
+        .map((summary) => summary.capture.id)
+        .toList(growable: false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final database = ref.watch(databaseProvider);
+    final editing = _selectionController.editing;
     return Scaffold(
-      appBar: AppBar(title: Text(strings.allRecords)),
+      appBar: AppBar(
+        title: Text(strings.allRecords),
+        actions: [
+          if (editing)
+            IconButton(
+              key: const Key('select-all-captures'),
+              onPressed: () {
+                _selectionController.selectAll(_selectableIds(_latestCaptures));
+              },
+              tooltip: strings.selectAll,
+              icon: const Icon(Icons.select_all_outlined),
+            ),
+          IconButton(
+            key: const Key('edit-captures'),
+            onPressed: () {
+              if (_selectionController.editing) {
+                _selectionController.exit();
+              } else {
+                _selectionController.enter();
+              }
+            },
+            tooltip: editing ? strings.done : strings.editRecords,
+            icon: Icon(editing ? Icons.done : Icons.edit_outlined),
+          ),
+        ],
+      ),
       body: StreamBuilder<List<Project>>(
         stream: database.watchProjects(),
         builder: (context, projectSnapshot) {
@@ -68,6 +140,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                           );
                         }
                         final rows = filteredSnapshot.data!;
+                        _latestCaptures = rows;
                         if (rows.isEmpty) {
                           return Center(
                             child: Padding(
@@ -89,12 +162,23 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                               const SizedBox(height: 10),
                           itemBuilder: (context, index) {
                             final summary = rows[index];
+                            final id = summary.capture.id;
                             return CaptureRecordCard(
                               summary: summary,
                               showProjectName: true,
+                              selectionMode: editing,
+                              selected: _selectionController.selectedIds
+                                  .contains(id),
+                              selectable:
+                                  summary.capture.status ==
+                                      CaptureStatus.ready ||
+                                  summary.capture.status ==
+                                      CaptureStatus.failed,
+                              onSelectedChanged: (_) =>
+                                  _selectionController.toggle(id),
                               onTap: () => context.go(
                                 '/projects/${summary.capture.projectId}'
-                                '/captures/${summary.capture.id}',
+                                '/captures/$id',
                               ),
                             );
                           },
@@ -108,6 +192,16 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
           );
         },
       ),
+      bottomNavigationBar:
+          editing && _selectionController.selectedIds.isNotEmpty
+          ? CaptureBatchActionBar(
+              controller: _selectionController,
+              mediaService: ref.watch(captureMediaServiceProvider),
+              exportService: ref.watch(projectExportServiceProvider),
+              shareService: ref.watch(shareFileServiceProvider),
+              summaries: _latestCaptures,
+            )
+          : null,
     );
   }
 
@@ -145,6 +239,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                 // must drop a previously-selected year/month/day that may not
                 // exist under the new project.
                 _filter = CaptureFilter(projectId: value);
+                _selectionController.clearForFilterChange();
               }),
             ),
           ),
@@ -154,7 +249,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
               padding: EdgeInsets.zero,
               filter: _filter,
               summaries: allSummaries,
-              onChanged: (next) => setState(() => _filter = next),
+              onChanged: _onFilterChanged,
             ),
           ),
         ],
