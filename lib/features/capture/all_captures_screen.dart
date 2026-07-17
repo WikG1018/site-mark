@@ -6,6 +6,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
+import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 /// Global capture-records surface.
@@ -117,42 +118,44 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     List<Project> projects,
     List<CaptureSummary> allSummaries,
   ) {
-    final entries = <DropdownMenuEntry<String?>>[
-      DropdownMenuEntry<String?>(value: null, label: strings.allProjects),
-    ];
+    final projectEntries = <(String?, String)>[(null, strings.allProjects)];
     for (final project in projects) {
-      entries.add(
-        DropdownMenuEntry<String?>(value: project.id, label: project.name),
-      );
+      projectEntries.add((project.id, project.name));
     }
+    String projectLabel() {
+      if (_filter.projectId == null) return strings.allProjects;
+      for (final project in projects) {
+        if (project.id == _filter.projectId) return project.name;
+      }
+      return strings.allProjects;
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Column(
+      child: Row(
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SizedBox(
-              width: 240,
-              child: DropdownMenu<String?>(
-                key: const Key('project-filter'),
-                initialSelection: _filter.projectId,
-                expandedInsets: EdgeInsets.zero,
-                dropdownMenuEntries: entries,
-                onSelected: (value) => setState(() {
-                  // Reset the entire filter so the project -> year -> month ->
-                  // day cascade clears invalid children: changing the project
-                  // must drop a previously-selected year/month/day that may not
-                  // exist under the new project.
-                  _filter = CaptureFilter(projectId: value);
-                }),
-              ),
+          Expanded(
+            child: CompactFilterMenu<String?>(
+              key: const Key('project-filter'),
+              label: projectLabel(),
+              entries: projectEntries,
+              onSelected: (value) => setState(() {
+                // Reset the entire filter so the project -> year -> month ->
+                // day cascade clears invalid children: changing the project
+                // must drop a previously-selected year/month/day that may not
+                // exist under the new project.
+                _filter = CaptureFilter(projectId: value);
+              }),
             ),
           ),
-          const SizedBox(height: 4),
-          CaptureDateFilterBar(
-            filter: _filter,
-            summaries: allSummaries,
-            onChanged: (next) => setState(() => _filter = next),
+          Expanded(
+            flex: 3,
+            child: CaptureDateFilterBar(
+              padding: EdgeInsets.zero,
+              filter: _filter,
+              summaries: allSummaries,
+              onChanged: (next) => setState(() => _filter = next),
+            ),
           ),
         ],
       ),

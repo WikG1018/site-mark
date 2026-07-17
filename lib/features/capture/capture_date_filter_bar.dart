@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
+import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 /// Cascading year → month → day filter for capture lists.
@@ -10,17 +11,24 @@ import 'package:sitemark/l10n/app_strings.dart';
 /// resets month and day; selecting a month resets day; clearing a year resets
 /// the entire selection. Disabled month/day controls show the "all" label
 /// until their parent is selected.
+///
+/// The three controls share one [Row] of equal [Expanded] children so they fit
+/// on a single line at 360dp. The [padding] defaults to a small horizontal
+/// inset; callers that embed this bar inside their own [Row] (e.g. the
+/// all-records screen beside a project menu) pass [EdgeInsets.zero].
 class CaptureDateFilterBar extends StatelessWidget {
   const CaptureDateFilterBar({
     super.key,
     required this.filter,
     required this.summaries,
     required this.onChanged,
+    this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
   });
 
   final CaptureFilter filter;
   final List<CaptureSummary> summaries;
   final ValueChanged<CaptureFilter> onChanged;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
@@ -51,38 +59,41 @@ class CaptureDateFilterBar extends StatelessWidget {
           );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      padding: padding,
+      child: Row(
         children: [
-          _menu(
-            key: const Key('filter-year'),
-            value: filter.year,
-            options: years,
-            allLabel: strings.allYears,
-            labelFor: (value) => value.toString(),
-            enabled: true,
-            onChanged: (value) => onChanged(filter.selectYear(value)),
+          Expanded(
+            child: _menu(
+              key: const Key('filter-year'),
+              value: filter.year,
+              options: years,
+              allLabel: strings.allYears,
+              labelFor: (value) => value.toString(),
+              enabled: true,
+              onChanged: (value) => onChanged(filter.selectYear(value)),
+            ),
           ),
-          _menu(
-            key: const Key('filter-month'),
-            value: filter.month,
-            options: months,
-            allLabel: strings.allMonths,
-            labelFor: (value) => '$value${strings.monthSuffix}',
-            enabled: filter.year != null,
-            onChanged: (value) => onChanged(filter.selectMonth(value)),
+          Expanded(
+            child: _menu(
+              key: const Key('filter-month'),
+              value: filter.month,
+              options: months,
+              allLabel: strings.allMonths,
+              labelFor: (value) => '$value${strings.monthSuffix}',
+              enabled: filter.year != null,
+              onChanged: (value) => onChanged(filter.selectMonth(value)),
+            ),
           ),
-          _menu(
-            key: const Key('filter-day'),
-            value: filter.day,
-            options: days,
-            allLabel: strings.allDays,
-            labelFor: (value) => '$value${strings.daySuffix}',
-            enabled: filter.year != null && filter.month != null,
-            onChanged: (value) => onChanged(filter.selectDay(value)),
+          Expanded(
+            child: _menu(
+              key: const Key('filter-day'),
+              value: filter.day,
+              options: days,
+              allLabel: strings.allDays,
+              labelFor: (value) => '$value${strings.daySuffix}',
+              enabled: filter.year != null && filter.month != null,
+              onChanged: (value) => onChanged(filter.selectDay(value)),
+            ),
           ),
         ],
       ),
@@ -104,24 +115,17 @@ class CaptureDateFilterBar extends StatelessWidget {
     required bool enabled,
     required ValueChanged<int?> onChanged,
   }) {
-    final entries = <DropdownMenuEntry<int?>>[];
-    entries.add(DropdownMenuEntry<int?>(value: null, label: allLabel));
+    final entries = <(int?, String)>[(null, allLabel)];
     for (final option in options) {
-      entries.add(
-        DropdownMenuEntry<int?>(value: option, label: labelFor(option)),
-      );
+      entries.add((option, labelFor(option)));
     }
-    return SizedBox(
-      width: 140,
-      child: DropdownMenu<int?>(
-        key: key,
-        enabled: enabled,
-        initialSelection: value,
-        expandedInsets: EdgeInsets.zero,
-        menuHeight: 320,
-        dropdownMenuEntries: entries,
-        onSelected: (next) => onChanged(next),
-      ),
+    final label = value == null ? allLabel : labelFor(value);
+    return CompactFilterMenu<int?>(
+      key: key,
+      label: label,
+      entries: entries,
+      enabled: enabled,
+      onSelected: onChanged,
     );
   }
 }

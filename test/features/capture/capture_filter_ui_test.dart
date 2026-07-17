@@ -1,3 +1,4 @@
+import 'dart:math' show max, min;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -311,6 +312,85 @@ void main() {
     expect(find.widgetWithText(MenuItemButton, '2026'), findsOneWidget);
     expect(find.widgetWithText(MenuItemButton, '2025'), findsNothing);
 
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+  testWidgets('date controls share one row at 360dp', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final filter = ValueNotifier(const CaptureFilter());
+    await tester.pumpWidget(filterHarnessLive(filter));
+    await tester.pumpAndSettle();
+    final tops = [
+      tester.getTopLeft(find.byKey(const Key('filter-year'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-month'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-day'))).dy,
+    ];
+    expect(tops.reduce(max) - tops.reduce(min), lessThan(1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('all-records controls share one row at 360dp', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final pending = await database.createPendingCapture(
+      id: 'capture-a',
+      projectId: 'project-1',
+      originalPath: '/private/capture-a.jpg',
+      workLocation: 'A 区',
+      workContent: '风管',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 9),
+    );
+    final captured = await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 30),
+    );
+    final rendering = await database.markRendering(
+      captureId: captured.id,
+      originalSha256:
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+    await database.markReady(
+      captureId: rendering.id,
+      publishedUri: 'content://media/site-mark/capture-a',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const AllCapturesScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final tops = [
+      tester.getTopLeft(find.byKey(const Key('project-filter'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-year'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-month'))).dy,
+      tester.getTopLeft(find.byKey(const Key('filter-day'))).dy,
+    ];
+    expect(tops.reduce(max) - tops.reduce(min), lessThan(1));
+    expect(tester.takeException(), isNull);
+
+    // Unmount the tree so the StreamBuilder subscriptions to the Drift
+    // streams are cancelled before the database closes.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   });
