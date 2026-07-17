@@ -48,7 +48,7 @@ void main() {
 
     expect(result.outputZipPath, '/exports/project-1.zip');
     expect(images.request?.projectName, '东区厂房改造');
-    expect(images.request?.photos.single.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
+    expect(images.request?.photos.single.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
     expect(
       images.request?.photos.single.watermarkedPath,
       '/rendered/capture-1.jpg',
@@ -94,12 +94,12 @@ void main() {
     expect(images.selectionRequest!.projects[0].projectName, '东区厂房改造');
     expect(
       images.selectionRequest!.projects[0].photos.single.photoNumber,
-      '东区厂房改造-project-a-SM-20260716-001',
+      '东区厂房改造~project-a-SM-20260716-001',
     );
     expect(images.selectionRequest!.projects[1].projectId, 'project-b');
     expect(
       images.selectionRequest!.projects[1].photos.single.photoNumber,
-      '西区市政给水-project-b-SM-20260716-001',
+      '西区市政给水~project-b-SM-20260716-001',
     );
     expect(images.selectionRequest!.includeOriginals, isFalse);
   });

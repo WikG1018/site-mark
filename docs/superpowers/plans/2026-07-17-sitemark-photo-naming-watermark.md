@@ -10,9 +10,9 @@
 
 ## Global Constraints
 
-- New numbers use `{safeProjectName}-{projectId}-SM-{yyyyMMdd}-{sequence padded to at least 3 digits}`, where `projectId` is embedded **verbatim** (hyphens preserved). Preserving hyphens keeps the project-ID-to-file-name mapping strictly one-to-one — `project-1` and `project1` stay distinct — and two distinct project IDs always produce distinct file names.
+- New numbers use `{safeProjectName}~{projectId}-SM-{yyyyMMdd}-{sequence padded to at least 3 digits}`, where `~` is a **dedicated field separator** (blacklisted in `safePhotoProjectName`, excluded from the `projectId` ASCII whitelist) and `projectId` is embedded **verbatim** (hyphens preserved). This prevents cross-field collisions such as `(A, B-C)` vs `(A-B, C)`, and preserving hyphens keeps the project-ID-to-file-name mapping strictly one-to-one.
 - Validate `projectId` against `^[A-Za-z0-9_-]+$` (matches the Rust `safe_archive_component` ASCII contract) before generating the number. Also reject `projectId` when the suffix bytes plus the `Project` fallback bytes would exceed 255, so the final JPEG name can never exceed the POSIX `NAME_MAX` of 255 bytes.
-- Replace control characters (incl. C1), Unicode whitespace, and `/ \ : * ? " < > |` with one underscore; collapse repeated underscores; trim leading/trailing dots, spaces, and underscores.
+- Replace control characters (incl. C1), `~`, Unicode whitespace, and `/ \ : * ? " < > |` with one underscore; collapse repeated underscores; trim leading/trailing dots, spaces, and underscores.
 - Truncate the sanitized project-name component to a UTF-8 byte budget of `255 - suffixBytes`, where `suffixBytes` is the UTF-8 byte length of `-{projectKey}-SM-{yyyyMMdd}-{seq}.jpg`. Truncation iterates Unicode runes so multi-byte characters (CJK, Emoji) are never split. Fall back to `Project` when empty.
 - Apply the new number only when a future capture reaches `markCaptured`; do not migrate or rename existing records or gallery files.
 - Regenerating an existing photo preserves its stored number.
@@ -39,14 +39,16 @@
 - Create: `lib/domain/photo_number.dart`
 
 **Interfaces:**
-- Consumes: raw project name, capture-local `DateTime`, and positive daily sequence.
-- Produces: `safePhotoProjectName(String) -> String` and `formatPhotoNumber({required String projectName, required DateTime capturedAt, required int sequence}) -> String`.
+- Consumes: raw project name, project ID (ASCII `^[A-Za-z0-9_-]+$`), capture-local `DateTime`, and positive daily sequence.
+- Produces: `safePhotoProjectName(String, {int maxJpegNameBytes, int suffixReserve}) -> String`, `const fallbackProjectName = 'Project'`, and `formatPhotoNumber({required String projectName, required String projectId, required DateTime capturedAt, required int sequence}) -> String`. Output format: `{safeProjectName}~{projectId}-SM-{yyyyMMdd}-{seq}`.
 
 - [ ] **Step 1: Write the failing formatter tests**
 
 Create `test/domain/photo_number_test.dart`:
 
 ```dart
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/domain/photo_number.dart';
 
@@ -59,7 +61,7 @@ void main() {
         capturedAt: DateTime(2026, 7, 17, 9, 5),
         sequence: 1,
       ),
-      '东区厂房改造-project-1-SM-20260717-001',
+      '东区厂房改造~project-1-SM-20260717-001',
     );
   });
 
@@ -67,12 +69,16 @@ void main() {
     expect(safePhotoProjectName('  A 区 / 风管::检查  '), 'A_区_风管_检查');
   });
 
-  test('truncates to fit the UTF-8 byte budget and trims the truncated result', () {
-    final repeated = List.filled(59, '工').join();
-    final raw = '$repeated._extra';
-    final safe = safePhotoProjectName(raw);
-    expect(safe.runes.length, 59);
-    expect(safe, repeated);
+  test('sanitizes tilde from project names', () {
+    expect(safePhotoProjectName('A~B'), 'A_B');
+    expect(safePhotoProjectName('A~~B'), 'A_B');
+  });
+
+  test('truncates to fit the UTF-8 byte budget and trims result', () {
+    final repeated = List.filled(60, '工').join();
+    final safe = safePhotoProjectName(repeated);
+    expect(utf8.encode(safe).length, lessThanOrEqualTo(231));
+    expect(safe.runes.length, 60);
   });
 
   test('uses Project when no safe project characters remain', () {
@@ -83,11 +89,130 @@ void main() {
     expect(
       () => formatPhotoNumber(
         projectName: '项目',
+        projectId: 'p1',
         capturedAt: DateTime(2026, 7, 17),
         sequence: 0,
       ),
       throwsArgumentError,
     );
+  });
+
+  test('rejects project ids that are not safe ASCII', () {
+    expect(
+      () => formatPhotoNumber(
+        projectName: '项目',
+        projectId: '',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => formatPhotoNumber(
+        projectName: '项目',
+        projectId: 'a/b',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => formatPhotoNumber(
+        projectName: '项目',
+        projectId: '项目一',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('rejects a project id whose suffix exceeds the byte budget', () {
+    final longId = List.filled(235, 'a').join();
+    expect(
+      () => formatPhotoNumber(
+        projectName: '项目',
+        projectId: longId,
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('keeps final jpeg name within 255 UTF-8 bytes', () {
+    final projectName = List.filled(60, '😀').join();
+    final number = formatPhotoNumber(
+      projectName: projectName,
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    expect(utf8.encode('$number.jpg').length, lessThanOrEqualTo(255));
+  });
+
+  test('different project ids with same sanitized name produce different numbers', () {
+    final a = formatPhotoNumber(
+      projectName: 'A/B',
+      projectId: 'aaaa1111-2222-3333-4444-555566667777',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    final b = formatPhotoNumber(
+      projectName: 'A:B',
+      projectId: 'bbbb2222-3333-4444-5555-666677778888',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    expect(a, isNot(equals(b)));
+  });
+
+  test('different ids sharing first 8 chars stay distinct', () {
+    final a = formatPhotoNumber(
+      projectName: '同名项目',
+      projectId: 'aaaaaaaa-1111-2222-3333-444444444444',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    final b = formatPhotoNumber(
+      projectName: '同名项目',
+      projectId: 'aaaaaaaa-9999-8888-7777-666666666666',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    expect(a, isNot(b));
+  });
+
+  test('hyphen removal cannot collapse distinct project ids', () {
+    final a = formatPhotoNumber(
+      projectName: '同名项目',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    final b = formatPhotoNumber(
+      projectName: '同名项目',
+      projectId: 'project1',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    expect(a, isNot(b));
+  });
+
+  test('project name and id boundaries cannot collide', () {
+    final a = formatPhotoNumber(
+      projectName: 'A',
+      projectId: 'B-C',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    final b = formatPhotoNumber(
+      projectName: 'A-B',
+      projectId: 'C',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    expect(a, isNot(b));
   });
 }
 ```
@@ -102,35 +227,87 @@ flutter test test/domain/photo_number_test.dart
 
 Expected: FAIL because `package:sitemark/domain/photo_number.dart` does not exist.
 
-- [ ] **Step 3: Implement the minimal pure formatter**
+- [ ] **Step 3: Implement the pure formatter**
 
 Create `lib/domain/photo_number.dart`:
 
 ```dart
-String safePhotoProjectName(String projectName) {
+import 'dart:convert';
+
+String safePhotoProjectName(
+  String projectName, {
+  int maxJpegNameBytes = 255,
+  int suffixReserve = 24,
+}) {
   var safe = projectName.trim().replaceAll(
-    RegExp(r'[\s/\\:*?"<>|\x00-\x1F\x7F]+'),
+    RegExp(r'[\s~ /\\:*?"<>|\x00-\x1F\x7F\x80-\x9F]+'),
     '_',
   );
   safe = safe.replaceAll(RegExp(r'_+'), '_');
-  safe = String.fromCharCodes(safe.runes.take(60));
+  final byteBudget = maxJpegNameBytes - suffixReserve;
+  if (byteBudget < 1) {
+    return _trimToUtf8Bytes(safe, 1);
+  }
+  safe = _trimToUtf8Bytes(safe, byteBudget);
   safe = safe.replaceAll(RegExp(r'^[._ ]+|[._ ]+$'), '');
   return safe.isEmpty ? 'Project' : safe;
 }
 
+String _trimToUtf8Bytes(String value, int maxBytes) {
+  final runes = value.runes.toList();
+  var result = StringBuffer();
+  var used = 0;
+  for (final rune in runes) {
+    final char = String.fromCharCodes([rune]);
+    final charBytes = utf8.encode(char).length;
+    if (used + charBytes > maxBytes) break;
+    result.write(char);
+    used += charBytes;
+  }
+  return result.toString();
+}
+
+const fallbackProjectName = 'Project';
+
 String formatPhotoNumber({
   required String projectName,
+  required String projectId,
   required DateTime capturedAt,
   required int sequence,
 }) {
   if (sequence < 1) {
     throw ArgumentError.value(sequence, 'sequence', 'Must be positive');
   }
+  if (projectId.isEmpty ||
+      !RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(projectId)) {
+    throw ArgumentError.value(
+      projectId,
+      'projectId',
+      'Expected a non-empty ASCII identifier (A-Z, a-z, 0-9, _, -)',
+    );
+  }
   String two(int value) => value.toString().padLeft(2, '0');
-  final date = '${capturedAt.year.toString().padLeft(4, '0')}'
+  final date =
+      '${capturedAt.year.toString().padLeft(4, '0')}'
       '${two(capturedAt.month)}${two(capturedAt.day)}';
-  return '${safePhotoProjectName(projectName)}-SM-$date-'
-      '${sequence.toString().padLeft(3, '0')}';
+  final seq = sequence.toString().padLeft(3, '0');
+  final projectKey = projectId;
+  final suffix = '~$projectKey-SM-$date-$seq.jpg';
+  final suffixBytes = utf8.encode(suffix).length;
+  final fallbackBytes = utf8.encode(fallbackProjectName).length;
+  if (suffixBytes + fallbackBytes > 255) {
+    throw ArgumentError.value(
+      projectId,
+      'projectId',
+      'Project ID is too long for a valid JPEG file name',
+    );
+  }
+  final safe = safePhotoProjectName(projectName, suffixReserve: suffixBytes);
+  final number = '$safe~$projectKey-SM-$date-$seq';
+  if (utf8.encode('$number.jpg').length > 255) {
+    throw StateError('Generated JPEG name exceeds 255 UTF-8 bytes');
+  }
+  return number;
 }
 ```
 
@@ -143,7 +320,7 @@ dart format lib/domain/photo_number.dart test/domain/photo_number_test.dart
 flutter test test/domain/photo_number_test.dart
 ```
 
-Expected: all 5 formatter tests PASS.
+Expected: all 18 formatter tests PASS.
 
 - [ ] **Step 5: Commit the formatter**
 
@@ -164,34 +341,34 @@ git commit -m "feat: format project photo numbers"
 
 **Interfaces:**
 - Consumes: `formatPhotoNumber` from Task 1 and the parent `Project.name` read inside the existing `markCaptured` transaction.
-- Produces: persisted `CaptureRecord.photoNumber` values such as `东区厂房改造-project-1-SM-20260717-001` (projectId verbatim, hyphens preserved); `CaptureProcessor` continues passing that value to `RenderPhotoRequest.photoNumber` and `PlatformServices.publishJpeg`.
+- Produces: persisted `CaptureRecord.photoNumber` values such as `东区厂房改造~project-1-SM-20260717-001` (~ separator, projectId verbatim, hyphens preserved); `CaptureProcessor` continues passing that value to `RenderPhotoRequest.photoNumber` and `PlatformServices.publishJpeg`.
 
 - [ ] **Step 1: Change allocation and publishing expectations first**
 
 Update the generated-number assertions for projects named `车间改造` or `东区厂房改造`:
 
 ```dart
-expect(captured.photoNumber, '车间改造-project-SM-20260716-001');
-expect(captured.photoNumber, '车间改造-project-SM-20260716-003');
-expect(edited.photoNumber, '车间改造-project-SM-20260716-001');
-expect(updated?.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
+expect(captured.photoNumber, '车间改造~project-SM-20260716-001');
+expect(captured.photoNumber, '车间改造~project-SM-20260716-003');
+expect(edited.photoNumber, '车间改造~project-SM-20260716-001');
+expect(updated?.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
 ```
 
 In `test/workflow/capture_workflow_test.dart`, use:
 
 ```dart
-expect(record?.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
-expect(edited.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
+expect(record?.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
+expect(edited.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
 ```
 
 In `test/workflow/capture_processor_test.dart`, use:
 
 ```dart
-expect(captured.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
-expect(platform.publishedNames, ['东区厂房改造-project-1-SM-20260716-001']);
+expect(captured.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
+expect(platform.publishedNames, ['东区厂房改造~project-1-SM-20260716-001']);
 expect(
   images.lastRenderRequest?.photoNumber,
-  '东区厂房改造-project-1-SM-20260716-001',
+  '东区厂房改造~project-1-SM-20260716-001',
 );
 ```
 

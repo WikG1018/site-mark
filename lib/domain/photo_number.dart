@@ -3,7 +3,8 @@ import 'dart:convert';
 /// Sanitizes a project name for use in file names.
 ///
 /// Forbidden characters (matching the Android/Rust blacklist contract):
-/// whitespace, control chars (C0 + DEL + C1), and `/ \ : * ? " < > |`.
+/// whitespace, control chars (C0 + DEL + C1), `~` (reserved as the dedicated
+/// field separator in [formatPhotoNumber]), and `/ \ : * ? " < > |`.
 /// Repeated forbidden runs collapse to a single `_`. The result is trimmed
 /// of leading/trailing dots, underscores, and spaces, then truncated to fit
 /// the UTF-8 byte budget so the final JPEG name never exceeds 255 bytes.
@@ -13,7 +14,7 @@ String safePhotoProjectName(
   int suffixReserve = 24,
 }) {
   var safe = projectName.trim().replaceAll(
-    RegExp(r'[\s/\\:*?"<>|\x00-\x1F\x7F\x80-\x9F]+'),
+    RegExp(r'[\s~ /\\:*?"<>|\x00-\x1F\x7F\x80-\x9F]+'),
     '_',
   );
   safe = safe.replaceAll(RegExp(r'_+'), '_');
@@ -49,17 +50,23 @@ const fallbackProjectName = 'Project';
 
 /// Formats a unique photo number for filesystem use.
 ///
-/// Format: `{safeProjectName}-{projectId}-SM-{yyyyMMdd}-{seq}`
+/// Format: `{safeProjectName}~{projectId}-SM-{yyyyMMdd}-{seq}`
+///
+/// The `~` character is a **dedicated field separator**. It is added to the
+/// `safePhotoProjectName` blacklist so it can never appear in the sanitized
+/// project name, and it is excluded from the `projectId` ASCII whitelist
+/// (`^[A-Za-z0-9_-]+$`). This makes `~` an unambiguous boundary between the
+/// two fields, preventing cross-field collisions such as
+/// `(A, B-C)` vs `(A-B, C)` from producing the same photo number.
 ///
 /// `projectId` is embedded verbatim — hyphens are preserved — so the
 /// mapping from project ID to photo number is strictly one-to-one. Two
 /// distinct project IDs always produce distinct file names, even when the
-/// project display names are identical or sanitize to the same value. This
-/// prevents silent overwrites in the Android MediaStore and ZIP export.
+/// project display names are identical or sanitize to the same value.
 ///
 /// [projectId] must be a non-empty ASCII identifier matching
 /// `^[A-Za-z0-9_-]+$`. This matches the Rust `safe_archive_component`
-/// contract and prevents `/`, whitespace, or non-ASCII characters from
+/// contract and prevents `/`, whitespace, `~`, or non-ASCII characters from
 /// being embedded in the file name.
 ///
 /// The byte budget for the project name is computed from the actual UTF-8
@@ -94,7 +101,10 @@ String formatPhotoNumber({
   // file-name mapping strictly one-to-one (e.g. "project-1" and "project1"
   // stay distinct).
   final projectKey = projectId;
-  final suffix = '-$projectKey-SM-$date-$seq.jpg';
+  // Use ~ as the field separator. It is blacklisted in safePhotoProjectName
+  // and excluded from the projectId whitelist, so it cannot appear in either
+  // field — making it an unambiguous boundary.
+  final suffix = '~$projectKey-SM-$date-$seq.jpg';
   final suffixBytes = utf8.encode(suffix).length;
   final fallbackBytes = utf8.encode(fallbackProjectName).length;
   if (suffixBytes + fallbackBytes > 255) {
@@ -106,7 +116,7 @@ String formatPhotoNumber({
     );
   }
   final safe = safePhotoProjectName(projectName, suffixReserve: suffixBytes);
-  final number = '$safe-$projectKey-SM-$date-$seq';
+  final number = '$safe~$projectKey-SM-$date-$seq';
   // Defensive final check: never emit a number whose .jpg name would
   // exceed the POSIX NAME_MAX of 255 bytes.
   if (utf8.encode('$number.jpg').length > 255) {

@@ -127,7 +127,7 @@ void main() {
     );
 
     expect(captured.status, CaptureStatus.captured);
-    expect(captured.photoNumber, '车间改造-project-SM-20260716-001');
+    expect(captured.photoNumber, '车间改造~project-SM-20260716-001');
   });
 
   test(
@@ -170,7 +170,7 @@ void main() {
         capturedAt: DateTime(2026, 7, 16, 10, 1),
       );
 
-      expect(captured.photoNumber, '车间改造-project-SM-20260716-003');
+      expect(captured.photoNumber, '车间改造~project-SM-20260716-003');
     },
   );
 
@@ -296,7 +296,7 @@ void main() {
     expect(edited.notes, '整改后复验');
     expect(edited.capturedAt, capturedAt);
     expect(edited.originalSha256, originalHash);
-    expect(edited.photoNumber, '车间改造-project-SM-20260716-001');
+    expect(edited.photoNumber, '车间改造~project-SM-20260716-001');
   });
 
   test(
@@ -420,7 +420,7 @@ void main() {
 
     final updated = await database.watchCaptureById(pending.id).first;
     expect(updated?.status, CaptureStatus.captured);
-    expect(updated?.photoNumber, '东区厂房改造-project-1-SM-20260716-001');
+    expect(updated?.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
   });
 
   test('watchCaptureById emits null for unknown id', () async {

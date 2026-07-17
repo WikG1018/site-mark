@@ -14,13 +14,21 @@ void main() {
           capturedAt: DateTime(2026, 7, 17, 9, 5),
           sequence: 1,
         ),
-        '东区厂房改造-project-1-SM-20260717-001',
+        '东区厂房改造~project-1-SM-20260717-001',
       );
     },
   );
 
   test('sanitizes unsafe characters and repeated separators', () {
     expect(safePhotoProjectName('  A 区 / 风管::检查  '), 'A_区_风管_检查');
+  });
+
+  test('sanitizes tilde from project names', () {
+    // ~ is the dedicated field separator; it must never survive into the
+    // sanitized project name.
+    expect(safePhotoProjectName('A~B'), 'A_B');
+    expect(safePhotoProjectName('A~~B'), 'A_B');
+    expect(safePhotoProjectName(' A ~ B '), 'A_B');
   });
 
   test('truncates to fit UTF-8 byte budget and trims result', () {
@@ -116,7 +124,7 @@ void main() {
         capturedAt: DateTime(2026, 7, 17),
         sequence: 1,
       ),
-      '东区厂房改造（一期）-project-1-SM-20260717-001',
+      '东区厂房改造（一期）~project-1-SM-20260717-001',
     );
     expect(
       formatPhotoNumber(
@@ -125,7 +133,7 @@ void main() {
         capturedAt: DateTime(2026, 7, 17),
         sequence: 1,
       ),
-      'A.B-project-1-SM-20260717-001',
+      'A.B~project-1-SM-20260717-001',
     );
   });
 
@@ -169,8 +177,8 @@ void main() {
         capturedAt: DateTime(2026, 7, 17),
         sequence: 1,
       );
-      expect(a, 'A_B-aaaa1111-2222-3333-4444-555566667777-SM-20260717-001');
-      expect(b, 'A_B-bbbb2222-3333-4444-5555-666677778888-SM-20260717-001');
+      expect(a, 'A_B~aaaa1111-2222-3333-4444-555566667777-SM-20260717-001');
+      expect(b, 'A_B~bbbb2222-3333-4444-5555-666677778888-SM-20260717-001');
       expect(a, isNot(equals(b)));
       expect('$a.jpg', isNot(equals('$b.jpg')));
     },
@@ -191,8 +199,8 @@ void main() {
         capturedAt: DateTime(2026, 7, 17),
         sequence: 1,
       );
-      expect(a, '东区厂房改造-aaaa1111-2222-3333-4444-555566667777-SM-20260717-001');
-      expect(b, '东区厂房改造-bbbb2222-3333-4444-5555-666677778888-SM-20260717-001');
+      expect(a, '东区厂房改造~aaaa1111-2222-3333-4444-555566667777-SM-20260717-001');
+      expect(b, '东区厂房改造~bbbb2222-3333-4444-5555-666677778888-SM-20260717-001');
       expect(a, isNot(equals(b)));
       expect('$a.jpg', isNot(equals('$b.jpg')));
     },
@@ -211,8 +219,8 @@ void main() {
       capturedAt: DateTime(2026, 7, 17),
       sequence: 1,
     );
-    expect(a, '同名项目-aaaaaaaa-1111-2222-3333-444444444444-SM-20260717-001');
-    expect(b, '同名项目-aaaaaaaa-9999-8888-7777-666666666666-SM-20260717-001');
+    expect(a, '同名项目~aaaaaaaa-1111-2222-3333-444444444444-SM-20260717-001');
+    expect(b, '同名项目~aaaaaaaa-9999-8888-7777-666666666666-SM-20260717-001');
     expect(a, isNot(b));
     expect('$a.jpg', isNot(equals('$b.jpg')));
   });
@@ -232,8 +240,30 @@ void main() {
       capturedAt: DateTime(2026, 7, 17),
       sequence: 1,
     );
-    expect(a, '同名项目-project-1-SM-20260717-001');
-    expect(b, '同名项目-project1-SM-20260717-001');
+    expect(a, '同名项目~project-1-SM-20260717-001');
+    expect(b, '同名项目~project1-SM-20260717-001');
+    expect(a, isNot(b));
+    expect('$a.jpg', isNot(equals('$b.jpg')));
+  });
+
+  test('project name and id boundaries cannot collide', () {
+    // Without a dedicated separator, (A, B-C) and (A-B, C) would both
+    // produce "A-B-C-SM-...". The ~ separator makes them distinct:
+    //   A~B-C-SM-...  vs  A-B~C-SM-...
+    final a = formatPhotoNumber(
+      projectName: 'A',
+      projectId: 'B-C',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    final b = formatPhotoNumber(
+      projectName: 'A-B',
+      projectId: 'C',
+      capturedAt: DateTime(2026, 7, 17),
+      sequence: 1,
+    );
+    expect(a, 'A~B-C-SM-20260717-001');
+    expect(b, 'A-B~C-SM-20260717-001');
     expect(a, isNot(b));
     expect('$a.jpg', isNot(equals('$b.jpg')));
   });
