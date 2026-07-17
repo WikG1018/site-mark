@@ -67,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -70732977;
+  int get rustContentHash => -1164762658;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,6 +81,10 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 abstract class RustLibApi extends BaseApi {
   Future<ExportProjectResult> crateApiImageCoreExportProject({
     required ExportProjectRequest request,
+  });
+
+  Future<ExportProjectResult> crateApiImageCoreExportSelection({
+    required ExportSelectionRequest request,
   });
 
   String crateApiSimpleGreet({required String name});
@@ -138,13 +142,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "export_project", argNames: ["request"]);
 
   @override
+  Future<ExportProjectResult> crateApiImageCoreExportSelection({
+    required ExportSelectionRequest request,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_export_selection_request(request, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_export_project_result,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiImageCoreExportSelectionConstMeta,
+        argValues: [request],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiImageCoreExportSelectionConstMeta =>
+      const TaskConstMeta(debugName: "export_selection", argNames: ["request"]);
+
+  @override
   String crateApiSimpleGreet({required String name}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(name, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -169,7 +203,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -199,7 +233,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -227,7 +261,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 6,
             port: port_,
           );
         },
@@ -259,7 +293,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -298,6 +332,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_export_project_request(raw);
+  }
+
+  @protected
+  ExportSelectionRequest dco_decode_box_autoadd_export_selection_request(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_export_selection_request(raw);
   }
 
   @protected
@@ -356,6 +398,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportSelectionProject dco_decode_export_selection_project(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ExportSelectionProject(
+      projectId: dco_decode_String(arr[0]),
+      projectName: dco_decode_String(arr[1]),
+      photos: dco_decode_list_export_photo_record(arr[2]),
+    );
+  }
+
+  @protected
+  ExportSelectionRequest dco_decode_export_selection_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ExportSelectionRequest(
+      outputZipPath: dco_decode_String(arr[0]),
+      includeOriginals: dco_decode_bool(arr[1]),
+      projects: dco_decode_list_export_selection_project(arr[2]),
+    );
+  }
+
+  @protected
   double dco_decode_f_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
@@ -371,6 +439,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<ExportPhotoRecord> dco_decode_list_export_photo_record(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_export_photo_record).toList();
+  }
+
+  @protected
+  List<ExportSelectionProject> dco_decode_list_export_selection_project(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_export_selection_project)
+        .toList();
   }
 
   @protected
@@ -471,6 +549,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportSelectionRequest sse_decode_box_autoadd_export_selection_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_export_selection_request(deserializer));
+  }
+
+  @protected
   RenderPhotoRequest sse_decode_box_autoadd_render_photo_request(
     SseDeserializer deserializer,
   ) {
@@ -544,6 +630,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportSelectionProject sse_decode_export_selection_project(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_projectId = sse_decode_String(deserializer);
+    var var_projectName = sse_decode_String(deserializer);
+    var var_photos = sse_decode_list_export_photo_record(deserializer);
+    return ExportSelectionProject(
+      projectId: var_projectId,
+      projectName: var_projectName,
+      photos: var_photos,
+    );
+  }
+
+  @protected
+  ExportSelectionRequest sse_decode_export_selection_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_outputZipPath = sse_decode_String(deserializer);
+    var var_includeOriginals = sse_decode_bool(deserializer);
+    var var_projects = sse_decode_list_export_selection_project(deserializer);
+    return ExportSelectionRequest(
+      outputZipPath: var_outputZipPath,
+      includeOriginals: var_includeOriginals,
+      projects: var_projects,
+    );
+  }
+
+  @protected
   double sse_decode_f_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat64();
@@ -565,6 +681,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <ExportPhotoRecord>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_export_photo_record(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ExportSelectionProject> sse_decode_list_export_selection_project(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ExportSelectionProject>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_export_selection_project(deserializer));
     }
     return ans_;
   }
@@ -693,6 +823,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_export_selection_request(
+    ExportSelectionRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_export_selection_request(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_render_photo_request(
     RenderPhotoRequest self,
     SseSerializer serializer,
@@ -745,6 +884,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_export_selection_project(
+    ExportSelectionProject self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.projectId, serializer);
+    sse_encode_String(self.projectName, serializer);
+    sse_encode_list_export_photo_record(self.photos, serializer);
+  }
+
+  @protected
+  void sse_encode_export_selection_request(
+    ExportSelectionRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.outputZipPath, serializer);
+    sse_encode_bool(self.includeOriginals, serializer);
+    sse_encode_list_export_selection_project(self.projects, serializer);
+  }
+
+  @protected
   void sse_encode_f_64(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat64(self);
@@ -765,6 +926,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_export_photo_record(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_export_selection_project(
+    List<ExportSelectionProject> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_export_selection_project(item, serializer);
     }
   }
 

@@ -369,6 +369,10 @@ class _FakeImagePipeline implements ImagePipeline {
       throw UnimplementedError();
 
   @override
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
+      throw UnimplementedError();
+
+  @override
   Future<String> sha256(String path) async => digestA;
 
   @override

@@ -3,8 +3,9 @@ use std::io::Read;
 
 use image::{ImageBuffer, Rgb};
 use sitemark_core::api::image_core::{
-    export_project, render_photo, sha256_file, ExportPhotoRecord, ExportProjectRequest,
-    RenderPhotoRequest, WatermarkPosition,
+    export_project, export_selection, render_photo, sha256_file, ExportPhotoRecord,
+    ExportProjectRequest, ExportSelectionProject, ExportSelectionRequest, RenderPhotoRequest,
+    WatermarkPosition,
 };
 use tempfile::tempdir;
 use zip::ZipArchive;
@@ -188,4 +189,90 @@ fn wraps_max_length_work_content_within_card_text_area() {
     assert_eq!((rendered.width(), rendered.height()), (4000, 3000));
     assert_eq!(result.width, 4000);
     assert_eq!(result.height, 3000);
+}
+
+#[test]
+fn exports_selection_zip_grouped_by_project_with_records_and_manifest() {
+    let directory = tempdir().unwrap();
+    let photo_a = directory.path().join("SM-20260716-001.jpg");
+    let photo_b = directory.path().join("SM-20260716-002.jpg");
+    fs::write(&photo_a, b"jpeg-a").unwrap();
+    fs::write(&photo_b, b"jpeg-b").unwrap();
+    let archive_path = directory.path().join("selection.zip");
+
+    let result = export_selection(ExportSelectionRequest {
+        output_zip_path: archive_path.to_string_lossy().into_owned(),
+        include_originals: false,
+        projects: vec![
+            ExportSelectionProject {
+                project_id: "project-a".to_string(),
+                project_name: "东区厂房改造".to_string(),
+                photos: vec![ExportPhotoRecord {
+                    photo_number: "SM-20260716-001".to_string(),
+                    watermarked_path: photo_a.to_string_lossy().into_owned(),
+                    original_path: None,
+                    original_sha256: "0123456789abcdef".repeat(4),
+                    captured_at: "2026-07-16 09:32:18 +08:00".to_string(),
+                    work_location: "A 区".to_string(),
+                    work_content: "风管检查".to_string(),
+                    photographer: "张工".to_string(),
+                    address: None,
+                    coordinates: None,
+                    notes: None,
+                }],
+            },
+            ExportSelectionProject {
+                project_id: "project-b".to_string(),
+                project_name: "西区市政给水".to_string(),
+                photos: vec![ExportPhotoRecord {
+                    photo_number: "SM-20260716-002".to_string(),
+                    watermarked_path: photo_b.to_string_lossy().into_owned(),
+                    original_path: None,
+                    original_sha256: "fedcba9876543210".repeat(4),
+                    captured_at: "2026-07-16 10:11:42 +08:00".to_string(),
+                    work_location: "B 区".to_string(),
+                    work_content: "管道试压".to_string(),
+                    photographer: "李工".to_string(),
+                    address: None,
+                    coordinates: None,
+                    notes: None,
+                }],
+            },
+        ],
+    })
+    .unwrap();
+
+    assert_eq!(result.photo_count, 2);
+    assert_eq!(result.archive_sha256.len(), 64);
+    let archive_file = fs::File::open(&archive_path).unwrap();
+    let mut archive = ZipArchive::new(archive_file).unwrap();
+    assert!(archive
+        .by_name("projects/project-a/photos/SM-20260716-001.jpg")
+        .is_ok());
+    assert!(archive
+        .by_name("projects/project-b/photos/SM-20260716-002.jpg")
+        .is_ok());
+    assert!(archive.by_name("records.csv").is_ok());
+    assert!(archive.by_name("manifest.json").is_ok());
+
+    let mut csv = Vec::new();
+    archive
+        .by_name("records.csv")
+        .unwrap()
+        .read_to_end(&mut csv)
+        .unwrap();
+    assert!(csv.starts_with(&[0xef, 0xbb, 0xbf]));
+    let csv_text = String::from_utf8(csv).unwrap();
+    assert!(csv_text.contains("东区厂房改造"));
+    assert!(csv_text.contains("西区市政给水"));
+
+    let mut manifest = String::new();
+    archive
+        .by_name("manifest.json")
+        .unwrap()
+        .read_to_string(&mut manifest)
+        .unwrap();
+    assert!(manifest.contains("\"schema_version\": 1"));
+    assert!(manifest.contains("project-a"));
+    assert!(manifest.contains("project-b"));
 }

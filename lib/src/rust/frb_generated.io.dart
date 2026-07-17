@@ -31,6 +31,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExportSelectionRequest dco_decode_box_autoadd_export_selection_request(
+    dynamic raw,
+  );
+
+  @protected
   RenderPhotoRequest dco_decode_box_autoadd_render_photo_request(dynamic raw);
 
   @protected
@@ -43,6 +48,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ExportProjectResult dco_decode_export_project_result(dynamic raw);
 
   @protected
+  ExportSelectionProject dco_decode_export_selection_project(dynamic raw);
+
+  @protected
+  ExportSelectionRequest dco_decode_export_selection_request(dynamic raw);
+
+  @protected
   double dco_decode_f_64(dynamic raw);
 
   @protected
@@ -50,6 +61,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ExportPhotoRecord> dco_decode_list_export_photo_record(dynamic raw);
+
+  @protected
+  List<ExportSelectionProject> dco_decode_list_export_selection_project(
+    dynamic raw,
+  );
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -87,6 +103,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExportSelectionRequest sse_decode_box_autoadd_export_selection_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RenderPhotoRequest sse_decode_box_autoadd_render_photo_request(
     SseDeserializer deserializer,
   );
@@ -107,6 +128,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExportSelectionProject sse_decode_export_selection_project(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ExportSelectionRequest sse_decode_export_selection_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
@@ -114,6 +145,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ExportPhotoRecord> sse_decode_list_export_photo_record(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ExportSelectionProject> sse_decode_list_export_selection_project(
     SseDeserializer deserializer,
   );
 
@@ -158,6 +194,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_export_selection_request(
+    ExportSelectionRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_render_photo_request(
     RenderPhotoRequest self,
     SseSerializer serializer,
@@ -182,6 +224,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_export_selection_project(
+    ExportSelectionProject self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_export_selection_request(
+    ExportSelectionRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
@@ -190,6 +244,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_export_photo_record(
     List<ExportPhotoRecord> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_export_selection_project(
+    List<ExportSelectionProject> self,
     SseSerializer serializer,
   );
 

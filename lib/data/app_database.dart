@@ -716,6 +716,19 @@ class AppDatabase extends _$AppDatabase {
     return captureById(captureId).then((row) => row!);
   }
 
+  /// Updates only the `publishedUri` column for [captureId], preserving the
+  /// row's status, evidence hash, and other fields. Used by republish flows
+  /// that re-publish an already-completed capture's watermarked JPEG and need
+  /// to persist the new MediaStore URI.
+  Future<CaptureRecord> updatePublishedUri(
+    String captureId,
+    String publishedUri,
+  ) async {
+    await (update(captureRecords)..where((row) => row.id.equals(captureId)))
+        .write(CaptureRecordsCompanion(publishedUri: Value(publishedUri)));
+    return captureById(captureId).then((row) => row!);
+  }
+
   /// Returns captures matching any of the provided IDs, ordered by
   /// `createdAt` ascending. Returns an empty list for an empty input.
   Future<List<CaptureRecord>> capturesByIds(Iterable<String> captureIds) {

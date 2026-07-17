@@ -566,6 +566,10 @@ class _ProcessorImagePipeline implements ImagePipeline {
       throw UnimplementedError();
 
   @override
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
+      throw UnimplementedError();
+
+  @override
   Future<String> sha256(String path) async {
     final error = sha256Error;
     if (error != null) {

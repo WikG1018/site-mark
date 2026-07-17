@@ -200,6 +200,10 @@ class _IntegrationImagePipeline implements ImagePipeline {
   }
 
   @override
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
+      throw UnimplementedError();
+
+  @override
   Future<RenderPhotoResult> render(RenderPhotoRequest request) async {
     return RenderPhotoResult(
       outputPath: request.outputPath,

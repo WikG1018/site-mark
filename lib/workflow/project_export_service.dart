@@ -9,12 +9,14 @@ class ProjectExportService {
     required this.images,
     required this.capturePaths,
     required this.exportPaths,
+    required this.selectionExportPaths,
   });
 
   final AppDatabase database;
   final ImagePipeline images;
   final CaptureOutputPaths capturePaths;
   final ProjectExportPaths exportPaths;
+  final SelectionExportPaths selectionExportPaths;
 
   Future<ExportProjectResult> exportProject({
     required String projectId,
@@ -54,6 +56,85 @@ class ProjectExportService {
         outputZipPath: outputPath,
         includeOriginals: includeOriginals,
         photos: photos,
+      ),
+    );
+  }
+
+  /// Exports a cross-project ZIP containing every selected capture grouped by
+  /// project. Rejects any non-`ready` capture, groups by project ID, preserves
+  /// each group's capture-time order, omits originals whose
+  /// `originalDeletedAt` is non-null, and fails an `includeOriginals: true`
+  /// request when any selected original is unavailable.
+  Future<ExportProjectResult> exportSelection({
+    required List<String> captureIds,
+    required bool includeOriginals,
+  }) async {
+    if (captureIds.isEmpty) {
+      throw StateError('No captures selected for export');
+    }
+    final captures = await database.capturesByIds(captureIds);
+    if (captures.isEmpty) {
+      throw StateError('No captures found for the given IDs');
+    }
+    for (final capture in captures) {
+      if (capture.status != CaptureStatus.ready) {
+        throw StateError(
+          'Capture ${capture.id} is not ready for export (status=${capture.status.name})',
+        );
+      }
+    }
+    final byProject = <String, List<CaptureRecord>>{};
+    for (final capture in captures) {
+      byProject.putIfAbsent(capture.projectId, () => []).add(capture);
+    }
+    final projects = <ExportSelectionProject>[];
+    for (final entry in byProject.entries) {
+      final projectId = entry.key;
+      final project = await database.projectById(projectId);
+      if (project == null) {
+        throw StateError('Project $projectId does not exist');
+      }
+      final photos = <ExportPhotoRecord>[];
+      for (final capture in entry.value) {
+        String? originalPath;
+        if (includeOriginals) {
+          if (capture.originalDeletedAt != null) {
+            throw StateError(
+              'Capture ${capture.id} original is unavailable (cleared)',
+            );
+          }
+          originalPath = capture.originalPath;
+        }
+        photos.add(
+          ExportPhotoRecord(
+            photoNumber: capture.photoNumber!,
+            watermarkedPath: await capturePaths.renderedPhotoPath(capture.id),
+            originalPath: originalPath,
+            originalSha256: capture.originalSha256!,
+            capturedAt: _formatLocalTimestamp(capture.capturedAt!),
+            workLocation: capture.workLocation,
+            workContent: capture.workContent,
+            photographer: capture.photographer,
+            address: capture.address,
+            coordinates: _coordinates(capture),
+            notes: capture.notes,
+          ),
+        );
+      }
+      projects.add(
+        ExportSelectionProject(
+          projectId: projectId,
+          projectName: project.name,
+          photos: photos,
+        ),
+      );
+    }
+    final outputPath = await selectionExportPaths.selectionZipPath();
+    return images.exportSelection(
+      ExportSelectionRequest(
+        outputZipPath: outputPath,
+        includeOriginals: includeOriginals,
+        projects: projects,
       ),
     );
   }

@@ -79,6 +79,20 @@ pub struct ExportProjectResult {
     pub photo_count: u32,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportSelectionProject {
+    pub project_id: String,
+    pub project_name: String,
+    pub photos: Vec<ExportPhotoRecord>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportSelectionRequest {
+    pub output_zip_path: String,
+    pub include_originals: bool,
+    pub projects: Vec<ExportSelectionProject>,
+}
+
 #[derive(Serialize)]
 struct ExportManifest<'a> {
     schema_version: u32,
@@ -87,6 +101,21 @@ struct ExportManifest<'a> {
     project_name: &'a str,
     includes_originals: bool,
     photos: &'a [ExportPhotoRecord],
+}
+
+#[derive(Serialize)]
+struct SelectionManifestProject<'a> {
+    project_id: &'a str,
+    project_name: &'a str,
+    photos: &'a [ExportPhotoRecord],
+}
+
+#[derive(Serialize)]
+struct SelectionManifest<'a> {
+    schema_version: u32,
+    app: &'static str,
+    includes_originals: bool,
+    projects: Vec<SelectionManifestProject<'a>>,
 }
 
 #[derive(Serialize)]
@@ -282,6 +311,138 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         output_zip_path: request.output_zip_path.clone(),
         archive_sha256: sha256_file(request.output_zip_path)?,
         photo_count: request.photos.len() as u32,
+    })
+}
+
+pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProjectResult, String> {
+    if request.projects.is_empty() {
+        return Err(invalid_data(
+            "validate export request",
+            "project list is empty",
+        ));
+    }
+    let total_photos: usize = request.projects.iter().map(|p| p.photos.len()).sum();
+    if total_photos == 0 {
+        return Err(invalid_data(
+            "validate export request",
+            "no photos to export",
+        ));
+    }
+    for project in &request.projects {
+        safe_archive_component(&project.project_id)?;
+        if project.project_name.trim().is_empty() {
+            return Err(invalid_data(
+                "validate export request",
+                "project name is required",
+            ));
+        }
+        for photo in &project.photos {
+            safe_archive_component(&photo.photo_number)?;
+        }
+    }
+
+    let output = Path::new(&request.output_zip_path);
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| io_failure("create export directory", error))?;
+    }
+    let file = File::create(output).map_err(|error| io_failure("create ZIP", error))?;
+    let mut archive = ZipWriter::new(BufWriter::new(file));
+    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    for project in &request.projects {
+        let safe_project_id = safe_archive_component(&project.project_id)?;
+        for photo in &project.photos {
+            let safe_number = safe_archive_component(&photo.photo_number)?;
+            add_file_to_zip(
+                &mut archive,
+                &photo.watermarked_path,
+                &format!("projects/{safe_project_id}/photos/{safe_number}.jpg"),
+                options,
+            )?;
+            if request.include_originals {
+                let original = photo.original_path.as_deref().ok_or_else(|| {
+                    invalid_data(
+                        "validate export request",
+                        format!("missing original for {}", photo.photo_number),
+                    )
+                })?;
+                let extension = Path::new(original)
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("jpg")
+                    .to_ascii_lowercase();
+                add_file_to_zip(
+                    &mut archive,
+                    original,
+                    &format!("projects/{safe_project_id}/originals/{safe_number}.{extension}"),
+                    options,
+                )?;
+            }
+        }
+    }
+
+    let mut csv_bytes = vec![0xef, 0xbb, 0xbf];
+    {
+        let mut csv = csv::WriterBuilder::new()
+            .has_headers(true)
+            .from_writer(&mut csv_bytes);
+        for project in &request.projects {
+            for photo in &project.photos {
+                csv.serialize(CsvRow {
+                    project_name: &project.project_name,
+                    photo_number: &photo.photo_number,
+                    captured_at: &photo.captured_at,
+                    work_location: &photo.work_location,
+                    work_content: &photo.work_content,
+                    photographer: &photo.photographer,
+                    address: photo.address.as_deref().unwrap_or(""),
+                    coordinates: photo.coordinates.as_deref().unwrap_or(""),
+                    notes: photo.notes.as_deref().unwrap_or(""),
+                    original_sha256: &photo.original_sha256,
+                })
+                .map_err(|error| invalid_data("write CSV record", error))?;
+            }
+        }
+        csv.flush()
+            .map_err(|error| io_failure("finish CSV", error))?;
+    }
+    archive
+        .start_file("records.csv", options)
+        .map_err(|error| zip_failure("start CSV entry", error))?;
+    archive
+        .write_all(&csv_bytes)
+        .map_err(|error| io_failure("write CSV entry", error))?;
+
+    let manifest_projects: Vec<SelectionManifestProject> = request
+        .projects
+        .iter()
+        .map(|project| SelectionManifestProject {
+            project_id: &project.project_id,
+            project_name: &project.project_name,
+            photos: &project.photos,
+        })
+        .collect();
+    let manifest = serde_json::to_vec_pretty(&SelectionManifest {
+        schema_version: 1,
+        app: "SiteMark",
+        includes_originals: request.include_originals,
+        projects: manifest_projects,
+    })
+    .map_err(|error| invalid_data("serialize manifest", error))?;
+    archive
+        .start_file("manifest.json", options)
+        .map_err(|error| zip_failure("start manifest entry", error))?;
+    archive
+        .write_all(&manifest)
+        .map_err(|error| io_failure("write manifest entry", error))?;
+    archive
+        .finish()
+        .map_err(|error| zip_failure("finish ZIP", error))?;
+
+    Ok(ExportProjectResult {
+        output_zip_path: request.output_zip_path.clone(),
+        archive_sha256: sha256_file(request.output_zip_path)?,
+        photo_count: total_photos as u32,
     })
 }
 

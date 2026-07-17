@@ -7,6 +7,9 @@ import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
+const digestA =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
 void main() {
   late AppDatabase database;
   late _MediaFiles files;
@@ -34,8 +37,7 @@ void main() {
     );
     await database.markRendering(
       captureId: pending.id,
-      originalSha256:
-          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      originalSha256: digestA,
     );
     await database.markReady(
       captureId: pending.id,
@@ -62,8 +64,7 @@ void main() {
     photographer: '张工',
     originalPath: '/private/original.jpg',
     publishedUri: 'content://media/site-mark/1',
-    originalSha256:
-        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    originalSha256: digestA,
     status: CaptureStatus.ready,
     createdAt: DateTime(2026, 7, 16, 9),
     capturedAt: DateTime(2026, 7, 16, 9),
@@ -120,6 +121,38 @@ void main() {
       expect(info.originalState, OriginalPhotoState.retained);
     },
   );
+
+  test(
+    'clear originals preserves record rendered image URI and hash',
+    () async {
+      files.existing.add('/private/original.jpg');
+      final result = await service.clearOriginals(['capture-1']);
+      final row = await database.captureById('capture-1');
+      expect(result.succeededIds, ['capture-1']);
+      expect(files.deleted, ['/private/original.jpg']);
+      expect(row, isNotNull);
+      expect(row?.publishedUri, 'content://media/site-mark/1');
+      expect(row?.originalSha256, digestA);
+      expect(row?.originalDeletedAt, isNotNull);
+    },
+  );
+
+  test('delete all keeps the row when published deletion fails', () async {
+    platform.deleteError = StateError('MediaStore failure');
+    final result = await service.deleteAll(['capture-1']);
+    expect(result.failures.keys, ['capture-1']);
+    expect(await database.captureById('capture-1'), isNotNull);
+  });
+
+  test('republish updates the actual returned URI', () async {
+    files.existing.add('/rendered/capture-1.jpg');
+    platform.nextPublishedUri = 'content://media/site-mark/re-saved';
+    await service.republish(['capture-1']);
+    expect(
+      (await database.captureById('capture-1'))?.publishedUri,
+      'content://media/site-mark/re-saved',
+    );
+  });
 }
 
 class _MediaFiles implements PrivateFileStore {
@@ -144,6 +177,8 @@ class _MediaPaths implements CaptureOutputPaths {
 
 class _MediaPlatform implements PlatformServices {
   final Map<String, ImageMetadataResult> metadataByPath = {};
+  Object? deleteError;
+  String nextPublishedUri = 'content://media/site-mark/1';
 
   @override
   Future<ImageMetadataResult> inspectImage(String path) async =>
@@ -151,10 +186,12 @@ class _MediaPlatform implements PlatformServices {
 
   @override
   Future<String> publishJpeg(String sourcePath, String displayName) async =>
-      'content://media/site-mark/1';
+      nextPublishedUri;
 
   @override
-  Future<void> deletePublishedImage(String contentUri) async {}
+  Future<void> deletePublishedImage(String contentUri) async {
+    if (deleteError != null) throw deleteError!;
+  }
 
   @override
   Future<LocationPermissionState> getLocationPermissionState() async =>

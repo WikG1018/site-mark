@@ -82,6 +82,10 @@ final projectExportPathsProvider = Provider<ProjectExportPaths>(
   (ref) => AppProjectExportPaths(),
 );
 
+final selectionExportPathsProvider = Provider<SelectionExportPaths>(
+  (ref) => AppSelectionExportPaths(),
+);
+
 final shareFileServiceProvider = Provider<ShareFileService>(
   (ref) => SystemShareFileService(),
 );
@@ -152,6 +156,7 @@ final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
     images: ref.watch(imagePipelineProvider),
     capturePaths: ref.watch(captureOutputPathsProvider),
     exportPaths: ref.watch(projectExportPathsProvider),
+    selectionExportPaths: ref.watch(selectionExportPathsProvider),
   );
 });
 
