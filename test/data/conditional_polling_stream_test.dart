@@ -88,4 +88,50 @@ void main() {
     expect(reads, readsAtCancel);
     await source.close();
   });
+
+  test('discards stale poll result when source emits a newer value', () async {
+    final source = StreamController<CaptureStatus>();
+    final loadStarted = Completer<void>();
+    final releaseLoad = Completer<void>();
+    final emitted = <CaptureStatus>[];
+    var loadCalls = 0;
+    final subscription =
+        watchWithConditionalPolling<CaptureStatus>(
+          source: source.stream,
+          load: () async {
+            loadCalls += 1;
+            if (!loadStarted.isCompleted) loadStarted.complete();
+            await releaseLoad.future;
+            return CaptureStatus.captured;
+          },
+          shouldPoll: (status) =>
+              status == CaptureStatus.captured ||
+              status == CaptureStatus.rendering,
+          pollInterval: const Duration(milliseconds: 5),
+        ).listen((status) {
+          emitted.add(status);
+        });
+
+    // Source emits captured → polling starts.
+    source.add(CaptureStatus.captured);
+    await Future<void>.delayed(Duration.zero);
+
+    // Wait for the first poll to start (load is now in-flight).
+    await loadStarted.future.timeout(const Duration(milliseconds: 200));
+
+    // Source emits ready while the poll is in-flight.
+    source.add(CaptureStatus.ready);
+    await Future<void>.delayed(Duration.zero);
+
+    // Release the stale load → it returns captured.
+    releaseLoad.complete();
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    // The stale captured must NOT have overwritten ready.
+    expect(emitted, [CaptureStatus.captured, CaptureStatus.ready]);
+    expect(loadCalls, 1);
+
+    await subscription.cancel();
+    await source.close();
+  });
 }

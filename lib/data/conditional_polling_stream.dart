@@ -17,6 +17,7 @@ Stream<T> watchWithConditionalPolling<T>({
   T? latest;
   var hasLatest = false;
   var pollRunning = false;
+  var sourceVersion = 0;
   var active = false;
   late Future<void> Function() poll;
 
@@ -50,8 +51,13 @@ Stream<T> watchWithConditionalPolling<T>({
   poll = () async {
     if (!active || pollRunning || controller.isClosed) return;
     pollRunning = true;
+    final versionAtStart = sourceVersion;
     try {
-      accept(await load());
+      final result = await load();
+      // Discard the result if a newer source event arrived while loading.
+      if (sourceVersion == versionAtStart) {
+        accept(result);
+      }
     } catch (_) {
       // Keep the primary Drift stream alive and retry on the next interval.
     } finally {
@@ -59,11 +65,16 @@ Stream<T> watchWithConditionalPolling<T>({
     }
   };
 
+  void onSourceValue(T value) {
+    sourceVersion += 1;
+    accept(value);
+  }
+
   controller = StreamController<T>(
     onListen: () {
       active = true;
       sourceSubscription = source.listen(
-        accept,
+        onSourceValue,
         onError: (Object error, StackTrace stackTrace) {
           controller.addError(error, stackTrace);
         },
