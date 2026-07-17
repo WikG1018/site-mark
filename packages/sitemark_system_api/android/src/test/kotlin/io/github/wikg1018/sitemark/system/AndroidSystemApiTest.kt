@@ -149,11 +149,27 @@ class AndroidSystemApiTest {
     }
 
     @Test
-    fun normalizedJpegNameAcceptsChinesePhotoNumbers() {
+    fun normalizedJpegNameAcceptsPhotoNumbersWithPunctuationPreservedByDart() {
         val api = AndroidSystemApi(context)
         assertEquals(
             "东区厂房改造-SM-20260717-001.jpg",
             api.normalizedJpegName("东区厂房改造-SM-20260717-001"),
+        )
+        assertEquals(
+            "东区厂房改造（一期）-SM-20260717-001.jpg",
+            api.normalizedJpegName("东区厂房改造（一期）-SM-20260717-001"),
+        )
+        assertEquals(
+            "A.B-SM-20260717-001.jpg",
+            api.normalizedJpegName("A.B-SM-20260717-001"),
+        )
+        assertEquals(
+            "--A-SM-20260717-001.jpg",
+            api.normalizedJpegName("--A-SM-20260717-001"),
+        )
+        assertEquals(
+            "C&D-SM-20260717-001.jpg",
+            api.normalizedJpegName("C&D-SM-20260717-001"),
         )
         assertEquals(
             "Project-SM-20260717-001.jpg",

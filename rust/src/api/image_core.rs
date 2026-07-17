@@ -819,9 +819,14 @@ fn non_empty(value: &Option<String>) -> Option<&str> {
 
 fn safe_archive_component(value: &str) -> Result<&str, String> {
     if value.is_empty()
-        || !value
-            .chars()
-            .all(|character| character.is_alphanumeric() || matches!(character, '-' | '_'))
+        || value.chars().any(|character| {
+            character.is_control()
+                || character.is_whitespace()
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                )
+        })
     {
         return Err(invalid_data(
             "validate archive file name",
@@ -960,8 +965,15 @@ mod archive_tests {
     use super::*;
 
     #[test]
-    fn accepts_unicode_photo_numbers() {
+    fn accepts_photo_numbers_with_punctuation_preserved_by_dart() {
+        // Dart safePhotoProjectName preserves parentheses, periods,
+        // ampersands, and leading hyphens because they are not in its
+        // forbidden set. The archive layer must accept all of them.
         assert!(safe_archive_component("东区厂房改造-SM-20260717-001").is_ok());
+        assert!(safe_archive_component("东区厂房改造（一期）-SM-20260717-001").is_ok());
+        assert!(safe_archive_component("A.B-SM-20260717-001").is_ok());
+        assert!(safe_archive_component("--A-SM-20260717-001").is_ok());
+        assert!(safe_archive_component("C&D-SM-20260717-001").is_ok());
         assert!(safe_archive_component("Project-SM-20260717-001").is_ok());
     }
 

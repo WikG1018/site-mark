@@ -39,4 +39,32 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('preserves punctuation outside the forbidden set', () {
+    // These characters are NOT in Dart's forbidden set and must survive
+    // sanitization so downstream layers (Android/Rust) accept them.
+    expect(safePhotoProjectName('东区厂房改造（一期）'), '东区厂房改造（一期）');
+    expect(safePhotoProjectName('A.B'), 'A.B');
+    expect(safePhotoProjectName('--A'), '--A');
+    expect(safePhotoProjectName('C&D'), 'C&D');
+  });
+
+  test('formats photo numbers with preserved punctuation', () {
+    expect(
+      formatPhotoNumber(
+        projectName: '东区厂房改造（一期）',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      '东区厂房改造（一期）-SM-20260717-001',
+    );
+    expect(
+      formatPhotoNumber(
+        projectName: 'A.B',
+        capturedAt: DateTime(2026, 7, 17),
+        sequence: 1,
+      ),
+      'A.B-SM-20260717-001',
+    );
+  });
 }
