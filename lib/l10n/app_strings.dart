@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:sitemark/domain/app_links.dart';
 
 class AppStrings {
   const AppStrings(this.locale);
@@ -130,8 +131,10 @@ class AppStrings {
   String get privacyStatements => _english
       ? 'No ads · No account · No cloud · System camera only · Local storage only'
       : '无广告 · 无账号 · 无云端 · 仅调用系统相机 · 仅保存在本机';
-  String get repository => _english ? 'Repository' : '代码仓库';
-  String get repositoryValue => 'WikG1018/site-mark';
+  String get repository => _english ? 'GitHub Repository' : 'GitHub 代码仓库';
+  String get repositoryValue => siteMarkRepositoryUrl;
+  String get openLinkFailed =>
+      _english ? 'Could not open the browser' : '无法打开浏览器';
   String get privacySummary => _english
       ? 'Offline by design. No account, no SiteMark server, no ads, no analytics SDK. Foreground location is requested once before capture and stored only with the local record.'
       : '以离线使用为设计前提，不创建账号、不连接服务器、不展示广告、不含统计 SDK。拍摄前仅请求一次前台定位，结果只保存在本机记录中。';

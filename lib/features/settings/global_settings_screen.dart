@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/app_links.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -133,6 +134,25 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  Future<void> _openRepository(BuildContext context) async {
+    try {
+      final opened = await ref
+          .read(externalLinkServiceProvider)
+          .open(siteMarkRepositoryUri);
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.of(context).openLinkFailed)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppStrings.of(context).openLinkFailed)),
+        );
+      }
+    }
   }
 
   @override
@@ -393,7 +413,11 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
                 onTap: _onLocationTapped,
               ),
               const SizedBox(height: 32),
-              _AboutSection(version: _version, buildNumber: _buildNumber),
+              _AboutSection(
+                version: _version,
+                buildNumber: _buildNumber,
+                onOpenRepository: () => _openRepository(context),
+              ),
             ],
           );
         },
@@ -489,10 +513,15 @@ class _AccentChoice extends StatelessWidget {
 }
 
 class _AboutSection extends StatelessWidget {
-  const _AboutSection({required this.version, required this.buildNumber});
+  const _AboutSection({
+    required this.version,
+    required this.buildNumber,
+    required this.onOpenRepository,
+  });
 
   final String version;
   final String buildNumber;
+  final VoidCallback onOpenRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -519,9 +548,12 @@ class _AboutSection extends StatelessWidget {
           ),
         ),
         ListTile(
+          key: const Key('github-repository-link'),
           leading: const Icon(Icons.source_outlined),
           title: Text(strings.repository),
-          subtitle: const Text('WikG1018/site-mark'),
+          subtitle: const Text(siteMarkRepositoryUrl),
+          trailing: const Icon(Icons.open_in_new),
+          onTap: onOpenRepository,
         ),
         ListTile(
           leading: const Icon(Icons.description_outlined),

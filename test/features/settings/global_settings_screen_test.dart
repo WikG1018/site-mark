@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
+import 'package:sitemark/domain/app_links.dart';
+import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -28,11 +30,13 @@ void main() {
     WidgetTester tester, {
     AppDatabase? db,
     PlatformServices? platform,
+    ExternalLinkService? externalLinks,
   }) async {
     final resolved = db ?? database;
     // Default to a fake platform so the screen's permission load resolves
     // deterministically instead of hanging on the real platform channel.
     final resolvedPlatform = platform ?? _SettingsTestPlatformServices();
+    final resolvedLinks = externalLinks ?? _RecordingExternalLinkService();
     // Open the lazy in-memory database and ensure the singleton settings row
     // before the screen reads it, so the FutureBuilder resolves on the first
     // pumped frame instead of stalling `pumpAndSettle` on the DB open.
@@ -42,6 +46,7 @@ void main() {
         overrides: [
           databaseProvider.overrideWithValue(resolved),
           platformServicesProvider.overrideWithValue(resolvedPlatform),
+          externalLinkServiceProvider.overrideWithValue(resolvedLinks),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -149,17 +154,42 @@ void main() {
     expect(find.textContaining('0.2.0'), findsOneWidget);
   });
 
-  testWidgets('about section exposes the repository name and license', (
+  testWidgets('about shows and opens the full GitHub repository URL', (
     tester,
   ) async {
-    await pumpSettings(tester, db: database);
+    final links = _RecordingExternalLinkService();
+    await pumpSettings(tester, db: database, externalLinks: links);
     await tester.scrollUntilVisible(
-      find.text('WikG1018/site-mark'),
+      find.text(siteMarkRepositoryUrl),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('WikG1018/site-mark'), findsOneWidget);
-    expect(find.text('Apache-2.0'), findsOneWidget);
+    expect(find.text('GitHub 代码仓库'), findsOneWidget);
+    expect(find.text(siteMarkRepositoryUrl), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('github-repository-link')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('github-repository-link')));
+    await tester.pump();
+    expect(links.opened, [siteMarkRepositoryUri]);
+  });
+
+  testWidgets('about shows a snackbar when opening the repository fails', (
+    tester,
+  ) async {
+    final links = _RecordingExternalLinkService(result: false);
+    await pumpSettings(tester, db: database, externalLinks: links);
+    await tester.scrollUntilVisible(
+      find.text(siteMarkRepositoryUrl),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.byKey(const Key('github-repository-link')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('github-repository-link')));
+    await tester.pump();
+    expect(find.text('无法打开浏览器'), findsOneWidget);
+    expect(links.opened, [siteMarkRepositoryUri]);
   });
 
   testWidgets('location tile shows disabled when permission is denied', (
@@ -323,4 +353,17 @@ class _SettingsTestPlatformServices implements PlatformServices {
         fileSizeBytes: 0,
         mimeType: 'image/jpeg',
       );
+}
+
+class _RecordingExternalLinkService implements ExternalLinkService {
+  _RecordingExternalLinkService({this.result = true});
+
+  final bool result;
+  final List<Uri> opened = [];
+
+  @override
+  Future<bool> open(Uri uri) async {
+    opened.add(uri);
+    return result;
+  }
 }
