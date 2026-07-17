@@ -7,15 +7,23 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
+import android.location.Location
 import android.location.LocationManager
+import android.os.CancellationSignal
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
+import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.`when`
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.anyInt
 import org.mockito.Mockito.anyString
+import java.util.concurrent.Executor
+import java.util.function.Consumer
 
 /**
  * Verifies the headless-safety contract of [AndroidSystemApi]: MediaStore
@@ -30,6 +38,7 @@ import org.mockito.Mockito.anyString
 class AndroidSystemApiTest {
 
     private lateinit var context: Context
+    private lateinit var locationManager: LocationManager
 
     @Before
     fun setUp() {
@@ -42,7 +51,8 @@ class AndroidSystemApiTest {
         `when`(editor.remove(anyString())).thenReturn(editor)
         `when`(editor.apply()).then {} // no-op
         `when`(context.getSharedPreferences(anyString(), anyInt())).thenReturn(prefs)
-        `when`(context.getSystemService(LocationManager::class.java)).thenReturn(mock(LocationManager::class.java))
+        locationManager = mock(LocationManager::class.java)
+        `when`(context.getSystemService(LocationManager::class.java)).thenReturn(locationManager)
         // Permission checks return denied so the API never believes it has GPS.
         `when`(context.checkPermission(anyString(), anyInt(), anyInt())).thenReturn(PackageManager.PERMISSION_DENIED)
         `when`(context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION))
@@ -96,5 +106,45 @@ class AndroidSystemApiTest {
             .thenReturn(PackageManager.PERMISSION_GRANTED)
         val api = AndroidSystemApi(context)
         assertEquals(LocationPermissionState.GRANTED, api.getLocationPermissionState())
+    }
+
+    @Test
+    fun concurrentLocationRequestsShareTheInFlightResult() {
+        `when`(context.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION))
+            .thenReturn(PackageManager.PERMISSION_GRANTED)
+        `when`(locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)).thenReturn(true)
+        `when`(context.mainExecutor).thenReturn(Executor { command -> command.run() })
+        var locationConsumer: Consumer<Location>? = null
+        doAnswer { invocation ->
+            locationConsumer = invocation.getArgument(3)
+            null
+        }.`when`(locationManager).getCurrentLocation(
+            eq(LocationManager.NETWORK_PROVIDER),
+            any(CancellationSignal::class.java),
+            any(Executor::class.java),
+            any(),
+        )
+        val api = AndroidSystemApi(context)
+        var first: Result<LocationResult>? = null
+        var second: Result<LocationResult>? = null
+
+        api.requestCurrentLocation(10_000) { first = it }
+        api.requestCurrentLocation(10_000) { second = it }
+
+        assertNull(first)
+        assertNull(second)
+
+        val location = mock(Location::class.java)
+        `when`(location.latitude).thenReturn(23.123)
+        `when`(location.longitude).thenReturn(113.456)
+        `when`(location.accuracy).thenReturn(12.0f)
+        locationConsumer!!.accept(location)
+
+        val firstLocation = requireNotNull(first).getOrThrow()
+        val secondLocation = requireNotNull(second).getOrThrow()
+        assertEquals(LocationOutcome.APPROXIMATE, firstLocation.outcome)
+        assertEquals(LocationOutcome.APPROXIMATE, secondLocation.outcome)
+        assertEquals(23.123, secondLocation.latitude!!, 0.000001)
+        assertEquals(113.456, secondLocation.longitude!!, 0.000001)
     }
 }

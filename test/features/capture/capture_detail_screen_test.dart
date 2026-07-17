@@ -133,14 +133,53 @@ void main() {
     expect(await database.captureById('capture-1'), isNotNull);
     await disposeDetail(tester);
   });
+
+  testWidgets('missing original is explicit and disables original actions', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: false);
+
+    expect(find.text('原图缺失'), findsOneWidget);
+    expect(find.byKey(const Key('show-original')), findsNothing);
+    expect(find.byKey(const Key('delete-original')), findsNothing);
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+
+    await disposeDetail(tester);
+  });
+
+  testWidgets('failed original deletion reports failure instead of success', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    files.deleteError = StateError('delete blocked');
+
+    await tester.tap(find.byKey(const Key('delete-original')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除原图'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('原图已清理'), findsNothing);
+    expect(find.textContaining('delete blocked'), findsOneWidget);
+    expect(
+      (await database.captureById('capture-1'))?.originalDeletedAt,
+      isNull,
+    );
+
+    await disposeDetail(tester);
+  });
 }
 
 class _DetailFiles implements PrivateFileStore {
   final Set<String> existing = {};
+  Object? deleteError;
   @override
   Future<bool> exists(String path) async => existing.contains(path);
   @override
-  Future<void> deleteIfExists(String path) async => existing.remove(path);
+  Future<void> deleteIfExists(String path) async {
+    final error = deleteError;
+    if (error != null) throw error;
+    existing.remove(path);
+  }
 }
 
 class _DetailPaths implements CaptureOutputPaths {

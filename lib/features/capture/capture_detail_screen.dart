@@ -38,9 +38,26 @@ class CaptureDetailScreen extends ConsumerStatefulWidget {
 
 class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
   CapturePreviewSource _previewSource = CapturePreviewSource.bestAvailable;
+  Future<CaptureFileInfo>? _fileInfoFuture;
+  String? _fileInfoKey;
 
   String get _projectId => widget.projectId;
   String get _captureId => widget.captureId;
+
+  Future<CaptureFileInfo> _fileInfoFor(
+    CaptureRecord capture,
+    CaptureMediaService mediaService,
+  ) {
+    final key =
+        '${capture.id}:${capture.status.name}:'
+        '${capture.originalDeletedAt?.microsecondsSinceEpoch}:'
+        '${capture.publishedUri}';
+    if (_fileInfoFuture == null || _fileInfoKey != key) {
+      _fileInfoKey = key;
+      _fileInfoFuture = mediaService.inspect(capture);
+    }
+    return _fileInfoFuture!;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,152 +69,151 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       stream: database.watchCaptureById(_captureId),
       builder: (context, snapshot) {
         final capture = snapshot.data;
-        final isBusy =
-            capture != null &&
-            (capture.status == CaptureStatus.captured ||
-                capture.status == CaptureStatus.rendering);
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(capture?.photoNumber ?? strings.captureDetail),
-            actions: [
-              if (capture != null && !isBusy) ...[
-                if (capture.originalDeletedAt == null)
-                  IconButton(
-                    onPressed: () => context.go(
-                      '/projects/$_projectId/captures/$_captureId/edit',
+        if (capture == null) {
+          return Scaffold(
+            appBar: AppBar(title: Text(strings.captureDetail)),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        return FutureBuilder<CaptureFileInfo>(
+          future: _fileInfoFor(capture, mediaService),
+          builder: (context, infoSnapshot) {
+            final info = infoSnapshot.data;
+            final originalRetained =
+                info?.originalState == OriginalPhotoState.retained;
+            final effectiveSource = originalRetained
+                ? _previewSource
+                : CapturePreviewSource.watermarked;
+            final canRetry =
+                capture.status == CaptureStatus.failed && originalRetained;
+            final isBusy =
+                capture.status == CaptureStatus.captured ||
+                capture.status == CaptureStatus.rendering;
+            return Scaffold(
+              appBar: AppBar(
+                title: Text(capture.photoNumber ?? strings.captureDetail),
+                actions: [
+                  if (!isBusy && originalRetained)
+                    IconButton(
+                      onPressed: () => context.go(
+                        '/projects/$_projectId/captures/$_captureId/edit',
+                      ),
+                      tooltip: strings.editRecord,
+                      icon: const Icon(Icons.edit_outlined),
                     ),
-                    tooltip: strings.editRecord,
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                if (capture.originalDeletedAt == null)
-                  IconButton(
-                    key: const Key('delete-original'),
-                    onPressed: () => _deleteOriginal(capture),
-                    tooltip: strings.deleteOriginal,
-                    icon: const Icon(Icons.cleaning_services_outlined),
-                  ),
-                IconButton(
-                  key: const Key('delete-all'),
-                  onPressed: () => _deleteAll(capture),
-                  tooltip: strings.deleteAll,
-                  icon: const Icon(Icons.delete_sweep_outlined),
-                ),
-              ],
-            ],
-          ),
-          body: capture == null
-              ? const Center(child: CircularProgressIndicator())
-              : ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    FutureBuilder<CaptureFileInfo>(
-                      future: mediaService.inspect(capture),
-                      builder: (context, infoSnapshot) {
-                        final info = infoSnapshot.data;
-                        final originalRetained =
-                            info?.originalState == OriginalPhotoState.retained;
-                        final effectiveSource = originalRetained
-                            ? _previewSource
-                            : CapturePreviewSource.watermarked;
-                        final canRetry =
-                            capture.status == CaptureStatus.failed &&
-                            originalRetained;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (canRetry)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: FilledButton.icon(
-                                  onPressed: () => _retry(),
-                                  icon: const Icon(Icons.refresh),
-                                  label: Text(strings.retryProcessing),
-                                ),
-                              ),
-                            if (originalRetained)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _PreviewSourceToggle(
-                                  source: _previewSource,
-                                  onChanged: (source) => setState(() {
-                                    _previewSource = source;
-                                  }),
-                                ),
-                              ),
-                            AspectRatio(
-                              aspectRatio: 4 / 3,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: CaptureImagePreview(
-                                  capture: capture,
-                                  outputPaths: outputPaths,
-                                  source: effectiveSource,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 14),
-                            if (info != null)
-                              _DetailCard(
-                                children: _fileInfoRows(strings, capture, info),
-                              ),
-                            const SizedBox(height: 14),
-                            _DetailCard(
-                              children: [
-                                _DetailRow(
-                                  icon: Icons.place_outlined,
-                                  label: strings.workLocation,
-                                  value: capture.workLocation,
-                                ),
-                                _DetailRow(
-                                  icon: Icons.construction_outlined,
-                                  label: strings.workContent,
-                                  value: capture.workContent,
-                                ),
-                                _DetailRow(
-                                  icon: Icons.person_outline,
-                                  label: strings.photographer,
-                                  value: capture.photographer,
-                                ),
-                                if (capture.notes != null)
-                                  _DetailRow(
-                                    icon: Icons.notes_outlined,
-                                    label: strings.notesOptional,
-                                    value: capture.notes!,
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            _DetailCard(
-                              children: [
-                                _DetailRow(
-                                  icon: Icons.schedule_outlined,
-                                  label: strings.capturedAt,
-                                  value:
-                                      capture.capturedAt?.toIso8601String() ??
-                                      '-',
-                                ),
-                                if (capture.latitude != null)
-                                  _DetailRow(
-                                    icon: Icons.my_location_outlined,
-                                    label: strings.coordinates,
-                                    value:
-                                        '${capture.latitude!.toStringAsFixed(6)}, '
-                                        '${capture.longitude!.toStringAsFixed(6)}',
-                                  ),
-                                _DetailRow(
-                                  icon: Icons.fingerprint,
-                                  label: strings.originalSha256,
-                                  value: capture.originalSha256 ?? '-',
-                                  selectable: true,
-                                ),
-                              ],
-                            ),
-                          ],
-                        );
-                      },
+                  if (!isBusy && originalRetained)
+                    IconButton(
+                      key: const Key('delete-original'),
+                      onPressed: () => _deleteOriginal(capture),
+                      tooltip: strings.deleteOriginal,
+                      icon: const Icon(Icons.cleaning_services_outlined),
                     ),
-                  ],
-                ),
+                  if (!isBusy)
+                    IconButton(
+                      key: const Key('delete-all'),
+                      onPressed: () => _deleteAll(capture),
+                      tooltip: strings.deleteAll,
+                      icon: const Icon(Icons.delete_sweep_outlined),
+                    ),
+                ],
+              ),
+              body: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (canRetry)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: FilledButton.icon(
+                            onPressed: () => _retry(),
+                            icon: const Icon(Icons.refresh),
+                            label: Text(strings.retryProcessing),
+                          ),
+                        ),
+                      if (originalRetained)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _PreviewSourceToggle(
+                            source: _previewSource,
+                            onChanged: (source) => setState(() {
+                              _previewSource = source;
+                            }),
+                          ),
+                        ),
+                      AspectRatio(
+                        aspectRatio: 4 / 3,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: CaptureImagePreview(
+                            capture: capture,
+                            outputPaths: outputPaths,
+                            source: effectiveSource,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      if (info != null)
+                        _DetailCard(
+                          children: _fileInfoRows(strings, capture, info),
+                        ),
+                      const SizedBox(height: 14),
+                      _DetailCard(
+                        children: [
+                          _DetailRow(
+                            icon: Icons.place_outlined,
+                            label: strings.workLocation,
+                            value: capture.workLocation,
+                          ),
+                          _DetailRow(
+                            icon: Icons.construction_outlined,
+                            label: strings.workContent,
+                            value: capture.workContent,
+                          ),
+                          _DetailRow(
+                            icon: Icons.person_outline,
+                            label: strings.photographer,
+                            value: capture.photographer,
+                          ),
+                          if (capture.notes != null)
+                            _DetailRow(
+                              icon: Icons.notes_outlined,
+                              label: strings.notesOptional,
+                              value: capture.notes!,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      _DetailCard(
+                        children: [
+                          _DetailRow(
+                            icon: Icons.schedule_outlined,
+                            label: strings.capturedAt,
+                            value: capture.capturedAt?.toIso8601String() ?? '-',
+                          ),
+                          if (capture.latitude != null)
+                            _DetailRow(
+                              icon: Icons.my_location_outlined,
+                              label: strings.coordinates,
+                              value:
+                                  '${capture.latitude!.toStringAsFixed(6)}, '
+                                  '${capture.longitude!.toStringAsFixed(6)}',
+                            ),
+                          _DetailRow(
+                            icon: Icons.fingerprint,
+                            label: strings.originalSha256,
+                            value: capture.originalSha256 ?? '-',
+                            selectable: true,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -208,12 +224,17 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     CaptureRecord capture,
     CaptureFileInfo info,
   ) {
-    final rows = <Widget>[];
-    // Only render the original-file section when the original is still on disk.
-    // When the original has been cleared or is unexpectedly missing, the
-    // segmented control is hidden and the cleared-state snackbar (if any)
-    // already conveys the state, so we skip the section to avoid duplicate
-    // "原图已清理" text that would break finders expecting a single match.
+    final rows = <Widget>[
+      _DetailRow(
+        icon: Icons.photo_library_outlined,
+        label: strings.originalPhoto,
+        value: switch (info.originalState) {
+          OriginalPhotoState.retained => strings.originalRetained,
+          OriginalPhotoState.cleared => strings.originalCleared,
+          OriginalPhotoState.missing => strings.originalMissing,
+        },
+      ),
+    ];
     if (info.original != null) {
       rows.add(
         _DetailRow(
@@ -296,11 +317,23 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(captureMediaServiceProvider).clearOriginals([capture.id]);
+    final result = await ref.read(captureMediaServiceProvider).clearOriginals([
+      capture.id,
+    ]);
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(strings.originalClearedSnackbar)));
+    final failure = result.failures[capture.id];
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          failure ??
+              strings.actionResult(
+                result.succeededIds.length,
+                result.skippedIds.length,
+                result.failures.length,
+              ),
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteAll(CaptureRecord capture) async {

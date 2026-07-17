@@ -9,6 +9,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
+import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -584,6 +585,43 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets('busy record tap is disabled while editing', (tester) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final pending = await database.createPendingCapture(
+      id: 'capture-busy',
+      projectId: 'project-1',
+      originalPath: '/private/capture-busy.jpg',
+      workLocation: 'A 区',
+      workContent: '风管检查',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      locationResolution: 'resolved',
+    );
+    await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Checkbox>(find.byType(Checkbox)).onChanged, isNull);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(CaptureRecordCard),
+        matching: find.byType(InkWell),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
     await unmountTree(tester);
   });
 }

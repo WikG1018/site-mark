@@ -47,8 +47,10 @@ class CaptureRecordCard extends ConsumerWidget {
     final capture = summary.capture;
     final (label, icon, color) = _statusPresentation(capture.status, strings);
     final mediaService = ref.watch(captureMediaServiceProvider);
-    final cardTap = selectionMode && selectable
-        ? () => onSelectedChanged?.call(!selected)
+    final VoidCallback? cardTap = selectionMode
+        ? selectable
+              ? () => onSelectedChanged?.call(!selected)
+              : null
         : onTap;
     return Card(
       clipBehavior: Clip.antiAlias,

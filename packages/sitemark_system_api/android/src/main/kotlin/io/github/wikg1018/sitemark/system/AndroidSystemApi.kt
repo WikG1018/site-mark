@@ -45,7 +45,7 @@ class AndroidSystemApi(
     private var activity: Activity? = null
 
     private var cameraCallback: ((Result<CameraCaptureResult>) -> Unit)? = null
-    private var locationCallback: ((Result<LocationResult>) -> Unit)? = null
+    private val locationCallbacks = mutableListOf<(Result<LocationResult>) -> Unit>()
     private var locationCancellation: CancellationSignal? = null
     private var locationTimeout: Runnable? = null
     private var permissionCallback: ((Result<LocationPermissionState>) -> Unit)? = null
@@ -235,11 +235,10 @@ class AndroidSystemApi(
         timeoutMillis: Long,
         callback: (Result<LocationResult>) -> Unit,
     ) {
-        if (locationCallback != null) {
-            callback(Result.failure(IllegalStateException("A location request is already active")))
+        locationCallbacks.add(callback)
+        if (locationCallbacks.size > 1) {
             return
         }
-        locationCallback = callback
         requestedLocationTimeoutMillis = timeoutMillis.coerceIn(1_000L, 30_000L)
         if (!hasLocationPermission()) {
             finishLocation(
@@ -345,12 +344,13 @@ class AndroidSystemApi(
     }
 
     private fun finishLocation(result: LocationResult) {
-        val callback = locationCallback ?: return
-        locationCallback = null
+        if (locationCallbacks.isEmpty()) return
+        val callbacks = locationCallbacks.toList()
+        locationCallbacks.clear()
         locationCancellation = null
         locationTimeout?.let(mainHandler::removeCallbacks)
         locationTimeout = null
-        callback(Result.success(result))
+        callbacks.forEach { callback -> callback(Result.success(result)) }
     }
 
     override fun publishJpeg(
