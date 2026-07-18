@@ -650,6 +650,9 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// One-shot read used for app-private storage accounting.
+  Future<List<CaptureRecord>> getAllCaptures() => select(captureRecords).get();
+
   bool _isProcessing(CaptureStatus status) =>
       status == CaptureStatus.captured || status == CaptureStatus.rendering;
 

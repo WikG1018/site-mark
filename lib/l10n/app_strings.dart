@@ -153,6 +153,36 @@ class AppStrings {
       ? 'Drag the slider to adjust watermark font size (80%–160%).'
       : '拖动滑块调整水印字体大小（80%–160%）';
 
+  // App-private storage accounting. System MediaStore photos are excluded.
+  String get storageScope => _english
+      ? 'SiteMark app data usage (system gallery excluded)'
+      : 'SiteMark 应用内数据占用（不含系统相册）';
+  String get storageTotal => _english ? 'Total' : '合计';
+  String get privateOriginals => _english ? 'Private originals' : '私有原图';
+  String get privateWatermarked =>
+      _english ? 'Private watermarked photos' : '私有水印成片';
+  String get localExportFiles => _english ? 'Local export files' : '本地导出文件';
+  String get databaseAndOther =>
+      _english ? 'Database and other app documents' : '数据库及其他应用文档';
+  String get refreshStorage => _english ? 'Refresh storage' : '刷新占用';
+  String get manageRecords => _english ? 'Manage records' : '管理拍摄记录';
+  String get clearLocalExports =>
+      _english ? 'Clear local export files' : '清理本地导出文件';
+  String get clearLocalExportsHint => _english
+      ? 'Deletes only app-private ZIP files; shared copies and photos are kept.'
+      : '仅删除应用私有目录中的 ZIP，已分享副本和照片不受影响。';
+  String get clearLocalExportsPrompt => _english
+      ? 'Delete all ZIP files from SiteMark private exports? Shared copies, photos, originals, and records are not affected.'
+      : '确认删除 SiteMark 私有导出目录中的全部 ZIP？已分享副本、照片、原图和记录均不受影响。';
+  String localExportsCleared(int count) =>
+      _english ? 'Cleared $count local export file(s)' : '已清理 $count 个本地导出文件';
+  String get clearLocalExportsFailed =>
+      _english ? 'Could not clear local exports' : '本地导出文件清理失败';
+  String get storageLoadFailed =>
+      _english ? 'Could not read storage usage' : '无法读取存储占用';
+  String get retry => _english ? 'Retry' : '重试';
+  String get clear => _english ? 'Clear' : '清理';
+
   // Non-blocking location permission UX
   String get locationPermissionExplanation => _english
       ? 'Foreground location tags each capture with GPS coordinates. Capture still works if you decline; tap below to enable it once.'

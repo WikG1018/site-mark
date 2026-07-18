@@ -6,12 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_links.dart';
+import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/workflow/app_storage_service.dart';
 
 void main() {
   late AppDatabase database;
@@ -31,12 +33,23 @@ void main() {
     AppDatabase? db,
     PlatformServices? platform,
     ExternalLinkService? externalLinks,
+    StorageUsageService? storage,
   }) async {
     final resolved = db ?? database;
     // Default to a fake platform so the screen's permission load resolves
     // deterministically instead of hanging on the real platform channel.
     final resolvedPlatform = platform ?? _SettingsTestPlatformServices();
     final resolvedLinks = externalLinks ?? _RecordingExternalLinkService();
+    final resolvedStorage =
+        storage ??
+        _RecordingStorageUsageService(const [
+          AppStorageUsage(
+            originalBytes: 0,
+            renderedBytes: 0,
+            exportBytes: 0,
+            databaseAndOtherBytes: 0,
+          ),
+        ]);
     // Open the lazy in-memory database and ensure the singleton settings row
     // before the screen reads it, so the FutureBuilder resolves on the first
     // pumped frame instead of stalling `pumpAndSettle` on the DB open.
@@ -47,6 +60,7 @@ void main() {
           databaseProvider.overrideWithValue(resolved),
           platformServicesProvider.overrideWithValue(resolvedPlatform),
           externalLinkServiceProvider.overrideWithValue(resolvedLinks),
+          storageUsageServiceProvider.overrideWithValue(resolvedStorage),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -152,6 +166,145 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.textContaining('0.2.0'), findsOneWidget);
+  });
+
+  testWidgets('storage section shows totals, refreshes, and clears exports', (
+    tester,
+  ) async {
+    final storage = _RecordingStorageUsageService([
+      const AppStorageUsage(
+        originalBytes: 1024 * 1024,
+        renderedBytes: 2 * 1024 * 1024,
+        exportBytes: 3 * 1024 * 1024,
+        databaseAndOtherBytes: 4 * 1024 * 1024,
+      ),
+      const AppStorageUsage(
+        originalBytes: 1024 * 1024,
+        renderedBytes: 2 * 1024 * 1024,
+        exportBytes: 0,
+        databaseAndOtherBytes: 4 * 1024 * 1024,
+      ),
+    ]);
+    await pumpSettings(tester, storage: storage);
+    final scrollable = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('storage-section')),
+      300,
+      scrollable: scrollable,
+    );
+
+    expect(find.text('SiteMark 应用内数据占用（不含系统相册）'), findsOneWidget);
+    expect(find.text('10 MB'), findsOneWidget);
+    expect(find.text('1 MB'), findsOneWidget);
+    expect(find.text('2 MB'), findsOneWidget);
+    expect(find.text('3 MB'), findsOneWidget);
+    expect(find.text('4 MB'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('storage-refresh')));
+    await tester.tap(find.byKey(const Key('storage-refresh')));
+    await tester.pumpAndSettle();
+    expect(storage.loadCount, 2);
+
+    // Restore a non-zero export value to exercise the destructive action.
+    storage.values.add(
+      const AppStorageUsage(
+        originalBytes: 1024 * 1024,
+        renderedBytes: 2 * 1024 * 1024,
+        exportBytes: 3 * 1024 * 1024,
+        databaseAndOtherBytes: 4 * 1024 * 1024,
+      ),
+    );
+    await tester.tap(find.byKey(const Key('storage-refresh')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('clear-local-exports')));
+    await tester.tap(find.byKey(const Key('clear-local-exports')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-clear-exports')));
+    await tester.pumpAndSettle();
+    expect(storage.clearCount, 1);
+  });
+
+  testWidgets('storage error state retries successfully', (tester) async {
+    final storage = _RetryingStorageUsageService();
+    await pumpSettings(tester, storage: storage);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('storage-section')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('无法读取存储占用'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('retry-storage-load')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('retry-storage-load')));
+    await tester.pumpAndSettle();
+
+    expect(storage.loadCount, 2);
+    expect(find.text('无法读取存储占用'), findsNothing);
+  });
+
+  testWidgets('storage manage-records entry opens the records route', (
+    tester,
+  ) async {
+    await database.getAppSettings();
+    final router = GoRouter(
+      initialLocation: '/settings',
+      routes: [
+        GoRoute(
+          path: '/settings',
+          builder: (context, state) => const GlobalSettingsScreen(),
+        ),
+        GoRoute(
+          path: '/records',
+          builder: (context, state) =>
+              const Scaffold(body: Text('records destination')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          platformServicesProvider.overrideWithValue(
+            _SettingsTestPlatformServices(),
+          ),
+          storageUsageServiceProvider.overrideWithValue(
+            _RecordingStorageUsageService(const [
+              AppStorageUsage(
+                originalBytes: 0,
+                renderedBytes: 0,
+                exportBytes: 0,
+                databaseAndOtherBytes: 0,
+              ),
+            ]),
+          ),
+        ],
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('manage-storage-records')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.byKey(const Key('manage-storage-records')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('manage-storage-records')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('records destination'), findsOneWidget);
   });
 
   testWidgets('about shows and opens the full GitHub repository URL', (
@@ -270,6 +423,16 @@ void main() {
           platformServicesProvider.overrideWithValue(
             _SettingsTestPlatformServices(),
           ),
+          storageUsageServiceProvider.overrideWithValue(
+            _RecordingStorageUsageService(const [
+              AppStorageUsage(
+                originalBytes: 0,
+                renderedBytes: 0,
+                exportBytes: 0,
+                databaseAndOtherBytes: 0,
+              ),
+            ]),
+          ),
         ],
         child: MaterialApp.router(
           locale: const Locale('zh'),
@@ -365,5 +528,56 @@ class _RecordingExternalLinkService implements ExternalLinkService {
   Future<bool> open(Uri uri) async {
     opened.add(uri);
     return result;
+  }
+}
+
+class _RecordingStorageUsageService implements StorageUsageService {
+  _RecordingStorageUsageService(this.values);
+
+  final List<AppStorageUsage> values;
+  int loadCount = 0;
+  int clearCount = 0;
+
+  @override
+  Future<AppStorageUsage> load() async {
+    final index = loadCount < values.length ? loadCount : values.length - 1;
+    loadCount++;
+    return values[index];
+  }
+
+  @override
+  Future<ClearExportsResult> clearExports() async {
+    clearCount++;
+    final current = values.last;
+    values.add(
+      AppStorageUsage(
+        originalBytes: current.originalBytes,
+        renderedBytes: current.renderedBytes,
+        exportBytes: 0,
+        databaseAndOtherBytes: current.databaseAndOtherBytes,
+      ),
+    );
+    return const ClearExportsResult(deletedFiles: 1, freedBytes: 1024);
+  }
+}
+
+class _RetryingStorageUsageService implements StorageUsageService {
+  int loadCount = 0;
+
+  @override
+  Future<AppStorageUsage> load() async {
+    loadCount++;
+    if (loadCount == 1) throw StateError('read failed');
+    return const AppStorageUsage(
+      originalBytes: 0,
+      renderedBytes: 0,
+      exportBytes: 0,
+      databaseAndOtherBytes: 0,
+    );
+  }
+
+  @override
+  Future<ClearExportsResult> clearExports() async {
+    return const ClearExportsResult(deletedFiles: 0, freedBytes: 0);
   }
 }

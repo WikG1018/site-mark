@@ -12,7 +12,6 @@ import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
-import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 CaptureRecord _record({required String id, required DateTime capturedAt}) {

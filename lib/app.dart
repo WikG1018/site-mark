@@ -17,6 +17,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
+import 'package:sitemark/workflow/app_storage_service.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
@@ -94,6 +95,14 @@ final shareFileServiceProvider = Provider<ShareFileService>(
 final privateFileStoreProvider = Provider<PrivateFileStore>(
   (ref) => DartIoPrivateFileStore(),
 );
+
+final storageUsageServiceProvider = Provider<StorageUsageService>((ref) {
+  return AppStorageUsageService(database: ref.watch(databaseProvider));
+});
+
+final storageUsageProvider = FutureProvider.autoDispose((ref) {
+  return ref.watch(storageUsageServiceProvider).load();
+});
 
 final externalLinkServiceProvider = Provider<ExternalLinkService>(
   (ref) => const UrlLauncherExternalLinkService(),
