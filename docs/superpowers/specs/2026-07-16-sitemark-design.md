@@ -1,5 +1,9 @@
 # SiteMark 工程印记 Design
 
+> **历史文档：** 本文记录 v0.1.0 初始设计，不代表当前 v0.2.0 行为。
+> 请以[当前产品边界与总体架构](../../current-product-architecture.md)和
+> [关键技术决策记录](../../decision-records.md)为准。
+
 ## Product
 
 SiteMark is an Android 12+ engineering-record camera. It contains no ads,

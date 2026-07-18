@@ -165,10 +165,13 @@ SiteMark 只通过 Android URI 授权机制临时提供拍摄目标。
 
 详细设计与决策记录：
 
-- [SiteMark v0.1.0 产品与技术设计](docs/superpowers/specs/2026-07-16-sitemark-design.md)
-- [SiteMark v0.1.0 实施计划](docs/superpowers/plans/2026-07-16-sitemark-v0.1.0.md)
-- [README 产品首页改版设计](docs/superpowers/specs/2026-07-16-readme-redesign-design.md)
-- [README 产品首页实施计划](docs/superpowers/plans/2026-07-16-readme-redesign.md)
+- [当前产品边界与总体架构](docs/current-product-architecture.md)
+- [拍摄、后台处理与照片存储生命周期](docs/capture-processing-storage.md)
+- [项目、记录、水印与设置详细设计](docs/record-watermark-settings.md)
+- [关键技术决策记录](docs/decision-records.md)
+
+早期版本的设计与实施计划继续保留在 `docs/superpowers/`，仅用于追溯历史，
+不代表当前版本行为。
 
 ## 本地构建 / Build locally
 

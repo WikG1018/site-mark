@@ -1,5 +1,9 @@
 # SiteMark README Redesign Implementation Plan
 
+> **历史文档：** 本文是 PR #1 的 README 实施清单，其中的版本、截图、测试数量、
+> PR 编号和“尚无签名 APK”等说明已经过期。当前信息以仓库根目录的
+> [README](../../../README.md)和[关键技术决策记录](../../decision-records.md)为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the developer-heavy README with a Chinese-first product landing page backed by four real Android screenshots and honest alpha-release information.
