@@ -287,7 +287,8 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('SM-'), findsOneWidget);
+    expect(find.byType(CaptureRecordCard), findsOneWidget);
+    expect(find.textContaining('SM-'), findsNothing);
     expect(find.text('已完成'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.archive_outlined));
@@ -297,7 +298,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(share.lastPath, '/exports/project-1.zip');
 
-    await tester.tap(find.textContaining('SM-'));
+    await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();
     // The detail screen now leads with a large image preview, so the evidence
     // card is below the fold and must be scrolled into view before asserting.
