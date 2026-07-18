@@ -13,7 +13,7 @@ manufacturer camera experience.
 
 **当前版本：[`v0.2.0` 签名预发布版](https://github.com/WikG1018/site-mark/releases/tag/v0.2.0)**
 
-支持 Android 12 及以上系统。预发布版适合试用和现场反馈，重要项目请同时保留已导出的备份。
+支持 Android 12 及以上系统。预发布版适合试用和现场反馈，重要项目请同时保留已导出的归档文件。
 
 ## 下载 / Download
 
@@ -23,7 +23,7 @@ manufacturer camera experience.
 | universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [下载 sitemark-v0.2.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v0.2.0/sitemark-v0.2.0-universal.apk) |
 | SHA-256 | 校验下载文件完整性 | [查看 SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v0.2.0/SHA256SUMS.txt) |
 
-> **重要数据警告：** 卸载 SiteMark 会删除项目数据库和应用私有原图；已经发布到 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载或切换签名前，必须先导出重要项目和原图。
+> **重要数据警告：** 卸载 SiteMark 会删除项目数据库和应用私有原图；已经发布到 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载或切换签名前，必须先导出重要项目和原图。导出 ZIP 仅供外部归档，当前版本不能导入或恢复 SiteMark 应用内项目/数据库。
 
 ## 安装与升级
 
@@ -31,7 +31,7 @@ manufacturer camera experience.
 2. 打开 APK，按 Android 提示允许浏览器或文件管理器“安装未知应用”。
 3. 后续使用相同正式签名的新版本时，可以覆盖安装并保留应用数据。
 4. 旧 Debug APK 使用不同签名，Android 可能拒绝直接覆盖安装。
-5. 遇到签名冲突时，先导出重要数据，再决定是否卸载旧版。
+5. 遇到签名冲突时，先将重要项目和原图导出为 ZIP 外部归档；当前版本不能将其导入或恢复到 SiteMark，再决定是否卸载旧版。
 6. [Release 页面](https://github.com/WikG1018/site-mark/releases/tag/v0.2.0)提供版本说明和校验文件。
 
 ## 实际效果 / Screenshots
@@ -86,7 +86,7 @@ SiteMark 不在应用里重做相机界面，而是通过 Android 标准 Intent 
 5. 上一张在后台处理时继续拍摄。
 6. 搜索或筛选记录，检查预览、详情、文件大小和原图状态。
 7. 批量导出、再次保存、清理原图或删除，也可在详情页单独处理。
-8. 卸载或换机前导出重要项目和原图。
+8. 卸载或换机前将重要项目和原图导出为 ZIP 外部归档；当前版本不能将其导入或恢复到 SiteMark。
 
 ## 原图生命周期与删除
 
