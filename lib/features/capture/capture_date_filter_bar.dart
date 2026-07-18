@@ -73,6 +73,7 @@ class CaptureDateFilterBar extends StatelessWidget {
               onChanged: (value) => onChanged(filter.selectYear(value)),
             ),
           ),
+          const SizedBox(width: 6),
           Expanded(
             child: _menu(
               key: const Key('filter-month'),
@@ -84,6 +85,7 @@ class CaptureDateFilterBar extends StatelessWidget {
               onChanged: (value) => onChanged(filter.selectMonth(value)),
             ),
           ),
+          const SizedBox(width: 6),
           Expanded(
             child: _menu(
               key: const Key('filter-day'),

@@ -12,6 +12,7 @@ import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
+import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 CaptureRecord _record({required String id, required DateTime capturedAt}) {
@@ -332,6 +333,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'filter controls are 44dp rounded rectangles with centered text',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final filter = ValueNotifier(const CaptureFilter());
+      await tester.pumpWidget(filterHarnessLive(filter));
+      await tester.pumpAndSettle();
+
+      final menuFinder = find.byKey(const Key('filter-year'));
+      final buttonFinder = find.descendant(
+        of: menuFinder,
+        matching: find.byType(OutlinedButton),
+      );
+      final button = tester.widget<OutlinedButton>(buttonFinder);
+      final shape = button.style?.shape?.resolve(<WidgetState>{});
+
+      expect(tester.getSize(menuFinder).height, 44);
+      expect(shape, isA<RoundedRectangleBorder>());
+      final border = shape! as RoundedRectangleBorder;
+      expect(border.borderRadius, BorderRadius.circular(10));
+      expect(
+        (tester.getCenter(buttonFinder).dx -
+                tester.getCenter(find.text('全部年份')).dx)
+            .abs(),
+        lessThan(1),
+      );
+    },
+  );
+
   testWidgets('all-records controls share one row at 360dp', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -467,6 +498,27 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
   }
+
+  testWidgets('record cards show a short date and sequence title', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '云湖之城');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 17, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026-07-17 · 001'), findsOneWidget);
+    expect(find.text('云湖之城-SM-20260717-001'), findsNothing);
+    await unmountTree(tester);
+  });
 
   testWidgets('all-records edit mode shows checkboxes and batch bar', (
     tester,

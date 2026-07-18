@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Compact 48dp dropdown-style filter menu for one-row filter bars.
+/// Compact 44dp dropdown-style filter menu for one-row filter bars.
 ///
 /// Wraps a [MenuAnchor] with an [OutlinedButton] builder so multiple menus can
 /// share a single [Row] at narrow widths (e.g. 360dp) without overflowing.
-/// The [label] is shown with a trailing chevron and ellipsizes when cramped.
+/// The label stays centered in the entire control while the chevron is pinned
+/// to the right, so its visual center does not shift.
 class CompactFilterMenu<T> extends StatelessWidget {
   const CompactFilterMenu({
     super.key,
@@ -29,18 +30,35 @@ class CompactFilterMenu<T> extends StatelessWidget {
         ),
     ],
     builder: (context, controller, _) => SizedBox(
-      height: 48,
+      height: 44,
       child: OutlinedButton(
         onPressed: enabled ? controller.open : null,
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 6),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
-        child: Row(
+        child: Stack(
+          fit: StackFit.expand,
+          alignment: Alignment.center,
           children: [
-            Expanded(
-              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            Center(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
             ),
-            const Icon(Icons.arrow_drop_down, size: 18),
+            const Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: Center(child: Icon(Icons.arrow_drop_down, size: 18)),
+            ),
           ],
         ),
       ),
