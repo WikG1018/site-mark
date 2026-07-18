@@ -13,7 +13,7 @@ manufacturer camera experience.
 
 **当前版本：[`v0.2.0` 签名预发布版](https://github.com/WikG1018/site-mark/releases/tag/v0.2.0)**
 
-支持 Android 12 及以上系统。预发布版适合试用和现场反馈，重要项目请同时保留导出备份。
+支持 Android 12 及以上系统。预发布版适合试用和现场反馈，重要项目请同时保留已导出的备份。
 
 ## 下载 / Download
 
@@ -38,7 +38,7 @@ manufacturer camera experience.
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/readme/01-projects.png" alt="项目列表" width="260"><br><sub>项目列表、搜索与筛选</sub></td>
+    <td align="center"><img src="docs/images/readme/01-projects.png" alt="项目列表" width="260"><br><sub>项目列表与搜索入口</sub></td>
     <td align="center"><img src="docs/images/readme/02-capture-form.png" alt="现场记录表单" width="260"><br><sub>现场记录表单</sub></td>
   </tr>
   <tr>
@@ -122,6 +122,7 @@ SiteMark 只通过 Android URI 授权机制临时提供拍摄目标。
 - 已完成的水印 JPEG；
 - 带 UTF-8 BOM 的 CSV，方便在常见表格软件中直接打开；
 - 带版本号的 JSON manifest；
+- CSV 与 JSON manifest 均保留照片编号；
 - 用户明确选择时附带的私有原图。
 
 原图 SHA-256 用于一致性核对和追溯；SiteMark 不提供司法鉴定结论或第三方存证服务。
@@ -150,8 +151,8 @@ SiteMark 只通过 Android URI 授权机制临时提供拍摄目标。
 - Android 单元测试通过；
 - GitHub Actions 已完成签名 APK 构建。
 
-预发布版仍需要持续补充多品牌真机兼容性反馈。测试安装前请先阅读本页的数据警告和
-[Release 页面](https://github.com/WikG1018/site-mark/releases/tag/v0.2.0)中的已知问题。
+预发布版仍需要持续补充多品牌真机兼容性反馈。测试安装前请先阅读本页的数据警告，
+并在 [Release 页面](https://github.com/WikG1018/site-mark/releases/tag/v0.2.0)查看版本说明和校验文件。
 
 ## 技术架构 / Architecture
 
