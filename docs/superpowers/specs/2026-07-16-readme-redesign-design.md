@@ -1,5 +1,9 @@
 # SiteMark README Redesign
 
+> **历史文档：** 本文记录 PR #1 时的 README 设计，当时尚未发布签名 APK。
+> v0.2.0 已发布签名预发布版；当前产品说明以仓库根目录的
+> [README](../../../README.md)和[当前产品边界与总体架构](../../current-product-architecture.md)为准。
+
 ## Goal
 
 Turn the repository README into a trustworthy product landing page for Chinese
