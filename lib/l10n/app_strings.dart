@@ -174,6 +174,7 @@ class AppStrings {
   String get editRecords => _english ? 'Edit records' : '编辑记录';
   String get done => _english ? 'Done' : '完成';
   String get selectAll => _english ? 'Select all' : '全选';
+  String get deselectAll => _english ? 'Deselect all' : '取消全选';
   String get exportSelection => _english ? 'Export selection' : '导出所选';
   String get saveToGallery => _english ? 'Save to gallery' : '保存到相册';
   String get clearOriginals => _english ? 'Clear originals' : '清理原图';

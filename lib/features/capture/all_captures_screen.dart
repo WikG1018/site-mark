@@ -78,6 +78,9 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     final strings = AppStrings.of(context);
     final database = ref.watch(databaseProvider);
     final editing = _selectionController.editing;
+    final allEligibleSelected = _selectionController.allSelected(
+      _selectableIds(_latestCaptures),
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text(strings.allRecords),
@@ -86,10 +89,16 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
             IconButton(
               key: const Key('select-all-captures'),
               onPressed: () {
-                _selectionController.selectAll(_selectableIds(_latestCaptures));
+                _selectionController.toggleAll(_selectableIds(_latestCaptures));
               },
-              tooltip: strings.selectAll,
-              icon: const Icon(Icons.select_all_outlined),
+              tooltip: allEligibleSelected
+                  ? strings.deselectAll
+                  : strings.selectAll,
+              icon: Icon(
+                allEligibleSelected
+                    ? Icons.check_box_outline_blank
+                    : Icons.select_all_outlined,
+              ),
             ),
           IconButton(
             key: const Key('edit-captures'),

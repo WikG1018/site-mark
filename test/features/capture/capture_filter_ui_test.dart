@@ -549,6 +549,59 @@ void main() {
     await unmountTree(tester);
   });
 
+  testWidgets('select-all button toggles eligible rows and skips busy rows', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-ready',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+    final busy = await database.createPendingCapture(
+      id: 'capture-busy',
+      projectId: 'project-1',
+      originalPath: '/private/capture-busy.jpg',
+      workLocation: 'B 区',
+      workContent: '检查',
+      photographer: '李工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 10),
+    );
+    await database.markCaptured(
+      captureId: busy.id,
+      capturedAt: DateTime(2026, 7, 16, 10),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+    final firstValues = tester
+        .widgetList<Checkbox>(find.byType(Checkbox))
+        .map((checkbox) => checkbox.value)
+        .toList();
+    expect(firstValues.where((value) => value == true), hasLength(1));
+    expect(find.byTooltip('取消全选'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<Checkbox>(find.byType(Checkbox))
+          .every((checkbox) => checkbox.value == false),
+      isTrue,
+    );
+    expect(find.byTooltip('全选'), findsOneWidget);
+    await unmountTree(tester);
+  });
+
   testWidgets('all-records changing date filter clears selection', (
     tester,
   ) async {
