@@ -28,6 +28,11 @@ class AppStrings {
   String get projectName => _english ? 'Project name' : '项目名称';
   String get projectNameRequired =>
       _english ? 'Enter a project name' : '请输入项目名称';
+  String get projectNameAlreadyExists =>
+      _english ? 'A project with this name already exists' : '已存在同名项目';
+  String get projectFileNameConflict => _english
+      ? 'This name conflicts with an existing project file name'
+      : '项目名称生成的文件名与已有项目重复';
   String get descriptionOptional =>
       _english ? 'Description (optional)' : '项目说明（选填）';
   String get save => _english ? 'Save' : '保存';

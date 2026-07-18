@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
+import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:uuid/uuid.dart';
 
@@ -17,6 +18,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   bool _saving = false;
+  String? _nameError;
 
   @override
   void dispose() {
@@ -26,6 +28,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   }
 
   Future<void> _save() async {
+    setState(() => _nameError = null);
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     final database = ref.read(databaseProvider);
@@ -36,17 +39,29 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
     // microtask and the save button's spinner does not stall `pumpAndSettle`
     // in widget tests.
     final settings = await database.getAppSettings();
-    await database.createProject(
-      id: const Uuid().v4(),
-      name: _nameController.text,
-      description: _descriptionController.text.isEmpty
-          ? null
-          : _descriptionController.text,
-      watermarkPosition: settings.defaultWatermarkPosition,
-      watermarkOpacity: settings.defaultWatermarkOpacity,
-      watermarkAccentColorArgb: settings.defaultWatermarkAccentColorArgb,
-      watermarkFontScale: settings.defaultWatermarkFontScale,
-    );
+    try {
+      await database.createProject(
+        id: const Uuid().v4(),
+        name: _nameController.text,
+        description: _descriptionController.text.isEmpty
+            ? null
+            : _descriptionController.text,
+        watermarkPosition: settings.defaultWatermarkPosition,
+        watermarkOpacity: settings.defaultWatermarkOpacity,
+        watermarkAccentColorArgb: settings.defaultWatermarkAccentColorArgb,
+        watermarkFontScale: settings.defaultWatermarkFontScale,
+      );
+    } on ProjectNameConflictException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _nameError = error.kind == ProjectNameConflictKind.displayName
+            ? AppStrings.of(context).projectNameAlreadyExists
+            : AppStrings.of(context).projectFileNameConflict;
+      });
+      _formKey.currentState!.validate();
+      return;
+    }
     if (mounted) context.go('/');
   }
 
@@ -70,9 +85,17 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                     autofocus: true,
                     textInputAction: TextInputAction.next,
                     decoration: InputDecoration(labelText: strings.projectName),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? strings.projectNameRequired
-                        : null,
+                    onChanged: (_) {
+                      if (_nameError != null) {
+                        setState(() => _nameError = null);
+                      }
+                    },
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return strings.projectNameRequired;
+                      }
+                      return _nameError;
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(

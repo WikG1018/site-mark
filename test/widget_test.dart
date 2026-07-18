@@ -428,6 +428,30 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('duplicate project name stays on form and shows an error', (
+    tester,
+  ) async {
+    await database.createProject(id: 'existing', name: 'Cloud Site');
+    await tester.pumpWidget(
+      MyApp(database: database, initialLocale: const Locale('zh')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('新建项目'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('project-name')),
+      ' cloud   site ',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-name')), findsOneWidget);
+    expect(find.text('已存在同名项目'), findsOneWidget);
+    expect((await database.getProjects()), hasLength(1));
+    await disposeApp(tester);
+  });
+
   testWidgets('granted location hides the explanation card', (tester) async {
     await database.createProject(id: 'project-1', name: '东区厂房改造');
     final platform = _WidgetTestPlatformServices()
