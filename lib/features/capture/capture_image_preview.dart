@@ -246,52 +246,72 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     required String key,
     required String? overlay,
   }) {
-    final image = Image.file(
-      File(path),
-      fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
-      cacheWidth: widget.thumbnail ? 192 : null,
-      cacheHeight: widget.thumbnail ? 192 : null,
-      errorBuilder: (context, error, _) => _placeholder(
-        context,
-        AppStrings.of(context),
-        label: AppStrings.of(context).failed,
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final image = Image.file(
+          File(path),
+          fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
+          cacheWidth: widget.thumbnail
+              ? 192
+              : _detailCacheWidth(context, constraints),
+          cacheHeight: widget.thumbnail ? 192 : null,
+          errorBuilder: (context, error, _) => _placeholder(
+            context,
+            AppStrings.of(context),
+            label: AppStrings.of(context).failed,
+          ),
+        );
+
+        final content = overlay == null
+            ? image
+            : Stack(
+                fit: widget.thumbnail ? StackFit.expand : StackFit.passthrough,
+                children: [
+                  Positioned.fill(child: image),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      color: Colors.black54,
+                      child: Text(
+                        overlay,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+
+        if (widget.thumbnail) {
+          return KeyedSubtree(key: Key(key), child: content);
+        }
+        return GestureDetector(
+          onTap: widget.onOpen ?? () => _openFullscreen(context, path),
+          child: KeyedSubtree(key: Key(key), child: content),
+        );
+      },
     );
+  }
 
-    final content = overlay == null
-        ? image
-        : Stack(
-            fit: widget.thumbnail ? StackFit.expand : StackFit.passthrough,
-            children: [
-              Positioned.fill(child: image),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
-                  ),
-                  color: Colors.black54,
-                  child: Text(
-                    overlay,
-                    style: const TextStyle(color: Colors.white, fontSize: 11),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-            ],
-          );
-
-    if (widget.thumbnail) {
-      return KeyedSubtree(key: Key(key), child: content);
+  int _detailCacheWidth(BuildContext context, BoxConstraints constraints) {
+    final width = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+        ? constraints.maxWidth
+        : MediaQuery.sizeOf(context).width;
+    final physicalWidth = width * MediaQuery.devicePixelRatioOf(context);
+    if (!physicalWidth.isFinite || physicalWidth <= 0) {
+      return 1;
     }
-    return GestureDetector(
-      onTap: widget.onOpen ?? () => _openFullscreen(context, path),
-      child: KeyedSubtree(key: Key(key), child: content),
-    );
+    return physicalWidth.ceil().clamp(1, 2048);
   }
 
   void _openFullscreen(BuildContext context, String path) {

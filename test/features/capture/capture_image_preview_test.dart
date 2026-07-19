@@ -140,7 +140,218 @@ Future<void> pumpPreview(
   await tester.pumpAndSettle();
 }
 
+Image previewImage(WidgetTester tester) =>
+    tester.widget<Image>(find.byType(Image).first);
+
+ResizeImage previewResizeImage(WidgetTester tester) =>
+    previewImage(tester).image as ResizeImage;
+
 void main() {
+  testWidgets('thumbnail preview keeps a 192 pixel cache dimension', (
+    tester,
+  ) async {
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await pumpPreview(
+      tester,
+      capture: capture,
+      renderedExists: true,
+      thumbnail: true,
+    );
+
+    final image = previewResizeImage(tester);
+    expect(image.width, 192);
+    expect(image.height, 192);
+  });
+
+  testWidgets('detail preview bounds cache width to layout width and DPR', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 2.5;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 240,
+            child: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _FakeOutputPaths(),
+              fileExists: (path) => true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final image = previewResizeImage(tester);
+    expect(image.width, 900);
+    expect(image.height, isNull);
+  });
+
+  testWidgets('detail preview caps its cache width at 2048 pixels', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: SizedBox(
+            width: 1000,
+            height: 240,
+            child: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _FakeOutputPaths(),
+              fileExists: (path) => true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(previewResizeImage(tester).width, 2048);
+  });
+
+  testWidgets('detail preview uses media width for an unbounded layout', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(800, 1200);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: UnconstrainedBox(
+            child: SizedBox(
+              height: 240,
+              child: CaptureImagePreview(
+                capture: capture,
+                outputPaths: _FakeOutputPaths(),
+                fileExists: (path) => true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(previewResizeImage(tester).width, 800);
+  });
+
+  testWidgets('detail preview uses media width for a zero-width layout', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 2;
+    tester.view.physicalSize = const Size(800, 1200);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: SizedBox(
+            width: 0,
+            height: 240,
+            child: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _FakeOutputPaths(),
+              fileExists: (path) => true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(previewResizeImage(tester).width, 800);
+  });
+
+  testWidgets('fullscreen preview keeps full-resolution decoding', (
+    tester,
+  ) async {
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 240,
+            child: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _FakeOutputPaths(),
+              fileExists: (path) => true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('rendered-preview-capture-1')));
+    await tester.pumpAndSettle();
+
+    final fullscreenImage = tester.widget<Image>(
+      find.descendant(
+        of: find.byType(InteractiveViewer),
+        matching: find.byType(Image),
+      ),
+    );
+    expect(fullscreenImage.image, isNot(isA<ResizeImage>()));
+  });
+
   testWidgets('ready preview uses rendered image and rendering uses original', (
     tester,
   ) async {
