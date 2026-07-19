@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -75,6 +76,83 @@ void main() {
     expect(usage.databaseAndOtherBytes, 42);
     expect(usage.totalBytes, 83);
   });
+
+  test(
+    'loads many file sizes once with at most eight concurrent length reads',
+    () async {
+      final original = await writeFile(
+        '${documents.path}${Platform.pathSeparator}capture-original.jpg',
+        101,
+      );
+      for (final id in ['capture-a', 'capture-b']) {
+        await database.createPendingCapture(
+          id: id,
+          projectId: 'project',
+          originalPath: original.path,
+          workLocation: 'A 区',
+          workContent: '检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+        );
+      }
+      for (var length = 1; length <= 10; length++) {
+        await writeFile(
+          '${documents.path}${Platform.pathSeparator}rendered'
+          '${Platform.pathSeparator}$length.jpg',
+          length,
+        );
+      }
+      for (var length = 11; length <= 15; length++) {
+        await writeFile(
+          '${documents.path}${Platform.pathSeparator}exports'
+          '${Platform.pathSeparator}$length.zip',
+          length,
+        );
+      }
+      for (var length = 16; length <= 20; length++) {
+        await writeFile(
+          '${documents.path}${Platform.pathSeparator}other-$length.bin',
+          length,
+        );
+      }
+
+      var activeReads = 0;
+      var maximumActiveReads = 0;
+      final eightReadsStarted = Completer<void>();
+      final allowReads = Completer<void>();
+      final usageFuture = AppStorageUsageService(
+        database: database,
+        documentsDirectory: () async => documents,
+        fileLength: (file) async {
+          activeReads++;
+          maximumActiveReads = maximumActiveReads < activeReads
+              ? activeReads
+              : maximumActiveReads;
+          if (activeReads == 8 && !eightReadsStarted.isCompleted) {
+            eightReadsStarted.complete();
+          }
+          try {
+            await allowReads.future;
+            return await file.length();
+          } finally {
+            activeReads--;
+          }
+        },
+      ).load();
+
+      await eightReadsStarted.future.timeout(const Duration(seconds: 1));
+      expect(maximumActiveReads, 8);
+      allowReads.complete();
+
+      final usage = await usageFuture;
+      expect(usage.originalBytes, 101);
+      expect(usage.renderedBytes, 55);
+      expect(usage.exportBytes, 65);
+      expect(usage.databaseAndOtherBytes, 90);
+      expect(usage.totalBytes, 311);
+      expect(maximumActiveReads, 8);
+    },
+  );
 
   test(
     'clearExports deletes only ZIP files under the private export folder',
