@@ -464,6 +464,40 @@ void main() {
       tester.getTopLeft(find.byKey(const Key('filter-day'))).dy,
     ];
     expect(tops.reduce(max) - tops.reduce(min), lessThan(1));
+    for (final key in const [
+      Key('project-filter'),
+      Key('filter-year'),
+      Key('filter-month'),
+      Key('filter-day'),
+    ]) {
+      expect(
+        find.descendant(
+          of: find.byKey(key),
+          matching: find.byIcon(Icons.arrow_drop_down),
+        ),
+        findsNothing,
+      );
+    }
+
+    await tester.tap(find.byKey(const Key('project-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    final projectButton = find.descendant(
+      of: find.byKey(const Key('project-filter')),
+      matching: find.byType(OutlinedButton),
+    );
+    final projectLabel = find.descendant(
+      of: find.byKey(const Key('project-filter')),
+      matching: find.text('东区厂房改造'),
+    );
+    expect(projectLabel, findsOneWidget);
+    expect(
+      (tester.getCenter(projectButton).dx - tester.getCenter(projectLabel).dx)
+          .abs(),
+      lessThan(1),
+    );
     expect(tester.takeException(), isNull);
 
     // Unmount the tree so the StreamBuilder subscriptions to the Drift
