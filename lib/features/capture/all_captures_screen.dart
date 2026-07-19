@@ -241,6 +241,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
             child: CompactFilterMenu<String?>(
               key: const Key('project-filter'),
               label: projectLabel(),
+              selectedValue: _filter.projectId,
               entries: projectEntries,
               onSelected: (value) => setState(() {
                 // Reset the entire filter so the project -> year -> month ->

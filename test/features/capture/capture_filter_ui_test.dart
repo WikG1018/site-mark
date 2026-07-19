@@ -359,8 +359,53 @@ void main() {
             .abs(),
         lessThan(1),
       );
+      expect(
+        find.descendant(
+          of: menuFinder,
+          matching: find.byIcon(Icons.arrow_drop_down),
+        ),
+        findsNothing,
+      );
     },
   );
+
+  testWidgets('filter menu animates and highlights the current option', (
+    tester,
+  ) async {
+    final filter = ValueNotifier(const CaptureFilter(year: 2026));
+    await tester.pumpWidget(filterHarnessLive(filter));
+    await tester.pumpAndSettle();
+
+    final menuFinder = find.byKey(const Key('filter-year'));
+    final anchor = tester.widget<MenuAnchor>(
+      find.descendant(of: menuFinder, matching: find.byType(MenuAnchor)),
+    );
+    final menuShape = anchor.style?.shape?.resolve(<WidgetState>{});
+
+    expect(anchor.animated, isTrue);
+    expect(anchor.alignmentOffset, const Offset(0, 6));
+    expect(menuShape, isA<RoundedRectangleBorder>());
+    expect(
+      (menuShape! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(14),
+    );
+
+    await tester.tap(menuFinder);
+    await tester.pumpAndSettle();
+
+    final selectedItem = tester.widget<MenuItemButton>(
+      find.widgetWithText(MenuItemButton, '2026'),
+    );
+    final colorScheme = Theme.of(tester.element(menuFinder)).colorScheme;
+    expect(
+      selectedItem.leadingIcon,
+      isA<Icon>().having((widget) => widget.icon, 'icon', Icons.check_rounded),
+    );
+    expect(
+      selectedItem.style?.backgroundColor?.resolve(<WidgetState>{}),
+      colorScheme.primaryContainer,
+    );
+  });
 
   testWidgets('all-records controls share one row at 360dp', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));

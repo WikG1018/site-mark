@@ -125,6 +125,7 @@ class CaptureDateFilterBar extends StatelessWidget {
     return CompactFilterMenu<int?>(
       key: key,
       label: label,
+      selectedValue: value,
       entries: entries,
       enabled: enabled,
       onSelected: onChanged,
