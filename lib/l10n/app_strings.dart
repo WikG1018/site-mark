@@ -28,6 +28,11 @@ class AppStrings {
   String get projectName => _english ? 'Project name' : '项目名称';
   String get projectNameRequired =>
       _english ? 'Enter a project name' : '请输入项目名称';
+  String get projectNameAlreadyExists =>
+      _english ? 'A project with this name already exists' : '已存在同名项目';
+  String get projectFileNameConflict => _english
+      ? 'This name conflicts with an existing project file name'
+      : '项目名称生成的文件名与已有项目重复';
   String get descriptionOptional =>
       _english ? 'Description (optional)' : '项目说明（选填）';
   String get save => _english ? 'Save' : '保存';
@@ -82,6 +87,8 @@ class AppStrings {
   String get regenerateWatermark =>
       _english ? 'Regenerate watermark' : '重新生成水印';
   String get watermarkSettings => _english ? 'Watermark settings' : '水印设置';
+  String get projectWatermarkSettings =>
+      _english ? 'Project watermark settings' : '此项目水印设置';
   String get watermarkSettingsHint => _english
       ? 'Use a consistent engineering template. New captures and regenerated photos use these settings.'
       : '使用统一的工程水印模板；新拍照片和重新生成的成片会采用这些设置。';
@@ -148,6 +155,36 @@ class AppStrings {
       ? 'Drag the slider to adjust watermark font size (80%–160%).'
       : '拖动滑块调整水印字体大小（80%–160%）';
 
+  // App-private storage accounting. System MediaStore photos are excluded.
+  String get storageScope => _english
+      ? 'SiteMark app data usage (system gallery excluded)'
+      : 'SiteMark 应用内数据占用（不含系统相册）';
+  String get storageTotal => _english ? 'Total' : '合计';
+  String get privateOriginals => _english ? 'Private originals' : '私有原图';
+  String get privateWatermarked =>
+      _english ? 'Private watermarked photos' : '私有水印成片';
+  String get localExportFiles => _english ? 'Local export files' : '本地导出文件';
+  String get databaseAndOther =>
+      _english ? 'Database and other app documents' : '数据库及其他应用文档';
+  String get refreshStorage => _english ? 'Refresh storage' : '刷新占用';
+  String get manageRecords => _english ? 'Manage records' : '管理拍摄记录';
+  String get clearLocalExports =>
+      _english ? 'Clear local export files' : '清理本地导出文件';
+  String get clearLocalExportsHint => _english
+      ? 'Deletes only app-private ZIP files; shared copies and photos are kept.'
+      : '仅删除应用私有目录中的 ZIP，已分享副本和照片不受影响。';
+  String get clearLocalExportsPrompt => _english
+      ? 'Delete all ZIP files from SiteMark private exports? Shared copies, photos, originals, and records are not affected.'
+      : '确认删除 SiteMark 私有导出目录中的全部 ZIP？已分享副本、照片、原图和记录均不受影响。';
+  String localExportsCleared(int count) =>
+      _english ? 'Cleared $count local export file(s)' : '已清理 $count 个本地导出文件';
+  String get clearLocalExportsFailed =>
+      _english ? 'Could not clear local exports' : '本地导出文件清理失败';
+  String get storageLoadFailed =>
+      _english ? 'Could not read storage usage' : '无法读取存储占用';
+  String get retry => _english ? 'Retry' : '重试';
+  String get clear => _english ? 'Clear' : '清理';
+
   // Non-blocking location permission UX
   String get locationPermissionExplanation => _english
       ? 'Foreground location tags each capture with GPS coordinates. Capture still works if you decline; tap below to enable it once.'
@@ -169,6 +206,7 @@ class AppStrings {
   String get editRecords => _english ? 'Edit records' : '编辑记录';
   String get done => _english ? 'Done' : '完成';
   String get selectAll => _english ? 'Select all' : '全选';
+  String get deselectAll => _english ? 'Deselect all' : '取消全选';
   String get exportSelection => _english ? 'Export selection' : '导出所选';
   String get saveToGallery => _english ? 'Save to gallery' : '保存到相册';
   String get clearOriginals => _english ? 'Clear originals' : '清理原图';

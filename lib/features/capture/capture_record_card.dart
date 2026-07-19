@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -92,7 +93,11 @@ class CaptureRecordCard extends ConsumerWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            capture.photoNumber ?? capture.workLocation,
+                            captureListDisplayName(
+                              capturedAt: capture.capturedAt,
+                              photoNumber: capture.photoNumber,
+                              fallback: capture.workLocation,
+                            ),
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),

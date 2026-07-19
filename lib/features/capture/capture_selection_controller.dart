@@ -46,6 +46,27 @@ class CaptureSelectionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether every currently eligible row is selected. An empty eligible set
+  /// is never treated as fully selected.
+  bool allSelected(Iterable<String> eligibleIds) {
+    final eligible = eligibleIds.toSet();
+    return eligible.isNotEmpty && eligible.every(_selectedIds.contains);
+  }
+
+  /// Selects all eligible rows, or clears the selection when they are already
+  /// all selected.
+  void toggleAll(Iterable<String> eligibleIds) {
+    final eligible = eligibleIds.toSet();
+    if (allSelected(eligible)) {
+      _selectedIds.clear();
+    } else {
+      _selectedIds
+        ..clear()
+        ..addAll(eligible);
+    }
+    notifyListeners();
+  }
+
   /// Clears selected IDs after a filter change while keeping the editing
   /// session open. Hidden rows must not stay selected.
   void clearForFilterChange() {

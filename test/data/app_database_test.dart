@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_name.dart';
 
 void main() {
   const originalHash =
@@ -32,6 +33,36 @@ void main() {
     final projects = await database.watchProjects().first;
 
     expect(projects.map((project) => project.name), ['二号厂房', '一号厂房']);
+  });
+
+  test('rejects normalized duplicate project names', () async {
+    await database.createProject(id: 'project-a', name: 'Cloud Site');
+
+    expect(
+      () => database.createProject(id: 'project-b', name: ' cloud   site '),
+      throwsA(
+        isA<ProjectNameConflictException>().having(
+          (error) => error.kind,
+          'kind',
+          ProjectNameConflictKind.displayName,
+        ),
+      ),
+    );
+  });
+
+  test('rejects duplicate safe project file-name keys', () async {
+    await database.createProject(id: 'project-a', name: 'A/B');
+
+    expect(
+      () => database.createProject(id: 'project-b', name: 'A:B'),
+      throwsA(
+        isA<ProjectNameConflictException>().having(
+          (error) => error.kind,
+          'kind',
+          ProjectNameConflictKind.safeFileName,
+        ),
+      ),
+    );
   });
 
   test('persists constrained project watermark settings', () async {
@@ -127,7 +158,35 @@ void main() {
     );
 
     expect(captured.status, CaptureStatus.captured);
-    expect(captured.photoNumber, '车间改造~project-SM-20260716-001');
+    expect(captured.photoNumber, '车间改造-SM-20260716-001');
+  });
+
+  test('allocates one daily sequence across different projects', () async {
+    await database.createProject(id: 'project-a', name: '东区');
+    await database.createProject(id: 'project-b', name: '西区');
+
+    Future<CaptureRecord> capture(String id, String projectId) async {
+      final pending = await database.createPendingCapture(
+        id: id,
+        projectId: projectId,
+        originalPath: '/private/$id.jpg',
+        workLocation: '现场',
+        workContent: '检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 16, 9),
+      );
+      return database.markCaptured(
+        captureId: pending.id,
+        capturedAt: DateTime(2026, 7, 16, 9),
+      );
+    }
+
+    final first = await capture('capture-a', 'project-a');
+    final second = await capture('capture-b', 'project-b');
+
+    expect(first.photoNumber, '东区-SM-20260716-001');
+    expect(second.photoNumber, '西区-SM-20260716-002');
   });
 
   test(
@@ -170,7 +229,7 @@ void main() {
         capturedAt: DateTime(2026, 7, 16, 10, 1),
       );
 
-      expect(captured.photoNumber, '车间改造~project-SM-20260716-003');
+      expect(captured.photoNumber, '车间改造-SM-20260716-003');
     },
   );
 
@@ -296,7 +355,7 @@ void main() {
     expect(edited.notes, '整改后复验');
     expect(edited.capturedAt, capturedAt);
     expect(edited.originalSha256, originalHash);
-    expect(edited.photoNumber, '车间改造~project-SM-20260716-001');
+    expect(edited.photoNumber, '车间改造-SM-20260716-001');
   });
 
   test(
@@ -420,7 +479,7 @@ void main() {
 
     final updated = await database.watchCaptureById(pending.id).first;
     expect(updated?.status, CaptureStatus.captured);
-    expect(updated?.photoNumber, '东区厂房改造~project-1-SM-20260716-001');
+    expect(updated?.photoNumber, '东区厂房改造-SM-20260716-001');
   });
 
   test('watchCaptureById emits null for unknown id', () async {

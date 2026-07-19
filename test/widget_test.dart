@@ -221,10 +221,11 @@ void main() {
 
     await tester.tap(find.text('东区厂房改造'));
     await tester.pumpAndSettle();
+    expect(find.byTooltip('此项目水印设置'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.tune_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.text('水印设置'), findsOneWidget);
+    expect(find.text('此项目水印设置'), findsOneWidget);
     expect(find.byKey(const Key('project-font-scale-slider')), findsOneWidget);
     await tester.tap(find.text('右下'));
     await tester.tap(find.byKey(const Key('accent-blue')));
@@ -287,7 +288,8 @@ void main() {
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('SM-'), findsOneWidget);
+    expect(find.byType(CaptureRecordCard), findsOneWidget);
+    expect(find.textContaining('SM-'), findsNothing);
     expect(find.text('已完成'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.archive_outlined));
@@ -297,7 +299,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(share.lastPath, '/exports/project-1.zip');
 
-    await tester.tap(find.textContaining('SM-'));
+    await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();
     // The detail screen now leads with a large image preview, so the evidence
     // card is below the fold and must be scrolled into view before asserting.
@@ -425,6 +427,30 @@ void main() {
     expect(project.watermarkPosition, 'bottomRight');
     expect(project.watermarkOpacity, 0.64);
     expect(project.watermarkAccentColorArgb, 0xff1565c0);
+    await disposeApp(tester);
+  });
+
+  testWidgets('duplicate project name stays on form and shows an error', (
+    tester,
+  ) async {
+    await database.createProject(id: 'existing', name: 'Cloud Site');
+    await tester.pumpWidget(
+      MyApp(database: database, initialLocale: const Locale('zh')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('新建项目'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('project-name')),
+      ' cloud   site ',
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-name')), findsOneWidget);
+    expect(find.text('已存在同名项目'), findsOneWidget);
+    expect((await database.getProjects()), hasLength(1));
     await disposeApp(tester);
   });
 

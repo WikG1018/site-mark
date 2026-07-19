@@ -4,39 +4,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/domain/photo_number.dart';
 
 void main() {
-  test(
-    'formats a project-prefixed daily photo number with full project id',
-    () {
-      expect(
-        formatPhotoNumber(
-          projectName: '东区厂房改造',
-          projectId: 'project-1',
-          capturedAt: DateTime(2026, 7, 17, 9, 5),
-          sequence: 1,
-        ),
-        '东区厂房改造~project-1-SM-20260717-001',
-      );
-    },
-  );
+  test('formats a short project-prefixed daily photo number', () {
+    expect(
+      formatPhotoNumber(
+        projectName: '云湖之城',
+        capturedAt: DateTime(2026, 7, 17, 9, 5),
+        sequence: 3,
+      ),
+      '云湖之城-SM-20260717-003',
+    );
+  });
 
-  test('sanitizes unsafe characters and repeated separators', () {
+  test('sanitizes forbidden characters and repeated separators', () {
     expect(safePhotoProjectName('  A 区 / 风管::检查  '), 'A_区_风管_检查');
-  });
-
-  test('sanitizes tilde from project names', () {
-    // ~ is the dedicated field separator; it must never survive into the
-    // sanitized project name.
     expect(safePhotoProjectName('A~B'), 'A_B');
-    expect(safePhotoProjectName('A~~B'), 'A_B');
-    expect(safePhotoProjectName(' A ~ B '), 'A_B');
   });
 
-  test('truncates to fit UTF-8 byte budget and trims result', () {
-    // 60 CJK chars = 180 bytes, well within default budget.
-    final repeated = List.filled(60, '工').join();
-    final safe = safePhotoProjectName(repeated);
-    expect(utf8.encode(safe).length, lessThanOrEqualTo(231)); // 255 - 24
-    expect(safe.runes.length, 60);
+  test('preserves punctuation outside the forbidden set', () {
+    expect(safePhotoProjectName('东区厂房改造（一期）'), '东区厂房改造（一期）');
+    expect(safePhotoProjectName('A.B'), 'A.B');
+    expect(safePhotoProjectName('--A'), '--A');
+    expect(safePhotoProjectName('C&D'), 'C&D');
   });
 
   test('uses Project when no safe project characters remain', () {
@@ -47,7 +35,6 @@ void main() {
     expect(
       () => formatPhotoNumber(
         projectName: '项目',
-        projectId: 'p1',
         capturedAt: DateTime(2026, 7, 17),
         sequence: 0,
       ),
@@ -55,216 +42,21 @@ void main() {
     );
   });
 
-  test('rejects project ids that are not safe ASCII', () {
-    expect(
-      () => formatPhotoNumber(
-        projectName: '项目',
-        projectId: '',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      ),
-      throwsArgumentError,
-    );
-    expect(
-      () => formatPhotoNumber(
-        projectName: '项目',
-        projectId: 'a/b',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      ),
-      throwsArgumentError,
-    );
-    expect(
-      () => formatPhotoNumber(
-        projectName: '项目',
-        projectId: '项目一',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      ),
-      throwsArgumentError,
-    );
-    expect(
-      () => formatPhotoNumber(
-        projectName: '项目',
-        projectId: 'a b',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      ),
-      throwsArgumentError,
-    );
-  });
-
-  test('rejects a project id whose suffix exceeds the byte budget', () {
-    // 235 ASCII chars -> suffix alone is already ~256 bytes, leaving no
-    // room for even the "Project" fallback within 255 bytes.
-    final longId = List.filled(235, 'a').join();
-    expect(
-      () => formatPhotoNumber(
-        projectName: '项目',
-        projectId: longId,
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      ),
-      throwsArgumentError,
-    );
-  });
-
-  test('preserves punctuation outside the forbidden set', () {
-    expect(safePhotoProjectName('东区厂房改造（一期）'), '东区厂房改造（一期）');
-    expect(safePhotoProjectName('A.B'), 'A.B');
-    expect(safePhotoProjectName('--A'), '--A');
-    expect(safePhotoProjectName('C&D'), 'C&D');
-  });
-
-  test('formats photo numbers with preserved punctuation', () {
-    expect(
-      formatPhotoNumber(
-        projectName: '东区厂房改造（一期）',
-        projectId: 'project-1',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      ),
-      '东区厂房改造（一期）~project-1-SM-20260717-001',
-    );
-    expect(
-      formatPhotoNumber(
-        projectName: 'A.B',
-        projectId: 'project-1',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      ),
-      'A.B~project-1-SM-20260717-001',
-    );
-  });
-
-  test('sanitizes C1 controls and Unicode whitespace consistently', () {
-    // C1 control (U+0080) — must be sanitized like C0 controls.
+  test('sanitizes controls and Unicode whitespace consistently', () {
     expect(safePhotoProjectName('A\u0080B'), 'A_B');
-    // NBSP (U+00A0) — must be sanitized like ASCII space.
     expect(safePhotoProjectName('A\u00A0B'), 'A_B');
-    // EM SPACE (U+2003) — must be sanitized.
     expect(safePhotoProjectName('A\u2003B'), 'A_B');
-    // LINE SEPARATOR (U+2028) — must be sanitized.
     expect(safePhotoProjectName('A\u2028B'), 'A_B');
-    // ZWNBSP / BOM (U+FEFF) — must be sanitized.
     expect(safePhotoProjectName('A\uFEFFB'), 'A_B');
   });
 
   test('keeps final jpeg name within 255 UTF-8 bytes', () {
-    // 60 four-byte emoji = 240 bytes for the project name alone.
     final projectName = List.filled(60, '😀').join();
     final number = formatPhotoNumber(
       projectName: projectName,
-      projectId: 'project-1',
       capturedAt: DateTime(2026, 7, 17),
       sequence: 1,
     );
     expect(utf8.encode('$number.jpg').length, lessThanOrEqualTo(255));
-  });
-
-  test(
-    'different project ids with same sanitized name produce different numbers',
-    () {
-      final a = formatPhotoNumber(
-        projectName: 'A/B',
-        projectId: 'aaaa1111-2222-3333-4444-555566667777',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      );
-      final b = formatPhotoNumber(
-        projectName: 'A:B',
-        projectId: 'bbbb2222-3333-4444-5555-666677778888',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      );
-      expect(a, 'A_B~aaaa1111-2222-3333-4444-555566667777-SM-20260717-001');
-      expect(b, 'A_B~bbbb2222-3333-4444-5555-666677778888-SM-20260717-001');
-      expect(a, isNot(equals(b)));
-      expect('$a.jpg', isNot(equals('$b.jpg')));
-    },
-  );
-
-  test(
-    'different project ids with identical project names produce different numbers',
-    () {
-      final a = formatPhotoNumber(
-        projectName: '东区厂房改造',
-        projectId: 'aaaa1111-2222-3333-4444-555566667777',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      );
-      final b = formatPhotoNumber(
-        projectName: '东区厂房改造',
-        projectId: 'bbbb2222-3333-4444-5555-666677778888',
-        capturedAt: DateTime(2026, 7, 17),
-        sequence: 1,
-      );
-      expect(a, '东区厂房改造~aaaa1111-2222-3333-4444-555566667777-SM-20260717-001');
-      expect(b, '东区厂房改造~bbbb2222-3333-4444-5555-666677778888-SM-20260717-001');
-      expect(a, isNot(equals(b)));
-      expect('$a.jpg', isNot(equals('$b.jpg')));
-    },
-  );
-
-  test('different ids sharing first 8 chars stay distinct', () {
-    final a = formatPhotoNumber(
-      projectName: '同名项目',
-      projectId: 'aaaaaaaa-1111-2222-3333-444444444444',
-      capturedAt: DateTime(2026, 7, 17),
-      sequence: 1,
-    );
-    final b = formatPhotoNumber(
-      projectName: '同名项目',
-      projectId: 'aaaaaaaa-9999-8888-7777-666666666666',
-      capturedAt: DateTime(2026, 7, 17),
-      sequence: 1,
-    );
-    expect(a, '同名项目~aaaaaaaa-1111-2222-3333-444444444444-SM-20260717-001');
-    expect(b, '同名项目~aaaaaaaa-9999-8888-7777-666666666666-SM-20260717-001');
-    expect(a, isNot(b));
-    expect('$a.jpg', isNot(equals('$b.jpg')));
-  });
-
-  test('hyphen removal cannot collapse distinct project ids', () {
-    // "project-1" and "project1" are distinct IDs. Because hyphens are now
-    // preserved verbatim, they must produce distinct photo numbers.
-    final a = formatPhotoNumber(
-      projectName: '同名项目',
-      projectId: 'project-1',
-      capturedAt: DateTime(2026, 7, 17),
-      sequence: 1,
-    );
-    final b = formatPhotoNumber(
-      projectName: '同名项目',
-      projectId: 'project1',
-      capturedAt: DateTime(2026, 7, 17),
-      sequence: 1,
-    );
-    expect(a, '同名项目~project-1-SM-20260717-001');
-    expect(b, '同名项目~project1-SM-20260717-001');
-    expect(a, isNot(b));
-    expect('$a.jpg', isNot(equals('$b.jpg')));
-  });
-
-  test('project name and id boundaries cannot collide', () {
-    // Without a dedicated separator, (A, B-C) and (A-B, C) would both
-    // produce "A-B-C-SM-...". The ~ separator makes them distinct:
-    //   A~B-C-SM-...  vs  A-B~C-SM-...
-    final a = formatPhotoNumber(
-      projectName: 'A',
-      projectId: 'B-C',
-      capturedAt: DateTime(2026, 7, 17),
-      sequence: 1,
-    );
-    final b = formatPhotoNumber(
-      projectName: 'A-B',
-      projectId: 'C',
-      capturedAt: DateTime(2026, 7, 17),
-      sequence: 1,
-    );
-    expect(a, 'A~B-C-SM-20260717-001');
-    expect(b, 'A-B~C-SM-20260717-001');
-    expect(a, isNot(b));
-    expect('$a.jpg', isNot(equals('$b.jpg')));
   });
 }

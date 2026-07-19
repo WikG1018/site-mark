@@ -4,6 +4,7 @@ import 'package:sitemark/data/conditional_polling_stream.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/photo_number.dart';
+import 'package:sitemark/domain/project_name.dart';
 
 part 'app_database.g.dart';
 
@@ -200,29 +201,47 @@ class AppDatabase extends _$AppDatabase {
     int? watermarkAccentColorArgb,
     double? watermarkFontScale,
     DateTime? createdAt,
-  }) {
+  }) async {
     final timestamp = createdAt ?? DateTime.now();
-    return into(projects).insertReturning(
-      ProjectsCompanion.insert(
-        id: id,
-        name: name.trim(),
-        description: Value(description?.trim()),
-        watermarkPosition: watermarkPosition == null
-            ? const Value.absent()
-            : Value(watermarkPosition),
-        watermarkOpacity: watermarkOpacity == null
-            ? const Value.absent()
-            : Value(watermarkOpacity),
-        watermarkAccentColorArgb: watermarkAccentColorArgb == null
-            ? const Value.absent()
-            : Value(watermarkAccentColorArgb),
-        watermarkFontScale: watermarkFontScale == null
-            ? const Value.absent()
-            : Value(_validatedFontScale(watermarkFontScale)),
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      ),
-    );
+    final trimmedName = name.trim();
+    return transaction(() async {
+      final existingProjects = await select(projects).get();
+      final displayKey = normalizedProjectNameKey(trimmedName);
+      final safeKey = safeProjectFileNameKey(trimmedName);
+      for (final existing in existingProjects) {
+        if (normalizedProjectNameKey(existing.name) == displayKey) {
+          throw const ProjectNameConflictException(
+            ProjectNameConflictKind.displayName,
+          );
+        }
+        if (safeProjectFileNameKey(existing.name) == safeKey) {
+          throw const ProjectNameConflictException(
+            ProjectNameConflictKind.safeFileName,
+          );
+        }
+      }
+      return into(projects).insertReturning(
+        ProjectsCompanion.insert(
+          id: id,
+          name: trimmedName,
+          description: Value(description?.trim()),
+          watermarkPosition: watermarkPosition == null
+              ? const Value.absent()
+              : Value(watermarkPosition),
+          watermarkOpacity: watermarkOpacity == null
+              ? const Value.absent()
+              : Value(watermarkOpacity),
+          watermarkAccentColorArgb: watermarkAccentColorArgb == null
+              ? const Value.absent()
+              : Value(watermarkAccentColorArgb),
+          watermarkFontScale: watermarkFontScale == null
+              ? const Value.absent()
+              : Value(_validatedFontScale(watermarkFontScale)),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        ),
+      );
+    });
   }
 
   Stream<List<Project>> watchProjects() {
@@ -404,7 +423,6 @@ class AppDatabase extends _$AppDatabase {
       final sameDay =
           await (select(captureRecords)..where(
                 (row) =>
-                    row.projectId.equals(current.projectId) &
                     row.capturedAt.isBiggerOrEqualValue(startOfDay) &
                     row.capturedAt.isSmallerThanValue(endOfDay) &
                     row.photoNumber.isNotNull(),
@@ -417,7 +435,6 @@ class AppDatabase extends _$AppDatabase {
           .fold(0, (highest, value) => value > highest ? value : highest);
       final number = formatPhotoNumber(
         projectName: project.name,
-        projectId: current.projectId,
         capturedAt: capturedAt,
         sequence: highestSequence + 1,
       );
@@ -632,6 +649,9 @@ class AppDatabase extends _$AppDatabase {
       pollInterval: externalRefreshInterval,
     );
   }
+
+  /// One-shot read used for app-private storage accounting.
+  Future<List<CaptureRecord>> getAllCaptures() => select(captureRecords).get();
 
   bool _isProcessing(CaptureStatus status) =>
       status == CaptureStatus.captured || status == CaptureStatus.rendering;

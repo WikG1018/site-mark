@@ -16,4 +16,21 @@ void main() {
     controller.selectAll(['a', 'c']);
     expect(controller.selectedIds, {'a', 'c'});
   });
+
+  test('toggle all selects then deselects the same eligible IDs', () {
+    final controller = CaptureSelectionController()..enter();
+
+    controller.toggleAll(['a', 'b']);
+    expect(controller.selectedIds, {'a', 'b'});
+    expect(controller.allSelected(['a', 'b']), isTrue);
+
+    controller.toggleAll(['a', 'b']);
+    expect(controller.selectedIds, isEmpty);
+    expect(controller.allSelected(['a', 'b']), isFalse);
+  });
+
+  test('an empty eligible set is never considered fully selected', () {
+    final controller = CaptureSelectionController()..enter();
+    expect(controller.allSelected(const []), isFalse);
+  });
 }

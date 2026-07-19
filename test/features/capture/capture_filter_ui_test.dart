@@ -332,6 +332,81 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'filter controls are 44dp rounded rectangles with centered text',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final filter = ValueNotifier(const CaptureFilter());
+      await tester.pumpWidget(filterHarnessLive(filter));
+      await tester.pumpAndSettle();
+
+      final menuFinder = find.byKey(const Key('filter-year'));
+      final buttonFinder = find.descendant(
+        of: menuFinder,
+        matching: find.byType(OutlinedButton),
+      );
+      final button = tester.widget<OutlinedButton>(buttonFinder);
+      final shape = button.style?.shape?.resolve(<WidgetState>{});
+
+      expect(tester.getSize(menuFinder).height, 44);
+      expect(shape, isA<RoundedRectangleBorder>());
+      final border = shape! as RoundedRectangleBorder;
+      expect(border.borderRadius, BorderRadius.circular(10));
+      expect(
+        (tester.getCenter(buttonFinder).dx -
+                tester.getCenter(find.text('全部年份')).dx)
+            .abs(),
+        lessThan(1),
+      );
+      expect(
+        find.descendant(
+          of: menuFinder,
+          matching: find.byIcon(Icons.arrow_drop_down),
+        ),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('filter menu animates and highlights the current option', (
+    tester,
+  ) async {
+    final filter = ValueNotifier(const CaptureFilter(year: 2026));
+    await tester.pumpWidget(filterHarnessLive(filter));
+    await tester.pumpAndSettle();
+
+    final menuFinder = find.byKey(const Key('filter-year'));
+    final anchor = tester.widget<MenuAnchor>(
+      find.descendant(of: menuFinder, matching: find.byType(MenuAnchor)),
+    );
+    final menuShape = anchor.style?.shape?.resolve(<WidgetState>{});
+
+    expect(anchor.animated, isTrue);
+    expect(anchor.alignmentOffset, const Offset(0, 6));
+    expect(menuShape, isA<RoundedRectangleBorder>());
+    expect(
+      (menuShape! as RoundedRectangleBorder).borderRadius,
+      BorderRadius.circular(14),
+    );
+
+    await tester.tap(menuFinder);
+    await tester.pumpAndSettle();
+
+    final selectedItem = tester.widget<MenuItemButton>(
+      find.widgetWithText(MenuItemButton, '2026'),
+    );
+    final colorScheme = Theme.of(tester.element(menuFinder)).colorScheme;
+    expect(
+      selectedItem.leadingIcon,
+      isA<Icon>().having((widget) => widget.icon, 'icon', Icons.check_rounded),
+    );
+    expect(
+      selectedItem.style?.backgroundColor?.resolve(<WidgetState>{}),
+      colorScheme.primaryContainer,
+    );
+  });
+
   testWidgets('all-records controls share one row at 360dp', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -389,6 +464,40 @@ void main() {
       tester.getTopLeft(find.byKey(const Key('filter-day'))).dy,
     ];
     expect(tops.reduce(max) - tops.reduce(min), lessThan(1));
+    for (final key in const [
+      Key('project-filter'),
+      Key('filter-year'),
+      Key('filter-month'),
+      Key('filter-day'),
+    ]) {
+      expect(
+        find.descendant(
+          of: find.byKey(key),
+          matching: find.byIcon(Icons.arrow_drop_down),
+        ),
+        findsNothing,
+      );
+    }
+
+    await tester.tap(find.byKey(const Key('project-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    final projectButton = find.descendant(
+      of: find.byKey(const Key('project-filter')),
+      matching: find.byType(OutlinedButton),
+    );
+    final projectLabel = find.descendant(
+      of: find.byKey(const Key('project-filter')),
+      matching: find.text('东区厂房改造'),
+    );
+    expect(projectLabel, findsOneWidget);
+    expect(
+      (tester.getCenter(projectButton).dx - tester.getCenter(projectLabel).dx)
+          .abs(),
+      lessThan(1),
+    );
     expect(tester.takeException(), isNull);
 
     // Unmount the tree so the StreamBuilder subscriptions to the Drift
@@ -468,6 +577,27 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
+  testWidgets('record cards show a short date and sequence title', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '云湖之城');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 17, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2026-07-17 · 001'), findsOneWidget);
+    expect(find.text('云湖之城-SM-20260717-001'), findsNothing);
+    await unmountTree(tester);
+  });
+
   testWidgets('all-records edit mode shows checkboxes and batch bar', (
     tester,
   ) async {
@@ -494,6 +624,59 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets('select-all button toggles eligible rows and skips busy rows', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-ready',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+    final busy = await database.createPendingCapture(
+      id: 'capture-busy',
+      projectId: 'project-1',
+      originalPath: '/private/capture-busy.jpg',
+      workLocation: 'B 区',
+      workContent: '检查',
+      photographer: '李工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 10),
+    );
+    await database.markCaptured(
+      captureId: busy.id,
+      capturedAt: DateTime(2026, 7, 16, 10),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+    final firstValues = tester
+        .widgetList<Checkbox>(find.byType(Checkbox))
+        .map((checkbox) => checkbox.value)
+        .toList();
+    expect(firstValues.where((value) => value == true), hasLength(1));
+    expect(find.byTooltip('取消全选'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widgetList<Checkbox>(find.byType(Checkbox))
+          .every((checkbox) => checkbox.value == false),
+      isTrue,
+    );
+    expect(find.byTooltip('全选'), findsOneWidget);
     await unmountTree(tester);
   });
 

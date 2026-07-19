@@ -28,7 +28,7 @@ class _ProjectWatermarkSettingsScreenState
     final database = ref.watch(databaseProvider);
     final strings = AppStrings.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(strings.watermarkSettings)),
+      appBar: AppBar(title: Text(strings.projectWatermarkSettings)),
       body: FutureBuilder<Project?>(
         future: database.projectById(widget.projectId),
         builder: (context, snapshot) {
