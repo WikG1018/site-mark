@@ -149,7 +149,7 @@ SiteMark 只通过 Android URI 授权机制临时提供拍摄目标。
 
 `v0.2.0` 已完成以下自动化验证：
 
-- 195 项 Flutter 测试通过；
+- 196 项 Flutter 测试通过；
 - 20 项 Rust 测试通过；
 - `flutter analyze` 无问题；
 - Rust 格式检查和 Clippy 通过；
