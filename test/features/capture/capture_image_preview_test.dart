@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,52 @@ class _FakeOutputPaths implements CaptureOutputPaths {
   @override
   Future<String> renderedPhotoPath(String captureId) async =>
       '/private/rendered/$captureId.jpg';
+}
+
+class _CountingOutputPaths implements CaptureOutputPaths {
+  int requests = 0;
+
+  @override
+  Future<String> renderedPhotoPath(String captureId) async {
+    requests++;
+    return '/private/rendered/$captureId.jpg';
+  }
+}
+
+class _RebuildingPreview extends StatefulWidget {
+  const _RebuildingPreview({
+    required this.capture,
+    required this.outputPaths,
+    required this.fileExists,
+  });
+
+  final CaptureRecord capture;
+  final CaptureOutputPaths outputPaths;
+  final FutureOr<bool> Function(String path) fileExists;
+
+  @override
+  State<_RebuildingPreview> createState() => _RebuildingPreviewState();
+}
+
+class _RebuildingPreviewState extends State<_RebuildingPreview> {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        TextButton(onPressed: () => setState(() {}), child: const Text('重建')),
+        SizedBox(
+          width: 96,
+          height: 96,
+          child: CaptureImagePreview(
+            capture: widget.capture,
+            outputPaths: widget.outputPaths,
+            thumbnail: true,
+            fileExists: widget.fileExists,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 CaptureRecord _record({
@@ -133,5 +181,86 @@ void main() {
     );
     expect(find.byKey(const Key('original-preview-capture-1')), findsNothing);
     expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+  });
+
+  testWidgets('parent rebuild keeps the resolved preview without re-reading', (
+    tester,
+  ) async {
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+    final paths = _CountingOutputPaths();
+    var fileChecks = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: _RebuildingPreview(
+            capture: capture,
+            outputPaths: paths,
+            fileExists: (path) {
+              fileChecks++;
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
+    expect(paths.requests, 1);
+    expect(fileChecks, 2);
+
+    await tester.tap(find.text('重建'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
+    expect(paths.requests, 1);
+    expect(fileChecks, 2);
+  });
+
+  testWidgets('loading async file checks shows a stable placeholder', (
+    tester,
+  ) async {
+    final originalExists = Completer<bool>();
+    final renderedExists = Completer<bool>();
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureImagePreview(
+            capture: capture,
+            outputPaths: _FakeOutputPaths(),
+            thumbnail: true,
+            fileExists: (path) => path == capture.originalPath
+                ? originalExists.future
+                : renderedExists.future,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+
+    originalExists.complete(true);
+    renderedExists.complete(true);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
   });
 }

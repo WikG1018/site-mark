@@ -22,7 +22,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 /// rows (`captured` or `rendering`) expose a disabled checkbox via
 /// [selectable] = `false`. Below the metadata column a [FutureBuilder] resolves
 /// the localized original-photo state label (retained/cleared/missing).
-class CaptureRecordCard extends ConsumerWidget {
+class CaptureRecordCard extends ConsumerStatefulWidget {
   const CaptureRecordCard({
     super.key,
     required this.summary,
@@ -43,16 +43,49 @@ class CaptureRecordCard extends ConsumerWidget {
   final ValueChanged<bool>? onSelectedChanged;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CaptureRecordCard> createState() => _CaptureRecordCardState();
+}
+
+class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
+  late Future<OriginalPhotoState> _originalState;
+
+  @override
+  void initState() {
+    super.initState();
+    _originalState = _readOriginalState();
+  }
+
+  @override
+  void didUpdateWidget(covariant CaptureRecordCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_originalStateInputsChanged(oldWidget.summary.capture)) {
+      _originalState = _readOriginalState();
+    }
+  }
+
+  Future<OriginalPhotoState> _readOriginalState() {
+    return ref
+        .read(captureMediaServiceProvider)
+        .originalState(widget.summary.capture);
+  }
+
+  bool _originalStateInputsChanged(CaptureRecord previous) {
+    final current = widget.summary.capture;
+    return previous.id != current.id ||
+        previous.originalPath != current.originalPath ||
+        previous.originalDeletedAt != current.originalDeletedAt;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final capture = summary.capture;
+    final capture = widget.summary.capture;
     final (label, icon, color) = _statusPresentation(capture.status, strings);
-    final mediaService = ref.watch(captureMediaServiceProvider);
-    final VoidCallback? cardTap = selectionMode
-        ? selectable
-              ? () => onSelectedChanged?.call(!selected)
+    final VoidCallback? cardTap = widget.selectionMode
+        ? widget.selectable
+              ? () => widget.onSelectedChanged?.call(!widget.selected)
               : null
-        : onTap;
+        : widget.onTap;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -62,11 +95,12 @@ class CaptureRecordCard extends ConsumerWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (selectionMode) ...[
+              if (widget.selectionMode) ...[
                 Checkbox(
-                  value: selected,
-                  onChanged: selectable
-                      ? (value) => onSelectedChanged?.call(value ?? false)
+                  value: widget.selected,
+                  onChanged: widget.selectable
+                      ? (value) =>
+                            widget.onSelectedChanged?.call(value ?? false)
                       : null,
                 ),
                 const SizedBox(width: 4),
@@ -107,9 +141,9 @@ class CaptureRecordCard extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    if (showProjectName) ...[
+                    if (widget.showProjectName) ...[
                       Text(
-                        summary.projectName,
+                        widget.summary.projectName,
                         style: Theme.of(context).textTheme.bodySmall,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -139,7 +173,7 @@ class CaptureRecordCard extends ConsumerWidget {
                       ),
                     ],
                     FutureBuilder<OriginalPhotoState>(
-                      future: mediaService.originalState(capture),
+                      future: _originalState,
                       builder: (context, snapshot) {
                         final state = snapshot.data;
                         if (state == null) {
