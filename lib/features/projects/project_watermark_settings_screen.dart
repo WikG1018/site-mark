@@ -22,6 +22,25 @@ class _ProjectWatermarkSettingsScreenState
   int? _accentColorArgb;
   double? _fontScale;
   bool _saving = false;
+  late Future<Project?> _projectFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _projectFuture = ref.read(databaseProvider).projectById(widget.projectId);
+  }
+
+  @override
+  void didUpdateWidget(covariant ProjectWatermarkSettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId) {
+      _projectFuture = ref.read(databaseProvider).projectById(widget.projectId);
+      _position = null;
+      _opacity = null;
+      _accentColorArgb = null;
+      _fontScale = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +49,7 @@ class _ProjectWatermarkSettingsScreenState
     return Scaffold(
       appBar: AppBar(title: Text(strings.projectWatermarkSettings)),
       body: FutureBuilder<Project?>(
-        future: database.projectById(widget.projectId),
+        future: _projectFuture,
         builder: (context, snapshot) {
           final project = snapshot.data;
           if (project == null) {

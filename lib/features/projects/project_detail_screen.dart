@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
+import 'package:sitemark/domain/capture_summary_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
@@ -25,6 +26,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   CaptureFilter? _filter;
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
+  late Future<Project?> _projectFuture;
+  late Stream<List<CaptureSummary>> _captureSummariesStream;
 
   /// Latest filtered captures emitted by the inner StreamBuilder. Updated
   /// synchronously during build (no `setState`) so the AppBar's select-all
@@ -35,7 +38,26 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _loadPageData();
     _selectionController.addListener(_onSelectionChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant ProjectDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId) {
+      _filter = null;
+      _latestCaptures = const [];
+      _loadPageData();
+    }
+  }
+
+  void _loadPageData() {
+    final database = ref.read(databaseProvider);
+    _projectFuture = database.projectById(widget.projectId);
+    _captureSummariesStream = database.watchCaptureSummaries(
+      CaptureFilter(projectId: widget.projectId),
+    );
   }
 
   void _onSelectionChanged() {
@@ -73,7 +95,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final database = ref.watch(databaseProvider);
     final strings = AppStrings.of(context);
     final filter = _filterForProject();
     final editing = _selectionController.editing;
@@ -81,7 +102,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       _selectableIds(_latestCaptures),
     );
     return FutureBuilder<Project?>(
-      future: database.projectById(widget.projectId),
+      future: _projectFuture,
       builder: (context, projectSnapshot) {
         final project = projectSnapshot.data;
         return Scaffold(
@@ -135,118 +156,94 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           body: project == null
               ? const Center(child: CircularProgressIndicator())
               : StreamBuilder<List<CaptureSummary>>(
-                  stream: database.watchCaptureSummaries(filter),
+                  stream: _captureSummariesStream,
                   builder: (context, captureSnapshot) {
                     if (!captureSnapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    final captures = captureSnapshot.data!;
+                    final allProjectSummaries = captureSnapshot.data!;
+                    final captures = filterCaptureSummaries(
+                      allProjectSummaries,
+                      filter,
+                    );
                     _latestCaptures = captures;
-                    return StreamBuilder<List<CaptureSummary>>(
-                      stream: database.watchCaptureSummaries(
-                        CaptureFilter(projectId: widget.projectId),
-                      ),
-                      builder: (context, projectSummarySnapshot) {
-                        final allProjectSummaries =
-                            projectSummarySnapshot.data ?? const [];
-                        final hasAnyRecord = allProjectSummaries.isNotEmpty;
-                        return CustomScrollView(
-                          slivers: [
-                            SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  20,
-                                  16,
-                                  8,
-                                ),
-                                child: _ProjectHeader(project: project),
+                    final hasAnyRecord = allProjectSummaries.isNotEmpty;
+                    return CustomScrollView(
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+                            child: _ProjectHeader(project: project),
+                          ),
+                        ),
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                            child: Text(
+                              strings.captureRecords,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                        ),
+                        if (hasAnyRecord)
+                          SliverToBoxAdapter(
+                            child: CaptureDateFilterBar(
+                              filter: filter,
+                              summaries: allProjectSummaries,
+                              onChanged: _onFilterChanged,
+                            ),
+                          ),
+                        if (!hasAnyRecord)
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Center(
+                              child: Text(
+                                strings.noCaptures,
+                                style: Theme.of(context).textTheme.bodyLarge,
                               ),
                             ),
-                            SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  12,
-                                  20,
-                                  4,
-                                ),
-                                child: Text(
-                                  strings.captureRecords,
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
+                          )
+                        else if (captures.isEmpty)
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Center(
+                              child: Text(
+                                strings.filteredEmpty,
+                                style: Theme.of(context).textTheme.bodyLarge,
                               ),
                             ),
-                            if (hasAnyRecord)
-                              SliverToBoxAdapter(
-                                child: CaptureDateFilterBar(
-                                  filter: filter,
-                                  summaries: allProjectSummaries,
-                                  onChanged: _onFilterChanged,
-                                ),
-                              ),
-                            if (!hasAnyRecord)
-                              SliverFillRemaining(
-                                hasScrollBody: false,
-                                child: Center(
-                                  child: Text(
-                                    strings.noCaptures,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge,
+                          )
+                        else
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                            sliver: SliverList.separated(
+                              itemCount: captures.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, index) {
+                                final summary = captures[index];
+                                final id = summary.capture.id;
+                                return CaptureRecordCard(
+                                  summary: summary,
+                                  selectionMode: editing,
+                                  selected: _selectionController.selectedIds
+                                      .contains(id),
+                                  selectable:
+                                      summary.capture.status ==
+                                          CaptureStatus.ready ||
+                                      summary.capture.status ==
+                                          CaptureStatus.failed,
+                                  onSelectedChanged: (_) =>
+                                      _selectionController.toggle(id),
+                                  onTap: () => context.go(
+                                    '/projects/${widget.projectId}'
+                                    '/captures/$id',
                                   ),
-                                ),
-                              )
-                            else if (captures.isEmpty)
-                              SliverFillRemaining(
-                                hasScrollBody: false,
-                                child: Center(
-                                  child: Text(
-                                    strings.filteredEmpty,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge,
-                                  ),
-                                ),
-                              )
-                            else
-                              SliverPadding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  0,
-                                  16,
-                                  96,
-                                ),
-                                sliver: SliverList.separated(
-                                  itemCount: captures.length,
-                                  separatorBuilder: (_, _) =>
-                                      const SizedBox(height: 10),
-                                  itemBuilder: (context, index) {
-                                    final summary = captures[index];
-                                    final id = summary.capture.id;
-                                    return CaptureRecordCard(
-                                      summary: summary,
-                                      selectionMode: editing,
-                                      selected: _selectionController.selectedIds
-                                          .contains(id),
-                                      selectable:
-                                          summary.capture.status ==
-                                              CaptureStatus.ready ||
-                                          summary.capture.status ==
-                                              CaptureStatus.failed,
-                                      onSelectedChanged: (_) =>
-                                          _selectionController.toggle(id),
-                                      onTap: () => context.go(
-                                        '/projects/${widget.projectId}'
-                                        '/captures/$id',
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                          ],
-                        );
-                      },
+                                );
+                              },
+                            ),
+                          ),
+                      ],
                     );
                   },
                 ),
