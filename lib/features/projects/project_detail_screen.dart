@@ -92,7 +92,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                 IconButton(
                   onPressed: () =>
                       context.go('/projects/${project.id}/settings'),
-                  tooltip: strings.watermarkSettings,
+                  tooltip: strings.projectWatermarkSettings,
                   icon: const Icon(Icons.tune_outlined),
                 ),
                 IconButton(

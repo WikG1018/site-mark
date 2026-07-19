@@ -87,6 +87,8 @@ class AppStrings {
   String get regenerateWatermark =>
       _english ? 'Regenerate watermark' : '重新生成水印';
   String get watermarkSettings => _english ? 'Watermark settings' : '水印设置';
+  String get projectWatermarkSettings =>
+      _english ? 'Project watermark settings' : '此项目水印设置';
   String get watermarkSettingsHint => _english
       ? 'Use a consistent engineering template. New captures and regenerated photos use these settings.'
       : '使用统一的工程水印模板；新拍照片和重新生成的成片会采用这些设置。';

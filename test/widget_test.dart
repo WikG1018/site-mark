@@ -221,10 +221,11 @@ void main() {
 
     await tester.tap(find.text('东区厂房改造'));
     await tester.pumpAndSettle();
+    expect(find.byTooltip('此项目水印设置'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.tune_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.text('水印设置'), findsOneWidget);
+    expect(find.text('此项目水印设置'), findsOneWidget);
     expect(find.byKey(const Key('project-font-scale-slider')), findsOneWidget);
     await tester.tap(find.text('右下'));
     await tester.tap(find.byKey(const Key('accent-blue')));
