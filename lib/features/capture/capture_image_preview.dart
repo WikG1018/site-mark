@@ -105,31 +105,47 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
 
   Future<bool> _defaultFileExists(String path) => File(path).exists();
 
+  Future<bool> _existsOrFalse(String path) async {
+    try {
+      return await _exists(path);
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<_PreviewResolution> _resolve() async {
     final capture = widget.capture;
     switch (widget.source) {
       case CapturePreviewSource.watermarked:
-        final renderedPath = await widget.outputPaths.renderedPhotoPath(
-          capture.id,
-        );
-        return await _exists(renderedPath)
-            ? _PreviewResolution.image(renderedPath, status: null)
-            : const _PreviewResolution.watermarkedUnavailable();
+        try {
+          final renderedPath = await widget.outputPaths.renderedPhotoPath(
+            capture.id,
+          );
+          return await _existsOrFalse(renderedPath)
+              ? _PreviewResolution.image(renderedPath, status: null)
+              : const _PreviewResolution.watermarkedUnavailable();
+        } catch (_) {
+          return const _PreviewResolution.watermarkedUnavailable();
+        }
       case CapturePreviewSource.original:
         if (capture.originalDeletedAt != null) {
           return const _PreviewResolution.originalCleared();
         }
-        return await _exists(capture.originalPath)
+        return await _existsOrFalse(capture.originalPath)
             ? _PreviewResolution.image(capture.originalPath, status: null)
             : const _PreviewResolution.originalMissing();
       case CapturePreviewSource.bestAvailable:
-        final originalExists = _exists(capture.originalPath);
+        final originalExists = _existsOrFalse(capture.originalPath);
         if (capture.status == CaptureStatus.ready) {
-          final renderedPath = await widget.outputPaths.renderedPhotoPath(
-            capture.id,
-          );
-          if (await _exists(renderedPath)) {
-            return _PreviewResolution.image(renderedPath, status: null);
+          try {
+            final renderedPath = await widget.outputPaths.renderedPhotoPath(
+              capture.id,
+            );
+            if (await _existsOrFalse(renderedPath)) {
+              return _PreviewResolution.image(renderedPath, status: null);
+            }
+          } catch (_) {
+            // A rendered result is optional for the best-available source.
           }
         }
         if (await originalExists) {

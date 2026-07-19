@@ -71,6 +71,12 @@ class _DelayedOutputPaths implements CaptureOutputPaths {
   Future<String> renderedPhotoPath(String captureId) => renderedPath.future;
 }
 
+class _ThrowingOutputPaths implements CaptureOutputPaths {
+  @override
+  Future<String> renderedPhotoPath(String captureId) =>
+      Future.error(StateError('rendered path unavailable'));
+}
+
 CaptureRecord _record({
   required String id,
   required CaptureStatus status,
@@ -388,4 +394,89 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'ready preview falls back to original when rendered resolution throws',
+    (tester) async {
+      final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _ThrowingOutputPaths(),
+              thumbnail: true,
+              fileExists: (path) => true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('original-preview-capture-1')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('explicit sources convert errors into existing placeholders', (
+    tester,
+  ) async {
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureImagePreview(
+            capture: capture,
+            outputPaths: _ThrowingOutputPaths(),
+            thumbnail: true,
+            source: CapturePreviewSource.watermarked,
+            fileExists: (path) => true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('成片尚未生成'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureImagePreview(
+            capture: capture,
+            outputPaths: _FakeOutputPaths(),
+            thumbnail: true,
+            source: CapturePreviewSource.original,
+            fileExists: (path) => Future<bool>.error(StateError('read failed')),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('原图缺失'), findsOneWidget);
+  });
 }
