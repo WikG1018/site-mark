@@ -64,6 +64,13 @@ class _RebuildingPreviewState extends State<_RebuildingPreview> {
   }
 }
 
+class _DelayedOutputPaths implements CaptureOutputPaths {
+  final Completer<String> renderedPath = Completer<String>();
+
+  @override
+  Future<String> renderedPhotoPath(String captureId) => renderedPath.future;
+}
+
 CaptureRecord _record({
   required String id,
   required CaptureStatus status,
@@ -263,4 +270,122 @@ void main() {
 
     expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
   });
+
+  testWidgets(
+    'source change hides the previous image until delayed resolution',
+    (tester) async {
+      final paths = _DelayedOutputPaths();
+      final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+      var source = CapturePreviewSource.original;
+      late StateSetter rebuild;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: CaptureImagePreview(
+                    capture: capture,
+                    outputPaths: paths,
+                    thumbnail: true,
+                    source: source,
+                    fileExists: (path) => true,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('original-preview-capture-1')),
+        findsOneWidget,
+      );
+
+      rebuild(() => source = CapturePreviewSource.watermarked);
+      await tester.pump();
+
+      expect(find.byKey(const Key('original-preview-capture-1')), findsNothing);
+      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+
+      paths.renderedPath.complete('/private/rendered/capture-1.jpg');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('rendered-preview-capture-1')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'capture change hides the previous image until delayed resolution',
+    (tester) async {
+      final paths = _DelayedOutputPaths();
+      var capture = _record(id: 'capture-1', status: CaptureStatus.failed);
+      late StateSetter rebuild;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: CaptureImagePreview(
+                    capture: capture,
+                    outputPaths: paths,
+                    thumbnail: true,
+                    fileExists: (path) => true,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('original-preview-capture-1')),
+        findsOneWidget,
+      );
+
+      rebuild(
+        () => capture = _record(id: 'capture-2', status: CaptureStatus.ready),
+      );
+      await tester.pump();
+
+      expect(find.byKey(const Key('original-preview-capture-1')), findsNothing);
+      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+
+      paths.renderedPath.complete('/private/rendered/capture-2.jpg');
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('rendered-preview-capture-2')),
+        findsOneWidget,
+      );
+    },
+  );
 }

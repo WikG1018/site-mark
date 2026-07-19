@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -14,13 +16,54 @@ import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
-  testWidgets('parent rebuild keeps the original-state result cached', (
+  testWidgets(
+    'card reuses one original-state check for preview and parent rebuild',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final media = _CountingMediaService(database);
+      final summary = CaptureSummary(capture: _record(), projectName: '东区厂房改造');
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            captureMediaServiceProvider.overrideWithValue(media),
+            captureOutputPathsProvider.overrideWithValue(_CardOutputPaths()),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: Scaffold(body: _RebuildingCard(summary: summary)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('原图已保留'), findsOneWidget);
+      expect(media.originalStateCalls, 1);
+
+      await tester.tap(find.text('重建'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('原图已保留'), findsOneWidget);
+      expect(media.originalStateCalls, 1);
+    },
+  );
+
+  testWidgets('capture change hides the previous original-state label', (
     tester,
   ) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
-    final media = _CountingMediaService(database);
-    final summary = CaptureSummary(capture: _record(), projectName: '东区厂房改造');
+    final media = _DelayedMediaService(database);
+    final initial = CaptureSummary(capture: _record(), projectName: '东区厂房改造');
+    late StateSetter rebuild;
+    var summary = initial;
 
     await tester.pumpWidget(
       ProviderScope(
@@ -37,19 +80,33 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: Scaffold(body: _RebuildingCard(summary: summary)),
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return CaptureRecordCard(summary: summary, onTap: () {});
+              },
+            ),
+          ),
         ),
       ),
     );
+    media.states[0].complete(OriginalPhotoState.retained);
     await tester.pumpAndSettle();
     expect(find.text('原图已保留'), findsOneWidget);
-    expect(media.originalStateCalls, 1);
 
-    await tester.tap(find.text('重建'));
+    rebuild(
+      () => summary = CaptureSummary(
+        capture: _record().copyWith(originalPath: '/private/new-capture.jpg'),
+        projectName: initial.projectName,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('原图已保留'), findsNothing);
+    media.states[1].complete(OriginalPhotoState.missing);
     await tester.pumpAndSettle();
-
-    expect(find.text('原图已保留'), findsOneWidget);
-    expect(media.originalStateCalls, 1);
+    expect(find.text('原图缺失'), findsOneWidget);
   });
 }
 
@@ -107,6 +164,20 @@ class _CountingMediaService extends CaptureMediaService {
   Future<OriginalPhotoState> originalState(CaptureRecord record) async {
     originalStateCalls++;
     return OriginalPhotoState.retained;
+  }
+}
+
+class _DelayedMediaService extends _CountingMediaService {
+  _DelayedMediaService(super.database);
+
+  final states = <Completer<OriginalPhotoState>>[];
+
+  @override
+  Future<OriginalPhotoState> originalState(CaptureRecord record) {
+    originalStateCalls++;
+    final state = Completer<OriginalPhotoState>();
+    states.add(state);
+    return state.future;
   }
 }
 

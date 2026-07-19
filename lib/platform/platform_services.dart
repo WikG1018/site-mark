@@ -182,8 +182,25 @@ class AppCaptureOutputPaths implements CaptureOutputPaths {
 
   @override
   Future<String> renderedPhotoPath(String captureId) async {
-    final directory = await (_renderedDirectory ??= _createRenderedDirectory());
+    final directory = await _resolveRenderedDirectory();
     return '${directory.path}${Platform.pathSeparator}$captureId.jpg';
+  }
+
+  Future<Directory> _resolveRenderedDirectory() {
+    final cached = _renderedDirectory;
+    if (cached != null) return cached;
+
+    final created = _createRenderedDirectory();
+    _renderedDirectory = created;
+    created.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        if (identical(_renderedDirectory, created)) {
+          _renderedDirectory = null;
+        }
+      },
+    );
+    return created;
   }
 
   Future<Directory> _createRenderedDirectory() async {

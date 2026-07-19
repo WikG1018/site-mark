@@ -149,7 +149,8 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
       future: _resolution,
       builder: (context, snapshot) {
         final resolution = snapshot.data;
-        if (resolution == null) {
+        if (snapshot.connectionState != ConnectionState.done ||
+            resolution == null) {
           return _placeholder(context, strings, label: _loadingLabel(strings));
         }
         return switch (resolution.kind) {

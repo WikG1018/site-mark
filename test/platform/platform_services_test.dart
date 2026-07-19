@@ -60,6 +60,25 @@ void main() {
     );
   });
 
+  test('rendered directory initialization retries after a failure', () async {
+    final root = await Directory.systemTemp.createTemp('sitemark-rendered-');
+    addTearDown(() => root.delete(recursive: true));
+    var attempts = 0;
+    final paths = AppCaptureOutputPaths(
+      documentsDirectory: () async {
+        attempts++;
+        if (attempts == 1) throw StateError('documents unavailable');
+        return root;
+      },
+    );
+
+    await expectLater(paths.renderedPhotoPath('capture-1'), throwsStateError);
+    final retry = await paths.renderedPhotoPath('capture-2');
+
+    expect(attempts, 2);
+    expect(retry, endsWith('${Platform.pathSeparator}capture-2.jpg'));
+  });
+
   group('PigeonPlatformServices bridge', () {
     test(
       'inspectImage delegates to the Pigeon API and returns the metadata',

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
@@ -48,6 +51,8 @@ class CaptureRecordCard extends ConsumerStatefulWidget {
 
 class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
   late Future<OriginalPhotoState> _originalState;
+  late final FutureOr<bool> Function(String) _previewFileExists =
+      _previewFileExistsForPath;
 
   @override
   void initState() {
@@ -67,6 +72,13 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     return ref
         .read(captureMediaServiceProvider)
         .originalState(widget.summary.capture);
+  }
+
+  Future<bool> _previewFileExistsForPath(String path) async {
+    if (path == widget.summary.capture.originalPath) {
+      return await _originalState == OriginalPhotoState.retained;
+    }
+    return File(path).exists();
   }
 
   bool _originalStateInputsChanged(CaptureRecord previous) {
@@ -114,6 +126,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                     capture: capture,
                     outputPaths: ref.watch(captureOutputPathsProvider),
                     thumbnail: true,
+                    fileExists: _previewFileExists,
                   ),
                 ),
               ),
@@ -175,6 +188,9 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                     FutureBuilder<OriginalPhotoState>(
                       future: _originalState,
                       builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done) {
+                          return const SizedBox.shrink();
+                        }
                         final state = snapshot.data;
                         if (state == null) {
                           return const SizedBox.shrink();
