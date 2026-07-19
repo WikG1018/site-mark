@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -665,6 +666,68 @@ void main() {
         'capture-earlier',
         'capture-later',
       ]);
+    },
+  );
+
+  test(
+    '1000 capture summary filter applies project and local day range in descending order',
+    () async {
+      const projectId = 'project-1';
+      final startOfDay = DateTime(2026, 7, 16);
+      await database.createProject(id: projectId, name: '东区厂房改造');
+      await database.createProject(id: 'project-2', name: '西区宿舍');
+
+      await database.batch((batch) {
+        for (var index = 0; index < 1000; index++) {
+          final inTargetProject = index.isEven;
+          final inTargetDay = inTargetProject && index % 4 == 0;
+          final capturedAt = inTargetDay
+              ? startOfDay.add(Duration(minutes: index))
+              : index == 998
+              ? startOfDay.add(const Duration(days: 1))
+              : startOfDay.subtract(const Duration(days: 1));
+          batch.insert(
+            database.captureRecords,
+            CaptureRecordsCompanion.insert(
+              id: 'capture-${index.toString().padLeft(4, '0')}',
+              projectId: inTargetProject ? projectId : 'project-2',
+              workLocation: '施工区',
+              workContent: '安装检查',
+              photographer: '张工',
+              originalPath: '/private/$index.jpg',
+              status: CaptureStatus.captured,
+              createdAt: startOfDay,
+              capturedAt: Value(capturedAt),
+            ),
+          );
+        }
+      });
+
+      final rows = await database
+          .watchCaptureSummaries(
+            const CaptureFilter(
+              projectId: projectId,
+              year: 2026,
+              month: 7,
+              day: 16,
+            ),
+          )
+          .first;
+
+      expect(rows, hasLength(250));
+      expect(rows.first.capture.id, 'capture-0996');
+      expect(rows.last.capture.id, 'capture-0000');
+      expect(rows.every((row) => row.capture.projectId == projectId), isTrue);
+      expect(
+        rows.every(
+          (row) =>
+              !row.capture.capturedAt!.isBefore(startOfDay) &&
+              row.capture.capturedAt!.isBefore(
+                startOfDay.add(const Duration(days: 1)),
+              ),
+        ),
+        isTrue,
+      );
     },
   );
 

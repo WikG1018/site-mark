@@ -115,11 +115,14 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (migrator) => migrator.createAll(),
+    onCreate: (migrator) async {
+      await migrator.createAll();
+      await _createCaptureIndexes();
+    },
     onUpgrade: (migrator, from, to) async {
       // When migrating from v2 directly to v4+, migrator.createTable creates
       // `app_settings` with the *current* (v4) schema. The v4 addColumn calls
@@ -164,12 +167,29 @@ class AppDatabase extends _$AppDatabase {
           captureRecords.originalDeletedAt,
         );
       }
+      if (from < 5) {
+        await _createCaptureIndexes();
+      }
       await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
       await _ensureGlobalSettingsRow();
     },
   );
+
+  Future<void> _createCaptureIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_status_idx ON captures (status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_sort_idx '
+      'ON captures (COALESCE(captured_at, created_at) DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_project_sort_idx '
+      'ON captures (project_id, COALESCE(captured_at, created_at) DESC)',
+    );
+  }
 
   /// Inserts the default `global` settings row if it does not already exist.
   ///
