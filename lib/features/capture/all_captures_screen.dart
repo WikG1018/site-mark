@@ -16,8 +16,8 @@ import 'package:sitemark/l10n/app_strings.dart';
 /// Global capture-records surface.
 ///
 /// Combines an optional project filter, the shared [CaptureDateFilterBar], and
-/// [CaptureRecordCard]s sourced from [AppDatabase.watchCaptureSummaries]. The
-/// unfiltered [AppDatabase.watchAllCaptureSummaries] stream drives the project
+/// [CaptureRecordCard]s sourced from one
+/// [AppDatabase.watchAllCaptureSummaries] stream. The unfiltered stream drives the project
 /// dropdown and is narrowed to the selected project before supplying cascading
 /// date options. Record taps route to the existing project-scoped capture
 /// detail using the IDs carried by each [CaptureSummary].

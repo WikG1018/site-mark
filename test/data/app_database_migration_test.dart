@@ -363,8 +363,35 @@ Future<Map<String, String>> captureIndexes(AppDatabase database) async {
   };
 }
 
+String _normalizedSql(String sql) =>
+    sql.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+
+Future<void> expectCaptureIndexes(AppDatabase database) async {
+  final indexes = await captureIndexes(database);
+
+  expect(indexes.keys, {
+    'capture_records_project_sort_idx',
+    'capture_records_sort_idx',
+    'capture_records_status_idx',
+  });
+  expect(
+    _normalizedSql(indexes['capture_records_status_idx']!),
+    'create index capture_records_status_idx on captures (status)',
+  );
+  expect(
+    _normalizedSql(indexes['capture_records_sort_idx']!),
+    'create index capture_records_sort_idx on captures '
+    '(coalesce(captured_at, created_at) desc)',
+  );
+  expect(
+    _normalizedSql(indexes['capture_records_project_sort_idx']!),
+    'create index capture_records_project_sort_idx on captures '
+    '(project_id, coalesce(captured_at, created_at) desc)',
+  );
+}
+
 void main() {
-  test('v2 to v3 migration preserves captures and inserts defaults', () async {
+  test('v2 migration preserves captures and inserts defaults', () async {
     final database = AppDatabase.forTesting(openMigratedV2Fixture());
     addTearDown(database.close);
 
@@ -380,31 +407,30 @@ void main() {
     expect(settings.defaultWatermarkPosition, 'bottomLeft');
     expect(settings.defaultWatermarkOpacity, 0.78);
     expect(settings.defaultWatermarkAccentColorArgb, 0xff37c58b);
+    await expectCaptureIndexes(database);
   });
 
-  test(
-    'v3 to v4 migration preserves rows and adds field-test defaults',
-    () async {
-      final database = AppDatabase.forTesting(openMigratedV3Fixture());
-      addTearDown(database.close);
+  test('v3 migration preserves rows and adds field-test defaults', () async {
+    final database = AppDatabase.forTesting(openMigratedV3Fixture());
+    addTearDown(database.close);
 
-      final project = await database.projectById('project-1');
-      final capture = await database.captureById('capture-1');
-      final settings = await database.getAppSettings();
+    final project = await database.projectById('project-1');
+    final capture = await database.captureById('capture-1');
+    final settings = await database.getAppSettings();
 
-      expect(project?.name, '东区厂房改造');
-      expect(project?.watermarkFontScale, 1.0);
-      expect(settings.themeMode, 'dark');
-      expect(settings.localeCode, 'en');
-      expect(settings.defaultWatermarkFontScale, 1.0);
-      expect(settings.locationPermissionPromptDismissed, isFalse);
-      expect(capture?.photoNumber, 'SM-20260716-001');
-      expect(capture?.processingAttempts, 2);
-      expect(capture?.watermarkLocaleCode, 'zh');
-      expect(capture?.locationResolution, 'resolved');
-      expect(capture?.originalDeletedAt, isNull);
-    },
-  );
+    expect(project?.name, '东区厂房改造');
+    expect(project?.watermarkFontScale, 1.0);
+    expect(settings.themeMode, 'dark');
+    expect(settings.localeCode, 'en');
+    expect(settings.defaultWatermarkFontScale, 1.0);
+    expect(settings.locationPermissionPromptDismissed, isFalse);
+    expect(capture?.photoNumber, 'SM-20260716-001');
+    expect(capture?.processingAttempts, 2);
+    expect(capture?.watermarkLocaleCode, 'zh');
+    expect(capture?.locationResolution, 'resolved');
+    expect(capture?.originalDeletedAt, isNull);
+    await expectCaptureIndexes(database);
+  });
 
   test(
     'v4 to v5 migration preserves rows and creates capture indexes',
@@ -415,7 +441,6 @@ void main() {
       final project = await database.projectById('project-1');
       final capture = await database.captureById('capture-1');
       final settings = await database.getAppSettings();
-      final indexes = await captureIndexes(database);
 
       expect(project?.name, '东区厂房改造');
       expect(project?.watermarkFontScale, 1.25);
@@ -424,20 +449,7 @@ void main() {
       expect(settings.themeMode, 'dark');
       expect(settings.defaultWatermarkFontScale, 1.25);
       expect(settings.locationPermissionPromptDismissed, isTrue);
-      expect(indexes.keys, {
-        'capture_records_project_sort_idx',
-        'capture_records_sort_idx',
-        'capture_records_status_idx',
-      });
-      expect(indexes['capture_records_status_idx'], contains('(status)'));
-      expect(
-        indexes['capture_records_sort_idx'],
-        contains('COALESCE(captured_at, created_at) DESC'),
-      );
-      expect(
-        indexes['capture_records_project_sort_idx'],
-        contains('project_id, COALESCE(captured_at, created_at) DESC'),
-      );
+      await expectCaptureIndexes(database);
     },
   );
 
@@ -489,12 +501,6 @@ void main() {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 
-    final indexes = await captureIndexes(database);
-
-    expect(indexes.keys, {
-      'capture_records_project_sort_idx',
-      'capture_records_sort_idx',
-      'capture_records_status_idx',
-    });
+    await expectCaptureIndexes(database);
   });
 }

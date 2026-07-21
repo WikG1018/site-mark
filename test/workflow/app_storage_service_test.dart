@@ -78,6 +78,35 @@ void main() {
   });
 
   test(
+    'treats a missing original file as zero bytes and still totals others',
+    () async {
+      await database.createPendingCapture(
+        id: 'missing-original',
+        projectId: 'project',
+        originalPath:
+            '${temporaryRoot.path}${Platform.pathSeparator}missing-original.jpg',
+        workLocation: 'A 区',
+        workContent: '检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+      );
+      await writeFile(
+        '${documents.path}${Platform.pathSeparator}other.bin',
+        23,
+      );
+
+      final usage = await AppStorageUsageService(
+        database: database,
+        documentsDirectory: () async => documents,
+      ).load();
+
+      expect(usage.originalBytes, 0);
+      expect(usage.databaseAndOtherBytes, 23);
+      expect(usage.totalBytes, 23);
+    },
+  );
+
+  test(
     'loads many file sizes once with at most eight concurrent length reads',
     () async {
       final original = await writeFile(

@@ -90,6 +90,58 @@ void main() {
     expect(record?.publishedUri, isNull);
   });
 
+  test(
+    'reports local pre-launch timing before requesting the camera',
+    () async {
+      final order = <Object>[];
+      final timings = <CaptureLaunchTiming>[];
+      platform.onLaunchCamera = () => order.add('platform.launchCamera');
+      final timedWorkflow = CaptureWorkflow(
+        database: database,
+        platform: platform,
+        images: images,
+        outputPaths: _FakeOutputPaths(),
+        fileStore: fileStore,
+        scheduler: scheduler,
+        locationCoordinator: coordinator,
+        idFactory: () => 'capture-timed',
+        now: () => DateTime(2026, 7, 16, 9, 32, 18),
+        onLaunchTiming: (timing) {
+          timings.add(timing);
+          order.add(timing.phase);
+        },
+      );
+
+      await timedWorkflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+          useLocationFallback: false,
+        ),
+      );
+
+      expect(order, [
+        CaptureLaunchPhase.targetPrepared,
+        CaptureLaunchPhase.pendingRecordPersisted,
+        CaptureLaunchPhase.cameraLaunchRequested,
+        'platform.launchCamera',
+      ]);
+      expect(
+        timings.map((timing) => timing.elapsed.inMicroseconds),
+        orderedEquals(
+          timings
+              .map((timing) => timing.elapsed.inMicroseconds)
+              .toList(growable: false)
+            ..sort(),
+        ),
+      );
+    },
+  );
+
   test('captures watermark locale code from draft', () async {
     final result = await workflow.capture(
       const CaptureDraft(
@@ -341,6 +393,7 @@ class _FakePlatformServices implements PlatformServices {
   RecoveredCameraCapture? recoveredCapture;
   String? deletedUri;
   Future<LocationResult>? locationOverride;
+  void Function()? onLaunchCamera;
 
   @override
   Future<String> createCameraTarget(String captureId) async =>
@@ -358,6 +411,7 @@ class _FakePlatformServices implements PlatformServices {
 
   @override
   Future<CameraCaptureResult> launchCamera(String captureId) async {
+    onLaunchCamera?.call();
     events.add('launchCamera');
     return CameraCaptureResult(
       outcome: cameraOutcome,
