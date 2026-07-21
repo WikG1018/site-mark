@@ -1,5 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
+
+/// Animated slot that hosts the [LocationPermissionPrompt] above the capture
+/// form. The card expands and fades in when [prompt] arrives and collapses
+/// back to zero height when it is removed, so the form below never jumps
+/// while the explanation appears or is dismissed.
+class LocationPermissionPromptArea extends StatelessWidget {
+  const LocationPermissionPromptArea({super.key, this.prompt});
+
+  /// The prompt to show, or `null` when the explanation should be hidden.
+  final Widget? prompt;
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = prompt != null;
+    return AnimatedSize(
+      duration: AppMotion.medium2,
+      curve: AppMotion.standard,
+      alignment: Alignment.topCenter,
+      child: AnimatedOpacity(
+        duration: AppMotion.medium2,
+        curve: AppMotion.standard,
+        opacity: visible ? 1 : 0,
+        child: visible
+            ? Padding(padding: const EdgeInsets.only(bottom: 16), child: prompt)
+            // Zero-height placeholder keeps the collapsed state full-width so
+            // the size animation starts from the same width as the card.
+            : const SizedBox(width: double.infinity),
+      ),
+    );
+  }
+}
 
 /// Non-blocking explanation card rendered above the capture form whenever the
 /// host location permission is not granted and the user has not dismissed the

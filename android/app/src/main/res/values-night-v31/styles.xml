@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ (API 31+) SplashScreen configuration for dark mode.
+         The background matches the black that drawable-v21/launch_background
+         resolves to under the night (Theme.Black) LaunchTheme. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@android:color/black</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:postSplashScreenTheme">@style/LaunchTheme</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <!-- Same purpose as the base NormalTheme; redeclared so resource
+         resolution keeps working when this qualifier directory wins. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>

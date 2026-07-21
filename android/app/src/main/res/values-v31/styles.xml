@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ (API 31+) SplashScreen configuration for light mode.
+         The background matches the solid white of drawable/launch_background
+         (the v21 variant resolves ?android:colorBackground to white under the
+         light LaunchTheme), so the system splash hands off to the Flutter
+         first frame without a color flash. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@android:color/white</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:postSplashScreenTheme">@style/LaunchTheme</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <!-- Same purpose as the base NormalTheme; redeclared so resource
+         resolution keeps working when this qualifier directory wins. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>

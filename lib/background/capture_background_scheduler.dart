@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/platform/local_notification_service.dart';
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/frb_generated.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
@@ -160,6 +162,62 @@ CaptureProcessor buildHeadlessCaptureProcessor(AppDatabase database) {
 /// initialized exactly once per background isolate.
 Future<void>? _backgroundRustInitialization;
 
+/// Sends the completion notification for a successfully processed capture
+/// when [enabled] (the persisted `AppSetting.completionNotificationsEnabled`
+/// switch) is true; a no-op otherwise.
+///
+/// Extracted as a top-level function so the background dispatcher and unit
+/// tests share the exact same gate sequence. The service must be
+/// initialized before posting — the tap callback is a no-op here because
+/// deep-link handling is owned by the foreground isolate — and its
+/// in-memory send gate must be opened explicitly.
+Future<void> sendCaptureReadyNotificationIfEnabled({
+  required bool enabled,
+  required CompletionNotificationService service,
+  required String projectId,
+  required String captureId,
+  required String photoNumber,
+}) async {
+  if (!enabled) return;
+  await service.initialize((_) {});
+  await service.setEnabled(true);
+  await service.showCaptureReady(
+    projectId: projectId,
+    captureId: captureId,
+    photoNumber: photoNumber,
+  );
+}
+
+/// Posts the completion notification for [captureId] after a successful
+/// background render, gated on the persisted `completionNotificationsEnabled`
+/// switch.
+///
+/// The background isolate cannot reach the Riverpod container, so a
+/// dedicated [LocalNotificationService] instance is constructed here. The
+/// whole path is wrapped in try/catch and degrades silently: plugin
+/// registration inside the WorkManager background isolate relies on the
+/// host app's GeneratedPluginRegistrant registering every plugin, which can
+/// fail on some devices. A failure must never fail the work item — the
+/// foreground UI already refreshes from the Drift watch streams, so the
+/// notification is best-effort only.
+Future<void> _notifyCaptureReady(AppDatabase database, String captureId) async {
+  try {
+    final settings = await database.getAppSettings();
+    final record = await database.captureById(captureId);
+    final photoNumber = record?.photoNumber;
+    if (record == null || photoNumber == null || photoNumber.isEmpty) return;
+    await sendCaptureReadyNotificationIfEnabled(
+      enabled: settings.completionNotificationsEnabled,
+      service: LocalNotificationService(),
+      projectId: record.projectId,
+      captureId: captureId,
+      photoNumber: photoNumber,
+    );
+  } catch (_) {
+    // Silent degradation; see the doc comment above.
+  }
+}
+
 /// WorkManager entry point invoked from a background isolate.
 ///
 /// Returns `true` (success) for every non-retry outcome so later work in the
@@ -178,6 +236,9 @@ void captureCallbackDispatcher() {
       final result = await buildHeadlessCaptureProcessor(
         database,
       ).process(captureId);
+      if (result == CaptureProcessResult.succeeded) {
+        await _notifyCaptureReady(database, captureId);
+      }
       return result != CaptureProcessResult.retry;
     } finally {
       await database.close();

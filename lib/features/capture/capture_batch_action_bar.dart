@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
@@ -12,11 +15,12 @@ import 'package:sitemark/workflow/project_export_service.dart';
 /// Hosts four equal-width actions: export selection, save to gallery
 /// (republish), clear originals, and delete all. Export/republish are disabled
 /// unless every selected row is `ready`; every action is disabled when the
-/// selection is empty. Destructive actions (clear/delete) show a count-aware
-/// confirmation dialog before running. Each action executes service work
-/// sequentially across the selected IDs, surfaces a `completed/total` progress
-/// line, and reports the aggregated success/skipped/failed counts in a
-/// Snackbar when done.
+/// selection is empty. Delete-all keeps a count-aware confirmation dialog with
+/// a red confirm button; clear-originals runs on a 5-second delayed timer with
+/// a Snackbar "undo" window instead of a dialog. Each action executes service
+/// work sequentially across the selected IDs, surfaces a `completed/total`
+/// progress line under a [LinearProgressIndicator], and reports the aggregated
+/// success/skipped/failed counts in a Snackbar when done.
 class CaptureBatchActionBar extends StatefulWidget {
   const CaptureBatchActionBar({
     super.key,
@@ -46,6 +50,16 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   int _completed = 0;
   int _total = 0;
 
+  /// Pending clear-originals execution. Set while the 5-second undo window is
+  /// open; cancelled by the Snackbar undo action or by [dispose].
+  Timer? _clearOriginalsTimer;
+
+  @override
+  void dispose() {
+    _clearOriginalsTimer?.cancel();
+    super.dispose();
+  }
+
   List<String> get _selectedIds => widget.controller.selectedIds.toList();
 
   bool _allReady(List<String> ids) {
@@ -61,9 +75,10 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
 
   Future<void> _runWithProgress(
     String snackbarTitle,
-    Future<CaptureActionResult> Function(List<String> ids) op,
-  ) async {
-    final ids = _selectedIds;
+    Future<CaptureActionResult> Function(List<String> ids) op, {
+    List<String>? overrideIds,
+  }) async {
+    final ids = overrideIds ?? _selectedIds;
     if (ids.isEmpty) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() {
@@ -117,6 +132,10 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         content: Text(
           '$title · ${strings.actionResult(succeeded, skipped, failed)}',
         ),
+        action: SnackBarAction(
+          label: strings.viewAction,
+          onPressed: () => widget.controller.exit(),
+        ),
       ),
     );
   }
@@ -133,8 +152,14 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
             child: Text(AppStrings.of(context).cancel),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(AppStrings.of(context).done),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () {
+              HapticFeedback.heavyImpact();
+              Navigator.pop(dialogContext, true);
+            },
+            child: Text(AppStrings.of(context).deleteAction),
           ),
         ],
       ),
@@ -183,21 +208,43 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     );
   }
 
-  Future<void> _clearOriginals() async {
+  /// Schedules the clear-originals run after a 5-second undo window instead of
+  /// asking for confirmation up front. The Snackbar action cancels the pending
+  /// timer; only expiry executes the deletion.
+  void _clearOriginals() {
     final ids = _selectedIds;
-    if (ids.isEmpty) return;
+    if (ids.isEmpty || _busy || _clearOriginalsTimer != null) return;
     final strings = AppStrings.of(context);
-    final confirmed = await _confirm(
-      strings.clearOriginals,
-      strings.confirmClearOriginals(ids.length),
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    _clearOriginalsTimer = Timer(const Duration(seconds: 5), () {
+      _clearOriginalsTimer = null;
+      _executeClearOriginals(ids);
+    });
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(strings.clearOriginalsScheduled(ids.length)),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: strings.undo,
+          onPressed: () {
+            _clearOriginalsTimer?.cancel();
+            _clearOriginalsTimer = null;
+          },
+        ),
+      ),
     );
-    if (confirmed != true) return;
+  }
+
+  Future<void> _executeClearOriginals(List<String> ids) async {
+    if (!mounted) return;
+    final strings = AppStrings.of(context);
     await _runWithProgress(
       strings.clearOriginals,
       (ids) => widget.mediaService.clearOriginals(ids),
+      overrideIds: ids,
     );
     // Exit selection mode so the cleared state is visible in the cards.
-    widget.controller.exit();
+    if (mounted) widget.controller.exit();
   }
 
   Future<void> _deleteAll() async {
@@ -228,63 +275,67 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         final exporting = _busy && _total == 1;
         return BottomAppBar(
           key: const Key('batch-action-bar'),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_busy)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_busy)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Column(
+                      children: [
+                        LinearProgressIndicator(
+                          value: _total == 0 ? null : _completed / _total,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
                           exporting
                               ? strings.exportSelection
                               : strings.actionProgress(_completed, _total),
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
+                      ],
+                    ),
+                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ActionButton(
+                        icon: Icons.archive_outlined,
+                        label: strings.exportSelection,
+                        enabled: !empty && ready && !_busy,
+                        onPressed: _export,
                       ),
-                    ],
-                  ),
+                    ),
+                    Expanded(
+                      child: _ActionButton(
+                        icon: Icons.save_outlined,
+                        label: strings.saveToGallery,
+                        enabled: !empty && ready && !_busy,
+                        onPressed: _republish,
+                      ),
+                    ),
+                    Expanded(
+                      child: _ActionButton(
+                        icon: Icons.cleaning_services_outlined,
+                        label: strings.clearOriginals,
+                        enabled: !empty && !_busy,
+                        onPressed: _clearOriginals,
+                      ),
+                    ),
+                    Expanded(
+                      child: _ActionButton(
+                        icon: Icons.delete_outline,
+                        label: strings.deleteAll,
+                        enabled: !empty && !_busy,
+                        onPressed: _deleteAll,
+                      ),
+                    ),
+                  ],
                 ),
-              Row(
-                children: [
-                  Expanded(
-                    child: _ActionButton(
-                      icon: Icons.archive_outlined,
-                      label: strings.exportSelection,
-                      enabled: !empty && ready && !_busy,
-                      onPressed: _export,
-                    ),
-                  ),
-                  Expanded(
-                    child: _ActionButton(
-                      icon: Icons.save_outlined,
-                      label: strings.saveToGallery,
-                      enabled: !empty && ready && !_busy,
-                      onPressed: _republish,
-                    ),
-                  ),
-                  Expanded(
-                    child: _ActionButton(
-                      icon: Icons.cleaning_services_outlined,
-                      label: strings.clearOriginals,
-                      enabled: !empty && !_busy,
-                      onPressed: _clearOriginals,
-                    ),
-                  ),
-                  Expanded(
-                    child: _ActionButton(
-                      icon: Icons.delete_outline,
-                      label: strings.deleteAll,
-                      enabled: !empty && !_busy,
-                      onPressed: _deleteAll,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -7,6 +8,7 @@ import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 
 /// Shared capture list item used by both the project detail and the global
 /// all-records surfaces.
@@ -17,11 +19,19 @@ import 'package:sitemark/l10n/app_strings.dart';
 /// stays tappable even when the preview file is missing -- the preview renders a
 /// placeholder instead.
 ///
-/// When [selectionMode] is `true`, a [Checkbox] is prepended to the row and card
-/// taps toggle selection (via [onSelectedChanged]) instead of navigating. Busy
-/// rows (`captured` or `rendering`) expose a disabled checkbox via
+/// When [selectionMode] is `true`, a [Checkbox] is prepended to the row (its
+/// column expands with an [AnimatedSize]) and card taps toggle selection (via
+/// [onSelectedChanged]) instead of navigating. A long press outside selection
+/// mode enters selection and selects the row ([HapticFeedback.mediumImpact]);
+/// every selection toggle fires [HapticFeedback.selectionClick]. Busy rows
+/// (`captured` or `rendering`) expose a disabled checkbox via
 /// [selectable] = `false`. Below the metadata column a [FutureBuilder] resolves
 /// the localized original-photo state label (retained/cleared/missing).
+///
+/// The status icon/label cross-fades between states ([AnimatedSwitcher]) and is
+/// merged into a single semantics label; the thumbnail carries an image
+/// semantics label and, for `ready` rows, a [Hero] tagged
+/// `capture-photo-{id}` paired with the detail screen's large preview.
 class CaptureRecordCard extends ConsumerWidget {
   const CaptureRecordCard({
     super.key,
@@ -50,38 +60,68 @@ class CaptureRecordCard extends ConsumerWidget {
     final mediaService = ref.watch(captureMediaServiceProvider);
     final VoidCallback? cardTap = selectionMode
         ? selectable
-              ? () => onSelectedChanged?.call(!selected)
+              ? () {
+                  HapticFeedback.selectionClick();
+                  onSelectedChanged?.call(!selected);
+                }
               : null
         : onTap;
+    final thumbnail = SizedBox(
+      width: 96,
+      height: 96,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: CaptureImagePreview(
+          capture: capture,
+          outputPaths: ref.watch(captureOutputPathsProvider),
+          thumbnail: true,
+        ),
+      ),
+    );
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: cardTap,
+        onLongPress: !selectionMode && selectable
+            ? () {
+                HapticFeedback.mediumImpact();
+                onSelectedChanged?.call(true);
+              }
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (selectionMode) ...[
-                Checkbox(
-                  value: selected,
-                  onChanged: selectable
-                      ? (value) => onSelectedChanged?.call(value ?? false)
-                      : null,
+              AnimatedSize(
+                duration: AppMotion.medium2,
+                curve: AppMotion.standard,
+                child: selectionMode
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox(
+                            value: selected,
+                            onChanged: selectable
+                                ? (value) {
+                                    HapticFeedback.selectionClick();
+                                    onSelectedChanged?.call(value ?? false);
+                                  }
+                                : null,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              Semantics(
+                image: true,
+                label: strings.photoSemanticsLabel(
+                  capture.photoNumber ?? capture.workLocation,
                 ),
-                const SizedBox(width: 4),
-              ],
-              SizedBox(
-                width: 96,
-                height: 96,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: CaptureImagePreview(
-                    capture: capture,
-                    outputPaths: ref.watch(captureOutputPathsProvider),
-                    thumbnail: true,
-                  ),
-                ),
+                child: capture.status == CaptureStatus.ready
+                    ? Hero(tag: 'capture-photo-${capture.id}', child: thumbnail)
+                    : thumbnail,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -101,9 +141,23 @@ class CaptureRecordCard extends ConsumerWidget {
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
-                        Icon(icon, size: 18, color: color),
-                        const SizedBox(width: 4),
-                        Text(label, style: TextStyle(color: color)),
+                        Semantics(
+                          label: '${strings.statusSemanticsPrefix}: $label',
+                          child: ExcludeSemantics(
+                            child: AnimatedSwitcher(
+                              duration: AppMotion.short4,
+                              child: Row(
+                                key: ValueKey(capture.status),
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(icon, size: 18, color: color),
+                                  const SizedBox(width: 4),
+                                  Text(label, style: TextStyle(color: color)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),

@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
@@ -8,6 +11,7 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 
 /// Photo detail surface with explicit watermarked/original preview, file
@@ -18,9 +22,15 @@ import 'package:sitemark/workflow/capture_media_service.dart';
 /// refreshes whenever the row changes (e.g. after clearing the original).
 ///
 /// When the original is retained a [SegmentedButton] lets the user switch the
-/// preview between the watermarked photo and the private original. When the
-/// original is cleared or missing the segmented control is hidden and the
-/// preview is forced to the watermarked photo.
+/// preview between the watermarked photo and the private original (the preview
+/// cross-fades via [AnimatedSwitcher]). When the original is cleared or missing
+/// the segmented control is hidden and the preview is forced to the watermarked
+/// photo. For `ready` records the preview pairs with the list thumbnail through
+/// a [Hero] tagged `capture-photo-{id}`.
+///
+/// Clearing the original is deferred: the action shows an undo [SnackBar] and
+/// only executes after a five-second window unless undone. Deleting everything
+/// keeps an [AlertDialog] confirmation with a red [FilledButton].
 class CaptureDetailScreen extends ConsumerStatefulWidget {
   const CaptureDetailScreen({
     super.key,
@@ -37,9 +47,18 @@ class CaptureDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
+  static const Duration _clearOriginalsWindow = Duration(seconds: 5);
+
   CapturePreviewSource _previewSource = CapturePreviewSource.bestAvailable;
   Future<CaptureFileInfo>? _fileInfoFuture;
   String? _fileInfoKey;
+  Timer? _clearOriginalsTimer;
+
+  @override
+  void dispose() {
+    _clearOriginalsTimer?.cancel();
+    super.dispose();
+  }
 
   String get _projectId => widget.projectId;
   String get _captureId => widget.captureId;
@@ -89,6 +108,27 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             final isBusy =
                 capture.status == CaptureStatus.captured ||
                 capture.status == CaptureStatus.rendering;
+            Widget preview = AspectRatio(
+              aspectRatio: 4 / 3,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AnimatedSwitcher(
+                  duration: AppMotion.medium2,
+                  child: CaptureImagePreview(
+                    key: ValueKey(effectiveSource),
+                    capture: capture,
+                    outputPaths: outputPaths,
+                    source: effectiveSource,
+                  ),
+                ),
+              ),
+            );
+            if (capture.status == CaptureStatus.ready) {
+              preview = Hero(
+                tag: 'capture-photo-${capture.id}',
+                child: preview,
+              );
+            }
             return Scaffold(
               appBar: AppBar(
                 title: Text(capture.photoNumber ?? strings.captureDetail),
@@ -142,17 +182,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                             }),
                           ),
                         ),
-                      AspectRatio(
-                        aspectRatio: 4 / 3,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: CaptureImagePreview(
-                            capture: capture,
-                            outputPaths: outputPaths,
-                            source: effectiveSource,
-                          ),
-                        ),
-                      ),
+                      preview,
                       const SizedBox(height: 14),
                       if (info != null)
                         _DetailCard(
@@ -297,26 +327,33 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     await ref.read(captureBackgroundSchedulerProvider).retry(_captureId);
   }
 
-  Future<void> _deleteOriginal(CaptureRecord capture) async {
+  void _deleteOriginal(CaptureRecord capture) {
     final strings = AppStrings.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(strings.deleteOriginal),
-        content: Text(strings.confirmClearOriginals(1)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(strings.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(strings.deleteOriginal),
-          ),
-        ],
+    final messenger = ScaffoldMessenger.of(context);
+    _clearOriginalsTimer?.cancel();
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(strings.clearOriginalsScheduled(1)),
+        duration: _clearOriginalsWindow,
+        action: SnackBarAction(
+          label: strings.undo,
+          onPressed: () {
+            _clearOriginalsTimer?.cancel();
+            _clearOriginalsTimer = null;
+            messenger.hideCurrentSnackBar();
+          },
+        ),
       ),
     );
-    if (confirmed != true) return;
+    _clearOriginalsTimer = Timer(_clearOriginalsWindow, () {
+      _clearOriginalsTimer = null;
+      _executeClearOriginals(capture);
+    });
+  }
+
+  Future<void> _executeClearOriginals(CaptureRecord capture) async {
+    final strings = AppStrings.of(context);
     final result = await ref.read(captureMediaServiceProvider).clearOriginals([
       capture.id,
     ]);
@@ -349,8 +386,14 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             child: Text(strings.cancel),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(strings.deleteAll),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () {
+              HapticFeedback.heavyImpact();
+              Navigator.pop(dialogContext, true);
+            },
+            child: Text(strings.deleteAction),
           ),
         ],
       ),

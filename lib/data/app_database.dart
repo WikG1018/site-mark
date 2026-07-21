@@ -52,6 +52,10 @@ class AppSettings extends Table {
       real().withDefault(const Constant(1.0))();
   BoolColumn get locationPermissionPromptDismissed =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get useDynamicColor =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get completionNotificationsEnabled =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -115,16 +119,16 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) => migrator.createAll(),
     onUpgrade: (migrator, from, to) async {
       // When migrating from v2 directly to v4+, migrator.createTable creates
-      // `app_settings` with the *current* (v4) schema. The v4 addColumn calls
-      // for that table must therefore be skipped when the table was just
-      // created, otherwise SQLite raises "duplicate column name".
+      // `app_settings` with the *current* schema. The addColumn calls for that
+      // table must therefore be skipped when the table was just created,
+      // otherwise SQLite raises "duplicate column name".
       var appSettingsJustCreated = false;
       if (from < 2) {
         await migrator.addColumn(projects, projects.watermarkPosition);
@@ -164,6 +168,13 @@ class AppDatabase extends _$AppDatabase {
           captureRecords.originalDeletedAt,
         );
       }
+      if (from < 5 && !appSettingsJustCreated) {
+        await migrator.addColumn(appSettings, appSettings.useDynamicColor);
+        await migrator.addColumn(
+          appSettings,
+          appSettings.completionNotificationsEnabled,
+        );
+      }
       await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
@@ -186,6 +197,8 @@ class AppDatabase extends _$AppDatabase {
         defaultWatermarkAccentColorArgb: const Value(0xff37c58b),
         defaultWatermarkFontScale: const Value(1.0),
         locationPermissionPromptDismissed: const Value(false),
+        useDynamicColor: const Value(false),
+        completionNotificationsEnabled: const Value(false),
         updatedAt: now,
       ),
       mode: InsertMode.insertOrIgnore,
@@ -564,6 +577,8 @@ class AppDatabase extends _$AppDatabase {
     int? defaultWatermarkAccentColorArgb,
     double? defaultWatermarkFontScale,
     bool? locationPermissionPromptDismissed,
+    bool? useDynamicColor,
+    bool? completionNotificationsEnabled,
   }) async {
     final companion = AppSettingsCompanion(
       themeMode: themeMode == null ? const Value.absent() : Value(themeMode),
@@ -586,6 +601,12 @@ class AppDatabase extends _$AppDatabase {
           locationPermissionPromptDismissed == null
           ? const Value.absent()
           : Value(locationPermissionPromptDismissed),
+      useDynamicColor: useDynamicColor == null
+          ? const Value.absent()
+          : Value(useDynamicColor),
+      completionNotificationsEnabled: completionNotificationsEnabled == null
+          ? const Value.absent()
+          : Value(completionNotificationsEnabled),
       updatedAt: Value(DateTime.now()),
     );
     await (update(

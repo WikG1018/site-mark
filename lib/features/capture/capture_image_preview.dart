@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/platform_services.dart';
 
 /// Selects which on-disk source [CaptureImagePreview] renders.
@@ -32,10 +34,15 @@ enum CapturePreviewSource { bestAvailable, watermarked, original }
 ///   [CaptureStatus.failed]: the private original when it exists.
 /// - missing file: a Material placeholder with the status/error label.
 ///
-/// When [thumbnail] is `false` (the detail surface) tapping the image opens a
-/// full-screen [Dialog] with an [InteractiveViewer] (1x–4x). The async rendered
-/// path is resolved with a [FutureBuilder]; [fileExists] is overridable so
-/// widget tests can simulate on-disk state without touching the filesystem.
+/// When [thumbnail] is `false` (the detail surface) tapping the image pushes
+/// the full-screen [CaptureFullscreenScreen] route (pinch 1x–4x, double-tap
+/// zoom, drag-down to dismiss). The async rendered path is resolved with a
+/// [FutureBuilder]; [fileExists] is overridable so widget tests can simulate
+/// on-disk state without touching the filesystem.
+///
+/// Decoded frames fade in via [Image.frameBuilder], and same-slot content
+/// swaps (status overlay to final photo, placeholder to image) cross-fade
+/// through an [AnimatedSwitcher] driven by the keyed subtrees below.
 ///
 /// Pass an explicit [source] to render only the watermarked or original photo
 /// (used by the detail screen's segmented control). The default
@@ -71,14 +78,20 @@ class CaptureImagePreview extends StatelessWidget {
     final bool Function(String path) exists =
         fileExists ?? (path) => File(path).existsSync();
 
-    switch (source) {
-      case CapturePreviewSource.watermarked:
-        return _buildWatermarked(context, strings, exists);
-      case CapturePreviewSource.original:
-        return _buildOriginal(context, strings, exists);
-      case CapturePreviewSource.bestAvailable:
-        return _buildBestAvailable(context, strings, exists);
-    }
+    final child = switch (source) {
+      CapturePreviewSource.watermarked => _buildWatermarked(
+        context,
+        strings,
+        exists,
+      ),
+      CapturePreviewSource.original => _buildOriginal(context, strings, exists),
+      CapturePreviewSource.bestAvailable => _buildBestAvailable(
+        context,
+        strings,
+        exists,
+      ),
+    };
+    return AnimatedSwitcher(duration: AppMotion.medium2, child: child);
   }
 
   Widget _buildBestAvailable(
@@ -213,6 +226,15 @@ class CaptureImagePreview extends StatelessWidget {
       fit: thumbnail ? BoxFit.cover : BoxFit.contain,
       cacheWidth: thumbnail ? 192 : null,
       cacheHeight: thumbnail ? 192 : null,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded) return child;
+        return AnimatedOpacity(
+          opacity: frame == null ? 0 : 1,
+          duration: AppMotion.medium2,
+          curve: AppMotion.standard,
+          child: child,
+        );
+      },
       errorBuilder: (context, error, _) => _placeholder(
         context,
         AppStrings.of(context),
@@ -259,40 +281,21 @@ class CaptureImagePreview extends StatelessWidget {
   void _openFullscreen(BuildContext context, String path) {
     Navigator.of(context).push(
       PageRouteBuilder<void>(
-        opaque: false,
-        barrierDismissible: true,
-        pageBuilder: (context, animation, secondaryAnimation) {
-          return Dialog(
-            insetPadding: EdgeInsets.zero,
-            child: Scaffold(
-              appBar: AppBar(
-                automaticallyImplyLeading: false,
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-              body: SafeArea(
-                child: InteractiveViewer(
-                  minScale: 1,
-                  maxScale: 4,
-                  child: Center(
-                    child: Image.file(
-                      File(path),
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, _) => Center(
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+        opaque: true,
+        transitionDuration: AppMotion.long2,
+        reverseTransitionDuration: AppMotion.medium4,
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            CaptureFullscreenScreen(path: path),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: AppMotion.emphasizedDecelerate,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.92, end: 1).animate(curved),
+              child: child,
             ),
           );
         },
