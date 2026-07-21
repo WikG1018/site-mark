@@ -122,9 +122,9 @@
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-19-sitemark-smoothness.md`（勾选结果）
 
-- [ ] 运行 `dart format --output=none --set-exit-if-changed lib test integration_test`。
-- [ ] 运行 `flutter analyze` 和 `flutter test`。
-- [ ] 运行 Rust fmt、clippy、单元及集成测试。
-- [ ] 运行 Android 单元测试并构建 debug APK。
-- [ ] 在模拟器 Profile 模式运行性能场景，记录帧数据但不把模拟器绝对耗时作为真机门槛。
+- [x] 运行 `dart format --output=none --set-exit-if-changed lib test integration_test`。
+- [x] 运行 `flutter analyze` 和 `flutter test`。
+- [x] 运行 Rust fmt、clippy、单元及集成测试。
+- [x] 运行 Android 单元测试并构建 debug APK。
+- [ ] 在模拟器 Profile 模式运行性能场景，记录帧数据但不把模拟器绝对耗时作为真机门槛。当前 API 36 模拟器禁止 Dart VM Service 创建本地监听端口，需在真机或允许 VM Service 的模拟器补跑。
 - [ ] 检查 git diff、提交完整变更，并按用户指定方式推送 PR。
