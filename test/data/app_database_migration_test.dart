@@ -425,6 +425,31 @@ void main() {
   );
 
   test(
+    'v4 to v6 migration creates capture performance indexes',
+    () async {
+      final database = AppDatabase.forTesting(openMigratedV4Fixture());
+      addTearDown(database.close);
+
+      // Force the migration to run by reading a row.
+      await database.getAppSettings();
+
+      final indexes = await database.customSelect(
+        "SELECT name FROM sqlite_master "
+        "WHERE type = 'index' AND name LIKE 'capture_records_%_idx'",
+      ).get();
+      final indexNames = indexes.map((row) => row.read<String>('name')).toSet();
+      expect(
+        indexNames,
+        containsAll(const <String>{
+          'capture_records_status_idx',
+          'capture_records_sort_idx',
+          'capture_records_project_sort_idx',
+        }),
+      );
+    },
+  );
+
+  test(
     'v2 to v3 migration allows increments and retries on upgraded rows',
     () async {
       final database = AppDatabase.forTesting(openMigratedV2Fixture());

@@ -21,6 +21,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications (and other Android plugins) require JDK
+        // 11+ APIs (e.g. java.time) that are unavailable on the Android runtime
+        // without desugaring. Enable core-library desugaring so debug/release
+        // APK builds succeed on minSdk 31+.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -59,6 +64,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     testImplementation("junit:junit:4.13.2")
 }
 

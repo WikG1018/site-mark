@@ -5,6 +5,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_summary_filter.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
@@ -34,6 +35,13 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
 
+  /// Cached streams so a rebuild does not re-open the same watch. Drift
+  /// deduplicates identical stream subscriptions, but holding the reference
+  /// avoids building a new stream object on every `build` and keeps the
+  /// `AnimatedSwitcher` skeleton → content cross-fade stable across rebuilds.
+  late Stream<List<Project>> _projectsStream;
+  late Stream<List<CaptureSummary>> _captureSummariesStream;
+
   /// Latest filtered captures emitted by the inner StreamBuilder. Updated
   /// synchronously during build (no `setState`) so the AppBar's select-all
   /// action and the bottom action bar can resolve status without an extra
@@ -43,6 +51,9 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   @override
   void initState() {
     super.initState();
+    final database = ref.read(databaseProvider);
+    _projectsStream = database.watchProjects();
+    _captureSummariesStream = database.watchAllCaptureSummaries();
     _selectionController.addListener(_onSelectionChanged);
   }
 
@@ -129,7 +140,6 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final database = ref.watch(databaseProvider);
     final editing = _selectionController.editing;
     final allEligibleSelected = _selectionController.allSelected(
       _selectableIds(_latestCaptures),
@@ -174,56 +184,43 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
         ],
       ),
       body: StreamBuilder<List<Project>>(
-        stream: database.watchProjects(),
+        stream: _projectsStream,
         builder: (context, projectSnapshot) {
           return StreamBuilder<List<CaptureSummary>>(
-            stream: database.watchAllCaptureSummaries(),
+            stream: _captureSummariesStream,
             builder: (context, allSnapshot) {
               final allSummaries = allSnapshot.data ?? const [];
               final projects = projectSnapshot.data ?? const [];
-              final dateOptionSummaries = _filter.projectId == null
-                  ? allSummaries
-                  : allSummaries
-                        .where(
-                          (summary) =>
-                              summary.capture.projectId == _filter.projectId,
-                        )
-                        .toList(growable: false);
+              final dateOptionSummaries = filterCaptureSummaries(
+                allSummaries,
+                CaptureFilter(projectId: _filter.projectId),
+              );
+              final rows = filterCaptureSummaries(allSummaries, _filter);
               return Column(
                 children: [
-                  _filterBar(
-                    context,
-                    strings,
-                    database,
-                    projects,
-                    dateOptionSummaries,
-                  ),
+                  _filterBar(context, strings, projects, dateOptionSummaries),
                   Expanded(
-                    child: StreamBuilder<List<CaptureSummary>>(
-                      stream: database.watchCaptureSummaries(_filter),
-                      builder: (context, filteredSnapshot) {
-                        final rows = filteredSnapshot.data;
-                        if (rows != null) {
-                          _latestCaptures = rows;
-                        }
-                        return AnimatedSwitcher(
-                          duration: AppMotion.short4,
-                          child: rows == null
-                              ? const Skeletonizer(
-                                  key: Key('capture-list-skeleton'),
-                                  child: _CaptureListSkeleton(),
-                                )
-                              : KeyedSubtree(
-                                  key: const Key('capture-list-content'),
-                                  child: _captureListContent(
+                    child: AnimatedSwitcher(
+                      duration: AppMotion.short4,
+                      child: !allSnapshot.hasData
+                          ? const Skeletonizer(
+                              key: Key('capture-list-skeleton'),
+                              child: _CaptureListSkeleton(),
+                            )
+                          : KeyedSubtree(
+                              key: const Key('capture-list-content'),
+                              child: Builder(
+                                builder: (context) {
+                                  _latestCaptures = rows;
+                                  return _captureListContent(
                                     context,
                                     strings,
                                     allSummaries,
                                     rows,
-                                  ),
-                                ),
-                        );
-                      },
+                                  );
+                                },
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -263,7 +260,6 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   Widget _filterBar(
     BuildContext context,
     AppStrings strings,
-    AppDatabase database,
     List<Project> projects,
     List<CaptureSummary> allSummaries,
   ) {

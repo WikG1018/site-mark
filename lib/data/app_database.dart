@@ -119,11 +119,14 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (migrator) => migrator.createAll(),
+    onCreate: (migrator) async {
+      await migrator.createAll();
+      await _createCaptureIndexes();
+    },
     onUpgrade: (migrator, from, to) async {
       // When migrating from v2 directly to v4+, migrator.createTable creates
       // `app_settings` with the *current* schema. The addColumn calls for that
@@ -175,6 +178,13 @@ class AppDatabase extends _$AppDatabase {
           appSettings.completionNotificationsEnabled,
         );
       }
+      if (from < 6) {
+        // Performance indexes from the smoothness branch. Uses
+        // `CREATE INDEX IF NOT EXISTS` so users who already have the indexes
+        // (e.g. from the perf branch) do not error out, and fresh installs
+        // that jumped straight to v6 via `onCreate` are also covered.
+        await _createCaptureIndexes();
+      }
       await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
@@ -202,6 +212,26 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: now,
       ),
       mode: InsertMode.insertOrIgnore,
+    );
+  }
+
+  /// Creates the SQLite indexes that back the capture-list queries.
+  ///
+  /// All statements use `CREATE INDEX IF NOT EXISTS` so this is safe to call
+  /// both from `onCreate` (fresh install) and the v6 migration step (upgrade
+  /// from any prior version), and idempotent for users who already have the
+  /// indexes from the perf branch.
+  Future<void> _createCaptureIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_status_idx ON captures (status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_sort_idx '
+      'ON captures (COALESCE(captured_at, created_at) DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_project_sort_idx '
+      'ON captures (project_id, COALESCE(captured_at, created_at) DESC)',
     );
   }
 
