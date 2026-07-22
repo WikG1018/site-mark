@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
-/// Compact 44dp dropdown-style filter menu for one-row filter bars.
+/// Compact 48dp dropdown-style filter menu for one-row filter bars.
 ///
 /// Wraps a [MenuAnchor] with an [OutlinedButton] builder so multiple menus can
 /// share a single [Row] at narrow widths (e.g. 360dp) without overflowing.
 /// The label stays centered without a trailing chevron so four controls remain
-/// readable when they share a single narrow row.
+/// readable when they share a single narrow row. The 48dp trigger height meets
+/// the Android tap-target accessibility guideline.
 class CompactFilterMenu<T> extends StatelessWidget {
   const CompactFilterMenu({
     super.key,
@@ -69,7 +70,7 @@ class CompactFilterMenu<T> extends StatelessWidget {
           ),
       ],
       builder: (context, controller, _) => SizedBox(
-        height: 44,
+        height: 48,
         child: OutlinedButton(
           onPressed: enabled ? controller.open : null,
           style: OutlinedButton.styleFrom(

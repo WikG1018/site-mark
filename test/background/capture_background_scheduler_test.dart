@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/platform/notification_service.dart';
 
 void main() {
   late AppDatabase database;
@@ -215,6 +216,46 @@ void main() {
 
     expect(pending.map((row) => row.id).toList(), ['capture-1']);
   });
+
+  group('completion notification gate', () {
+    test('does not touch the service when the switch is off', () async {
+      final service = _RecordingCompletionNotificationService();
+
+      await sendCaptureReadyNotificationIfEnabled(
+        enabled: false,
+        service: service,
+        projectId: 'project-1',
+        captureId: 'capture-1',
+        photoNumber: 'IMG-0001',
+      );
+
+      expect(service.initializeCalls, 0);
+      expect(service.enabledValues, isEmpty);
+      expect(service.showCalls, 0);
+    });
+
+    test(
+      'initializes, opens the gate, and posts when the switch is on',
+      () async {
+        final service = _RecordingCompletionNotificationService();
+
+        await sendCaptureReadyNotificationIfEnabled(
+          enabled: true,
+          service: service,
+          projectId: 'project-1',
+          captureId: 'capture-1',
+          photoNumber: 'IMG-0001',
+        );
+
+        expect(service.initializeCalls, 1);
+        expect(service.enabledValues, [true]);
+        expect(service.showCalls, 1);
+        expect(service.lastProjectId, 'project-1');
+        expect(service.lastCaptureId, 'capture-1');
+        expect(service.lastPhotoNumber, 'IMG-0001');
+      },
+    );
+  });
 }
 
 class _AppendCall {
@@ -257,5 +298,45 @@ class _RecordingBackgroundWorkClient implements BackgroundWorkClient {
         tag: tag,
       ),
     );
+  }
+}
+
+/// Records the gate sequence driven by
+/// [sendCaptureReadyNotificationIfEnabled] so the background notification
+/// path can be asserted without the real plugin.
+class _RecordingCompletionNotificationService
+    implements CompletionNotificationService {
+  int initializeCalls = 0;
+  final List<bool> enabledValues = [];
+  int showCalls = 0;
+  String? lastProjectId;
+  String? lastCaptureId;
+  String? lastPhotoNumber;
+
+  @override
+  Future<void> initialize(
+    void Function(String deepLinkPath) onTapDeepLink,
+  ) async {
+    initializeCalls++;
+  }
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) async {
+    showCalls++;
+    lastProjectId = projectId;
+    lastCaptureId = captureId;
+    lastPhotoNumber = photoNumber;
+  }
+
+  @override
+  Future<void> setEnabled(bool enabled) async {
+    enabledValues.add(enabled);
   }
 }

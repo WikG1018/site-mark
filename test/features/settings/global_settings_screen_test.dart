@@ -8,6 +8,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_links.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/platform/external_link_service.dart';
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -34,6 +35,7 @@ void main() {
     PlatformServices? platform,
     ExternalLinkService? externalLinks,
     StorageUsageService? storage,
+    CompletionNotificationService? notifications,
   }) async {
     final resolved = db ?? database;
     // Default to a fake platform so the screen's permission load resolves
@@ -61,6 +63,10 @@ void main() {
           platformServicesProvider.overrideWithValue(resolvedPlatform),
           externalLinkServiceProvider.overrideWithValue(resolvedLinks),
           storageUsageServiceProvider.overrideWithValue(resolvedStorage),
+          if (notifications != null)
+            completionNotificationServiceProvider.overrideWithValue(
+              notifications,
+            ),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -154,6 +160,68 @@ void main() {
 
     final settings = await database.getAppSettings();
     expect(settings.defaultWatermarkPosition, 'bottomRight');
+  });
+
+  testWidgets('dynamic color switch persists to the database', (tester) async {
+    await pumpSettings(tester, db: database);
+    await tester.tap(find.byKey(const Key('dynamic-color-switch')));
+    await tester.pumpAndSettle();
+
+    expect((await database.getAppSettings()).useDynamicColor, isTrue);
+
+    await tester.tap(find.byKey(const Key('dynamic-color-switch')));
+    await tester.pumpAndSettle();
+    expect((await database.getAppSettings()).useDynamicColor, isFalse);
+  });
+
+  testWidgets('completion notification switch persists when permission is '
+      'granted', (tester) async {
+    final notifications = _FakeCompletionNotificationService(
+      permissionResult: true,
+    );
+    await pumpSettings(tester, db: database, notifications: notifications);
+    final toggle = find.byKey(const Key('completion-notification-switch'));
+    await tester.scrollUntilVisible(
+      toggle,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(notifications.requestPermissionCount, 1);
+    expect(
+      (await database.getAppSettings()).completionNotificationsEnabled,
+      isTrue,
+    );
+  });
+
+  testWidgets('completion notification switch stays off and shows a snackbar '
+      'when permission is denied', (tester) async {
+    final notifications = _FakeCompletionNotificationService(
+      permissionResult: false,
+    );
+    await pumpSettings(tester, db: database, notifications: notifications);
+    final toggle = find.byKey(const Key('completion-notification-switch'));
+    await tester.scrollUntilVisible(
+      toggle,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(notifications.requestPermissionCount, 1);
+    expect(
+      (await database.getAppSettings()).completionNotificationsEnabled,
+      isFalse,
+    );
+    expect(find.text('通知权限被拒绝，可在系统设置中开启'), findsOneWidget);
+    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
   });
 
   testWidgets('about section shows fallback version when PackageInfo fails', (
@@ -382,6 +450,8 @@ void main() {
   testWidgets('tapping the disabled location tile requests permission', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final platform = _SettingsTestPlatformServices(
       permissionState: LocationPermissionState.denied,
       requestResult: LocationPermissionState.denied,
@@ -392,6 +462,10 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(
+      find.byKey(const Key('location-permission-setting')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('location-permission-setting')));
     await tester.pumpAndSettle();
 
@@ -580,4 +654,33 @@ class _RetryingStorageUsageService implements StorageUsageService {
   Future<ClearExportsResult> clearExports() async {
     return const ClearExportsResult(deletedFiles: 0, freedBytes: 0);
   }
+}
+
+class _FakeCompletionNotificationService
+    implements CompletionNotificationService {
+  _FakeCompletionNotificationService({this.permissionResult = true});
+
+  bool permissionResult;
+  int requestPermissionCount = 0;
+
+  @override
+  Future<void> initialize(
+    void Function(String deepLinkPath) onTapDeepLink,
+  ) async {}
+
+  @override
+  Future<bool> requestPermission() async {
+    requestPermissionCount++;
+    return permissionResult;
+  }
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) async {}
+
+  @override
+  Future<void> setEnabled(bool enabled) async {}
 }

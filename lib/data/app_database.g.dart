@@ -2042,6 +2042,36 @@ class $AppSettingsTable extends AppSettings
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _useDynamicColorMeta = const VerificationMeta(
+    'useDynamicColor',
+  );
+  @override
+  late final GeneratedColumn<bool> useDynamicColor = GeneratedColumn<bool>(
+    'use_dynamic_color',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("use_dynamic_color" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _completionNotificationsEnabledMeta =
+      const VerificationMeta('completionNotificationsEnabled');
+  @override
+  late final GeneratedColumn<bool> completionNotificationsEnabled =
+      GeneratedColumn<bool>(
+        'completion_notifications_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("completion_notifications_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -2063,6 +2093,8 @@ class $AppSettingsTable extends AppSettings
     defaultWatermarkAccentColorArgb,
     defaultWatermarkFontScale,
     locationPermissionPromptDismissed,
+    useDynamicColor,
+    completionNotificationsEnabled,
     updatedAt,
   ];
   @override
@@ -2137,6 +2169,24 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('use_dynamic_color')) {
+      context.handle(
+        _useDynamicColorMeta,
+        useDynamicColor.isAcceptableOrUnknown(
+          data['use_dynamic_color']!,
+          _useDynamicColorMeta,
+        ),
+      );
+    }
+    if (data.containsKey('completion_notifications_enabled')) {
+      context.handle(
+        _completionNotificationsEnabledMeta,
+        completionNotificationsEnabled.isAcceptableOrUnknown(
+          data['completion_notifications_enabled']!,
+          _completionNotificationsEnabledMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -2186,6 +2236,14 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.bool,
         data['${effectivePrefix}location_permission_prompt_dismissed'],
       )!,
+      useDynamicColor: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}use_dynamic_color'],
+      )!,
+      completionNotificationsEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}completion_notifications_enabled'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -2208,6 +2266,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   final int defaultWatermarkAccentColorArgb;
   final double defaultWatermarkFontScale;
   final bool locationPermissionPromptDismissed;
+  final bool useDynamicColor;
+  final bool completionNotificationsEnabled;
   final DateTime updatedAt;
   const AppSetting({
     required this.id,
@@ -2218,6 +2278,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     required this.defaultWatermarkAccentColorArgb,
     required this.defaultWatermarkFontScale,
     required this.locationPermissionPromptDismissed,
+    required this.useDynamicColor,
+    required this.completionNotificationsEnabled,
     required this.updatedAt,
   });
   @override
@@ -2243,6 +2305,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     map['location_permission_prompt_dismissed'] = Variable<bool>(
       locationPermissionPromptDismissed,
     );
+    map['use_dynamic_color'] = Variable<bool>(useDynamicColor);
+    map['completion_notifications_enabled'] = Variable<bool>(
+      completionNotificationsEnabled,
+    );
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -2261,6 +2327,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       locationPermissionPromptDismissed: Value(
         locationPermissionPromptDismissed,
       ),
+      useDynamicColor: Value(useDynamicColor),
+      completionNotificationsEnabled: Value(completionNotificationsEnabled),
       updatedAt: Value(updatedAt),
     );
   }
@@ -2289,6 +2357,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       locationPermissionPromptDismissed: serializer.fromJson<bool>(
         json['locationPermissionPromptDismissed'],
       ),
+      useDynamicColor: serializer.fromJson<bool>(json['useDynamicColor']),
+      completionNotificationsEnabled: serializer.fromJson<bool>(
+        json['completionNotificationsEnabled'],
+      ),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -2314,6 +2386,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'locationPermissionPromptDismissed': serializer.toJson<bool>(
         locationPermissionPromptDismissed,
       ),
+      'useDynamicColor': serializer.toJson<bool>(useDynamicColor),
+      'completionNotificationsEnabled': serializer.toJson<bool>(
+        completionNotificationsEnabled,
+      ),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -2327,6 +2403,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     int? defaultWatermarkAccentColorArgb,
     double? defaultWatermarkFontScale,
     bool? locationPermissionPromptDismissed,
+    bool? useDynamicColor,
+    bool? completionNotificationsEnabled,
     DateTime? updatedAt,
   }) => AppSetting(
     id: id ?? this.id,
@@ -2343,6 +2421,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     locationPermissionPromptDismissed:
         locationPermissionPromptDismissed ??
         this.locationPermissionPromptDismissed,
+    useDynamicColor: useDynamicColor ?? this.useDynamicColor,
+    completionNotificationsEnabled:
+        completionNotificationsEnabled ?? this.completionNotificationsEnabled,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
@@ -2369,6 +2450,13 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           data.locationPermissionPromptDismissed.present
           ? data.locationPermissionPromptDismissed.value
           : this.locationPermissionPromptDismissed,
+      useDynamicColor: data.useDynamicColor.present
+          ? data.useDynamicColor.value
+          : this.useDynamicColor,
+      completionNotificationsEnabled:
+          data.completionNotificationsEnabled.present
+          ? data.completionNotificationsEnabled.value
+          : this.completionNotificationsEnabled,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -2388,6 +2476,10 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write(
             'locationPermissionPromptDismissed: $locationPermissionPromptDismissed, ',
           )
+          ..write('useDynamicColor: $useDynamicColor, ')
+          ..write(
+            'completionNotificationsEnabled: $completionNotificationsEnabled, ',
+          )
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -2403,6 +2495,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     defaultWatermarkAccentColorArgb,
     defaultWatermarkFontScale,
     locationPermissionPromptDismissed,
+    useDynamicColor,
+    completionNotificationsEnabled,
     updatedAt,
   );
   @override
@@ -2419,6 +2513,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.defaultWatermarkFontScale == this.defaultWatermarkFontScale &&
           other.locationPermissionPromptDismissed ==
               this.locationPermissionPromptDismissed &&
+          other.useDynamicColor == this.useDynamicColor &&
+          other.completionNotificationsEnabled ==
+              this.completionNotificationsEnabled &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -2431,6 +2528,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<int> defaultWatermarkAccentColorArgb;
   final Value<double> defaultWatermarkFontScale;
   final Value<bool> locationPermissionPromptDismissed;
+  final Value<bool> useDynamicColor;
+  final Value<bool> completionNotificationsEnabled;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const AppSettingsCompanion({
@@ -2442,6 +2541,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.defaultWatermarkAccentColorArgb = const Value.absent(),
     this.defaultWatermarkFontScale = const Value.absent(),
     this.locationPermissionPromptDismissed = const Value.absent(),
+    this.useDynamicColor = const Value.absent(),
+    this.completionNotificationsEnabled = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2454,6 +2555,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.defaultWatermarkAccentColorArgb = const Value.absent(),
     this.defaultWatermarkFontScale = const Value.absent(),
     this.locationPermissionPromptDismissed = const Value.absent(),
+    this.useDynamicColor = const Value.absent(),
+    this.completionNotificationsEnabled = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : updatedAt = Value(updatedAt);
@@ -2466,6 +2569,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<int>? defaultWatermarkAccentColorArgb,
     Expression<double>? defaultWatermarkFontScale,
     Expression<bool>? locationPermissionPromptDismissed,
+    Expression<bool>? useDynamicColor,
+    Expression<bool>? completionNotificationsEnabled,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -2484,6 +2589,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       if (locationPermissionPromptDismissed != null)
         'location_permission_prompt_dismissed':
             locationPermissionPromptDismissed,
+      if (useDynamicColor != null) 'use_dynamic_color': useDynamicColor,
+      if (completionNotificationsEnabled != null)
+        'completion_notifications_enabled': completionNotificationsEnabled,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2498,6 +2606,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<int>? defaultWatermarkAccentColorArgb,
     Value<double>? defaultWatermarkFontScale,
     Value<bool>? locationPermissionPromptDismissed,
+    Value<bool>? useDynamicColor,
+    Value<bool>? completionNotificationsEnabled,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -2517,6 +2627,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       locationPermissionPromptDismissed:
           locationPermissionPromptDismissed ??
           this.locationPermissionPromptDismissed,
+      useDynamicColor: useDynamicColor ?? this.useDynamicColor,
+      completionNotificationsEnabled:
+          completionNotificationsEnabled ?? this.completionNotificationsEnabled,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2559,6 +2672,14 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         locationPermissionPromptDismissed.value,
       );
     }
+    if (useDynamicColor.present) {
+      map['use_dynamic_color'] = Variable<bool>(useDynamicColor.value);
+    }
+    if (completionNotificationsEnabled.present) {
+      map['completion_notifications_enabled'] = Variable<bool>(
+        completionNotificationsEnabled.value,
+      );
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -2582,6 +2703,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write('defaultWatermarkFontScale: $defaultWatermarkFontScale, ')
           ..write(
             'locationPermissionPromptDismissed: $locationPermissionPromptDismissed, ',
+          )
+          ..write('useDynamicColor: $useDynamicColor, ')
+          ..write(
+            'completionNotificationsEnabled: $completionNotificationsEnabled, ',
           )
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -3712,6 +3837,8 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<int> defaultWatermarkAccentColorArgb,
       Value<double> defaultWatermarkFontScale,
       Value<bool> locationPermissionPromptDismissed,
+      Value<bool> useDynamicColor,
+      Value<bool> completionNotificationsEnabled,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -3725,6 +3852,8 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<int> defaultWatermarkAccentColorArgb,
       Value<double> defaultWatermarkFontScale,
       Value<bool> locationPermissionPromptDismissed,
+      Value<bool> useDynamicColor,
+      Value<bool> completionNotificationsEnabled,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -3778,6 +3907,16 @@ class $$AppSettingsTableFilterComposer
         column: $table.locationPermissionPromptDismissed,
         builder: (column) => ColumnFilters(column),
       );
+
+  ColumnFilters<bool> get useDynamicColor => $composableBuilder(
+    column: $table.useDynamicColor,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get completionNotificationsEnabled => $composableBuilder(
+    column: $table.completionNotificationsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
@@ -3836,6 +3975,17 @@ class $$AppSettingsTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<bool> get useDynamicColor => $composableBuilder(
+    column: $table.useDynamicColor,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get completionNotificationsEnabled =>
+      $composableBuilder(
+        column: $table.completionNotificationsEnabled,
+        builder: (column) => ColumnOrderings(column),
+      );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -3889,6 +4039,17 @@ class $$AppSettingsTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<bool> get useDynamicColor => $composableBuilder(
+    column: $table.useDynamicColor,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get completionNotificationsEnabled =>
+      $composableBuilder(
+        column: $table.completionNotificationsEnabled,
+        builder: (column) => column,
+      );
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
@@ -3934,6 +4095,9 @@ class $$AppSettingsTableTableManager
                 Value<double> defaultWatermarkFontScale = const Value.absent(),
                 Value<bool> locationPermissionPromptDismissed =
                     const Value.absent(),
+                Value<bool> useDynamicColor = const Value.absent(),
+                Value<bool> completionNotificationsEnabled =
+                    const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AppSettingsCompanion(
@@ -3947,6 +4111,8 @@ class $$AppSettingsTableTableManager
                 defaultWatermarkFontScale: defaultWatermarkFontScale,
                 locationPermissionPromptDismissed:
                     locationPermissionPromptDismissed,
+                useDynamicColor: useDynamicColor,
+                completionNotificationsEnabled: completionNotificationsEnabled,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -3962,6 +4128,9 @@ class $$AppSettingsTableTableManager
                 Value<double> defaultWatermarkFontScale = const Value.absent(),
                 Value<bool> locationPermissionPromptDismissed =
                     const Value.absent(),
+                Value<bool> useDynamicColor = const Value.absent(),
+                Value<bool> completionNotificationsEnabled =
+                    const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => AppSettingsCompanion.insert(
@@ -3975,6 +4144,8 @@ class $$AppSettingsTableTableManager
                 defaultWatermarkFontScale: defaultWatermarkFontScale,
                 locationPermissionPromptDismissed:
                     locationPermissionPromptDismissed,
+                useDynamicColor: useDynamicColor,
+                completionNotificationsEnabled: completionNotificationsEnabled,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

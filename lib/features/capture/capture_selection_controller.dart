@@ -22,6 +22,15 @@ class CaptureSelectionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Enters selection mode (if not already editing) and selects [id] in one
+  /// step. Host lists call this when a card reports `onSelectedChanged(true)`
+  /// outside selection mode (long-press to multi-select).
+  void enterWithSelection(String id) {
+    _editing = true;
+    _selectedIds.add(id);
+    notifyListeners();
+  }
+
   /// Exits selection mode and drops all selected IDs.
   void exit() {
     _editing = false;

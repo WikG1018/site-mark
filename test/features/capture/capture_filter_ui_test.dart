@@ -150,6 +150,70 @@ void main() {
     expect(find.text('17日'), findsWidgets);
   });
 
+  testWidgets('below 360dp the three menus collapse into a filter button', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final filter = ValueNotifier(const CaptureFilter());
+    await tester.pumpWidget(filterHarnessLive(filter));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('filter-year')), findsNothing);
+    expect(find.byKey(const Key('filter-month')), findsNothing);
+    expect(find.byKey(const Key('filter-day')), findsNothing);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('narrow filter sheet applies the same cascading selections', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final filter = ValueNotifier(
+      const CaptureFilter(year: 2026, month: 7, day: 16),
+    );
+    await tester.pumpWidget(filterHarnessLive(filter));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+    await tester.pumpAndSettle();
+
+    // The sheet hosts the year/month/day dropdowns.
+    expect(find.byType(DropdownMenu<int?>), findsNWidgets(3));
+
+    // Changing the year resets month and day, matching the wide bar.
+    await tester.tap(find.byType(DropdownMenu<int?>).at(0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '2025'));
+    await tester.pumpAndSettle();
+
+    expect(filter.value.year, 2025);
+    expect(filter.value.month, isNull);
+    expect(filter.value.day, isNull);
+
+    // The month dropdown now only lists months available in 2025.
+    await tester.tap(find.byType(DropdownMenu<int?>).at(1));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(MenuItemButton, '6月'), findsOneWidget);
+    expect(find.widgetWithText(MenuItemButton, '7月'), findsNothing);
+    await tester.tap(find.widgetWithText(MenuItemButton, '6月'));
+    await tester.pumpAndSettle();
+
+    expect(filter.value.year, 2025);
+    expect(filter.value.month, 6);
+    expect(filter.value.day, isNull);
+  });
+
   testWidgets(
     'all-records changing project clears year/month/day date filters',
     (tester) async {
@@ -333,7 +397,7 @@ void main() {
   });
 
   testWidgets(
-    'filter controls are 44dp rounded rectangles with centered text',
+    'filter controls are 48dp rounded rectangles with centered text',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(360, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -349,7 +413,7 @@ void main() {
       final button = tester.widget<OutlinedButton>(buttonFinder);
       final shape = button.style?.shape?.resolve(<WidgetState>{});
 
-      expect(tester.getSize(menuFinder).height, 44);
+      expect(tester.getSize(menuFinder).height, 48);
       expect(shape, isA<RoundedRectangleBorder>());
       final border = shape! as RoundedRectangleBorder;
       expect(border.borderRadius, BorderRadius.circular(10));

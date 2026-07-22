@@ -7,6 +7,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/app_links.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -22,6 +23,12 @@ const _accentSwatches = <({int argb, Key key})>[
   (argb: 0xff1565c0, key: Key('accent-blue')),
   (argb: 0xffef6c00, key: Key('accent-orange')),
 ];
+
+/// Segmented buttons default to a 40dp minimum height, below Android's 48dp
+/// tap-target guideline; lifting the floor keeps the settings page compliant.
+const _segmentTapTargetStyle = ButtonStyle(
+  minimumSize: WidgetStatePropertyAll<Size>(Size.fromHeight(48)),
+);
 
 class GlobalSettingsScreen extends ConsumerStatefulWidget {
   const GlobalSettingsScreen({super.key});
@@ -132,6 +139,35 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
     setState(() => _settings = updated);
   }
 
+  Future<void> _onCompletionNotificationChanged(bool value) async {
+    if (!value) {
+      await _apply(
+        (db) => db.updateAppSettings(completionNotificationsEnabled: false),
+      );
+      return;
+    }
+    var granted = true;
+    try {
+      granted = await ref
+          .read(completionNotificationServiceProvider)
+          .requestPermission();
+    } on UnimplementedError {
+      granted = true;
+    }
+    if (!mounted) return;
+    if (granted) {
+      await _apply(
+        (db) => db.updateAppSettings(completionNotificationsEnabled: true),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.of(context).notificationPermissionDenied),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -221,6 +257,7 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
               const SizedBox(height: 8),
               SegmentedButton<String>(
                 key: const Key('theme-segmented'),
+                style: _segmentTapTargetStyle,
                 segments: [
                   ButtonSegment(
                     value: 'system',
@@ -249,6 +286,16 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
                   (db) => db.updateAppSettings(themeMode: selection.single),
                 ),
               ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                key: const Key('dynamic-color-switch'),
+                title: Text(strings.dynamicColorTitle),
+                subtitle: Text(strings.dynamicColorSubtitle),
+                value: settings.useDynamicColor,
+                onChanged: (value) => _apply(
+                  (db) => db.updateAppSettings(useDynamicColor: value),
+                ),
+              ),
               const SizedBox(height: 24),
               Text(
                 strings.language,
@@ -257,6 +304,7 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
               const SizedBox(height: 8),
               SegmentedButton<String?>(
                 key: const Key('language-segmented'),
+                style: _segmentTapTargetStyle,
                 segments: [
                   ButtonSegment(
                     value: null,
@@ -290,6 +338,7 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
               const SizedBox(height: 8),
               SegmentedButton<String>(
                 key: const Key('default-position-segmented'),
+                style: _segmentTapTargetStyle,
                 segments: [
                   ButtonSegment(
                     value: 'bottomLeft',
@@ -460,6 +509,14 @@ class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen>
               _LocationPermissionTile(
                 state: _permissionState,
                 onTap: _onLocationTapped,
+              ),
+              const SizedBox(height: 32),
+              SwitchListTile(
+                key: const Key('completion-notification-switch'),
+                title: Text(strings.completionNotificationTitle),
+                subtitle: Text(strings.completionNotificationSubtitle),
+                value: settings.completionNotificationsEnabled,
+                onChanged: _onCompletionNotificationChanged,
               ),
               const SizedBox(height: 32),
               _AboutSection(

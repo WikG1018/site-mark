@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 
 class ProjectWatermarkSettingsScreen extends ConsumerStatefulWidget {
   const ProjectWatermarkSettingsScreen({super.key, required this.projectId});
@@ -43,6 +44,52 @@ class _ProjectWatermarkSettingsScreenState
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
+              Text(
+                strings.watermarkPreviewTitle,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 4 / 3,
+                  child: Container(
+                    key: const Key('watermark-preview'),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF8D9AA5), Color(0xFF4E5A65)],
+                      ),
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(painter: _PreviewGridPainter()),
+                        ),
+                        AnimatedOpacity(
+                          key: const Key('watermark-preview-opacity'),
+                          opacity: _opacity!,
+                          duration: AppMotion.short4,
+                          child: Align(
+                            alignment: _position == 'bottomRight'
+                                ? Alignment.bottomRight
+                                : Alignment.bottomLeft,
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: _WatermarkPreviewCard(
+                                accentColor: Color(_accentColorArgb!),
+                                fontScale: _fontScale!,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
               Text(
                 strings.watermarkSettingsHint,
                 style: Theme.of(context).textTheme.bodyLarge,
@@ -181,6 +228,67 @@ class _ProjectWatermarkSettingsScreenState
       if (mounted) setState(() => _saving = false);
     }
   }
+}
+
+class _WatermarkPreviewCard extends StatelessWidget {
+  const _WatermarkPreviewCard({
+    required this.accentColor,
+    required this.fontScale,
+  });
+
+  final Color accentColor;
+  final double fontScale;
+
+  @override
+  Widget build(BuildContext context) {
+    final baseStyle = TextStyle(
+      color: Colors.white,
+      fontSize: 11 * fontScale,
+      height: 1.4,
+    );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(left: BorderSide(color: accentColor, width: 3)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'SM-2026-0001',
+            style: baseStyle.copyWith(
+              color: accentColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text('2026-07-21 10:24', style: baseStyle),
+          Text('31.2304°N 121.4737°E', style: baseStyle),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.10)
+      ..strokeWidth = 1;
+    const step = 24.0;
+    for (var x = 0.0; x <= size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (var y = 0.0; y <= size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _AccentChoice extends StatelessWidget {

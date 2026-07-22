@@ -5,12 +5,15 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_summary_filter.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 /// Global capture-records surface.
 ///
@@ -32,6 +35,13 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
 
+  /// Cached streams so a rebuild does not re-open the same watch. Drift
+  /// deduplicates identical stream subscriptions, but holding the reference
+  /// avoids building a new stream object on every `build` and keeps the
+  /// `AnimatedSwitcher` skeleton → content cross-fade stable across rebuilds.
+  late Stream<List<Project>> _projectsStream;
+  late Stream<List<CaptureSummary>> _captureSummariesStream;
+
   /// Latest filtered captures emitted by the inner StreamBuilder. Updated
   /// synchronously during build (no `setState`) so the AppBar's select-all
   /// action and the bottom action bar can resolve status without an extra
@@ -41,6 +51,9 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   @override
   void initState() {
     super.initState();
+    final database = ref.read(databaseProvider);
+    _projectsStream = database.watchProjects();
+    _captureSummariesStream = database.watchAllCaptureSummaries();
     _selectionController.addListener(_onSelectionChanged);
   }
 
@@ -73,10 +86,60 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
         .toList(growable: false);
   }
 
+  Widget _captureListContent(
+    BuildContext context,
+    AppStrings strings,
+    List<CaptureSummary> allSummaries,
+    List<CaptureSummary> rows,
+  ) {
+    if (rows.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            allSummaries.isEmpty ? strings.noCaptures : strings.filteredEmpty,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+      itemCount: rows.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final summary = rows[index];
+        final id = summary.capture.id;
+        return CaptureRecordCard(
+          summary: summary,
+          showProjectName: true,
+          selectionMode: _selectionController.editing,
+          selected: _selectionController.selectedIds.contains(id),
+          selectable:
+              summary.capture.status == CaptureStatus.ready ||
+              summary.capture.status == CaptureStatus.failed,
+          onSelectedChanged: (selected) {
+            if (selected && !_selectionController.editing) {
+              // Long-press entry: the card reports a selection outside
+              // selection mode, so enter editing and select it in one step.
+              _selectionController.enterWithSelection(id);
+            } else {
+              _selectionController.toggle(id);
+            }
+          },
+          onTap: () => context.push(
+            '/projects/${summary.capture.projectId}'
+            '/captures/$id',
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final database = ref.watch(databaseProvider);
     final editing = _selectionController.editing;
     final allEligibleSelected = _selectionController.allSelected(
       _selectableIds(_latestCaptures),
@@ -110,89 +173,54 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
               }
             },
             tooltip: editing ? strings.done : strings.editRecords,
-            icon: Icon(editing ? Icons.done : Icons.edit_outlined),
+            icon: AnimatedSwitcher(
+              duration: AppMotion.short4,
+              child: Icon(
+                editing ? Icons.done : Icons.edit_outlined,
+                key: ValueKey(editing),
+              ),
+            ),
           ),
         ],
       ),
       body: StreamBuilder<List<Project>>(
-        stream: database.watchProjects(),
+        stream: _projectsStream,
         builder: (context, projectSnapshot) {
           return StreamBuilder<List<CaptureSummary>>(
-            stream: database.watchAllCaptureSummaries(),
+            stream: _captureSummariesStream,
             builder: (context, allSnapshot) {
               final allSummaries = allSnapshot.data ?? const [];
               final projects = projectSnapshot.data ?? const [];
-              final dateOptionSummaries = _filter.projectId == null
-                  ? allSummaries
-                  : allSummaries
-                        .where(
-                          (summary) =>
-                              summary.capture.projectId == _filter.projectId,
-                        )
-                        .toList(growable: false);
+              final dateOptionSummaries = filterCaptureSummaries(
+                allSummaries,
+                CaptureFilter(projectId: _filter.projectId),
+              );
+              final rows = filterCaptureSummaries(allSummaries, _filter);
               return Column(
                 children: [
-                  _filterBar(
-                    context,
-                    strings,
-                    database,
-                    projects,
-                    dateOptionSummaries,
-                  ),
+                  _filterBar(context, strings, projects, dateOptionSummaries),
                   Expanded(
-                    child: StreamBuilder<List<CaptureSummary>>(
-                      stream: database.watchCaptureSummaries(_filter),
-                      builder: (context, filteredSnapshot) {
-                        if (!filteredSnapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        final rows = filteredSnapshot.data!;
-                        _latestCaptures = rows;
-                        if (rows.isEmpty) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32),
-                              child: Text(
-                                allSummaries.isEmpty
-                                    ? strings.noCaptures
-                                    : strings.filteredEmpty,
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.bodyLarge,
+                    child: AnimatedSwitcher(
+                      duration: AppMotion.short4,
+                      child: !allSnapshot.hasData
+                          ? const Skeletonizer(
+                              key: Key('capture-list-skeleton'),
+                              child: _CaptureListSkeleton(),
+                            )
+                          : KeyedSubtree(
+                              key: const Key('capture-list-content'),
+                              child: Builder(
+                                builder: (context) {
+                                  _latestCaptures = rows;
+                                  return _captureListContent(
+                                    context,
+                                    strings,
+                                    allSummaries,
+                                    rows,
+                                  );
+                                },
                               ),
                             ),
-                          );
-                        }
-                        return ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-                          itemCount: rows.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final summary = rows[index];
-                            final id = summary.capture.id;
-                            return CaptureRecordCard(
-                              summary: summary,
-                              showProjectName: true,
-                              selectionMode: editing,
-                              selected: _selectionController.selectedIds
-                                  .contains(id),
-                              selectable:
-                                  summary.capture.status ==
-                                      CaptureStatus.ready ||
-                                  summary.capture.status ==
-                                      CaptureStatus.failed,
-                              onSelectedChanged: (_) =>
-                                  _selectionController.toggle(id),
-                              onTap: () => context.go(
-                                '/projects/${summary.capture.projectId}'
-                                '/captures/$id',
-                              ),
-                            );
-                          },
-                        );
-                      },
                     ),
                   ),
                 ],
@@ -201,23 +229,37 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
           );
         },
       ),
-      bottomNavigationBar:
-          editing && _selectionController.selectedIds.isNotEmpty
-          ? CaptureBatchActionBar(
-              controller: _selectionController,
-              mediaService: ref.watch(captureMediaServiceProvider),
-              exportService: ref.watch(projectExportServiceProvider),
-              shareService: ref.watch(shareFileServiceProvider),
-              summaries: _latestCaptures,
-            )
-          : null,
+      bottomNavigationBar: AnimatedSwitcher(
+        duration: AppMotion.medium4,
+        transitionBuilder: (child, animation) {
+          final curved = animation.drive(
+            CurveTween(curve: AppMotion.emphasizedDecelerate),
+          );
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 1),
+              end: Offset.zero,
+            ).animate(curved),
+            child: FadeTransition(opacity: curved, child: child),
+          );
+        },
+        child: editing && _selectionController.selectedIds.isNotEmpty
+            ? CaptureBatchActionBar(
+                key: const Key('batch-bar'),
+                controller: _selectionController,
+                mediaService: ref.watch(captureMediaServiceProvider),
+                exportService: ref.watch(projectExportServiceProvider),
+                shareService: ref.watch(shareFileServiceProvider),
+                summaries: _latestCaptures,
+              )
+            : const SizedBox.shrink(key: Key('batch-bar-empty')),
+      ),
     );
   }
 
   Widget _filterBar(
     BuildContext context,
     AppStrings strings,
-    AppDatabase database,
     List<Project> projects,
     List<CaptureSummary> allSummaries,
   ) {
@@ -264,6 +306,66 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Placeholder card list painted by [Skeletonizer] while the first capture
+/// summary emit is in flight. Mirrors the [CaptureRecordCard] row layout
+/// (thumbnail + title + two metadata lines) so the cross-fade to real content
+/// does not jump. Text glyphs are only filler -- Skeletonizer replaces them
+/// with bone shapes, so they stay locale-neutral placeholders.
+class _CaptureListSkeleton extends StatelessWidget {
+  const _CaptureListSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+      itemCount: 6,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) => const _CaptureCardSkeleton(),
+    );
+  }
+}
+
+class _CaptureCardSkeleton extends StatelessWidget {
+  const _CaptureCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 96,
+              height: 96,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: const ColoredBox(color: Colors.grey),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SM-0000-000', style: textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text('0000/00/00 00:00', style: textTheme.bodyMedium),
+                  const SizedBox(height: 2),
+                  Text('---', style: textTheme.bodySmall),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

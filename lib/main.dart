@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
+import 'package:sitemark/platform/local_notification_service.dart';
 import 'package:sitemark/src/rust/frb_generated.dart';
 import 'package:workmanager/workmanager.dart';
 
@@ -18,5 +19,9 @@ Future<void> main() async {
     // ignore: deprecated_member_use
     isInDebugMode: kDebugMode,
   );
-  runApp(const MyApp());
+  // The production completion-notification service; SiteMarkApp initializes
+  // it (deep-link taps) and keeps its send gate in sync with the persisted
+  // settings switch.
+  final notificationService = LocalNotificationService();
+  runApp(MyApp(completionNotificationService: notificationService));
 }

@@ -12,4 +12,13 @@ Thank you for helping improve SiteMark.
    locations, customer project names, or private photos.
 6. Update both Chinese and English strings when adding user-visible copy.
 
+## Motion consistency
+
+Any custom animation in `lib/` must take its duration and curve exclusively
+from the `AppMotion` tokens in `lib/motion.dart` (`short4`/`medium2`/
+`medium4`/`long2` and `emphasized`/`emphasizedDecelerate`/
+`emphasizedAccelerate`/`standard`). Do not introduce hard-coded durations,
+`Cubic` values, or ad-hoc curves outside that file; extend `AppMotion` first
+if a new token is genuinely needed.
+
 By submitting a contribution, you agree that it is licensed under Apache-2.0.

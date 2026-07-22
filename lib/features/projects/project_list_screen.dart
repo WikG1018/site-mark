@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
   const ProjectListScreen({super.key});
@@ -54,18 +56,23 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     final database = ref.watch(databaseProvider);
     return Scaffold(
       appBar: AppBar(
-        title: _searching
-            ? TextField(
-                key: const Key('project-search-field'),
-                controller: _searchController,
-                focusNode: _searchFocus,
-                decoration: InputDecoration(
-                  hintText: strings.searchProjectsHint,
-                  border: InputBorder.none,
-                ),
-                onChanged: (value) => setState(() => _query = value),
-              )
-            : Text(strings.appName),
+        // Cross-fade between the app title and the inline search field; the
+        // ValueKey swap drives the AnimatedSwitcher transition.
+        title: AnimatedSwitcher(
+          duration: AppMotion.short4,
+          child: _searching
+              ? TextField(
+                  key: const Key('project-search-field'),
+                  controller: _searchController,
+                  focusNode: _searchFocus,
+                  decoration: InputDecoration(
+                    hintText: strings.searchProjectsHint,
+                    border: InputBorder.none,
+                  ),
+                  onChanged: (value) => setState(() => _query = value),
+                )
+              : Text(strings.appName, key: const ValueKey('project-title')),
+        ),
         actions: [
           if (_searching) ...[
             if (_query.isNotEmpty)
@@ -87,7 +94,11 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
               key: const Key('search-projects'),
               onPressed: _startSearch,
               tooltip: strings.searchProjects,
-              icon: const Icon(Icons.search),
+              icon: AnimatedRotation(
+                turns: _searching ? 0.5 : 0,
+                duration: AppMotion.short4,
+                child: const Icon(Icons.search),
+              ),
             ),
             IconButton(
               onPressed: () => context.go('/records'),
@@ -106,7 +117,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
         stream: database.watchProjects(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const _ProjectListSkeleton();
           }
           final projects = snapshot.data!;
           if (projects.isEmpty) {
@@ -155,6 +166,38 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
         onPressed: () => context.go('/projects/new'),
         icon: const Icon(Icons.add),
         label: Text(strings.newProject),
+      ),
+    );
+  }
+}
+
+/// First-frame loading placeholder: six bone cards mimicking the real
+/// project card layout (CircleAvatar + two-line ListTile). Taps are disabled
+/// while the stream has not delivered its first value.
+class _ProjectListSkeleton extends StatelessWidget {
+  const _ProjectListSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Skeletonizer(
+      enabled: true,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        itemCount: 6,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (context, index) => Card(
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: const CircleAvatar(child: Text('项')),
+            title: Text(
+              '项目骨架占位',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            subtitle: const Text('项目描述骨架占位文本'),
+            trailing: const Icon(Icons.chevron_right),
+          ),
+        ),
       ),
     );
   }
