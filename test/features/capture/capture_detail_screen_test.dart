@@ -124,13 +124,32 @@ void main() {
   ) async {
     await pumpReadyDetail(tester, originalExists: true);
     await tester.tap(find.byKey(const Key('delete-original')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '删除原图'));
+    // Advance past the 5-second undo window so the timer fires.
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
     await tester.pumpAndSettle();
     expect(find.text('原图已清理'), findsOneWidget);
     expect(find.byKey(const Key('show-original')), findsNothing);
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
     expect(await database.captureById('capture-1'), isNotNull);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('undo cancels the delete-original timer', (tester) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    await tester.tap(find.byKey(const Key('delete-original')));
+    // Let the SnackBar appear without advancing past the 5-second window.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('撤销'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('原图已清理'), findsNothing);
+    expect(find.byKey(const Key('show-original')), findsOneWidget);
+    expect(
+      (await database.captureById('capture-1'))?.originalDeletedAt,
+      isNull,
+    );
     await disposeDetail(tester);
   });
 
@@ -147,19 +166,23 @@ void main() {
     await disposeDetail(tester);
   });
 
-  testWidgets('failed original deletion reports failure instead of success', (
+  testWidgets('failed original deletion does not clear the original', (
     tester,
   ) async {
     await pumpReadyDetail(tester, originalExists: true);
     files.deleteError = StateError('delete blocked');
 
     await tester.tap(find.byKey(const Key('delete-original')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '删除原图'));
+    await tester.pump();
+    // Verify the undo Snackbar appears.
+    expect(find.text('将在 5 秒后清理 1 张原图'), findsOneWidget);
+
+    // Advance past the 5-second undo window.
+    await tester.pump(const Duration(seconds: 6));
     await tester.pumpAndSettle();
 
+    // The error prevents the original from being cleared.
     expect(find.text('原图已清理'), findsNothing);
-    expect(find.textContaining('delete blocked'), findsOneWidget);
     expect(
       (await database.captureById('capture-1'))?.originalDeletedAt,
       isNull,

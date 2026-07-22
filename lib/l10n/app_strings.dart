@@ -238,6 +238,41 @@ class AppStrings {
   String get deleteOriginal => _english ? 'Delete original' : '删除原图';
   String get originalCleared => _english ? 'Original cleared' : '原图已清理';
   String get originalMissing => _english ? 'Original missing' : '原图缺失';
+
+  // Motion & Android platform guidelines (motion-android-review Task 1)
+  String get undo => _english ? 'Undo' : '撤销';
+  String get deleteAction => _english ? 'Delete' : '删除';
+  String clearOriginalsScheduled(int n) =>
+      _english ? 'Clearing $n originals in 5 seconds' : '将在 5 秒后清理 $n 张原图';
+  String get originalsClearedUndo => _english ? 'Originals cleared' : '原图已清理';
+  String get dynamicColorTitle => _english ? 'Follow system color' : '跟随系统取色';
+  String get dynamicColorSubtitle => _english
+      ? 'Use wallpaper-based Material You colors on supported devices'
+      : '在支持的设备上使用壁纸动态取色（Material You）';
+  String get completionNotificationTitle =>
+      _english ? 'Completion notifications' : '完成通知';
+  String get completionNotificationSubtitle => _english
+      ? 'Send a local notification when background processing finishes'
+      : '后台处理完成后发送本地通知';
+  String get notificationReadyTitle => _english ? 'Photo ready' : '照片处理完成';
+  String notificationReadyBody(String photoNumber) => _english
+      ? '$photoNumber finished processing. Tap to view.'
+      : '照片 $photoNumber 已完成处理，点击查看';
+  String get notificationChannelName => _english ? 'Photo processing' : '照片处理';
+  String get notificationChannelDescription => _english
+      ? 'Notifies when background photo processing finishes'
+      : '后台照片处理完成时通知';
+  String get filterAction => _english ? 'Filter' : '筛选';
+  String get viewAction => _english ? 'View' : '查看';
+  String get statusSemanticsPrefix => _english ? 'Status' : '状态';
+  String photoSemanticsLabel(String photoNumber) =>
+      _english ? 'Photo $photoNumber' : '照片 $photoNumber';
+  String get fullscreenPhotoSemantics =>
+      _english ? 'Fullscreen photo viewer' : '全屏查看照片';
+  String get watermarkPreviewTitle => _english ? 'Watermark preview' : '水印预览';
+  String get notificationPermissionDenied => _english
+      ? 'Notification permission denied. You can enable it in system settings.'
+      : '通知权限被拒绝，可在系统设置中开启';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

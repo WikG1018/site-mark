@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -314,7 +315,6 @@ void main() {
   testWidgets('fullscreen preview keeps full-resolution decoding', (
     tester,
   ) async {
-    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('zh'),
@@ -325,22 +325,9 @@ void main() {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: Scaffold(
-          body: SizedBox(
-            width: 360,
-            height: 240,
-            child: CaptureImagePreview(
-              capture: capture,
-              outputPaths: _FakeOutputPaths(),
-              fileExists: (path) => true,
-            ),
-          ),
-        ),
+        home: const CaptureFullscreenScreen(path: '/rendered/capture-1.jpg'),
       ),
     );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('rendered-preview-capture-1')));
     await tester.pumpAndSettle();
 
     final fullscreenImage = tester.widget<Image>(

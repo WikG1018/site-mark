@@ -1,3 +1,5 @@
+import 'package:animations/animations.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +16,9 @@ import 'package:sitemark/features/capture/capture_edit_screen.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/external_link_service.dart';
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark/workflow/app_storage_service.dart';
@@ -174,55 +178,111 @@ final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
   );
 });
 
+/// Shared Axis (horizontal) page for hierarchical navigation (list → detail
+/// → form/edit), per M3 motion guidance.
+CustomTransitionPage<void> _sharedAxisPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    transitionDuration: AppMotion.medium2,
+    reverseTransitionDuration: AppMotion.medium2,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return SharedAxisTransition(
+        animation: animation,
+        secondaryAnimation: secondaryAnimation,
+        transitionType: SharedAxisTransitionType.horizontal,
+        child: child,
+      );
+    },
+    child: child,
+  );
+}
+
+/// Fade Through page for top-level destination switches (projects ↔ all
+/// records ↔ settings), per M3 motion guidance.
+CustomTransitionPage<void> _fadeThroughPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    transitionDuration: AppMotion.medium2,
+    reverseTransitionDuration: AppMotion.medium2,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeThroughTransition(
+        animation: animation,
+        secondaryAnimation: secondaryAnimation,
+        child: child,
+      );
+    },
+    child: child,
+  );
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => const ProjectListScreen(),
+        pageBuilder: (context, state) =>
+            _fadeThroughPage(state, const ProjectListScreen()),
         routes: [
           GoRoute(
             path: 'projects/new',
-            builder: (context, state) => const ProjectFormScreen(),
+            pageBuilder: (context, state) =>
+                _sharedAxisPage(state, const ProjectFormScreen()),
           ),
           GoRoute(
             path: 'records',
-            builder: (context, state) => const AllCapturesScreen(),
+            pageBuilder: (context, state) =>
+                _fadeThroughPage(state, const AllCapturesScreen()),
           ),
           GoRoute(
             path: 'settings',
-            builder: (context, state) => const GlobalSettingsScreen(),
+            pageBuilder: (context, state) =>
+                _fadeThroughPage(state, const GlobalSettingsScreen()),
           ),
           GoRoute(
             path: 'projects/:projectId',
-            builder: (context, state) => ProjectDetailScreen(
-              projectId: state.pathParameters['projectId']!,
+            pageBuilder: (context, state) => _sharedAxisPage(
+              state,
+              ProjectDetailScreen(
+                projectId: state.pathParameters['projectId']!,
+              ),
             ),
             routes: [
               GoRoute(
                 path: 'settings',
-                builder: (context, state) => ProjectWatermarkSettingsScreen(
-                  projectId: state.pathParameters['projectId']!,
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  ProjectWatermarkSettingsScreen(
+                    projectId: state.pathParameters['projectId']!,
+                  ),
                 ),
               ),
               GoRoute(
                 path: 'capture',
-                builder: (context, state) => CaptureFormScreen(
-                  projectId: state.pathParameters['projectId']!,
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  CaptureFormScreen(
+                    projectId: state.pathParameters['projectId']!,
+                  ),
                 ),
               ),
               GoRoute(
                 path: 'captures/:captureId',
-                builder: (context, state) => CaptureDetailScreen(
-                  projectId: state.pathParameters['projectId']!,
-                  captureId: state.pathParameters['captureId']!,
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  CaptureDetailScreen(
+                    projectId: state.pathParameters['projectId']!,
+                    captureId: state.pathParameters['captureId']!,
+                  ),
                 ),
                 routes: [
                   GoRoute(
                     path: 'edit',
-                    builder: (context, state) => CaptureEditScreen(
-                      projectId: state.pathParameters['projectId']!,
-                      captureId: state.pathParameters['captureId']!,
+                    pageBuilder: (context, state) => _sharedAxisPage(
+                      state,
+                      CaptureEditScreen(
+                        projectId: state.pathParameters['projectId']!,
+                        captureId: state.pathParameters['captureId']!,
+                      ),
                     ),
                   ),
                 ],
@@ -248,9 +308,37 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
   @override
   void initState() {
     super.initState();
+    // Keep the notification service's send gate in sync with the persisted
+    // `completionNotificationsEnabled` switch. The provider throws
+    // UnimplementedError when no production service is injected (e.g. in
+    // widget tests), in which case the gate update is skipped silently.
+    ref.listenManual(appSettingsProvider, (previous, next) {
+      final settings = next.value;
+      if (settings == null) return;
+      try {
+        ref
+            .read(completionNotificationServiceProvider)
+            .setEnabled(settings.completionNotificationsEnabled);
+      } on UnimplementedError {
+        // No production implementation injected; notifications stay inert.
+      }
+    });
     Future<void>.microtask(() async {
-      if (!ref.read(startupRecoveryEnabledProvider)) return;
-      await ref.read(appStartupRecoveryProvider).run();
+      if (ref.read(startupRecoveryEnabledProvider)) {
+        await ref.read(appStartupRecoveryProvider).run();
+      }
+      // Wire completion notifications: taps (including the cold-start
+      // launch payload) deep-link into the capture detail page.
+      try {
+        await ref.read(completionNotificationServiceProvider).initialize((
+          path,
+        ) {
+          ref.read(routerProvider).push(path);
+        });
+      } on UnimplementedError {
+        // No production implementation injected (e.g. widget tests);
+        // notifications stay inert.
+      }
     });
   }
 
@@ -261,38 +349,52 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
     // tests to force a locale; when set it takes precedence over persisted
     // settings so existing tests keep driving the locale explicitly.
     final forcedLocale = ref.watch(initialLocaleProvider);
-    return MaterialApp.router(
-      debugShowCheckedModeBanner: false,
-      title: 'SiteMark 工程印记',
-      themeMode: settings != null
-          ? parseThemeMode(settings.themeMode)
-          : ThemeMode.system,
-      locale: forcedLocale ?? parseLocale(settings?.localeCode),
-      supportedLocales: AppStrings.supportedLocales,
-      localizationsDelegates: const [
-        AppStrings.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF176B55),
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
-        ),
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF37C58B),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      routerConfig: ref.watch(routerProvider),
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        // Dynamic color applies only when the persisted opt-in is on AND the
+        // platform supplied both palettes; any gap falls back to the brand
+        // seed colors so the app never loses its identity.
+        final useDynamicColor =
+            (settings?.useDynamicColor ?? false) &&
+            lightDynamic != null &&
+            darkDynamic != null;
+        final lightScheme = useDynamicColor
+            ? lightDynamic
+            : ColorScheme.fromSeed(
+                seedColor: const Color(0xFF176B55),
+                brightness: Brightness.light,
+              );
+        final darkScheme = useDynamicColor
+            ? darkDynamic
+            : ColorScheme.fromSeed(
+                seedColor: const Color(0xFF37C58B),
+                brightness: Brightness.dark,
+              );
+        return MaterialApp.router(
+          debugShowCheckedModeBanner: false,
+          title: 'SiteMark 工程印记',
+          themeMode: settings != null
+              ? parseThemeMode(settings.themeMode)
+              : ThemeMode.system,
+          locale: forcedLocale ?? parseLocale(settings?.localeCode),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: ThemeData(
+            colorScheme: lightScheme,
+            useMaterial3: true,
+            inputDecorationTheme: const InputDecorationTheme(
+              border: OutlineInputBorder(),
+            ),
+          ),
+          darkTheme: ThemeData(colorScheme: darkScheme, useMaterial3: true),
+          routerConfig: ref.watch(routerProvider),
+        );
+      },
     );
   }
 }
@@ -312,6 +414,7 @@ class MyApp extends StatelessWidget {
     this.backgroundScheduler,
     this.backgroundWorkClient,
     this.startupRecovery,
+    this.completionNotificationService,
   });
 
   final AppDatabase? database;
@@ -326,6 +429,7 @@ class MyApp extends StatelessWidget {
   final CaptureBackgroundScheduler? backgroundScheduler;
   final BackgroundWorkClient? backgroundWorkClient;
   final AppStartupRecovery? startupRecovery;
+  final CompletionNotificationService? completionNotificationService;
 
   @override
   Widget build(BuildContext context) {
@@ -358,6 +462,10 @@ class MyApp extends StatelessWidget {
           ),
         if (backgroundWorkClient != null)
           backgroundWorkClientProvider.overrideWithValue(backgroundWorkClient!),
+        if (completionNotificationService != null)
+          completionNotificationServiceProvider.overrideWithValue(
+            completionNotificationService!,
+          ),
       ],
       child: const SiteMarkApp(),
     );

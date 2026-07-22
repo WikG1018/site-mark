@@ -8,6 +8,7 @@ import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
@@ -43,6 +44,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         startupRecovery: recovery,
+        completionNotificationService: _FakeCompletionNotificationService(),
       ),
     );
     await tester.pump();
@@ -116,6 +118,7 @@ void main() {
         shareService: share,
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
+        completionNotificationService: _FakeCompletionNotificationService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -157,6 +160,7 @@ void main() {
         shareService: share,
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
+        completionNotificationService: _FakeCompletionNotificationService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -169,7 +173,11 @@ void main() {
 
   testWidgets('shows the project-first empty state', (tester) async {
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('zh')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        completionNotificationService: _FakeCompletionNotificationService(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -183,7 +191,11 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('zh')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        completionNotificationService: _FakeCompletionNotificationService(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -202,7 +214,11 @@ void main() {
 
   testWidgets('ships an English interface', (tester) async {
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('en')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('en'),
+        completionNotificationService: _FakeCompletionNotificationService(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -215,7 +231,11 @@ void main() {
   testWidgets('edits constrained project watermark settings', (tester) async {
     await database.createProject(id: 'project-1', name: '东区厂房改造');
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('zh')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        completionNotificationService: _FakeCompletionNotificationService(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -223,12 +243,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('此项目水印设置'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.tune_outlined));
+    // Pump until the watermark settings screen's FutureBuilder resolves and
+    // the slider is visible.
+    await tester.pumpAndSettle();
+    await tester.pump();
     await tester.pumpAndSettle();
 
     expect(find.text('此项目水印设置'), findsOneWidget);
+    expect(find.byKey(const Key('watermark-preview')), findsOneWidget);
+    // The slider is below the fold in the ListView; scroll it into view.
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('project-font-scale-slider')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.byKey(const Key('project-font-scale-slider')), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('右下'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('右下'));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('accent-blue')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('accent-blue')));
+    await tester.scrollUntilVisible(
+      find.text('保存'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
@@ -265,6 +311,7 @@ void main() {
         shareService: share,
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
+        completionNotificationService: _FakeCompletionNotificationService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -327,7 +374,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '全部删除'));
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
     expect(platform.deletedUri, 'content://media/site-mark/1');
@@ -403,7 +450,11 @@ void main() {
     required String name,
   }) async {
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('zh')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        completionNotificationService: _FakeCompletionNotificationService(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -435,7 +486,11 @@ void main() {
   ) async {
     await database.createProject(id: 'existing', name: 'Cloud Site');
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('zh')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        completionNotificationService: _FakeCompletionNotificationService(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -628,6 +683,26 @@ void main() {
     expect(tester.takeException(), isNull);
     await disposeApp(tester);
   });
+}
+
+class _FakeCompletionNotificationService
+    implements CompletionNotificationService {
+  @override
+  Future<void> initialize(void Function(String deepLinkPath) onTapDeepLink) =>
+      Future.value();
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) => Future.value();
+
+  @override
+  Future<void> setEnabled(bool enabled) => Future.value();
 }
 
 class _WidgetTestPlatformServices implements PlatformServices {

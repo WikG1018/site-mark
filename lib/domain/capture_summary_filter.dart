@@ -3,6 +3,11 @@ import 'package:sitemark/domain/capture_filter.dart';
 
 /// Applies [filter] to already-loaded capture summaries without changing their
 /// order or the source list.
+///
+/// Used by the all-records and project-detail screens to narrow a single
+/// `watchAllCaptureSummaries` / `watchCaptureSummaries(projectId)` stream
+/// client-side, avoiding the second DB round-trip that the previous
+/// `watchCaptureSummaries(filter)` call introduced on every filter keystroke.
 List<CaptureSummary> filterCaptureSummaries(
   List<CaptureSummary> summaries,
   CaptureFilter filter,

@@ -52,6 +52,10 @@ class AppSettings extends Table {
       real().withDefault(const Constant(1.0))();
   BoolColumn get locationPermissionPromptDismissed =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get useDynamicColor =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get completionNotificationsEnabled =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -115,7 +119,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -125,9 +129,9 @@ class AppDatabase extends _$AppDatabase {
     },
     onUpgrade: (migrator, from, to) async {
       // When migrating from v2 directly to v4+, migrator.createTable creates
-      // `app_settings` with the *current* (v4) schema. The v4 addColumn calls
-      // for that table must therefore be skipped when the table was just
-      // created, otherwise SQLite raises "duplicate column name".
+      // `app_settings` with the *current* schema. The addColumn calls for that
+      // table must therefore be skipped when the table was just created,
+      // otherwise SQLite raises "duplicate column name".
       var appSettingsJustCreated = false;
       if (from < 2) {
         await migrator.addColumn(projects, projects.watermarkPosition);
@@ -167,8 +171,29 @@ class AppDatabase extends _$AppDatabase {
           captureRecords.originalDeletedAt,
         );
       }
-      if (from < 5) {
+      if (from < 5 && !appSettingsJustCreated) {
+        await migrator.addColumn(appSettings, appSettings.useDynamicColor);
+        await migrator.addColumn(
+          appSettings,
+          appSettings.completionNotificationsEnabled,
+        );
+      }
+      if (from < 6) {
+        // Performance indexes from the smoothness branch. Uses
+        // `CREATE INDEX IF NOT EXISTS` so users who already have the indexes
+        // (e.g. from the perf branch) do not error out, and fresh installs
+        // that jumped straight to v6 via `onCreate` are also covered.
         await _createCaptureIndexes();
+        // The perf/smoothness branch shipped a v5 schema that created these
+        // indexes but did NOT add the `use_dynamic_color` and
+        // `completion_notifications_enabled` columns on `app_settings`. A user
+        // on that branch therefore has `user_version = 5` without the two
+        // columns, so the `from < 5` branch above is skipped and
+        // `_ensureGlobalSettingsRow()` would crash with "no column named
+        // use_dynamic_color". Detect the missing columns via
+        // `PRAGMA table_info` and add them on demand so both v5 lineages
+        // converge at v6.
+        await _ensureDynamicColorColumns();
       }
       await _ensureGlobalSettingsRow();
     },
@@ -176,20 +201,6 @@ class AppDatabase extends _$AppDatabase {
       await _ensureGlobalSettingsRow();
     },
   );
-
-  Future<void> _createCaptureIndexes() async {
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS capture_records_status_idx ON captures (status)',
-    );
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS capture_records_sort_idx '
-      'ON captures (COALESCE(captured_at, created_at) DESC)',
-    );
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS capture_records_project_sort_idx '
-      'ON captures (project_id, COALESCE(captured_at, created_at) DESC)',
-    );
-  }
 
   /// Inserts the default `global` settings row if it does not already exist.
   ///
@@ -206,10 +217,61 @@ class AppDatabase extends _$AppDatabase {
         defaultWatermarkAccentColorArgb: const Value(0xff37c58b),
         defaultWatermarkFontScale: const Value(1.0),
         locationPermissionPromptDismissed: const Value(false),
+        useDynamicColor: const Value(false),
+        completionNotificationsEnabled: const Value(false),
         updatedAt: now,
       ),
       mode: InsertMode.insertOrIgnore,
     );
+  }
+
+  /// Creates the SQLite indexes that back the capture-list queries.
+  ///
+  /// All statements use `CREATE INDEX IF NOT EXISTS` so this is safe to call
+  /// both from `onCreate` (fresh install) and the v6 migration step (upgrade
+  /// from any prior version), and idempotent for users who already have the
+  /// indexes from the perf branch.
+  Future<void> _createCaptureIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_status_idx ON captures (status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_sort_idx '
+      'ON captures (COALESCE(captured_at, created_at) DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_project_sort_idx '
+      'ON captures (project_id, COALESCE(captured_at, created_at) DESC)',
+    );
+  }
+
+  /// Adds the `use_dynamic_color` and `completion_notifications_enabled`
+  /// columns to `app_settings` if they are missing.
+  ///
+  /// This is called from the v6 migration step to converge users who arrive
+  /// from the perf/smoothness branch's v5 schema (which has the capture
+  /// indexes but not these two columns). Uses `PRAGMA table_info` so the
+  /// operation is idempotent and never raises "duplicate column name". The
+  /// `ALTER TABLE` statements mirror what `migrator.addColumn` would emit,
+  /// but `migrator` is only in scope inside the `MigrationStrategy` callback,
+  /// so we issue the DDL directly.
+  Future<void> _ensureDynamicColorColumns() async {
+    final columns = await customSelect(
+      'PRAGMA table_info(app_settings)',
+    ).get();
+    final columnNames = columns.map((row) => row.read<String>('name')).toSet();
+    if (!columnNames.contains('use_dynamic_color')) {
+      await customStatement(
+        'ALTER TABLE app_settings ADD COLUMN use_dynamic_color '
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (!columnNames.contains('completion_notifications_enabled')) {
+      await customStatement(
+        'ALTER TABLE app_settings ADD COLUMN '
+        'completion_notifications_enabled INTEGER NOT NULL DEFAULT 0',
+      );
+    }
   }
 
   Future<Project> createProject({
@@ -584,6 +646,8 @@ class AppDatabase extends _$AppDatabase {
     int? defaultWatermarkAccentColorArgb,
     double? defaultWatermarkFontScale,
     bool? locationPermissionPromptDismissed,
+    bool? useDynamicColor,
+    bool? completionNotificationsEnabled,
   }) async {
     final companion = AppSettingsCompanion(
       themeMode: themeMode == null ? const Value.absent() : Value(themeMode),
@@ -606,6 +670,12 @@ class AppDatabase extends _$AppDatabase {
           locationPermissionPromptDismissed == null
           ? const Value.absent()
           : Value(locationPermissionPromptDismissed),
+      useDynamicColor: useDynamicColor == null
+          ? const Value.absent()
+          : Value(useDynamicColor),
+      completionNotificationsEnabled: completionNotificationsEnabled == null
+          ? const Value.absent()
+          : Value(completionNotificationsEnabled),
       updatedAt: Value(DateTime.now()),
     );
     await (update(

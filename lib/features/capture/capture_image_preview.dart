@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/platform_services.dart';
 
 /// Selects which on-disk source [CaptureImagePreview] renders.
@@ -33,10 +35,18 @@ enum CapturePreviewSource { bestAvailable, watermarked, original }
 ///   [CaptureStatus.failed]: the private original when it exists.
 /// - missing file: a Material placeholder with the status/error label.
 ///
-/// When [thumbnail] is `false` (the detail surface) tapping the image opens a
-/// full-screen [Dialog] with an [InteractiveViewer] (1x–4x). The async rendered
-/// path is resolved with a [FutureBuilder]; [fileExists] is overridable so
-/// widget tests can simulate on-disk state without touching the filesystem.
+/// When [thumbnail] is `false` (the detail surface) tapping the image pushes
+/// the full-screen [CaptureFullscreenScreen] route (pinch 1x–4x, double-tap
+/// zoom, drag-down to dismiss). The async rendered path is resolved with a
+/// [FutureBuilder]; [fileExists] is overridable so widget tests can simulate
+/// on-disk state without touching the filesystem.
+///
+/// File existence is checked asynchronously via [File.exists] and the resolved
+/// [_PreviewResolution] is cached per `State` instance, refreshed only when the
+/// relevant inputs change. Decoded frames fade in via [Image.frameBuilder],
+/// and same-slot content swaps (status overlay to final photo, placeholder to
+/// image) cross-fade through an [AnimatedSwitcher] driven by the keyed subtrees
+/// below.
 ///
 /// Pass an explicit [source] to render only the watermarked or original photo
 /// (used by the detail screen's segmented control). The default
@@ -60,7 +70,8 @@ class CaptureImagePreview extends StatefulWidget {
 
   /// Predicate used to verify whether a resolved path exists on disk. Defaults
   /// to the asynchronous [File.exists] in production; tests can inject either
-  /// a synchronous or asynchronous fake to control which branch is taken.
+  /// a synchronous or asynchronous fake to control which branch the widget
+  /// takes.
   final FutureOr<bool> Function(String path)? fileExists;
 
   /// Selects which on-disk source to render. See [CapturePreviewSource].
@@ -167,50 +178,59 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         final resolution = snapshot.data;
         if (snapshot.connectionState != ConnectionState.done ||
             resolution == null) {
-          return _placeholder(context, strings, label: _loadingLabel(strings));
+          return AnimatedSwitcher(
+            duration: AppMotion.medium2,
+            child: _placeholder(
+              context,
+              strings,
+              label: _loadingLabel(strings),
+            ),
+          );
         }
-        return switch (resolution.kind) {
-          _PreviewResolutionKind.image => _image(
-            context,
-            path: resolution.path!,
-            key: resolution.path == widget.capture.originalPath
-                ? 'original-preview-${widget.capture.id}'
-                : 'rendered-preview-${widget.capture.id}',
-            overlay: resolution.status == null
-                ? null
-                : _statusOverlayLabel(resolution.status!, strings),
-          ),
-          _PreviewResolutionKind.watermarkedUnavailable => _placeholder(
-            context,
-            strings,
-            label: strings.watermarkedUnavailable,
-          ),
-          _PreviewResolutionKind.originalCleared => _placeholder(
-            context,
-            strings,
-            label: strings.originalCleared,
-          ),
-          _PreviewResolutionKind.originalMissing => _placeholder(
-            context,
-            strings,
-            label: strings.originalMissing,
-          ),
-          _PreviewResolutionKind.statusPlaceholder => _placeholder(
-            context,
-            strings,
-            label:
-                _statusOverlayLabel(widget.capture.status, strings) ??
-                strings.failed,
-          ),
-        };
+        return AnimatedSwitcher(
+          duration: AppMotion.medium2,
+          child: switch (resolution.kind) {
+            _PreviewResolutionKind.image => _image(
+              context,
+              path: resolution.path!,
+              key: resolution.path == widget.capture.originalPath
+                  ? 'original-preview-${widget.capture.id}'
+                  : 'rendered-preview-${widget.capture.id}',
+              overlay: resolution.status == null
+                  ? null
+                  : _statusOverlayLabel(resolution.status!, strings),
+            ),
+            _PreviewResolutionKind.watermarkedUnavailable => _placeholder(
+              context,
+              strings,
+              label: strings.watermarkedUnavailable,
+            ),
+            _PreviewResolutionKind.originalCleared => _placeholder(
+              context,
+              strings,
+              label: strings.originalCleared,
+            ),
+            _PreviewResolutionKind.originalMissing => _placeholder(
+              context,
+              strings,
+              label: strings.originalMissing,
+            ),
+            _PreviewResolutionKind.statusPlaceholder => _placeholder(
+              context,
+              strings,
+              label:
+                  _statusOverlayLabel(widget.capture.status, strings) ??
+                  strings.failed,
+            ),
+          },
+        );
       },
     );
   }
 
-  /// In-progress and failed previews overlay a status label so the user can
-  /// see why the rendered image is not yet available. `ready` and missing-file
-  /// previews render no overlay (the image speaks for itself, or the placeholder
-  /// already carries the label).
+  /// Label shown while the existence check is in flight. Mirrors the most
+  /// likely placeholder the resolution will land on so the cross-fade does not
+  /// flash a different label first.
   String _loadingLabel(AppStrings strings) {
     return switch (widget.source) {
       CapturePreviewSource.watermarked => strings.watermarkedUnavailable,
@@ -255,6 +275,15 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
               ? 192
               : _detailCacheWidth(context, constraints),
           cacheHeight: widget.thumbnail ? 192 : null,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded) return child;
+            return AnimatedOpacity(
+              opacity: frame == null ? 0 : 1,
+              duration: AppMotion.medium2,
+              curve: AppMotion.standard,
+              child: child,
+            );
+          },
           errorBuilder: (context, error, _) => _placeholder(
             context,
             AppStrings.of(context),
@@ -314,43 +343,27 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     return physicalWidth.ceil().clamp(1, 2048);
   }
 
+  /// Detail-surface decode width cap, derived from the available horizontal
+  /// space and the device pixel ratio. The full-screen viewer does NOT use
+  /// this cap — it keeps the original resolution so 4x zoom stays sharp.
   void _openFullscreen(BuildContext context, String path) {
     Navigator.of(context).push(
       PageRouteBuilder<void>(
-        opaque: false,
-        barrierDismissible: true,
-        pageBuilder: (context, animation, secondaryAnimation) {
-          return Dialog(
-            insetPadding: EdgeInsets.zero,
-            child: Scaffold(
-              appBar: AppBar(
-                automaticallyImplyLeading: false,
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-              body: SafeArea(
-                child: InteractiveViewer(
-                  minScale: 1,
-                  maxScale: 4,
-                  child: Center(
-                    child: Image.file(
-                      File(path),
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, _) => Center(
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+        opaque: true,
+        transitionDuration: AppMotion.long2,
+        reverseTransitionDuration: AppMotion.medium4,
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            CaptureFullscreenScreen(path: path),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: AppMotion.emphasizedDecelerate,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.92, end: 1).animate(curved),
+              child: child,
             ),
           );
         },

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 
@@ -154,12 +156,18 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
       case CaptureWorkflowOutcome.queued:
         // Stay on the form for consecutive shooting: clear only notes so the
         // retained location/content/photographer edits persist, re-enable the
-        // button, and surface the background-queue confirmation.
+        // button, and surface the background-queue confirmation. Replace any
+        // in-flight snackbar so burst captures never queue a stack of them.
         _notesController.clear();
         setState(() => _working = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(strings.captureQueuedContinue)));
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(strings.captureQueuedContinue),
+              duration: const Duration(seconds: 2),
+            ),
+          );
       case CaptureWorkflowOutcome.cancelled:
         // The camera was dismissed without a photo; stay on the form and
         // re-enable the button without surfacing a confirmation.
@@ -262,10 +270,9 @@ class _CaptureFormBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        if (permissionPrompt != null) ...[
-          permissionPrompt!,
-          const SizedBox(height: 16),
-        ],
+        // Always-mounted animated slot: the prompt expands/fades in and
+        // collapses out without the form fields jumping.
+        LocationPermissionPromptArea(prompt: permissionPrompt),
         _RequiredField(
           fieldKey: const Key('work-location'),
           controller: locationController,
@@ -314,13 +321,34 @@ class _CaptureFormBody extends StatelessWidget {
         const SizedBox(height: 24),
         FilledButton.icon(
           key: const Key('capture-button'),
-          onPressed: working ? null : onCapture,
-          icon: working
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.photo_camera_outlined),
+          onPressed: working
+              ? null
+              : () {
+                  HapticFeedback.lightImpact();
+                  onCapture();
+                },
+          // Cross-fade between the camera glyph and the busy spinner. Both
+          // children sit inside the same fixed square so the icon slot width
+          // never shifts while the button toggles its loading state.
+          icon: AnimatedSwitcher(
+            duration: AppMotion.short4,
+            child: working
+                ? const SizedBox.square(
+                    key: ValueKey('capture-button-busy'),
+                    dimension: 24,
+                    child: Center(
+                      child: SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                : const SizedBox.square(
+                    key: ValueKey('capture-button-idle'),
+                    dimension: 24,
+                    child: Icon(Icons.photo_camera_outlined),
+                  ),
+          ),
           label: Text(strings.openSystemCamera),
         ),
       ],

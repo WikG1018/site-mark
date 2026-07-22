@@ -33,4 +33,26 @@ void main() {
     final controller = CaptureSelectionController()..enter();
     expect(controller.allSelected(const []), isFalse);
   });
+
+  test(
+    'enter with selection enters editing and selects the ID in one step',
+    () {
+      final controller = CaptureSelectionController();
+      expect(controller.editing, isFalse);
+
+      controller.enterWithSelection('a');
+
+      expect(controller.editing, isTrue);
+      expect(controller.selectedIds, {'a'});
+    },
+  );
+
+  test('enter with selection while editing keeps the existing selection', () {
+    final controller = CaptureSelectionController()..enter();
+    controller.toggle('a');
+
+    controller.enterWithSelection('b');
+
+    expect(controller.selectedIds, {'a', 'b'});
+  });
 }
