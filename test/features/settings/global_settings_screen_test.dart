@@ -229,11 +229,11 @@ void main() {
   ) async {
     await pumpSettings(tester, db: database);
     await tester.scrollUntilVisible(
-      find.textContaining('0.2.0'),
+      find.textContaining('0.3.0'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.textContaining('0.2.0'), findsOneWidget);
+    expect(find.textContaining('0.3.0'), findsOneWidget);
   });
 
   testWidgets('storage section shows totals, refreshes, and clears exports', (
