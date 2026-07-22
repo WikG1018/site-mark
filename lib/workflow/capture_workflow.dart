@@ -58,6 +58,23 @@ class CaptureEdits {
 /// rendering/publishing; the UI should not wait for the watermarked result.
 enum CaptureWorkflowOutcome { queued, cancelled, failed }
 
+/// Local milestones between a capture-button tap and the request to open the
+/// system camera. These diagnostics are opt-in and never contain capture data.
+enum CaptureLaunchPhase {
+  targetPrepared,
+  pendingRecordPersisted,
+  cameraLaunchRequested,
+}
+
+class CaptureLaunchTiming {
+  const CaptureLaunchTiming({required this.phase, required this.elapsed});
+
+  final CaptureLaunchPhase phase;
+  final Duration elapsed;
+}
+
+typedef CaptureLaunchTimingCallback = void Function(CaptureLaunchTiming timing);
+
 class CaptureWorkflowResult {
   const CaptureWorkflowResult({
     required this.outcome,
@@ -81,6 +98,7 @@ class CaptureWorkflow {
     PrivateFileStore? fileStore,
     String Function()? idFactory,
     DateTime Function()? now,
+    this.onLaunchTiming,
   }) : _idFactory = idFactory ?? const Uuid().v4,
        _now = now ?? DateTime.now,
        _fileStore = fileStore ?? DartIoPrivateFileStore();
@@ -94,9 +112,13 @@ class CaptureWorkflow {
   final PrivateFileStore _fileStore;
   final String Function() _idFactory;
   final DateTime Function() _now;
+  final CaptureLaunchTimingCallback? onLaunchTiming;
 
   Future<CaptureWorkflowResult> capture(CaptureDraft draft) async {
     final captureId = _idFactory();
+    final launchStopwatch = onLaunchTiming == null
+        ? null
+        : (Stopwatch()..start());
     // Start the location read (if permitted) without awaiting it so the camera
     // launches immediately. The coordinator consumes this future only when EXIF
     // GPS is missing.
@@ -107,6 +129,7 @@ class CaptureWorkflow {
     var keepOriginalOnFailure = false;
     try {
       originalPath = await platform.createCameraTarget(captureId);
+      _reportLaunchTiming(CaptureLaunchPhase.targetPrepared, launchStopwatch);
       await database.createPendingCapture(
         id: captureId,
         projectId: draft.projectId,
@@ -117,6 +140,14 @@ class CaptureWorkflow {
         watermarkLocaleCode: draft.watermarkLocaleCode,
         notes: draft.notes,
         createdAt: _now(),
+      );
+      _reportLaunchTiming(
+        CaptureLaunchPhase.pendingRecordPersisted,
+        launchStopwatch,
+      );
+      _reportLaunchTiming(
+        CaptureLaunchPhase.cameraLaunchRequested,
+        launchStopwatch,
       );
       final camera = await platform.launchCamera(captureId);
       switch (camera.outcome) {
@@ -167,6 +198,16 @@ class CaptureWorkflow {
         capture: failed,
         errorMessage: error.toString(),
       );
+    }
+  }
+
+  void _reportLaunchTiming(CaptureLaunchPhase phase, Stopwatch? stopwatch) {
+    final callback = onLaunchTiming;
+    if (callback == null || stopwatch == null) return;
+    try {
+      callback(CaptureLaunchTiming(phase: phase, elapsed: stopwatch.elapsed));
+    } on Object {
+      // Diagnostics must never delay or fail the capture path.
     }
   }
 

@@ -245,10 +245,6 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     };
   }
 
-  /// In-progress and failed previews overlay a status label so the user can
-  /// see why the rendered image is not yet available. `ready` and missing-file
-  /// previews render no overlay (the image speaks for itself, or the placeholder
-  /// already carries the label).
   String? _statusOverlayLabel(CaptureStatus status, AppStrings strings) {
     switch (status) {
       case CaptureStatus.captured:
@@ -270,68 +266,76 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     required String key,
     required String? overlay,
   }) {
-    final image = Image.file(
-      File(path),
-      fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
-      cacheWidth: widget.thumbnail ? 192 : _detailCacheWidth(context),
-      cacheHeight: widget.thumbnail ? 192 : null,
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (wasSynchronouslyLoaded) return child;
-        return AnimatedOpacity(
-          opacity: frame == null ? 0 : 1,
-          duration: AppMotion.medium2,
-          curve: AppMotion.standard,
-          child: child,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final image = Image.file(
+          File(path),
+          fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
+          cacheWidth: widget.thumbnail
+              ? 192
+              : _detailCacheWidth(context, constraints),
+          cacheHeight: widget.thumbnail ? 192 : null,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+            if (wasSynchronouslyLoaded) return child;
+            return AnimatedOpacity(
+              opacity: frame == null ? 0 : 1,
+              duration: AppMotion.medium2,
+              curve: AppMotion.standard,
+              child: child,
+            );
+          },
+          errorBuilder: (context, error, _) => _placeholder(
+            context,
+            AppStrings.of(context),
+            label: AppStrings.of(context).failed,
+          ),
+        );
+
+        final content = overlay == null
+            ? image
+            : Stack(
+                fit: widget.thumbnail ? StackFit.expand : StackFit.passthrough,
+                children: [
+                  Positioned.fill(child: image),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      color: Colors.black54,
+                      child: Text(
+                        overlay,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+
+        if (widget.thumbnail) {
+          return KeyedSubtree(key: Key(key), child: content);
+        }
+        return GestureDetector(
+          onTap: widget.onOpen ?? () => _openFullscreen(context, path),
+          child: KeyedSubtree(key: Key(key), child: content),
         );
       },
-      errorBuilder: (context, error, _) => _placeholder(
-        context,
-        AppStrings.of(context),
-        label: AppStrings.of(context).failed,
-      ),
-    );
-
-    final content = overlay == null
-        ? image
-        : Stack(
-            fit: widget.thumbnail ? StackFit.expand : StackFit.passthrough,
-            children: [
-              Positioned.fill(child: image),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 3,
-                  ),
-                  color: Colors.black54,
-                  child: Text(
-                    overlay,
-                    style: const TextStyle(color: Colors.white, fontSize: 11),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-            ],
-          );
-
-    if (widget.thumbnail) {
-      return KeyedSubtree(key: Key(key), child: content);
-    }
-    return GestureDetector(
-      onTap: widget.onOpen ?? () => _openFullscreen(context, path),
-      child: KeyedSubtree(key: Key(key), child: content),
     );
   }
 
-  /// Detail-surface decode width cap, derived from the available horizontal
-  /// space and the device pixel ratio. The full-screen viewer does NOT use
-  /// this cap — it keeps the original resolution so 4x zoom stays sharp.
-  int _detailCacheWidth(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
+  int _detailCacheWidth(BuildContext context, BoxConstraints constraints) {
+    final width = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+        ? constraints.maxWidth
+        : MediaQuery.sizeOf(context).width;
     final physicalWidth = width * MediaQuery.devicePixelRatioOf(context);
     if (!physicalWidth.isFinite || physicalWidth <= 0) {
       return 1;
@@ -339,6 +343,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     return physicalWidth.ceil().clamp(1, 2048);
   }
 
+  /// Detail-surface decode width cap, derived from the available horizontal
+  /// space and the device pixel ratio. The full-screen viewer does NOT use
+  /// this cap — it keeps the original resolution so 4x zoom stays sharp.
   void _openFullscreen(BuildContext context, String path) {
     Navigator.of(context).push(
       PageRouteBuilder<void>(

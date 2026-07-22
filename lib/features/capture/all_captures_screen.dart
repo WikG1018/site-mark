@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
-import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_summary_filter.dart';
+import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
@@ -18,8 +18,8 @@ import 'package:skeletonizer/skeletonizer.dart';
 /// Global capture-records surface.
 ///
 /// Combines an optional project filter, the shared [CaptureDateFilterBar], and
-/// [CaptureRecordCard]s sourced from [AppDatabase.watchCaptureSummaries]. The
-/// unfiltered [AppDatabase.watchAllCaptureSummaries] stream drives the project
+/// [CaptureRecordCard]s sourced from one
+/// [AppDatabase.watchAllCaptureSummaries] stream. The unfiltered stream drives the project
 /// dropdown and is narrowed to the selected project before supplying cascading
 /// date options. Record taps route to the existing project-scoped capture
 /// detail using the IDs carried by each [CaptureSummary].
@@ -34,11 +34,6 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   CaptureFilter _filter = const CaptureFilter();
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
-
-  /// Cached streams so a rebuild does not re-open the same watch. Drift
-  /// deduplicates identical stream subscriptions, but holding the reference
-  /// avoids building a new stream object on every `build` and keeps the
-  /// `AnimatedSwitcher` skeleton → content cross-fade stable across rebuilds.
   late Stream<List<Project>> _projectsStream;
   late Stream<List<CaptureSummary>> _captureSummariesStream;
 

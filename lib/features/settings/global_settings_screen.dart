@@ -13,8 +13,8 @@ import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 /// Fallback version/build used when [PackageInfo.fromPlatform] fails (e.g. in
 /// unit tests where no platform plugin is available).
-const _fallbackVersion = '0.2.0';
-const _fallbackBuild = '2';
+const _fallbackVersion = '0.3.0';
+const _fallbackBuild = '3';
 
 /// Accent swatches offered as new-project watermark defaults. Order matches
 /// the project-level watermark settings screen for visual consistency.

@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,7 +35,7 @@ import 'package:sitemark/motion.dart';
 /// merged into a single semantics label; the thumbnail carries an image
 /// semantics label and, for `ready` rows, a [Hero] tagged
 /// `capture-photo-{id}` paired with the detail screen's large preview.
-class CaptureRecordCard extends ConsumerWidget {
+class CaptureRecordCard extends ConsumerStatefulWidget {
   const CaptureRecordCard({
     super.key,
     required this.summary,
@@ -53,19 +56,61 @@ class CaptureRecordCard extends ConsumerWidget {
   final ValueChanged<bool>? onSelectedChanged;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CaptureRecordCard> createState() => _CaptureRecordCardState();
+}
+
+class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
+  late Future<OriginalPhotoState> _originalState;
+  late final FutureOr<bool> Function(String) _previewFileExists =
+      _previewFileExistsForPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _originalState = _readOriginalState();
+  }
+
+  @override
+  void didUpdateWidget(covariant CaptureRecordCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_originalStateInputsChanged(oldWidget.summary.capture)) {
+      _originalState = _readOriginalState();
+    }
+  }
+
+  Future<OriginalPhotoState> _readOriginalState() {
+    return ref
+        .read(captureMediaServiceProvider)
+        .originalState(widget.summary.capture);
+  }
+
+  Future<bool> _previewFileExistsForPath(String path) async {
+    if (path == widget.summary.capture.originalPath) {
+      return await _originalState == OriginalPhotoState.retained;
+    }
+    return File(path).exists();
+  }
+
+  bool _originalStateInputsChanged(CaptureRecord previous) {
+    final current = widget.summary.capture;
+    return previous.id != current.id ||
+        previous.originalPath != current.originalPath ||
+        previous.originalDeletedAt != current.originalDeletedAt;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final capture = summary.capture;
+    final capture = widget.summary.capture;
     final (label, icon, color) = _statusPresentation(capture.status, strings);
-    final mediaService = ref.watch(captureMediaServiceProvider);
-    final VoidCallback? cardTap = selectionMode
-        ? selectable
+    final VoidCallback? cardTap = widget.selectionMode
+        ? widget.selectable
               ? () {
                   HapticFeedback.selectionClick();
-                  onSelectedChanged?.call(!selected);
+                  widget.onSelectedChanged?.call(!widget.selected);
                 }
               : null
-        : onTap;
+        : widget.onTap;
     final thumbnail = SizedBox(
       width: 96,
       height: 96,
@@ -75,6 +120,7 @@ class CaptureRecordCard extends ConsumerWidget {
           capture: capture,
           outputPaths: ref.watch(captureOutputPathsProvider),
           thumbnail: true,
+          fileExists: _previewFileExists,
         ),
       ),
     );
@@ -82,10 +128,10 @@ class CaptureRecordCard extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: cardTap,
-        onLongPress: !selectionMode && selectable
+        onLongPress: !widget.selectionMode && widget.selectable
             ? () {
                 HapticFeedback.mediumImpact();
-                onSelectedChanged?.call(true);
+                widget.onSelectedChanged?.call(true);
               }
             : null,
         child: Padding(
@@ -96,16 +142,16 @@ class CaptureRecordCard extends ConsumerWidget {
               AnimatedSize(
                 duration: AppMotion.medium2,
                 curve: AppMotion.standard,
-                child: selectionMode
+                child: widget.selectionMode
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Checkbox(
-                            value: selected,
-                            onChanged: selectable
+                            value: widget.selected,
+                            onChanged: widget.selectable
                                 ? (value) {
                                     HapticFeedback.selectionClick();
-                                    onSelectedChanged?.call(value ?? false);
+                                    widget.onSelectedChanged?.call(value ?? false);
                                   }
                                 : null,
                           ),
@@ -161,9 +207,9 @@ class CaptureRecordCard extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    if (showProjectName) ...[
+                    if (widget.showProjectName) ...[
                       Text(
-                        summary.projectName,
+                        widget.summary.projectName,
                         style: Theme.of(context).textTheme.bodySmall,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -193,8 +239,11 @@ class CaptureRecordCard extends ConsumerWidget {
                       ),
                     ],
                     FutureBuilder<OriginalPhotoState>(
-                      future: mediaService.originalState(capture),
+                      future: _originalState,
                       builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done) {
+                          return const SizedBox.shrink();
+                        }
                         final state = snapshot.data;
                         if (state == null) {
                           return const SizedBox.shrink();

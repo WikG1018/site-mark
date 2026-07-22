@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -29,6 +31,52 @@ void main() {
       ),
     );
     expect(ImagePipelineException.tryParseRustError('unknown'), isNull);
+  });
+
+  test('rendered paths initialize the documents directory once', () async {
+    final root = await Directory.systemTemp.createTemp('sitemark-rendered-');
+    addTearDown(() => root.delete(recursive: true));
+    var documentsDirectoryReads = 0;
+    final paths = AppCaptureOutputPaths(
+      documentsDirectory: () async {
+        documentsDirectoryReads++;
+        return root;
+      },
+    );
+
+    final resolved = await Future.wait([
+      paths.renderedPhotoPath('capture-1'),
+      paths.renderedPhotoPath('capture-2'),
+    ]);
+
+    expect(resolved, [
+      '${root.path}${Platform.pathSeparator}rendered${Platform.pathSeparator}capture-1.jpg',
+      '${root.path}${Platform.pathSeparator}rendered${Platform.pathSeparator}capture-2.jpg',
+    ]);
+    expect(documentsDirectoryReads, 1);
+    expect(
+      Directory('${root.path}${Platform.pathSeparator}rendered').existsSync(),
+      isTrue,
+    );
+  });
+
+  test('rendered directory initialization retries after a failure', () async {
+    final root = await Directory.systemTemp.createTemp('sitemark-rendered-');
+    addTearDown(() => root.delete(recursive: true));
+    var attempts = 0;
+    final paths = AppCaptureOutputPaths(
+      documentsDirectory: () async {
+        attempts++;
+        if (attempts == 1) throw StateError('documents unavailable');
+        return root;
+      },
+    );
+
+    await expectLater(paths.renderedPhotoPath('capture-1'), throwsStateError);
+    final retry = await paths.renderedPhotoPath('capture-2');
+
+    expect(attempts, 2);
+    expect(retry, endsWith('${Platform.pathSeparator}capture-2.jpg'));
   });
 
   group('PigeonPlatformServices bridge', () {

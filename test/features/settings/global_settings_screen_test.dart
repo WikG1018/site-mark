@@ -229,11 +229,11 @@ void main() {
   ) async {
     await pumpSettings(tester, db: database);
     await tester.scrollUntilVisible(
-      find.textContaining('0.2.0'),
+      find.textContaining('0.3.0'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.textContaining('0.2.0'), findsOneWidget);
+    expect(find.textContaining('0.3.0'), findsOneWidget);
   });
 
   testWidgets('storage section shows totals, refreshes, and clears exports', (
@@ -290,6 +290,7 @@ void main() {
     await tester.tap(find.byKey(const Key('confirm-clear-exports')));
     await tester.pumpAndSettle();
     expect(storage.clearCount, 1);
+    expect(storage.loadCount, 4);
   });
 
   testWidgets('storage error state retries successfully', (tester) async {
@@ -310,6 +311,48 @@ void main() {
     expect(storage.loadCount, 2);
     expect(find.text('无法读取存储占用'), findsNothing);
   });
+
+  test(
+    'storage usage stays cached after settings disposal until invalidated',
+    () async {
+      final storage = _RecordingStorageUsageService(const [
+        AppStorageUsage(
+          originalBytes: 1,
+          renderedBytes: 2,
+          exportBytes: 3,
+          databaseAndOtherBytes: 4,
+        ),
+      ]);
+      final container = ProviderContainer(
+        overrides: [storageUsageServiceProvider.overrideWithValue(storage)],
+      );
+      addTearDown(container.dispose);
+
+      final firstListener = container.listen(
+        storageUsageProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
+      await container.read(storageUsageProvider.future);
+      expect(storage.loadCount, 1);
+
+      firstListener.close();
+      await container.pump();
+
+      final reenteredListener = container.listen(
+        storageUsageProvider,
+        (_, _) {},
+        fireImmediately: true,
+      );
+      await container.read(storageUsageProvider.future);
+      expect(storage.loadCount, 1);
+
+      container.invalidate(storageUsageProvider);
+      await container.read(storageUsageProvider.future);
+      expect(storage.loadCount, 2);
+      reenteredListener.close();
+    },
+  );
 
   testWidgets('storage manage-records entry opens the records route', (
     tester,
