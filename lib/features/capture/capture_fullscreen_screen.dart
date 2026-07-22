@@ -21,9 +21,10 @@ import 'package:sitemark/motion.dart';
 /// - while zoomed past 1x the [InteractiveViewer] pans normally and the
 ///   drag-to-dismiss gesture is disabled.
 ///
-/// The image area declares a live-region [Semantics] label and decodes at
-/// most `screenWidth * devicePixelRatio` pixels wide to avoid original-photo
-/// memory peaks.
+/// The image area declares a live-region [Semantics] label and decodes the
+/// photo at its full native resolution so zoom (up to 4x) preserves original
+/// detail. Memory peaks are mitigated by the OS page cache and the fact that
+/// the viewer is only reached from the detail screen for a single image.
 class CaptureFullscreenScreen extends StatefulWidget {
   const CaptureFullscreenScreen({super.key, required this.path});
 
@@ -150,9 +151,6 @@ class _CaptureFullscreenScreenState extends State<CaptureFullscreenScreen>
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final mediaQuery = MediaQuery.of(context);
-    final cacheWidth = (mediaQuery.size.width * mediaQuery.devicePixelRatio)
-        .round();
     final dragScale = (1 - _dragOffset.abs() / _dragShrinkFactor).clamp(
       _minDragScale,
       1.0,
@@ -186,7 +184,6 @@ class _CaptureFullscreenScreenState extends State<CaptureFullscreenScreen>
                       child: Image.file(
                         File(widget.path),
                         fit: BoxFit.contain,
-                        cacheWidth: cacheWidth,
                         errorBuilder: (context, error, _) => Center(
                           child: Icon(
                             Icons.broken_image_outlined,

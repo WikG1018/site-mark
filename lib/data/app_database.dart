@@ -184,6 +184,16 @@ class AppDatabase extends _$AppDatabase {
         // (e.g. from the perf branch) do not error out, and fresh installs
         // that jumped straight to v6 via `onCreate` are also covered.
         await _createCaptureIndexes();
+        // The perf/smoothness branch shipped a v5 schema that created these
+        // indexes but did NOT add the `use_dynamic_color` and
+        // `completion_notifications_enabled` columns on `app_settings`. A user
+        // on that branch therefore has `user_version = 5` without the two
+        // columns, so the `from < 5` branch above is skipped and
+        // `_ensureGlobalSettingsRow()` would crash with "no column named
+        // use_dynamic_color". Detect the missing columns via
+        // `PRAGMA table_info` and add them on demand so both v5 lineages
+        // converge at v6.
+        await _ensureDynamicColorColumns();
       }
       await _ensureGlobalSettingsRow();
     },
@@ -233,6 +243,35 @@ class AppDatabase extends _$AppDatabase {
       'CREATE INDEX IF NOT EXISTS capture_records_project_sort_idx '
       'ON captures (project_id, COALESCE(captured_at, created_at) DESC)',
     );
+  }
+
+  /// Adds the `use_dynamic_color` and `completion_notifications_enabled`
+  /// columns to `app_settings` if they are missing.
+  ///
+  /// This is called from the v6 migration step to converge users who arrive
+  /// from the perf/smoothness branch's v5 schema (which has the capture
+  /// indexes but not these two columns). Uses `PRAGMA table_info` so the
+  /// operation is idempotent and never raises "duplicate column name". The
+  /// `ALTER TABLE` statements mirror what `migrator.addColumn` would emit,
+  /// but `migrator` is only in scope inside the `MigrationStrategy` callback,
+  /// so we issue the DDL directly.
+  Future<void> _ensureDynamicColorColumns() async {
+    final columns = await customSelect(
+      'PRAGMA table_info(app_settings)',
+    ).get();
+    final columnNames = columns.map((row) => row.read<String>('name')).toSet();
+    if (!columnNames.contains('use_dynamic_color')) {
+      await customStatement(
+        'ALTER TABLE app_settings ADD COLUMN use_dynamic_color '
+        'INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (!columnNames.contains('completion_notifications_enabled')) {
+      await customStatement(
+        'ALTER TABLE app_settings ADD COLUMN '
+        'completion_notifications_enabled INTEGER NOT NULL DEFAULT 0',
+      );
+    }
   }
 
   Future<Project> createProject({
