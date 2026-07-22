@@ -192,7 +192,7 @@ void main() {
       expect(find.byKey(const Key('project-filter')), findsOneWidget);
 
       // Tap the capture card to push into detail.
-      await tester.tap(find.textContaining('SM-'));
+      await tester.tap(find.textContaining('2026-07-16'));
       await tester.pumpAndSettle();
 
       // Verify we're on the capture detail screen.

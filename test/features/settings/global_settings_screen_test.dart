@@ -465,6 +465,7 @@ void main() {
     await tester.ensureVisible(
       find.byKey(const Key('location-permission-setting')),
     );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('location-permission-setting')));
     await tester.pumpAndSettle();
 

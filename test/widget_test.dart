@@ -486,7 +486,11 @@ void main() {
   ) async {
     await database.createProject(id: 'existing', name: 'Cloud Site');
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('zh')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        completionNotificationService: _FakeCompletionNotificationService(),
+      ),
     );
     await tester.pumpAndSettle();
 

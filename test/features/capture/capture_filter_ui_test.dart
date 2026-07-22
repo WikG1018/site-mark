@@ -397,7 +397,7 @@ void main() {
   });
 
   testWidgets(
-    'filter controls are 44dp rounded rectangles with centered text',
+    'filter controls are 48dp rounded rectangles with centered text',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(360, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -413,7 +413,7 @@ void main() {
       final button = tester.widget<OutlinedButton>(buttonFinder);
       final shape = button.style?.shape?.resolve(<WidgetState>{});
 
-      expect(tester.getSize(menuFinder).height, 44);
+      expect(tester.getSize(menuFinder).height, 48);
       expect(shape, isA<RoundedRectangleBorder>());
       final border = shape! as RoundedRectangleBorder;
       expect(border.borderRadius, BorderRadius.circular(10));
