@@ -104,7 +104,7 @@ final storageUsageServiceProvider = Provider<StorageUsageService>((ref) {
   return AppStorageUsageService(database: ref.watch(databaseProvider));
 });
 
-final storageUsageProvider = FutureProvider.autoDispose((ref) {
+final storageUsageProvider = FutureProvider((ref) {
   return ref.watch(storageUsageServiceProvider).load();
 });
 

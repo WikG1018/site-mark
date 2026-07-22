@@ -241,6 +241,8 @@ QueryExecutor openMigratedV4Fixture() {
       DateTime.utc(2026, 7, 16).millisecondsSinceEpoch ~/ 1000;
   final captureCreated =
       DateTime(2026, 7, 16, 9, 30).millisecondsSinceEpoch ~/ 1000;
+  final captureCaptured =
+      DateTime(2026, 7, 16, 9, 32).millisecondsSinceEpoch ~/ 1000;
 
   db.execute('''
     CREATE TABLE projects (
@@ -322,8 +324,8 @@ QueryExecutor openMigratedV4Fixture() {
       id, project_id, photo_number, work_location, work_content, photographer,
       original_path, published_uri, original_sha256, status, created_at,
       captured_at, processing_attempts, watermark_locale_code,
-      location_resolution
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      location_resolution, original_deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ''',
     [
       'capture-1',
@@ -337,10 +339,11 @@ QueryExecutor openMigratedV4Fixture() {
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       CaptureStatus.ready.name,
       captureCreated,
-      captureCreated,
+      captureCaptured,
       2,
       'en',
       'resolved',
+      captureCaptured,
     ],
   );
   db.execute('PRAGMA user_version = 4;');
@@ -480,8 +483,46 @@ QueryExecutor openMigratedPerfV5Fixture() {
   return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
 }
 
+Future<Map<String, String>> captureIndexes(AppDatabase database) async {
+  final rows = await database.customSelect('''
+        SELECT name, sql
+        FROM sqlite_master
+        WHERE type = 'index' AND tbl_name = 'captures' AND sql IS NOT NULL
+        ORDER BY name
+      ''').get();
+  return {
+    for (final row in rows) row.read<String>('name'): row.read<String>('sql'),
+  };
+}
+
+String _normalizedSql(String sql) =>
+    sql.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+
+Future<void> expectCaptureIndexes(AppDatabase database) async {
+  final indexes = await captureIndexes(database);
+  expect(indexes.keys, {
+    'capture_records_project_sort_idx',
+    'capture_records_sort_idx',
+    'capture_records_status_idx',
+  });
+  expect(
+    _normalizedSql(indexes['capture_records_status_idx']!),
+    'create index capture_records_status_idx on captures (status)',
+  );
+  expect(
+    _normalizedSql(indexes['capture_records_sort_idx']!),
+    'create index capture_records_sort_idx on captures '
+    '(coalesce(captured_at, created_at) desc)',
+  );
+  expect(
+    _normalizedSql(indexes['capture_records_project_sort_idx']!),
+    'create index capture_records_project_sort_idx on captures '
+    '(project_id, coalesce(captured_at, created_at) desc)',
+  );
+}
+
 void main() {
-  test('v2 to v3 migration preserves captures and inserts defaults', () async {
+  test('v2 migration preserves captures and inserts defaults', () async {
     final database = AppDatabase.forTesting(openMigratedV2Fixture());
     addTearDown(database.close);
 
@@ -502,9 +543,9 @@ void main() {
   });
 
   test(
-    'v3 to v4 migration preserves rows and adds field-test defaults',
+    'v4 to v6 migration preserves rows and creates capture indexes',
     () async {
-      final database = AppDatabase.forTesting(openMigratedV3Fixture());
+      final database = AppDatabase.forTesting(openMigratedV4Fixture());
       addTearDown(database.close);
 
       final project = await database.projectById('project-1');
@@ -512,16 +553,13 @@ void main() {
       final settings = await database.getAppSettings();
 
       expect(project?.name, '东区厂房改造');
-      expect(project?.watermarkFontScale, 1.0);
-      expect(settings.themeMode, 'dark');
-      expect(settings.localeCode, 'en');
-      expect(settings.defaultWatermarkFontScale, 1.0);
-      expect(settings.locationPermissionPromptDismissed, isFalse);
+      expect(project?.watermarkFontScale, 1.25);
       expect(capture?.photoNumber, 'SM-20260716-001');
-      expect(capture?.processingAttempts, 2);
-      expect(capture?.watermarkLocaleCode, 'zh');
-      expect(capture?.locationResolution, 'resolved');
-      expect(capture?.originalDeletedAt, isNull);
+      expect(capture?.originalDeletedAt, DateTime(2026, 7, 16, 9, 32));
+      expect(settings.themeMode, 'dark');
+      expect(settings.defaultWatermarkFontScale, 1.40);
+      expect(settings.locationPermissionPromptDismissed, isTrue);
+      await expectCaptureIndexes(database);
     },
   );
 
@@ -677,4 +715,11 @@ void main() {
       expect(settings.completionNotificationsEnabled, isFalse);
     },
   );
+
+  test('fresh database creates all capture indexes', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    await expectCaptureIndexes(database);
+  });
 }
