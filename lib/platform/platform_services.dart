@@ -173,14 +173,43 @@ abstract interface class CaptureOutputPaths {
 }
 
 class AppCaptureOutputPaths implements CaptureOutputPaths {
+  AppCaptureOutputPaths({Future<Directory> Function()? documentsDirectory})
+    : _documentsDirectory =
+          documentsDirectory ?? getApplicationDocumentsDirectory;
+
+  final Future<Directory> Function() _documentsDirectory;
+  Future<Directory>? _renderedDirectory;
+
   @override
   Future<String> renderedPhotoPath(String captureId) async {
-    final root = await getApplicationDocumentsDirectory();
+    final directory = await _resolveRenderedDirectory();
+    return '${directory.path}${Platform.pathSeparator}$captureId.jpg';
+  }
+
+  Future<Directory> _resolveRenderedDirectory() {
+    final cached = _renderedDirectory;
+    if (cached != null) return cached;
+
+    final created = _createRenderedDirectory();
+    _renderedDirectory = created;
+    created.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        if (identical(_renderedDirectory, created)) {
+          _renderedDirectory = null;
+        }
+      },
+    );
+    return created;
+  }
+
+  Future<Directory> _createRenderedDirectory() async {
+    final root = await _documentsDirectory();
     final directory = Directory(
       '${root.path}${Platform.pathSeparator}rendered',
     );
     await directory.create(recursive: true);
-    return '${directory.path}${Platform.pathSeparator}$captureId.jpg';
+    return directory;
   }
 }
 

@@ -11,15 +11,61 @@ abstract interface class StorageUsageService {
 }
 
 typedef DocumentsDirectoryLoader = Future<Directory> Function();
+typedef FileLengthLoader = Future<int> Function(File file);
+
+const _maximumConcurrentFileLengths = 8;
+
+Future<int> _safeFileLength(File file) async {
+  try {
+    return await file.length();
+  } on FileSystemException {
+    return 0;
+  }
+}
+
+enum _StorageCategory { original, rendered, export, other }
+
+class _CategorizedFile {
+  const _CategorizedFile(this.file, this.category);
+
+  final File file;
+  final _StorageCategory category;
+}
+
+class _StorageTotals {
+  const _StorageTotals({
+    this.originalBytes = 0,
+    this.renderedBytes = 0,
+    this.exportBytes = 0,
+    this.databaseAndOtherBytes = 0,
+  });
+
+  final int originalBytes;
+  final int renderedBytes;
+  final int exportBytes;
+  final int databaseAndOtherBytes;
+
+  _StorageTotals add(_StorageTotals other) {
+    return _StorageTotals(
+      originalBytes: originalBytes + other.originalBytes,
+      renderedBytes: renderedBytes + other.renderedBytes,
+      exportBytes: exportBytes + other.exportBytes,
+      databaseAndOtherBytes:
+          databaseAndOtherBytes + other.databaseAndOtherBytes,
+    );
+  }
+}
 
 class AppStorageUsageService implements StorageUsageService {
   AppStorageUsageService({
     required this.database,
     this.documentsDirectory = getApplicationDocumentsDirectory,
-  });
+    FileLengthLoader? fileLength,
+  }) : fileLength = fileLength ?? _safeFileLength;
 
   final AppDatabase database;
   final DocumentsDirectoryLoader documentsDirectory;
+  final FileLengthLoader fileLength;
 
   @override
   Future<AppStorageUsage> load() async {
@@ -37,14 +83,10 @@ class AppStorageUsageService implements StorageUsageService {
       originals.putIfAbsent(_pathKey(file.path), () => file);
     }
 
-    var originalBytes = 0;
-    for (final file in originals.values) {
-      originalBytes += await _fileLength(file);
-    }
-
-    var renderedBytes = 0;
-    var exportBytes = 0;
-    var databaseAndOtherBytes = 0;
+    final files = <_CategorizedFile>[
+      for (final file in originals.values)
+        _CategorizedFile(file, _StorageCategory.original),
+    ];
     final renderedKey = _pathKey(renderedDirectory.path);
     final exportKey = _pathKey(exportDirectory.path);
     if (await documents.exists()) {
@@ -54,22 +96,26 @@ class AppStorageUsageService implements StorageUsageService {
       )) {
         if (entity is! File) continue;
         final key = _pathKey(entity.path);
-        final length = await _fileLength(entity);
+        if (originals.containsKey(key)) {
+          continue;
+        }
         if (_inside(key, renderedKey)) {
-          renderedBytes += length;
+          files.add(_CategorizedFile(entity, _StorageCategory.rendered));
         } else if (_inside(key, exportKey)) {
-          exportBytes += length;
-        } else if (!originals.containsKey(key)) {
-          databaseAndOtherBytes += length;
+          files.add(_CategorizedFile(entity, _StorageCategory.export));
+        } else {
+          files.add(_CategorizedFile(entity, _StorageCategory.other));
         }
       }
     }
 
+    final totals = await _loadFileLengths(files);
+
     return AppStorageUsage(
-      originalBytes: originalBytes,
-      renderedBytes: renderedBytes,
-      exportBytes: exportBytes,
-      databaseAndOtherBytes: databaseAndOtherBytes,
+      originalBytes: totals.originalBytes,
+      renderedBytes: totals.renderedBytes,
+      exportBytes: totals.exportBytes,
+      databaseAndOtherBytes: totals.databaseAndOtherBytes,
     );
   }
 
@@ -92,7 +138,7 @@ class AppStorageUsageService implements StorageUsageService {
       if (entity is! File || !entity.path.toLowerCase().endsWith('.zip')) {
         continue;
       }
-      freedBytes += await _fileLength(entity);
+      freedBytes += await fileLength(entity);
       await entity.delete();
       deletedFiles++;
     }
@@ -102,12 +148,46 @@ class AppStorageUsageService implements StorageUsageService {
     );
   }
 
-  Future<int> _fileLength(File file) async {
-    try {
-      return await file.length();
-    } on FileSystemException {
-      return 0;
-    }
+  Future<_StorageTotals> _loadFileLengths(List<_CategorizedFile> files) async {
+    if (files.isEmpty) return const _StorageTotals();
+
+    var nextIndex = 0;
+    final workerCount = files.length < _maximumConcurrentFileLengths
+        ? files.length
+        : _maximumConcurrentFileLengths;
+    final workerTotals = await Future.wait(
+      List.generate(workerCount, (_) async {
+        var originals = 0;
+        var rendered = 0;
+        var exports = 0;
+        var other = 0;
+        while (nextIndex < files.length) {
+          final file = files[nextIndex++];
+          final length = await fileLength(file.file);
+          switch (file.category) {
+            case _StorageCategory.original:
+              originals += length;
+            case _StorageCategory.rendered:
+              rendered += length;
+            case _StorageCategory.export:
+              exports += length;
+            case _StorageCategory.other:
+              other += length;
+          }
+        }
+        return _StorageTotals(
+          originalBytes: originals,
+          renderedBytes: rendered,
+          exportBytes: exports,
+          databaseAndOtherBytes: other,
+        );
+      }),
+    );
+
+    return workerTotals.fold<_StorageTotals>(
+      const _StorageTotals(),
+      (total, worker) => total.add(worker),
+    );
   }
 
   bool _inside(String path, String directory) {

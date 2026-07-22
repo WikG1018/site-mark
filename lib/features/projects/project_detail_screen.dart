@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
-import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_summary_filter.dart';
+import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
@@ -28,14 +28,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   CaptureFilter? _filter;
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
-
-  /// Cached one-shot future so a rebuild does not re-trigger the project load.
   late Future<Project?> _projectFuture;
-
-  /// Cached stream so a rebuild does not re-open the same watch. Drift
-  /// deduplicates identical stream subscriptions, but holding the reference
-  /// avoids building a new stream object on every `build` and keeps the
-  /// `AnimatedSwitcher` skeleton → content cross-fade stable across rebuilds.
   late Stream<List<CaptureSummary>> _captureSummariesStream;
 
   /// Latest filtered captures emitted by the inner StreamBuilder. Updated
