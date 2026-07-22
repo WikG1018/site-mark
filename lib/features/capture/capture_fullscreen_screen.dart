@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 
 /// Full-screen immersive photo viewer pushed from the detail image preview.
 ///
@@ -25,18 +27,18 @@ import 'package:sitemark/motion.dart';
 /// photo at its full native resolution so zoom (up to 4x) preserves original
 /// detail. Memory peaks are mitigated by the OS page cache and the fact that
 /// the viewer is only reached from the detail screen for a single image.
-class CaptureFullscreenScreen extends StatefulWidget {
+class CaptureFullscreenScreen extends ConsumerStatefulWidget {
   const CaptureFullscreenScreen({super.key, required this.path});
 
   /// Absolute path of the on-disk photo to display.
   final String path;
 
   @override
-  State<CaptureFullscreenScreen> createState() =>
+  ConsumerState<CaptureFullscreenScreen> createState() =>
       _CaptureFullscreenScreenState();
 }
 
-class _CaptureFullscreenScreenState extends State<CaptureFullscreenScreen>
+class _CaptureFullscreenScreenState extends ConsumerState<CaptureFullscreenScreen>
     with TickerProviderStateMixin {
   static const double _dismissThreshold = 120;
   static const double _dismissVelocity = 700;
@@ -60,6 +62,7 @@ class _CaptureFullscreenScreenState extends State<CaptureFullscreenScreen>
   double _dragOffset = 0;
   bool _zoomed = false;
   bool _chromeVisible = false;
+  VoidCallback? _releaseDetach;
 
   @override
   void initState() {
@@ -74,10 +77,21 @@ class _CaptureFullscreenScreenState extends State<CaptureFullscreenScreen>
       final animation = _dragAnimation;
       if (animation != null) setState(() => _dragOffset = animation.value);
     });
+    // ITGSA fair-memory: the fullscreen viewer holds the photo at its full
+    // native resolution (so 4x zoom preserves detail). When a MEMORY_TRIM or
+    // a framework memory-pressure callback arrives, pop the route so the
+    // Bitmap is released immediately rather than waiting for the user to
+    // dismiss. The viewer is only reachable from the detail screen, so
+    // popping returns the user to a sensible place.
+    final controller = ref.read(memoryPressureControllerProvider);
+    _releaseDetach = controller.attachRelease(() {
+      if (mounted) Navigator.of(context).maybePop();
+    });
   }
 
   @override
   void dispose() {
+    _releaseDetach?.call();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _scaleController.dispose();
     _dragController.dispose();

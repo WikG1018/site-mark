@@ -18,6 +18,8 @@ import 'package:sitemark/features/projects/project_watermark_settings_screen.dar
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/external_link_service.dart';
+import 'package:sitemark/platform/memory_pressure_coordinator.dart';
+import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
@@ -30,11 +32,32 @@ import 'package:sitemark/workflow/project_export_service.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase();
+  // Bridge the ITGSA fair-memory lifecycle to the database's conditional
+  // polling. When the app is backgrounded or a MEMORY_TRIM arrives, the
+  // MemoryPressureController pauses the 1 Hz polling fallback; on resume
+  // (foreground / pressure relieved) it restarts. The drift `watch()` stream
+  // itself stays active so writes from the background isolate still refresh
+  // the UI immediately.
+  final controller = ref.watch(memoryPressureControllerProvider);
+  final detach = controller.attachBackground(_DatabasePollingControl(database));
   ref.onDispose(() {
+    detach();
     database.close();
   });
   return database;
 });
+
+class _DatabasePollingControl implements BackgroundWorkControl {
+  _DatabasePollingControl(this._database);
+
+  final AppDatabase _database;
+
+  @override
+  void pauseBackgroundWork() => _database.setPollingPaused(true);
+
+  @override
+  void resumeBackgroundWork() => _database.setPollingPaused(false);
+}
 
 final initialLocaleProvider = Provider<Locale?>((ref) => null);
 final startupRecoveryEnabledProvider = Provider<bool>((ref) => true);
@@ -167,6 +190,19 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
         ref.read(captureBackgroundSchedulerProvider).reconcilePending(),
   );
 });
+
+/// Coordinator provider. Wires the service to the controller. Created lazily
+/// when first read; the root widget reads it in `initState` to start
+/// forwarding events.
+final memoryPressureCoordinatorProvider =
+    Provider<MemoryPressureCoordinator>((ref) {
+      final coordinator = MemoryPressureCoordinator(
+        service: ref.watch(memoryPressureServiceProvider),
+        controller: ref.watch(memoryPressureControllerProvider),
+      );
+      ref.onDispose(coordinator.dispose);
+      return coordinator;
+    });
 
 final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
   return ProjectExportService(
@@ -304,10 +340,15 @@ class SiteMarkApp extends ConsumerStatefulWidget {
   ConsumerState<SiteMarkApp> createState() => _SiteMarkAppState();
 }
 
-class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
+class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
+    with WidgetsBindingObserver {
+  MemoryPressureCoordinator? _pressureCoordinator;
+  bool _backgrounded = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Keep the notification service's send gate in sync with the persisted
     // `completionNotificationsEnabled` switch. The provider throws
     // UnimplementedError when no production service is injected (e.g. in
@@ -339,7 +380,67 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
         // No production implementation injected (e.g. widget tests);
         // notifications stay inert.
       }
+      // Initialize the ITGSA fair-memory bridge. The native
+      // `MemoryPressureReceiver` forwards `itgsa.intent.action.MEMORY_TRIM`
+      // and `MEMORY_KILL` broadcasts through the
+      // `sitemark/memory_pressure` MethodChannel; the coordinator dispatches
+      // them to the controller (image cache flush, background-work pause,
+      // kill hooks) and then ACKs the OEM Binder.
+      try {
+        _pressureCoordinator = ref.read(memoryPressureCoordinatorProvider);
+        await ref.read(memoryPressureServiceProvider).initialize();
+        _pressureCoordinator!.start();
+      } catch (_) {
+        // The service throws in tests that don't override the provider; the
+        // app still runs, just without the fair-memory bridge active.
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    final controller = ref.read(memoryPressureControllerProvider);
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_backgrounded) {
+          _backgrounded = false;
+          // Resume the conditional-polling streams and other paused work.
+          controller.resumeBackgroundWork();
+        }
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        // The app is no longer in the foreground. Pause non-essential
+        // background work (drift polling) so the process stays quiet while
+        // backgrounded. This is required by the ITGSA "fair running memory"
+        // mechanism: backgrounded apps must not keep polling.
+        if (!_backgrounded) {
+          _backgrounded = true;
+          controller.dispatch(MemoryPressureLevel.system);
+        }
+      case AppLifecycleState.detached:
+        // The activity is being destroyed. Nothing to resume; the process
+        // will be killed shortly.
+        break;
+    }
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    // Flutter's own memory-pressure callback (e.g. from
+    // `ActivityManager` / `onTrimMemory`). Route it through the same
+    // pipeline as the ITGSA broadcasts so a single code path releases
+    // caches.
+    ref.read(memoryPressureControllerProvider).dispatch(
+      MemoryPressureLevel.system,
+    );
   }
 
   @override
@@ -415,6 +516,7 @@ class MyApp extends StatelessWidget {
     this.backgroundWorkClient,
     this.startupRecovery,
     this.completionNotificationService,
+    this.memoryPressureService,
   });
 
   final AppDatabase? database;
@@ -430,6 +532,7 @@ class MyApp extends StatelessWidget {
   final BackgroundWorkClient? backgroundWorkClient;
   final AppStartupRecovery? startupRecovery;
   final CompletionNotificationService? completionNotificationService;
+  final MemoryPressureService? memoryPressureService;
 
   @override
   Widget build(BuildContext context) {
@@ -465,6 +568,10 @@ class MyApp extends StatelessWidget {
         if (completionNotificationService != null)
           completionNotificationServiceProvider.overrideWithValue(
             completionNotificationService!,
+          ),
+        if (memoryPressureService != null)
+          memoryPressureServiceProvider.overrideWithValue(
+            memoryPressureService!,
           ),
       ],
       child: const SiteMarkApp(),
