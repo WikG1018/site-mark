@@ -62,7 +62,21 @@
              in the background. On non-ITGSA ROMs the intents are never
              broadcast, so the receivers add zero overhead. `exported=false`
              because the broadcasts are sent only by the system process, not
-             by other apps. -->
+             by other apps.
+
+             RELEASE-PRECHECK: the `exported=false` configuration assumes the
+             OEM sends the broadcast from a system UID (system_server) with
+             explicit package targeting. Some vendor "phone manager" apps may
+             send these broadcasts from a non-system UID, in which case a
+             non-exported receiver will silently never receive them. Before
+             shipping to a new ITGSA ROM, verify on a real device that:
+               1. The broadcast is actually delivered (check logcat for
+                  MemoryPressureReceiver / MemoryPressurePlugin entries).
+               2. The Binder callback extra key matches one of the probed
+                  keys (itgsa_memory_callback / memory_callback / callback).
+               3. The ACK transact succeeds (no "acknowledge failed" log).
+             If delivery fails on a target ROM, switch to `exported=true`
+             with a signature-level custom permission to restrict senders. -->
         <receiver
             android:name=".memory.MemoryPressureReceiver"
             android:exported="false">

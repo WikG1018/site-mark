@@ -1025,4 +1025,56 @@ void main() {
       expect(rows.map((row) => row.id), ['capture-1']);
     },
   );
+
+  group('setPollingPaused', () {
+    test('is safe to call repeatedly with the same or alternating value', () {
+      database.setPollingPaused(true);
+      database.setPollingPaused(true);
+      database.setPollingPaused(false);
+      database.setPollingPaused(false);
+      database.setPollingPaused(true);
+      database.setPollingPaused(false);
+    });
+
+    test('does not prevent drift watch from emitting on writes', () async {
+      await database.createProject(id: 'p1', name: 'Project 1');
+      database.setPollingPaused(true);
+
+      final stream = database.watchCaptureSummaries(
+        const CaptureFilter(projectId: 'p1'),
+      );
+      final emissions = <List<dynamic>>[];
+      final subscription = stream.listen(emissions.add);
+
+      // Wait for the initial drift watch() emission.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(emissions.length, greaterThanOrEqualTo(1));
+      expect(emissions.first, isEmpty);
+
+      // Insert and capture a record so it appears in the summary (which
+      // excludes pendingCamera rows). The drift watch() should still fire
+      // even while polling is paused — the SQLite update hook is independent
+      // of the conditional-polling fallback.
+      final pending = await database.createPendingCapture(
+        id: 'c1',
+        projectId: 'p1',
+        originalPath: '/test/c1.jpg',
+        workLocation: 'Site A',
+        workContent: 'Foundation',
+        photographer: 'Alice',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 15),
+      );
+      await database.markCaptured(
+        captureId: pending.id,
+        capturedAt: DateTime(2026, 7, 15, 10),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(emissions.length, greaterThan(1));
+      expect(emissions.last.length, 1);
+
+      await subscription.cancel();
+    });
+  });
 }

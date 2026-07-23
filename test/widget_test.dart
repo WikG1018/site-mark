@@ -5,6 +5,7 @@ import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/main.dart';
+import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
@@ -45,6 +46,7 @@ void main() {
         initialLocale: const Locale('zh'),
         startupRecovery: recovery,
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pump();
@@ -119,6 +121,7 @@ void main() {
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -161,6 +164,7 @@ void main() {
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -177,6 +181,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -195,6 +200,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -218,6 +224,7 @@ void main() {
         database: database,
         initialLocale: const Locale('en'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -235,6 +242,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -312,6 +320,7 @@ void main() {
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -454,6 +463,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -490,6 +500,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();

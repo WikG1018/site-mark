@@ -35,7 +35,6 @@ import io.flutter.plugin.common.MethodChannel
 class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
 
     private var channel: MethodChannel? = null
-    private var context: Context? = null
 
     // Pending OEM callbacks, keyed by level name. Only the most recent Binder
     // per level is retained; older ones (if any) are ACK'd as "not handled"
@@ -44,7 +43,9 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     fun attachTo(context: Context, flutterEngine: FlutterEngine) {
-        this.context = context.applicationContext
+        // `context` is accepted to match the standard Flutter plugin attach
+        // signature but is not currently stored: the plugin only needs the
+        // Dart executor to build the MethodChannel.
         channel = MethodChannel(flutterEngine.dartExecutor, CHANNEL_NAME).also {
             it.setMethodCallHandler(this)
         }
@@ -53,7 +54,6 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
     fun detachFrom() {
         channel?.setMethodCallHandler(null)
         channel = null
-        context = null
         // ACK any pending callbacks as "not handled" so the system does not
         // leak them waiting for a response that will never come.
         synchronized(pending) {
@@ -67,11 +67,10 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "acknowledge" -> {
-                val args = call.argument<Map<String, Any>>("args")
-                    ?: (call.arguments as? Map<String, Any>)
-                @Suppress("UNCHECKED_CAST")
-                val level = (args?.get("level") as? String) ?: ""
-                val success = (args?.get("success") as? Boolean) ?: false
+                // The Dart side sends a flat map: { "level": "trim", "success": true }.
+                // MethodCall.argument<T>(key) reads from that map directly.
+                val level = call.argument<String>("level") ?: ""
+                val success = call.argument<Boolean>("success") ?: false
                 val binder = synchronized(pending) { pending.remove(level) }
                 MemoryPressureReceiver.acknowledge(binder, success)
                 result.success(null)

@@ -85,7 +85,14 @@ class _CaptureFullscreenScreenState extends ConsumerState<CaptureFullscreenScree
     // popping returns the user to a sensible place.
     final controller = ref.read(memoryPressureControllerProvider);
     _releaseDetach = controller.attachRelease(() {
-      if (mounted) Navigator.of(context).maybePop();
+      // Only pop if this route is still the topmost — the release handler
+      // can fire while a different route (e.g. a system dialog or another
+      // push) has replaced this one on the navigator stack.
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route?.isCurrent ?? false) {
+        Navigator.of(context).maybePop();
+      }
     });
   }
 

@@ -17,6 +17,7 @@ import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
@@ -343,7 +344,11 @@ class SiteMarkApp extends ConsumerStatefulWidget {
 class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
     with WidgetsBindingObserver {
   MemoryPressureCoordinator? _pressureCoordinator;
-  bool _backgrounded = false;
+  /// Tracks whether background work was paused via the lifecycle path.
+  /// `resumed` unconditionally resumes; this flag only suppresses a
+  /// redundant resume when the app was never backgrounded (e.g. a transient
+  /// `inactive` from a permission dialog).
+  bool _backgroundPaused = false;
 
   @override
   void initState() {
@@ -409,21 +414,30 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
     final controller = ref.read(memoryPressureControllerProvider);
     switch (state) {
       case AppLifecycleState.resumed:
-        if (_backgrounded) {
-          _backgrounded = false;
+        if (_backgroundPaused) {
+          _backgroundPaused = false;
           // Resume the conditional-polling streams and other paused work.
           controller.resumeBackgroundWork();
         }
       case AppLifecycleState.inactive:
+        // Transient state (e.g. a permission dialog or system overlay
+        // briefly covering the app). Do NOT release resources or pause
+        // polling — the user is still interacting with the app and will
+        // return momentarily. Grouping this with paused/hidden caused the
+        // image cache and fullscreen viewer to be cleared on every
+        // permission prompt (I1 fix).
+        break;
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
         // The app is no longer in the foreground. Pause non-essential
-        // background work (drift polling) so the process stays quiet while
-        // backgrounded. This is required by the ITGSA "fair running memory"
-        // mechanism: backgrounded apps must not keep polling.
-        if (!_backgrounded) {
-          _backgrounded = true;
-          controller.dispatch(MemoryPressureLevel.system);
+        // background work (drift polling) and release caches so the
+        // process stays quiet while backgrounded. This is required by the
+        // ITGSA "fair running memory" mechanism: backgrounded apps must
+        // not keep polling.
+        if (!_backgroundPaused) {
+          _backgroundPaused = true;
+          controller.pauseBackgroundWork();
+          controller.releaseResources();
         }
       case AppLifecycleState.detached:
         // The activity is being destroyed. Nothing to resume; the process
@@ -435,12 +449,12 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
   @override
   void didHaveMemoryPressure() {
     // Flutter's own memory-pressure callback (e.g. from
-    // `ActivityManager` / `onTrimMemory`). Route it through the same
-    // pipeline as the ITGSA broadcasts so a single code path releases
-    // caches.
-    ref.read(memoryPressureControllerProvider).dispatch(
-      MemoryPressureLevel.system,
-    );
+    // `ActivityManager` / `onTrimMemory`). Release caches but do NOT pause
+    // polling — this fires while the app is in the foreground and the user
+    // is still looking at it, so the 1 Hz database refresh must continue.
+    // Routing through `dispatch(system)` would stall the polling streams
+    // with no lifecycle `resumed` to restart them (C1 fix).
+    ref.read(memoryPressureControllerProvider).releaseResources();
   }
 
   @override
@@ -517,6 +531,8 @@ class MyApp extends StatelessWidget {
     this.startupRecovery,
     this.completionNotificationService,
     this.memoryPressureService,
+    this.captureFormDraftStore,
+    this.memoryPressureController,
   });
 
   final AppDatabase? database;
@@ -533,6 +549,8 @@ class MyApp extends StatelessWidget {
   final AppStartupRecovery? startupRecovery;
   final CompletionNotificationService? completionNotificationService;
   final MemoryPressureService? memoryPressureService;
+  final CaptureFormDraftStore? captureFormDraftStore;
+  final MemoryPressureController? memoryPressureController;
 
   @override
   Widget build(BuildContext context) {
@@ -572,6 +590,14 @@ class MyApp extends StatelessWidget {
         if (memoryPressureService != null)
           memoryPressureServiceProvider.overrideWithValue(
             memoryPressureService!,
+          ),
+        if (captureFormDraftStore != null)
+          captureFormDraftStoreProvider.overrideWithValue(
+            captureFormDraftStore!,
+          ),
+        if (memoryPressureController != null)
+          memoryPressureControllerProvider.overrideWithValue(
+            memoryPressureController!,
           ),
       ],
       child: const SiteMarkApp(),
