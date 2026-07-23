@@ -391,14 +391,11 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
       // `sitemark/memory_pressure` MethodChannel; the coordinator dispatches
       // them to the controller (image cache flush, background-work pause,
       // kill hooks) and then ACKs the OEM Binder.
-      try {
-        _pressureCoordinator = ref.read(memoryPressureCoordinatorProvider);
-        await ref.read(memoryPressureServiceProvider).initialize();
-        _pressureCoordinator!.start();
-      } catch (_) {
-        // The service throws in tests that don't override the provider; the
-        // app still runs, just without the fair-memory bridge active.
-      }
+      // The provider defaults to [NoopMemoryPressureService] so tests that
+      // don't override it still run without errors.
+      _pressureCoordinator = ref.read(memoryPressureCoordinatorProvider);
+      await ref.read(memoryPressureServiceProvider).initialize();
+      _pressureCoordinator!.start();
     });
   }
 

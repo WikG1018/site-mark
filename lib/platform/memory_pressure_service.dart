@@ -55,13 +55,12 @@ abstract class MemoryPressureService {
   Future<void> acknowledge(MemoryPressureLevel level, {required bool success});
 }
 
-/// Riverpod provider. Production wires [PlatformMemoryPressureService];
-/// tests override with fakes.
+/// Riverpod provider. Production wires [PlatformMemoryPressureService]
+/// via `MyApp(memoryPressureService: ...)`; the default [NoopMemoryPressureService]
+/// keeps tests (and any non-ITGSA platform) running without extra overrides.
 final memoryPressureServiceProvider =
     Provider<MemoryPressureService>((ref) {
-      throw UnimplementedError(
-        'memoryPressureServiceProvider must be overridden',
-      );
+      return NoopMemoryPressureService();
     });
 
 /// Production implementation backed by a [MethodChannel] named
