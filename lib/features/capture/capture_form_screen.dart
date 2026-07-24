@@ -49,33 +49,41 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     final database = ref.read(databaseProvider);
     final project = await database.projectById(widget.projectId);
     if (project == null) return null;
-    final draft = await database.latestCapturedDraft(widget.projectId);
-    if (draft == null) {
-      // No captured record to carry forward from. Fall back to a KILL-persisted
-      // draft snapshot if one exists (e.g. the user was mid-entry last time
-      // the OEM killed the process). This restores the exact text the user
-      // had typed, including notes. The restore is best-effort: a missing
-      // path-provider plugin (tests) or an IO error must never block the
-      // form from rendering.
-      CaptureFormDraftSnapshot? snapshot;
-      try {
-        snapshot = await ref
-            .read(captureFormDraftStoreProvider)
-            .load(widget.projectId);
-      } catch (_) {
-        snapshot = null;
-      }
-      if (snapshot != null) {
-        _locationController.text = snapshot.workLocation;
-        _contentController.text = snapshot.workContent;
-        _photographerController.text = snapshot.photographer;
-        _notesController.text = snapshot.notes;
-      }
-    } else {
-      // Prefill the three carry-forward fields exactly once, alongside this
-      // single initialization pass. Notes stay blank by design.
-      _applyCarryForward(draft);
+
+    // Check the KILL-persisted draft first. A KILL draft represents the
+    // user's unsaved input from the last session that was interrupted by
+    // the OEM memory killer. It takes priority over carry-forward because
+    // it contains the user's most recent edits, including notes (which
+    // carry-forward deliberately leaves blank). This applies regardless of
+    // whether the project already has captured records.
+    CaptureFormDraftSnapshot? snapshot;
+    try {
+      snapshot = await ref
+          .read(captureFormDraftStoreProvider)
+          .load(widget.projectId);
+    } catch (_) {
+      snapshot = null;
     }
+
+    if (snapshot != null) {
+      // Restore the user's unsaved draft from the last KILL event.
+      _locationController.text = snapshot.workLocation;
+      _contentController.text = snapshot.workContent;
+      _photographerController.text = snapshot.photographer;
+      _notesController.text = snapshot.notes;
+    } else {
+      // No KILL draft to restore; fall back to carry-forward fields from
+      // the most recent captured record. Notes stay blank by design.
+      final draft = await database.latestCapturedDraft(widget.projectId);
+      if (draft != null) {
+        _applyCarryForward(draft);
+      }
+      return _CaptureFormInit(project: project, draft: draft);
+    }
+
+    // A snapshot was restored; still load the latest draft so the caller
+    // knows whether the project has history.
+    final draft = await database.latestCapturedDraft(widget.projectId);
     return _CaptureFormInit(project: project, draft: draft);
   }
 

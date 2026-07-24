@@ -1,5 +1,6 @@
 package io.github.wikg1018.sitemark.memory
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.os.Handler
 import android.os.IBinder
@@ -36,10 +37,18 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
 
     private var channel: MethodChannel? = null
 
-    // Pending OEM callbacks, keyed by level name. Only the most recent Binder
+    /// Bundles the OEM Binder callback with the BroadcastReceiver PendingResult
+    /// obtained from `goAsync()`. Both must be completed: the Binder via
+    /// `transact` and the PendingResult via `finish()`.
+    private data class PendingCallback(
+        val binder: IBinder?,
+        val pendingResult: BroadcastReceiver.PendingResult?,
+    )
+
+    // Pending OEM callbacks, keyed by level name. Only the most recent entry
     // per level is retained; older ones (if any) are ACK'd as "not handled"
-    // so the system does not wait indefinitely.
-    private val pending = HashMap<String, IBinder?>()
+    // and their PendingResult finished so the system does not wait.
+    private val pending = HashMap<String, PendingCallback>()
     private val mainHandler = Handler(Looper.getMainLooper())
 
     fun attachTo(context: Context, flutterEngine: FlutterEngine) {
@@ -54,11 +63,13 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
     fun detachFrom() {
         channel?.setMethodCallHandler(null)
         channel = null
-        // ACK any pending callbacks as "not handled" so the system does not
-        // leak them waiting for a response that will never come.
+        // ACK any pending callbacks as "not handled" and finish their
+        // PendingResults so the system does not leak them waiting for a
+        // response that will never come.
         synchronized(pending) {
-            for (binder in pending.values) {
-                MemoryPressureReceiver.acknowledge(binder, false)
+            for (cb in pending.values) {
+                MemoryPressureReceiver.acknowledge(cb.binder, false)
+                cb.pendingResult?.finish()
             }
             pending.clear()
         }
@@ -71,21 +82,28 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
                 // MethodCall.argument<T>(key) reads from that map directly.
                 val level = call.argument<String>("level") ?: ""
                 val success = call.argument<Boolean>("success") ?: false
-                val binder = synchronized(pending) { pending.remove(level) }
-                MemoryPressureReceiver.acknowledge(binder, success)
+                val cb = synchronized(pending) { pending.remove(level) }
+                if (cb != null) {
+                    MemoryPressureReceiver.acknowledge(cb.binder, success)
+                    cb.pendingResult?.finish()
+                }
                 result.success(null)
             }
             else -> result.notImplemented()
         }
     }
 
-    private fun handleForward(level: String, binder: IBinder?) {
+    private fun handleForward(level: String, binder: IBinder?, pendingResult: BroadcastReceiver.PendingResult?) {
+        val callback = PendingCallback(binder, pendingResult)
+
         // If there's already a pending callback for this level, ACK it as
-        // "not handled" before stashing the new one. The OEM contract does
-        // not allow more than one outstanding callback per level.
-        val previous = synchronized(pending) { pending.put(level, binder) }
-        if (previous != null && previous !== binder) {
-            MemoryPressureReceiver.acknowledge(previous, false)
+        // "not handled" and finish its PendingResult before stashing the new
+        // one. The OEM contract does not allow more than one outstanding
+        // callback per level.
+        val previous = synchronized(pending) { pending.put(level, callback) }
+        if (previous != null && previous !== callback) {
+            MemoryPressureReceiver.acknowledge(previous.binder, false)
+            previous.pendingResult?.finish()
         }
 
         val channel = this.channel
@@ -94,9 +112,26 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
             // the Flutter engine was spun up, or after it was torn down).
             // ACK as "not handled" so the system can proceed.
             Log.w(TAG, "Engine not attached for level=$level; ACKing as not handled")
-            val b = synchronized(pending) { pending.remove(level) }
-            MemoryPressureReceiver.acknowledge(b, false)
+            val cb = synchronized(pending) { pending.remove(level) }
+            if (cb != null) {
+                MemoryPressureReceiver.acknowledge(cb.binder, false)
+                cb.pendingResult?.finish()
+            }
             return
+        }
+
+        // Strict timeout: if the Dart side does not ACK within the limit,
+        // ACK as "not handled" and finish the PendingResult so the broadcast
+        // does not leak and the system can proceed with its default behavior.
+        pendingResult?.let { pr ->
+            mainHandler.postDelayed({
+                val cb = synchronized(pending) { pending.remove(level) }
+                if (cb != null && cb.pendingResult === pr) {
+                    Log.w(TAG, "Dart handler timed out for $level; ACKing as not handled")
+                    MemoryPressureReceiver.acknowledge(cb.binder, false)
+                    cb.pendingResult?.finish()
+                }
+            }, ACK_TIMEOUT_MS)
         }
 
         // Invoke the Dart handler. The Dart side will call `acknowledge` to
@@ -120,14 +155,20 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
                         TAG,
                         "Dart handler error: $errorCode $errorMessage; ACKing $level as not handled",
                     )
-                    val b = synchronized(pending) { pending.remove(level) }
-                    MemoryPressureReceiver.acknowledge(b, false)
+                    val cb = synchronized(pending) { pending.remove(level) }
+                    if (cb != null) {
+                        MemoryPressureReceiver.acknowledge(cb.binder, false)
+                        cb.pendingResult?.finish()
+                    }
                 }
 
                 override fun notImplemented() {
                     Log.w(TAG, "Dart handler not implemented; ACKing $level as not handled")
-                    val b = synchronized(pending) { pending.remove(level) }
-                    MemoryPressureReceiver.acknowledge(b, false)
+                    val cb = synchronized(pending) { pending.remove(level) }
+                    if (cb != null) {
+                        MemoryPressureReceiver.acknowledge(cb.binder, false)
+                        cb.pendingResult?.finish()
+                    }
                 }
             },
         )
@@ -137,6 +178,13 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
         private const val TAG = "MemoryPressurePlugin"
         private const val CHANNEL_NAME = "sitemark/memory_pressure"
 
+        // Maximum time the Dart side has to ACK a pressure event before the
+        // plugin auto-ACKs as "not handled" and finishes the PendingResult.
+        // 10 seconds is well within the OEM's typical 20-second window while
+        // being short enough that a hung Dart isolate does not leave the
+        // broadcast dangling.
+        private const val ACK_TIMEOUT_MS = 10_000L
+
         @Volatile
         private var instance: MemoryPressurePlugin? = null
 
@@ -145,9 +193,13 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
          * Dart side. Safe to call from the main thread (broadcasts are
          * delivered there) — the MethodChannel invoke is non-blocking and the
          * Dart handler runs on the UI thread's platform channel executor.
+         *
+         * The [pendingResult] from `BroadcastReceiver.goAsync()` is held until
+         * the Dart side ACKs (or the timeout fires), at which point
+         * `finish()` is called to release the broadcast.
          */
         @JvmStatic
-        fun forward(context: Context, level: String, binder: IBinder?) {
+        fun forward(context: Context, level: String, binder: IBinder?, pendingResult: BroadcastReceiver.PendingResult?) {
             // Post to the main thread to guarantee we never block the
             // broadcast dispatch thread, even if the receiver was invoked
             // from a background context.
@@ -157,9 +209,10 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
                 // does not wait.
                 Log.w(TAG, "Plugin not attached; ACKing $level as not handled")
                 MemoryPressureReceiver.acknowledge(binder, false)
+                pendingResult?.finish()
                 return
             }
-            plugin.mainHandler.post { plugin.handleForward(level, binder) }
+            plugin.mainHandler.post { plugin.handleForward(level, binder, pendingResult) }
         }
 
         /**

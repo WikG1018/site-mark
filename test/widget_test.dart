@@ -98,6 +98,7 @@ void main() {
     WidgetTester tester, {
     CaptureWorkflowResult? workflowResult,
     _WidgetTestPlatformServices? platformOverride,
+    CaptureFormDraftStore? captureFormDraftStore,
   }) async {
     final images = _WidgetTestImagePipeline();
     final share = _WidgetTestShareService();
@@ -121,7 +122,7 @@ void main() {
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
-        captureFormDraftStore: MemoryCaptureFormDraftStore(),
+        captureFormDraftStore: captureFormDraftStore ?? MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -406,6 +407,40 @@ void main() {
       expect(fieldText(tester, const Key('work-content')), '风管安装检查');
       expect(fieldText(tester, const Key('photographer')), '张工');
       expect(fieldText(tester, const Key('notes')), '');
+      await disposeApp(tester);
+    },
+  );
+
+  testWidgets(
+    'restores KILL draft even when project has captured records',
+    (tester) async {
+      // Seed a ready capture so the project has history and carry-forward
+      // data is available.
+      await seedReadyCapture(
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+      );
+
+      // Simulate a KILL-persisted draft from a previous interrupted session.
+      // The draft contains different values (including notes) and must take
+      // priority over carry-forward.
+      final store = MemoryCaptureFormDraftStore();
+      await store.save(const CaptureFormDraftSnapshot(
+        projectId: 'project-1',
+        workLocation: 'B 区二层',
+        workContent: '管道验收',
+        photographer: '李工',
+        notes: '未完成备注',
+      ));
+
+      await openCaptureForm(tester, captureFormDraftStore: store);
+
+      // The KILL draft fields are restored, NOT the carry-forward fields.
+      expect(fieldText(tester, const Key('work-location')), 'B 区二层');
+      expect(fieldText(tester, const Key('work-content')), '管道验收');
+      expect(fieldText(tester, const Key('photographer')), '李工');
+      expect(fieldText(tester, const Key('notes')), '未完成备注');
       await disposeApp(tester);
     },
   );

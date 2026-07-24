@@ -39,6 +39,9 @@ class MemoryPressureReceiver : BroadcastReceiver() {
             ACTION_MEMORY_KILL -> "kill"
             else -> return
         }
+        // Log at INFO level so real-device verification via logcat can
+        // confirm the broadcast was actually delivered by the OEM ROM.
+        Log.i(TAG, "Received ${intent.action} (level=$level)")
 
         // The ITGSA spec passes a Binder through the intent extras so the app
         // can ACK the pressure event. The exact extra key varies by ROM
@@ -47,15 +50,14 @@ class MemoryPressureReceiver : BroadcastReceiver() {
         // on early adopter builds so the ACK path works across vendors.
         val callbackBinder = pickCallbackBinder(intent)
 
-        // Always forward to Flutter (best-effort). The Dart side owns the
-        // release/backup logic; we just bridge the signal.
-        MemoryPressurePlugin.forward(context, level, callbackBinder)
-
-        // The receiver must not block the main thread. The Binder ACK is
-        // posted from the Flutter side after the Dart handlers complete, so
-        // here we just return. The system treats returning from onReceive as
-        // "broadcast received" but NOT as "memory released"; the actual ACK
-        // that defers killing the process happens through the Binder.
+        // Use goAsync() so the broadcast stays alive while the Dart side
+        // processes the pressure event (image cache flush, draft persistence,
+        // Binder ACK). Without this, Android may lower the process priority
+        // or terminate it as soon as onReceive() returns, causing the async
+        // cleanup and ACK to be lost. The PendingResult is held by the plugin
+        // and finished when the Dart side ACKs, or after a strict timeout.
+        val pendingResult = goAsync()
+        MemoryPressurePlugin.forward(context, level, callbackBinder, pendingResult)
     }
 
     private fun pickCallbackBinder(intent: Intent): IBinder? {
@@ -75,7 +77,10 @@ class MemoryPressureReceiver : BroadcastReceiver() {
         val extras = intent.extras ?: return null
         for (key in keys) {
             val binder = extras.getBinder(key)
-            if (binder != null) return binder
+            if (binder != null) {
+                Log.i(TAG, "Binder found via key '$key' (getBinder)")
+                return binder
+            }
         }
         // Reflection fallback for ROMs whose Bundle implementation does not
         // surface the OEM Binder through the public getBinder path. The
@@ -89,7 +94,10 @@ class MemoryPressureReceiver : BroadcastReceiver() {
         if (getIBinder != null) {
             for (key in keys) {
                 val binder = getIBinder.invoke(extras, key) as? IBinder
-                if (binder != null) return binder
+                if (binder != null) {
+                    Log.i(TAG, "Binder found via key '$key' (getIBinder reflection)")
+                    return binder
+                }
             }
         } else {
             Log.w(TAG, "Bundle.getIBinder unavailable; OEM Binder callback cannot be retrieved")
