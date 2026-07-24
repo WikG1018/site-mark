@@ -190,10 +190,13 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
 
         // Maximum time the Dart side has to ACK a pressure event before the
         // plugin auto-ACKs as "not handled" and finishes the PendingResult.
-        // 10 seconds is well within the OEM's typical 20-second window while
-        // being short enough that a hung Dart isolate does not leave the
-        // broadcast dangling.
-        private const val ACK_TIMEOUT_MS = 10_000L
+        // Android's goAsync() broadcast window is ~10 seconds. We set the Dart
+        // timeout to 6 seconds so there is a clear ~4-second margin for the
+        // Binder transact() + PendingResult.finish() to complete before the
+        // broadcast expires. Without this margin, a slow Dart handler or a
+        // busy Binder executor could cause the auto-ACK + finish to land after
+        // the broadcast window closes, triggering an ANR or lost ACK.
+        private const val ACK_TIMEOUT_MS = 6_000L
 
         private val nextEventId = AtomicLong(0)
 
