@@ -9,6 +9,7 @@ import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Owns the `sitemark/memory_pressure` MethodChannel between native and Dart.
@@ -17,38 +18,48 @@ import io.flutter.plugin.common.MethodChannel
  *
  * - Native → Dart: [forward] is called by [MemoryPressureReceiver] when an
  *   ITGSA broadcast arrives. The plugin invokes `onMemoryPressure` on the
- *   Dart side, carrying the level and the pending Binder so the Dart side can
- *   ACK after its handlers finish.
- * - Dart → Native: the Dart side calls `acknowledge(level, success)` to
+ *   Dart side, carrying the level, a unique event ID, and the pending Binder
+ *   so the Dart side can ACK after its handlers finish.
+ * - Dart → Native: the Dart side calls `acknowledge(eventId, success)` to
  *   complete the OEM Binder callback.
  *
- * The plugin keeps the most recent pending Binder keyed by level so a
- * slow-to-ACK Dart side still has a chance to ACK before the OEM timeout.
- * Only one outstanding callback per level is tracked because the OEM contract
- * serializes pressure events per level.
+ * Each pressure event gets a monotonically increasing [eventId]. The pending
+ * map is keyed by eventId (not level) so that consecutive same-level events
+ * cannot be cross-ACKed: the Dart side's ACK for event #1 will not match
+ * event #2's entry. When a new event supersedes an older one at the same
+ * level, the older event is ACK'd as "not handled" and its PendingResult
+ * finished.
  *
- * When the Flutter engine is not attached (e.g. the app is in a pure
- * background state where the engine was destroyed), the plugin ACKs the
- * Binder with `success = false` so the system can proceed with its default
- * behavior. This keeps the app from being killed while it still has a chance
- * to release memory, but never blocks the system.
+ * When the Flutter engine is not attached, the plugin ACKs the Binder with
+ * `success = false` so the system can proceed with its default behavior.
+ *
+ * **PendingResult lifecycle:** the `BroadcastReceiver.PendingResult` from
+ * `goAsync()` is held until the Binder `transact` completes (or fails), at
+ * which point `finish()` is called via the `onComplete` callback. This
+ * ordering is critical: calling `finish()` before `transact` completes allows
+ * Android to reclaim the process, causing the ACK to be lost.
  */
 class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
 
     private var channel: MethodChannel? = null
 
-    /// Bundles the OEM Binder callback with the BroadcastReceiver PendingResult
-    /// obtained from `goAsync()`. Both must be completed: the Binder via
-    /// `transact` and the PendingResult via `finish()`.
+    /// Bundles the OEM Binder callback, the BroadcastReceiver PendingResult,
+    /// and the level for cleanup tracking. Keyed by [eventId] in [pending].
     private data class PendingCallback(
+        val eventId: Long,
+        val level: String,
         val binder: IBinder?,
         val pendingResult: BroadcastReceiver.PendingResult?,
     )
 
-    // Pending OEM callbacks, keyed by level name. Only the most recent entry
-    // per level is retained; older ones (if any) are ACK'd as "not handled"
-    // and their PendingResult finished so the system does not wait.
-    private val pending = HashMap<String, PendingCallback>()
+    // Pending OEM callbacks, keyed by eventId. Using eventId (not level)
+    // prevents cross-ACK when consecutive same-level events arrive.
+    private val pending = HashMap<Long, PendingCallback>()
+
+    // Tracks the current eventId per level so a new event can supersede
+    // and clean up the previous one.
+    private val levelToEventId = HashMap<String, Long>()
+
     private val mainHandler = Handler(Looper.getMainLooper())
 
     fun attachTo(context: Context, flutterEngine: FlutterEngine) {
@@ -64,28 +75,32 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
         channel?.setMethodCallHandler(null)
         channel = null
         // ACK any pending callbacks as "not handled" and finish their
-        // PendingResults so the system does not leak them waiting for a
-        // response that will never come.
+        // PendingResults. finish() is called in the onComplete callback,
+        // *after* the Binder transact completes.
         synchronized(pending) {
             for (cb in pending.values) {
-                MemoryPressureReceiver.acknowledge(cb.binder, false)
-                cb.pendingResult?.finish()
+                MemoryPressureReceiver.acknowledge(cb.binder, false) {
+                    cb.pendingResult?.finish()
+                }
             }
             pending.clear()
+            levelToEventId.clear()
         }
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "acknowledge" -> {
-                // The Dart side sends a flat map: { "level": "trim", "success": true }.
-                // MethodCall.argument<T>(key) reads from that map directly.
-                val level = call.argument<String>("level") ?: ""
+                val eventId = (call.argument<Number>("eventId") ?: -1).toLong()
                 val success = call.argument<Boolean>("success") ?: false
-                val cb = synchronized(pending) { pending.remove(level) }
+                val cb = synchronized(pending) { pending.remove(eventId) }
                 if (cb != null) {
-                    MemoryPressureReceiver.acknowledge(cb.binder, success)
-                    cb.pendingResult?.finish()
+                    // finish() is called in onComplete, after transact
+                    // completes. This ensures the process is not reclaimed
+                    // before the ACK reaches the OEM.
+                    MemoryPressureReceiver.acknowledge(cb.binder, success) {
+                        cb.pendingResult?.finish()
+                    }
                 }
                 result.success(null)
             }
@@ -93,52 +108,58 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
         }
     }
 
-    private fun handleForward(level: String, binder: IBinder?, pendingResult: BroadcastReceiver.PendingResult?) {
-        val callback = PendingCallback(binder, pendingResult)
-
-        // If there's already a pending callback for this level, ACK it as
-        // "not handled" and finish its PendingResult before stashing the new
-        // one. The OEM contract does not allow more than one outstanding
-        // callback per level.
-        val previous = synchronized(pending) { pending.put(level, callback) }
-        if (previous != null && previous !== callback) {
-            MemoryPressureReceiver.acknowledge(previous.binder, false)
-            previous.pendingResult?.finish()
+    /// Helper: ACK a callback as not-handled and finish its PendingResult
+    /// after the transact completes.
+    private fun ackAndFinish(cb: PendingCallback, tag: String) {
+        Log.w(TAG, "$tag; ACKing eventId=${cb.eventId} level=${cb.level} as not handled")
+        MemoryPressureReceiver.acknowledge(cb.binder, false) {
+            cb.pendingResult?.finish()
         }
+    }
+
+    private fun handleForward(level: String, binder: IBinder?, pendingResult: BroadcastReceiver.PendingResult?) {
+        val eventId = nextEventId.incrementAndGet()
+        val callback = PendingCallback(eventId, level, binder, pendingResult)
+
+        // Supersede any previous event at this level. The OEM contract does
+        // not allow more than one outstanding callback per level; ACK the
+        // old one as "not handled" and finish its PendingResult after the
+        // transact completes.
+        val oldEventId: Long? = synchronized(pending) {
+            levelToEventId.put(level, eventId)
+        }
+        if (oldEventId != null) {
+            val oldCb = synchronized(pending) { pending.remove(oldEventId) }
+            if (oldCb != null) {
+                ackAndFinish(oldCb, "Superseded by new $level event")
+            }
+        }
+        synchronized(pending) { pending[eventId] = callback }
 
         val channel = this.channel
         if (channel == null) {
-            // Engine not attached (e.g. background broadcast received before
-            // the Flutter engine was spun up, or after it was torn down).
-            // ACK as "not handled" so the system can proceed.
-            Log.w(TAG, "Engine not attached for level=$level; ACKing as not handled")
-            val cb = synchronized(pending) { pending.remove(level) }
-            if (cb != null) {
-                MemoryPressureReceiver.acknowledge(cb.binder, false)
-                cb.pendingResult?.finish()
-            }
+            // Engine not attached. ACK as "not handled".
+            val cb = synchronized(pending) { pending.remove(eventId) }
+            if (cb != null) ackAndFinish(cb, "Engine not attached")
             return
         }
 
         // Strict timeout: if the Dart side does not ACK within the limit,
-        // ACK as "not handled" and finish the PendingResult so the broadcast
-        // does not leak and the system can proceed with its default behavior.
+        // ACK as "not handled" and finish the PendingResult.
         pendingResult?.let { pr ->
             mainHandler.postDelayed({
-                val cb = synchronized(pending) { pending.remove(level) }
+                val cb = synchronized(pending) { pending.remove(eventId) }
                 if (cb != null && cb.pendingResult === pr) {
-                    Log.w(TAG, "Dart handler timed out for $level; ACKing as not handled")
-                    MemoryPressureReceiver.acknowledge(cb.binder, false)
-                    cb.pendingResult?.finish()
+                    ackAndFinish(cb, "Dart handler timed out")
                 }
             }, ACK_TIMEOUT_MS)
         }
 
-        // Invoke the Dart handler. The Dart side will call `acknowledge` to
-        // complete the Binder callback when its handlers finish.
+        // Invoke the Dart handler. The Dart side will call `acknowledge` with
+        // the eventId to complete the Binder callback when its handlers finish.
         channel.invokeMethod(
             "onMemoryPressure",
-            mapOf("level" to level),
+            mapOf("level" to level, "eventId" to eventId),
             object : MethodChannel.Result {
                 override fun success(result: Any?) {
                     // The Dart handler returned; if it did not ACK, the
@@ -151,24 +172,13 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
                     errorMessage: String?,
                     errorDetails: Any?,
                 ) {
-                    Log.w(
-                        TAG,
-                        "Dart handler error: $errorCode $errorMessage; ACKing $level as not handled",
-                    )
-                    val cb = synchronized(pending) { pending.remove(level) }
-                    if (cb != null) {
-                        MemoryPressureReceiver.acknowledge(cb.binder, false)
-                        cb.pendingResult?.finish()
-                    }
+                    val cb = synchronized(pending) { pending.remove(eventId) }
+                    if (cb != null) ackAndFinish(cb, "Dart handler error: $errorCode $errorMessage")
                 }
 
                 override fun notImplemented() {
-                    Log.w(TAG, "Dart handler not implemented; ACKing $level as not handled")
-                    val cb = synchronized(pending) { pending.remove(level) }
-                    if (cb != null) {
-                        MemoryPressureReceiver.acknowledge(cb.binder, false)
-                        cb.pendingResult?.finish()
-                    }
+                    val cb = synchronized(pending) { pending.remove(eventId) }
+                    if (cb != null) ackAndFinish(cb, "Dart handler not implemented")
                 }
             },
         )
@@ -185,6 +195,8 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
         // broadcast dangling.
         private const val ACK_TIMEOUT_MS = 10_000L
 
+        private val nextEventId = AtomicLong(0)
+
         @Volatile
         private var instance: MemoryPressurePlugin? = null
 
@@ -196,7 +208,7 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
          *
          * The [pendingResult] from `BroadcastReceiver.goAsync()` is held until
          * the Dart side ACKs (or the timeout fires), at which point
-         * `finish()` is called to release the broadcast.
+         * `finish()` is called *after* the Binder transact completes.
          */
         @JvmStatic
         fun forward(context: Context, level: String, binder: IBinder?, pendingResult: BroadcastReceiver.PendingResult?) {
@@ -206,10 +218,11 @@ class MemoryPressurePlugin : MethodChannel.MethodCallHandler {
             val plugin = instance
             if (plugin == null) {
                 // Plugin not attached yet. ACK as not handled so the system
-                // does not wait.
+                // does not wait. finish() in onComplete after transact.
                 Log.w(TAG, "Plugin not attached; ACKing $level as not handled")
-                MemoryPressureReceiver.acknowledge(binder, false)
-                pendingResult?.finish()
+                MemoryPressureReceiver.acknowledge(binder, false) {
+                    pendingResult?.finish()
+                }
                 return
             }
             plugin.mainHandler.post { plugin.handleForward(level, binder, pendingResult) }

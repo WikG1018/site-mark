@@ -233,6 +233,7 @@ class _NoopMemoryPressureService implements MemoryPressureService {
   @override
   Future<void> acknowledge(
     MemoryPressureLevel level, {
+    int? eventId,
     required bool success,
   }) async {}
 }

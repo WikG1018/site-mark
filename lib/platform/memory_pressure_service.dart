@@ -29,7 +29,10 @@ enum MemoryPressureLevel {
   kill,
 }
 
-typedef MemoryPressureHandler = Future<void> Function(MemoryPressureLevel level);
+typedef MemoryPressureHandler = Future<void> Function(
+  MemoryPressureLevel level,
+  int? eventId,
+);
 
 /// Abstraction over the native side that:
 ///
@@ -51,8 +54,13 @@ abstract class MemoryPressureService {
 
   /// Reports the Dart-side result back to the OEM Binder so the system knows
   /// the pressure event was handled. Safe to call when no native callback is
-  /// pending (no-op).
-  Future<void> acknowledge(MemoryPressureLevel level, {required bool success});
+  /// pending (no-op). [eventId] must match the value received in the handler
+  /// so the native side matches the ACK to the correct pending Binder.
+  Future<void> acknowledge(
+    MemoryPressureLevel level, {
+    int? eventId,
+    required bool success,
+  });
 }
 
 /// Riverpod provider. Production wires [PlatformMemoryPressureService]
@@ -88,12 +96,15 @@ class PlatformMemoryPressureService implements MemoryPressureService {
     _initialized = true;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onMemoryPressure') {
-        final raw = call.arguments is Map
-            ? (call.arguments as Map<Object?, Object?>)['level']
-            : null;
-        final level = _parseLevel(raw);
+        final args = call.arguments is Map
+            ? (call.arguments as Map<Object?, Object?>)
+            : <Object?, Object?>{};
+        final level = _parseLevel(args['level']);
         if (level == null) return null;
-        await _dispatch(level);
+        final eventId = args['eventId'] is int
+            ? args['eventId'] as int
+            : (args['eventId'] is num ? (args['eventId'] as num).toInt() : null);
+        await _dispatch(level, eventId);
       }
       return null;
     });
@@ -108,16 +119,17 @@ class PlatformMemoryPressureService implements MemoryPressureService {
   @override
   Future<void> acknowledge(
     MemoryPressureLevel level, {
+    int? eventId,
     required bool success,
   }) async {
     if (!_initialized) return;
-    // The native side ignores acks for levels it did not originate (e.g. the
-    // Flutter framework's didHaveMemoryPressure). Calling it unconditionally
-    // keeps the Dart code simple and is a no-op when no Binder callback is
-    // pending.
+    // The native side ignores acks for eventIds it did not originate (e.g.
+    // the Flutter framework's didHaveMemoryPressure, which has no eventId).
+    // Calling it unconditionally keeps the Dart code simple and is a no-op
+    // when no Binder callback is pending.
     try {
       await _channel.invokeMethod<void>('acknowledge', {
-        'level': _levelName(level),
+        'eventId': eventId ?? -1,
         'success': success,
       });
     } on PlatformException {
@@ -127,12 +139,12 @@ class PlatformMemoryPressureService implements MemoryPressureService {
     }
   }
 
-  Future<void> _dispatch(MemoryPressureLevel level) async {
+  Future<void> _dispatch(MemoryPressureLevel level, int? eventId) async {
     // Snapshot to avoid concurrent modification while iterating.
     final handlers = List<MemoryPressureHandler>.of(_handlers);
     for (final handler in handlers) {
       try {
-        await handler(level);
+        await handler(level, eventId);
       } catch (_, stack) {
         FlutterError.reportError(
           FlutterErrorDetails(
@@ -157,11 +169,6 @@ class PlatformMemoryPressureService implements MemoryPressureService {
     return null;
   }
 
-  static String _levelName(MemoryPressureLevel level) => switch (level) {
-    MemoryPressureLevel.system => 'system',
-    MemoryPressureLevel.trim => 'trim',
-    MemoryPressureLevel.kill => 'kill',
-  };
 }
 
 /// A no-op implementation used when the production service is not available
@@ -178,6 +185,7 @@ class NoopMemoryPressureService implements MemoryPressureService {
   @override
   Future<void> acknowledge(
     MemoryPressureLevel level, {
+    int? eventId,
     required bool success,
   }) async {}
 }

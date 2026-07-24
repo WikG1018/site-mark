@@ -139,9 +139,21 @@ class MemoryPressureReceiver : BroadcastReceiver() {
          * ANR the caller (typically the main thread). Catches
          * [RemoteException] so a dead binder (process already gone) does not
          * crash the caller.
+         *
+         * [onComplete] is invoked after the transact finishes (success or
+         * failure) on the executor thread. Callers use it to release the
+         * BroadcastReceiver PendingResult *after* the ACK is sent, so the
+         * process is not reclaimed before the Binder transaction completes.
          */
-        fun acknowledge(binder: IBinder?, success: Boolean) {
-            if (binder == null) return
+        fun acknowledge(
+            binder: IBinder?,
+            success: Boolean,
+            onComplete: (() -> Unit)? = null,
+        ) {
+            if (binder == null) {
+                onComplete?.invoke()
+                return
+            }
             ackExecutor.execute {
                 val data = Parcel.obtain()
                 val reply = Parcel.obtain()
@@ -160,6 +172,7 @@ class MemoryPressureReceiver : BroadcastReceiver() {
                     data.recycle()
                     reply.recycle()
                 }
+                onComplete?.invoke()
             }
         }
     }

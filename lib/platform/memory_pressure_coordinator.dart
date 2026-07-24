@@ -120,22 +120,21 @@ class MemoryPressureController {
   }
 
   /// Called by the coordinator for native OEM broadcasts (TRIM/KILL). For
-  /// TRIM this pauses background work and releases resources; for KILL this
-  /// runs the kill hooks. The coordinator awaits this before ACKing the
-  /// OEM Binder.
+  /// TRIM this releases resources; for KILL this runs the kill hooks. The
+  /// coordinator awaits this before ACKing the OEM Binder.
   ///
-  /// Note: the framework's `didHaveMemoryPressure` and the lifecycle
-  /// `paused`/`hidden` states do NOT go through this method — they call
-  /// [releaseResources] / [pauseBackgroundWork] directly so the foreground
-  /// pressure path does not stall the polling streams (see ITGSA C1 fix).
+  /// TRIM does NOT pause background polling. Polling pause/resume is owned
+  /// exclusively by the lifecycle (`paused`/`hidden` → pause, `resumed` →
+  /// resume). This prevents a forged or real TRIM from stalling the polling
+  /// streams when the app is in the foreground — the user would see "processing"
+  /// / "completed" status stop refreshing with no way to recover.
   Future<void> dispatch(MemoryPressureLevel level) async {
     _lastLevel = level;
     switch (level) {
       case MemoryPressureLevel.system:
       case MemoryPressureLevel.trim:
-        // OEM TRIM: the app is being asked to release memory while
-        // backgrounded. Pause polling and release caches.
-        pauseBackgroundWork();
+        // OEM TRIM: release caches and heavy resources. Polling is managed
+        // by lifecycle, not by TRIM — see the doc comment above.
         releaseResources();
       case MemoryPressureLevel.kill:
         // Persist state before the process is killed. Drift writes through
@@ -207,10 +206,12 @@ class MemoryPressureCoordinator {
     _unregisterHandler = null;
   }
 
-  Future<void> _handle(MemoryPressureLevel level) async {
+  Future<void> _handle(MemoryPressureLevel level, int? eventId) async {
     await controller.dispatch(level);
     // ACK the OEM Binder. `acknowledge` is a no-op when no Binder is pending
-    // (e.g. for `system` level, or when running on a non-ITGSA ROM).
-    await service.acknowledge(level, success: true);
+    // (e.g. for `system` level, or when running on a non-ITGSA ROM). The
+    // eventId ensures the ACK matches the correct pending Binder even when
+    // consecutive same-level events arrive.
+    await service.acknowledge(level, eventId: eventId, success: true);
   }
 }

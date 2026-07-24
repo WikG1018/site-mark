@@ -10,7 +10,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('MemoryPressureController', () {
-    test('system level pauses background work', () async {
+    test('system level does not pause background work', () async {
       final controller = MemoryPressureController();
 
       final control = _RecordingBackgroundControl();
@@ -18,7 +18,8 @@ void main() {
 
       await controller.dispatch(MemoryPressureLevel.system);
 
-      expect(control.pauseCalls, 1);
+      // System/TRIM only releases resources; lifecycle owns pause/resume.
+      expect(control.pauseCalls, 0);
       expect(control.resumeCalls, 0);
     });
 
@@ -48,7 +49,7 @@ void main() {
       expect(PaintingBinding.instance.imageCache.currentSize, 0);
     });
 
-    test('trim level pauses background work and invokes release handlers',
+    test('trim level invokes release handlers without pausing background work',
         () async {
       final controller = MemoryPressureController();
 
@@ -59,7 +60,9 @@ void main() {
 
       await controller.dispatch(MemoryPressureLevel.trim);
 
-      expect(control.pauseCalls, 1);
+      // TRIM does NOT pause polling — lifecycle owns pause/resume. This
+      // prevents a forged or real TRIM from stalling foreground polling.
+      expect(control.pauseCalls, 0);
       expect(releaseCalls, 1);
     });
 
@@ -176,7 +179,7 @@ void main() {
 
       // Simulate a native broadcast.
       expect(service.handlers.length, 1);
-      await service.handlers.first(MemoryPressureLevel.trim);
+      await service.handlers.first(MemoryPressureLevel.trim, null);
 
       // The coordinator should have acked with success=true.
       expect(service.acks, [
@@ -257,6 +260,7 @@ class _RecordingMemoryPressureService implements MemoryPressureService {
   @override
   Future<void> acknowledge(
     MemoryPressureLevel level, {
+    int? eventId,
     required bool success,
   }) async {
     acks.add((level, success));
