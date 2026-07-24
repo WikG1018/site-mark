@@ -134,4 +134,42 @@ void main() {
     await subscription.cancel();
     await source.close();
   });
+
+  test('isPaused skips loads while paused and resumes when unpaused', () async {
+    final source = StreamController<CaptureStatus>();
+    var paused = true;
+    var reads = 0;
+    final subscription = watchWithConditionalPolling<CaptureStatus>(
+      source: source.stream,
+      load: () async {
+        reads += 1;
+        return CaptureStatus.captured;
+      },
+      shouldPoll: (status) => status == CaptureStatus.captured,
+      pollInterval: const Duration(milliseconds: 5),
+      isPaused: () => paused,
+    ).listen((_) {});
+
+    // Source emits captured, but polling is paused → no reads should happen
+    // even after several intervals.
+    source.add(CaptureStatus.captured);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(reads, 0);
+
+    // Unpause → the timer is already running, so the next tick (within one
+    // interval) should resume the actual load.
+    paused = false;
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(reads, greaterThan(0));
+
+    final readsAtResume = reads;
+    // Re-pause → reads should stop accumulating (timer keeps running but
+    // skips the load).
+    paused = true;
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(reads, readsAtResume);
+
+    await subscription.cancel();
+    await source.close();
+  });
 }

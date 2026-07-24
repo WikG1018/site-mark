@@ -5,6 +5,7 @@ import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/main.dart';
+import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
@@ -45,6 +46,7 @@ void main() {
         initialLocale: const Locale('zh'),
         startupRecovery: recovery,
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pump();
@@ -96,6 +98,7 @@ void main() {
     WidgetTester tester, {
     CaptureWorkflowResult? workflowResult,
     _WidgetTestPlatformServices? platformOverride,
+    CaptureFormDraftStore? captureFormDraftStore,
   }) async {
     final images = _WidgetTestImagePipeline();
     final share = _WidgetTestShareService();
@@ -119,6 +122,7 @@ void main() {
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: captureFormDraftStore ?? MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -161,6 +165,7 @@ void main() {
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -177,6 +182,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -195,6 +201,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -218,6 +225,7 @@ void main() {
         database: database,
         initialLocale: const Locale('en'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -235,6 +243,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -312,6 +321,7 @@ void main() {
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -402,6 +412,40 @@ void main() {
   );
 
   testWidgets(
+    'restores KILL draft even when project has captured records',
+    (tester) async {
+      // Seed a ready capture so the project has history and carry-forward
+      // data is available.
+      await seedReadyCapture(
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+      );
+
+      // Simulate a KILL-persisted draft from a previous interrupted session.
+      // The draft contains different values (including notes) and must take
+      // priority over carry-forward.
+      final store = MemoryCaptureFormDraftStore();
+      await store.save(const CaptureFormDraftSnapshot(
+        projectId: 'project-1',
+        workLocation: 'B 区二层',
+        workContent: '管道验收',
+        photographer: '李工',
+        notes: '未完成备注',
+      ));
+
+      await openCaptureForm(tester, captureFormDraftStore: store);
+
+      // The KILL draft fields are restored, NOT the carry-forward fields.
+      expect(fieldText(tester, const Key('work-location')), 'B 区二层');
+      expect(fieldText(tester, const Key('work-content')), '管道验收');
+      expect(fieldText(tester, const Key('photographer')), '李工');
+      expect(fieldText(tester, const Key('notes')), '未完成备注');
+      await disposeApp(tester);
+    },
+  );
+
+  testWidgets(
     'queued capture stays on form, clears notes, and re-enables button',
     (tester) async {
       // Seed a prior ready capture so the three carry-forward fields are
@@ -454,6 +498,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -490,6 +535,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();

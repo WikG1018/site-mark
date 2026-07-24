@@ -105,6 +105,22 @@ class AppDatabase extends _$AppDatabase {
 
   final Duration externalRefreshInterval;
 
+  /// When true, [watchCaptureById] / [watchCaptureSummaries] /
+  /// [watchAllCaptureSummaries] stop their conditional-polling timers. The
+  /// underlying drift `watch()` stream keeps running (it's cheap and
+  /// SQLite-update-hook driven); only the 1 Hz fallback polling is paused.
+  /// Set by the ITGSA fair-memory lifecycle hook so a backgrounded app does
+  /// not keep waking the database.
+  bool _pollingPaused = false;
+
+  /// Pauses or resumes the conditional-polling fallback on all
+  /// `watch*Capture*` streams. Safe to call repeatedly. The drift `watch()`
+  /// stream itself is not paused, so writes from the background isolate
+  /// still update the UI immediately when the app is foregrounded.
+  void setPollingPaused(bool paused) {
+    _pollingPaused = paused;
+  }
+
   AppDatabase({this.externalRefreshInterval = _defaultExternalRefreshInterval})
     : super(
         driftDatabase(
@@ -711,6 +727,7 @@ class AppDatabase extends _$AppDatabase {
       load: () => query.getSingleOrNull(),
       shouldPoll: (record) => record != null && _isProcessing(record.status),
       pollInterval: externalRefreshInterval,
+      isPaused: () => _pollingPaused,
     );
   }
 
@@ -723,6 +740,7 @@ class AppDatabase extends _$AppDatabase {
           rows.any((summary) => _isProcessing(summary.capture.status)),
       equals: _sameCaptureSummaries,
       pollInterval: externalRefreshInterval,
+      isPaused: () => _pollingPaused,
     );
   }
 
@@ -737,6 +755,7 @@ class AppDatabase extends _$AppDatabase {
           rows.any((summary) => _isProcessing(summary.capture.status)),
       equals: _sameCaptureSummaries,
       pollInterval: externalRefreshInterval,
+      isPaused: () => _pollingPaused,
     );
   }
 

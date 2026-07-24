@@ -56,6 +56,54 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- ITGSA (金标联盟) "fair running memory" receivers.
+             Registered statically so they fire even when the app process is
+             in the background. On non-ITGSA ROMs the intents are never
+             broadcast, so the receivers add zero overhead.
+
+             `exported="true"` is required because ITGSA broadcasts may be
+             sent by the OEM's "phone manager" / memory-management service,
+             which may not run under the system_server UID. A non-exported
+             receiver only accepts broadcasts from the same UID or system
+             UID, which would silently drop the pressure event. The ITGSA
+             action strings are vendor-specific and not triggered by normal
+             Android system events, so the exposure is limited to a
+             malicious app deliberately sending ITGSA actions — the
+             receiver's response (releasing caches, persisting drafts) is
+             benign and has no data-exfiltration risk.
+
+             REAL-DEVICE VERIFICATION (required before claiming ITGSA
+             compliance):
+               1. Install the app on the target ITGSA ROM device.
+               2. Put the app in the background and trigger the OEM's
+                  memory-pressure mechanism (e.g. via the phone manager's
+                  "clean memory" feature, or by loading enough apps to
+                  trigger automatic trimming).
+               3. Check logcat for:
+                  - "MemoryPressureReceiver: Received <action>" — confirms
+                    the broadcast was delivered.
+                  - "MemoryPressureReceiver: Binder found via key '<key>'" —
+                    confirms the Binder extra key is readable.
+                  - "MemoryPressurePlugin: Dart handler" / "acknowledge" —
+                    confirms the Dart side processed and ACKed.
+                  - Absence of "acknowledge failed" — confirms the ACK
+                    transact succeeded.
+               4. If the broadcast is NOT received, the ROM may use a
+                  different action string or delivery mechanism. Consult the
+                  vendor's ITGSA developer documentation and update
+                  ACTION_MEMORY_TRIM / ACTION_MEMORY_KILL accordingly.
+               5. If the Binder is NOT found, add the vendor's extra key to
+                  the `keys` list in MemoryPressureReceiver.pickCallbackBinder.
+             -->
+        <receiver
+            android:name=".memory.MemoryPressureReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="itgsa.intent.action.MEMORY_TRIM" />
+                <action android:name="itgsa.intent.action.MEMORY_KILL" />
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

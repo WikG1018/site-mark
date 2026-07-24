@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -32,16 +33,18 @@ class _Host extends StatelessWidget {
 
 Future<void> pumpHost(WidgetTester tester) async {
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('zh'),
-      supportedLocales: AppStrings.supportedLocales,
-      localizationsDelegates: const [
-        AppStrings.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      home: const _Host(),
+    ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const _Host(),
+      ),
     ),
   );
   await tester.tap(find.text('open'));

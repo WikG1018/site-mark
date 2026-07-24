@@ -17,7 +17,10 @@ import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/external_link_service.dart';
+import 'package:sitemark/platform/memory_pressure_coordinator.dart';
+import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
@@ -30,11 +33,32 @@ import 'package:sitemark/workflow/project_export_service.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase();
+  // Bridge the ITGSA fair-memory lifecycle to the database's conditional
+  // polling. When the app is backgrounded or a MEMORY_TRIM arrives, the
+  // MemoryPressureController pauses the 1 Hz polling fallback; on resume
+  // (foreground / pressure relieved) it restarts. The drift `watch()` stream
+  // itself stays active so writes from the background isolate still refresh
+  // the UI immediately.
+  final controller = ref.watch(memoryPressureControllerProvider);
+  final detach = controller.attachBackground(_DatabasePollingControl(database));
   ref.onDispose(() {
+    detach();
     database.close();
   });
   return database;
 });
+
+class _DatabasePollingControl implements BackgroundWorkControl {
+  _DatabasePollingControl(this._database);
+
+  final AppDatabase _database;
+
+  @override
+  void pauseBackgroundWork() => _database.setPollingPaused(true);
+
+  @override
+  void resumeBackgroundWork() => _database.setPollingPaused(false);
+}
 
 final initialLocaleProvider = Provider<Locale?>((ref) => null);
 final startupRecoveryEnabledProvider = Provider<bool>((ref) => true);
@@ -167,6 +191,19 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
         ref.read(captureBackgroundSchedulerProvider).reconcilePending(),
   );
 });
+
+/// Coordinator provider. Wires the service to the controller. Created lazily
+/// when first read; the root widget reads it in `initState` to start
+/// forwarding events.
+final memoryPressureCoordinatorProvider =
+    Provider<MemoryPressureCoordinator>((ref) {
+      final coordinator = MemoryPressureCoordinator(
+        service: ref.watch(memoryPressureServiceProvider),
+        controller: ref.watch(memoryPressureControllerProvider),
+      );
+      ref.onDispose(coordinator.dispose);
+      return coordinator;
+    });
 
 final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
   return ProjectExportService(
@@ -304,10 +341,19 @@ class SiteMarkApp extends ConsumerStatefulWidget {
   ConsumerState<SiteMarkApp> createState() => _SiteMarkAppState();
 }
 
-class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
+class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
+    with WidgetsBindingObserver {
+  MemoryPressureCoordinator? _pressureCoordinator;
+  /// Tracks whether background work was paused via the lifecycle path.
+  /// `resumed` unconditionally resumes; this flag only suppresses a
+  /// redundant resume when the app was never backgrounded (e.g. a transient
+  /// `inactive` from a permission dialog).
+  bool _backgroundPaused = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Keep the notification service's send gate in sync with the persisted
     // `completionNotificationsEnabled` switch. The provider throws
     // UnimplementedError when no production service is injected (e.g. in
@@ -339,7 +385,73 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp> {
         // No production implementation injected (e.g. widget tests);
         // notifications stay inert.
       }
+      // Initialize the ITGSA fair-memory bridge. The native
+      // `MemoryPressureReceiver` forwards `itgsa.intent.action.MEMORY_TRIM`
+      // and `MEMORY_KILL` broadcasts through the
+      // `sitemark/memory_pressure` MethodChannel; the coordinator dispatches
+      // them to the controller (image cache flush, background-work pause,
+      // kill hooks) and then ACKs the OEM Binder.
+      // The provider defaults to [NoopMemoryPressureService] so tests that
+      // don't override it still run without errors.
+      _pressureCoordinator = ref.read(memoryPressureCoordinatorProvider);
+      await ref.read(memoryPressureServiceProvider).initialize();
+      _pressureCoordinator!.start();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    final controller = ref.read(memoryPressureControllerProvider);
+    switch (state) {
+      case AppLifecycleState.resumed:
+        if (_backgroundPaused) {
+          _backgroundPaused = false;
+          // Resume the conditional-polling streams and other paused work.
+          controller.resumeBackgroundWork();
+        }
+      case AppLifecycleState.inactive:
+        // Transient state (e.g. a permission dialog or system overlay
+        // briefly covering the app). Do NOT release resources or pause
+        // polling — the user is still interacting with the app and will
+        // return momentarily. Grouping this with paused/hidden caused the
+        // image cache and fullscreen viewer to be cleared on every
+        // permission prompt (I1 fix).
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        // The app is no longer in the foreground. Pause non-essential
+        // background work (drift polling) and release caches so the
+        // process stays quiet while backgrounded. This is required by the
+        // ITGSA "fair running memory" mechanism: backgrounded apps must
+        // not keep polling.
+        if (!_backgroundPaused) {
+          _backgroundPaused = true;
+          controller.pauseBackgroundWork();
+          controller.releaseResources();
+        }
+      case AppLifecycleState.detached:
+        // The activity is being destroyed. Nothing to resume; the process
+        // will be killed shortly.
+        break;
+    }
+  }
+
+  @override
+  void didHaveMemoryPressure() {
+    // Flutter's own memory-pressure callback (e.g. from
+    // `ActivityManager` / `onTrimMemory`). Release caches but do NOT pause
+    // polling — this fires while the app is in the foreground and the user
+    // is still looking at it, so the 1 Hz database refresh must continue.
+    // Routing through `dispatch(system)` would stall the polling streams
+    // with no lifecycle `resumed` to restart them (C1 fix).
+    ref.read(memoryPressureControllerProvider).releaseResources();
   }
 
   @override
@@ -415,6 +527,9 @@ class MyApp extends StatelessWidget {
     this.backgroundWorkClient,
     this.startupRecovery,
     this.completionNotificationService,
+    this.memoryPressureService,
+    this.captureFormDraftStore,
+    this.memoryPressureController,
   });
 
   final AppDatabase? database;
@@ -430,6 +545,9 @@ class MyApp extends StatelessWidget {
   final BackgroundWorkClient? backgroundWorkClient;
   final AppStartupRecovery? startupRecovery;
   final CompletionNotificationService? completionNotificationService;
+  final MemoryPressureService? memoryPressureService;
+  final CaptureFormDraftStore? captureFormDraftStore;
+  final MemoryPressureController? memoryPressureController;
 
   @override
   Widget build(BuildContext context) {
@@ -465,6 +583,18 @@ class MyApp extends StatelessWidget {
         if (completionNotificationService != null)
           completionNotificationServiceProvider.overrideWithValue(
             completionNotificationService!,
+          ),
+        if (memoryPressureService != null)
+          memoryPressureServiceProvider.overrideWithValue(
+            memoryPressureService!,
+          ),
+        if (captureFormDraftStore != null)
+          captureFormDraftStoreProvider.overrideWithValue(
+            captureFormDraftStore!,
+          ),
+        if (memoryPressureController != null)
+          memoryPressureControllerProvider.overrideWithValue(
+            memoryPressureController!,
           ),
       ],
       child: const SiteMarkApp(),

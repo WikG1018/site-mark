@@ -6,6 +6,11 @@ Stream<T> watchWithConditionalPolling<T>({
   required bool Function(T value) shouldPoll,
   bool Function(T previous, T next)? equals,
   Duration pollInterval = const Duration(seconds: 1),
+  /// When true, the polling timer is stopped and stays stopped until the
+  /// callback returns false again. Used by [AppDatabase.setPollingPaused] to
+  /// suspend background polling while the app is backgrounded (ITGSA fair
+  /// running memory: a backgrounded app must not keep waking the DB).
+  bool Function()? isPaused,
 }) {
   if (pollInterval <= Duration.zero) {
     throw ArgumentError.value(pollInterval, 'pollInterval', 'Must be positive');
@@ -24,6 +29,8 @@ Stream<T> watchWithConditionalPolling<T>({
   bool same(T previous, T next) =>
       equals?.call(previous, next) ?? previous == next;
 
+  bool globallyPaused() => isPaused != null && isPaused();
+
   void stopPolling() {
     timer?.cancel();
     timer = null;
@@ -34,6 +41,13 @@ Stream<T> watchWithConditionalPolling<T>({
       stopPolling();
       return;
     }
+    // Start the timer even if currently paused: when paused, the timer
+    // fires but [poll] skips the actual load and re-checks the pause flag.
+    // This way, when the pause is lifted (e.g. the app is foregrounded),
+    // polling resumes immediately on the next tick without needing an
+    // external "kick". The cost of a paused tick is a single bool check,
+    // which is negligible compared to the drift query it would otherwise
+    // run.
     timer ??= Timer.periodic(pollInterval, (_) => unawaited(poll()));
   }
 
@@ -50,6 +64,12 @@ Stream<T> watchWithConditionalPolling<T>({
 
   poll = () async {
     if (!active || pollRunning || controller.isClosed) return;
+    // Re-check the pause flag at fire time: the app may have been
+    // backgrounded between scheduling and firing. The timer stays alive so
+    // polling resumes automatically when the pause is lifted.
+    if (globallyPaused()) {
+      return;
+    }
     pollRunning = true;
     final versionAtStart = sourceVersion;
     try {

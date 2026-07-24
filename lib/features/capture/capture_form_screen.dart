@@ -6,6 +6,8 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/platform/capture_form_draft_store.dart';
+import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 
@@ -27,6 +29,10 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   final _notesController = TextEditingController();
   bool _working = false;
 
+  /// Detaches the KILL-persistence hook registered in [initState]. Null
+  /// until the hook is attached (or after [dispose]).
+  VoidCallback? _killHookDetach;
+
   /// One-time initialization future that loads the project together with the
   /// most recent non-pending capture of that project, so the three carry-forward
   /// fields can be prefilled exactly once. Rebuilt only when [widget.projectId]
@@ -43,10 +49,41 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     final database = ref.read(databaseProvider);
     final project = await database.projectById(widget.projectId);
     if (project == null) return null;
+
+    // Check the KILL-persisted draft first. A KILL draft represents the
+    // user's unsaved input from the last session that was interrupted by
+    // the OEM memory killer. It takes priority over carry-forward because
+    // it contains the user's most recent edits, including notes (which
+    // carry-forward deliberately leaves blank). This applies regardless of
+    // whether the project already has captured records.
+    CaptureFormDraftSnapshot? snapshot;
+    try {
+      snapshot = await ref
+          .read(captureFormDraftStoreProvider)
+          .load(widget.projectId);
+    } catch (_) {
+      snapshot = null;
+    }
+
+    if (snapshot != null) {
+      // Restore the user's unsaved draft from the last KILL event.
+      _locationController.text = snapshot.workLocation;
+      _contentController.text = snapshot.workContent;
+      _photographerController.text = snapshot.photographer;
+      _notesController.text = snapshot.notes;
+    } else {
+      // No KILL draft to restore; fall back to carry-forward fields from
+      // the most recent captured record. Notes stay blank by design.
+      final draft = await database.latestCapturedDraft(widget.projectId);
+      if (draft != null) {
+        _applyCarryForward(draft);
+      }
+      return _CaptureFormInit(project: project, draft: draft);
+    }
+
+    // A snapshot was restored; still load the latest draft so the caller
+    // knows whether the project has history.
     final draft = await database.latestCapturedDraft(widget.projectId);
-    // Prefill the three carry-forward fields exactly once, alongside this
-    // single initialization pass. Notes stay blank by design.
-    _applyCarryForward(draft);
     return _CaptureFormInit(project: project, draft: draft);
   }
 
@@ -62,6 +99,23 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     // Observe lifecycle so the permission card refreshes after the user
     // returns from the system permission dialog or settings page.
     WidgetsBinding.instance.addObserver(this);
+    // ITGSA fair-memory: persist the in-progress form text before a
+    // MEMORY_KILL so the user does not lose what they typed when the OEM
+    // reclaims the process. The hook reads the controllers synchronously
+    // (cheap) and writes the snapshot to disk asynchronously.
+    final store = ref.read(captureFormDraftStoreProvider);
+    _killHookDetach = ref
+        .read(memoryPressureControllerProvider)
+        .attachKillHook(
+          _CaptureFormKillHook(
+            projectId: widget.projectId,
+            locationController: _locationController,
+            contentController: _contentController,
+            photographerController: _photographerController,
+            notesController: _notesController,
+            store: store,
+          ),
+        );
   }
 
   @override
@@ -95,6 +149,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
 
   @override
   void dispose() {
+    _killHookDetach?.call();
     WidgetsBinding.instance.removeObserver(this);
     _locationController.dispose();
     _contentController.dispose();
@@ -154,6 +209,15 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     final strings = AppStrings.of(context);
     switch (result.outcome) {
       case CaptureWorkflowOutcome.queued:
+        // The draft became a durable record; clear the KILL snapshot so the
+        // next launch does not resurrect the just-submitted text. Best-effort:
+        // a failure to clear must not block the capture confirmation flow.
+        try {
+          await ref.read(captureFormDraftStoreProvider).clear(widget.projectId);
+        } catch (_) {
+          // Ignore: the snapshot will be overwritten on the next KILL.
+        }
+        if (!mounted) return;
         // Stay on the form for consecutive shooting: clear only notes so the
         // retained location/content/photographer edits persist, re-enable the
         // button, and surface the background-queue confirmation. Replace any
@@ -381,5 +445,58 @@ class _RequiredField extends StatelessWidget {
       validator: (value) =>
           value == null || value.trim().isEmpty ? error : null,
     );
+  }
+}
+
+/// [KillBackupHook] that persists the capture form's text fields to a
+/// [CaptureFormDraftStore] when the OEM fair-memory mechanism sends a
+/// MEMORY_KILL. Registered in [_CaptureFormScreenState.initState] and
+/// detached in [State.dispose].
+class _CaptureFormKillHook implements KillBackupHook {
+  _CaptureFormKillHook({
+    required this.projectId,
+    required this.locationController,
+    required this.contentController,
+    required this.photographerController,
+    required this.notesController,
+    required this.store,
+  });
+
+  final String projectId;
+  final TextEditingController locationController;
+  final TextEditingController contentController;
+  final TextEditingController photographerController;
+  final TextEditingController notesController;
+  final CaptureFormDraftStore store;
+
+  @override
+  Future<void> persistForKill() async {
+    try {
+      final location = locationController.text.trim();
+      final content = contentController.text.trim();
+      final photographer = photographerController.text.trim();
+      final notes = notesController.text.trim();
+      if (location.isEmpty &&
+          content.isEmpty &&
+          photographer.isEmpty &&
+          notes.isEmpty) {
+        // Nothing to restore; clear any stale snapshot so the next launch
+        // does not resurrect a form the user already abandoned.
+        await store.clear(projectId);
+        return;
+      }
+      await store.save(
+        CaptureFormDraftSnapshot(
+          projectId: projectId,
+          workLocation: location,
+          workContent: content,
+          photographer: photographer,
+          notes: notes,
+        ),
+      );
+    } catch (_) {
+      // Best-effort: never let a KILL-backup IO failure propagate to the
+      // memory-pressure dispatcher.
+    }
   }
 }
