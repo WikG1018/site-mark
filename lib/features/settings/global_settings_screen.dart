@@ -15,7 +15,7 @@ class GlobalSettingsScreen extends StatelessWidget {
       (Icons.water_drop_outlined, strings.newProjectDefaults, '/settings/watermark'),
       (Icons.palette_outlined, strings.appearance, '/settings/appearance'),
       (Icons.language, strings.language, '/settings/language'),
-      (Icons.storage_outlined, strings.storageScope, '/settings/storage'),
+      (Icons.storage_outlined, strings.storageMenuLabel, '/settings/storage'),
       (Icons.location_on_outlined, strings.locationLabel, '/settings/location'),
       (Icons.notifications_outlined, strings.completionNotificationTitle, '/settings/notification'),
       (Icons.info_outline, strings.about, '/settings/about'),

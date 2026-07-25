@@ -50,7 +50,7 @@ void main() {
     expect(find.text('新建项目水印默认值'), findsOneWidget);
     expect(find.text('外观'), findsOneWidget);
     expect(find.text('语言'), findsOneWidget);
-    expect(find.text('SiteMark 应用内数据占用（不含系统相册）'), findsOneWidget);
+    expect(find.text('储存'), findsOneWidget);
     expect(find.text('定位'), findsOneWidget);
     expect(find.text('完成通知'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
