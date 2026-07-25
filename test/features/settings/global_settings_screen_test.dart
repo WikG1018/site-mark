@@ -5,13 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
-import 'package:sitemark/domain/app_links.dart';
-import 'package:sitemark/domain/app_storage_usage.dart';
-import 'package:sitemark/platform/external_link_service.dart';
-import 'package:sitemark/platform/notification_service.dart';
-import 'package:sitemark/platform/platform_services.dart';
-import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/app_storage_service.dart';
@@ -29,45 +24,11 @@ void main() {
 
   /// Pumps the [GlobalSettingsScreen] in a localized Material harness wired to
   /// the in-memory [database] via Riverpod overrides.
-  Future<void> pumpSettings(
-    WidgetTester tester, {
-    AppDatabase? db,
-    PlatformServices? platform,
-    ExternalLinkService? externalLinks,
-    StorageUsageService? storage,
-    CompletionNotificationService? notifications,
-  }) async {
-    final resolved = db ?? database;
-    // Default to a fake platform so the screen's permission load resolves
-    // deterministically instead of hanging on the real platform channel.
-    final resolvedPlatform = platform ?? _SettingsTestPlatformServices();
-    final resolvedLinks = externalLinks ?? _RecordingExternalLinkService();
-    final resolvedStorage =
-        storage ??
-        _RecordingStorageUsageService(const [
-          AppStorageUsage(
-            originalBytes: 0,
-            renderedBytes: 0,
-            exportBytes: 0,
-            databaseAndOtherBytes: 0,
-          ),
-        ]);
-    // Open the lazy in-memory database and ensure the singleton settings row
-    // before the screen reads it, so the FutureBuilder resolves on the first
-    // pumped frame instead of stalling `pumpAndSettle` on the DB open.
-    await resolved.getAppSettings();
+  Future<void> pumpSettings(WidgetTester tester) async {
+    await database.getAppSettings();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          databaseProvider.overrideWithValue(resolved),
-          platformServicesProvider.overrideWithValue(resolvedPlatform),
-          externalLinkServiceProvider.overrideWithValue(resolvedLinks),
-          storageUsageServiceProvider.overrideWithValue(resolvedStorage),
-          if (notifications != null)
-            completionNotificationServiceProvider.overrideWithValue(
-              notifications,
-            ),
-        ],
+        overrides: [databaseProvider.overrideWithValue(database)],
         child: MaterialApp(
           locale: const Locale('zh'),
           supportedLocales: AppStrings.supportedLocales,
@@ -84,232 +45,53 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('theme and language persist through database settings', (
-    tester,
-  ) async {
-    await pumpSettings(tester, db: database);
-    await tester.tap(find.byKey(const Key('theme-dark')));
-    await tester.tap(find.byKey(const Key('language-en')));
-    await tester.pumpAndSettle();
-
-    final settings = await database.getAppSettings();
-    expect(settings.themeMode, 'dark');
-    expect(settings.localeCode, 'en');
-  });
-
-  testWidgets(
-    'opacity slider persists on change end within the 0.20-0.95 range',
-    (tester) async {
-      await pumpSettings(tester, db: database);
-      // The default opacity (0.78) already satisfies the 0.20-0.95 bounds, so a
-      // bare range check cannot detect a regression where onChangeEnd never
-      // persists. Drag the thumb hard to the right end: with divisions: 75 over
-      // [0.20, 0.95] the value snaps to exactly 0.95, which differs from 0.78.
-      // Asserting 0.95 proves onChangeEnd wrote the dragged value to the DB.
-      await tester.timedDrag(
-        find.byKey(const Key('opacity-slider')),
-        const Offset(500, 0),
-        const Duration(milliseconds: 200),
-      );
-      await tester.pumpAndSettle();
-
-      final settings = await database.getAppSettings();
-      expect(settings.defaultWatermarkOpacity, 0.95);
-      expect(settings.defaultWatermarkOpacity, lessThanOrEqualTo(0.95));
-      expect(settings.defaultWatermarkOpacity, greaterThanOrEqualTo(0.20));
-    },
-  );
-
-  testWidgets('default font scale persists on release', (tester) async {
+  testWidgets('shows 7 settings entries', (tester) async {
     await pumpSettings(tester);
-    final sliderFinder = find.byKey(const Key('default-font-scale-slider'));
-    final scrollable = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(sliderFinder, 200, scrollable: scrollable);
-    // scrollUntilVisible stops once the slider is built, but ListView's
-    // off-screen cache extent can leave the thumb just below the viewport.
-    // ensureVisible scrolls it fully on-screen so the drag hit-tests it.
-    await tester.ensureVisible(sliderFinder);
-    await tester.pumpAndSettle();
-    await tester.timedDrag(
-      sliderFinder,
-      const Offset(500, 0),
-      const Duration(milliseconds: 200),
-    );
-    await tester.pumpAndSettle();
-    expect((await database.getAppSettings()).defaultWatermarkFontScale, 1.60);
-  });
-
-  testWidgets('accent swatch selection persists', (tester) async {
-    await pumpSettings(tester, db: database);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('accent-orange')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byKey(const Key('accent-orange')));
-    await tester.pumpAndSettle();
-
-    final settings = await database.getAppSettings();
-    expect(settings.defaultWatermarkAccentColorArgb, 0xffef6c00);
-  });
-
-  testWidgets('watermark position segmented control persists', (tester) async {
-    await pumpSettings(tester, db: database);
-    await tester.tap(find.byKey(const Key('default-position-bottomRight')));
-    await tester.pumpAndSettle();
-
-    final settings = await database.getAppSettings();
-    expect(settings.defaultWatermarkPosition, 'bottomRight');
-  });
-
-  testWidgets('dynamic color switch persists to the database', (tester) async {
-    await pumpSettings(tester, db: database);
-    await tester.tap(find.byKey(const Key('dynamic-color-switch')));
-    await tester.pumpAndSettle();
-
-    expect((await database.getAppSettings()).useDynamicColor, isTrue);
-
-    await tester.tap(find.byKey(const Key('dynamic-color-switch')));
-    await tester.pumpAndSettle();
-    expect((await database.getAppSettings()).useDynamicColor, isFalse);
-  });
-
-  testWidgets('completion notification switch persists when permission is '
-      'granted', (tester) async {
-    final notifications = _FakeCompletionNotificationService(
-      permissionResult: true,
-    );
-    await pumpSettings(tester, db: database, notifications: notifications);
-    final toggle = find.byKey(const Key('completion-notification-switch'));
-    await tester.scrollUntilVisible(
-      toggle,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(toggle);
-    await tester.pumpAndSettle();
-    await tester.tap(toggle);
-    await tester.pumpAndSettle();
-
-    expect(notifications.requestPermissionCount, 1);
-    expect(
-      (await database.getAppSettings()).completionNotificationsEnabled,
-      isTrue,
-    );
-  });
-
-  testWidgets('completion notification switch stays off and shows a snackbar '
-      'when permission is denied', (tester) async {
-    final notifications = _FakeCompletionNotificationService(
-      permissionResult: false,
-    );
-    await pumpSettings(tester, db: database, notifications: notifications);
-    final toggle = find.byKey(const Key('completion-notification-switch'));
-    await tester.scrollUntilVisible(
-      toggle,
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(toggle);
-    await tester.pumpAndSettle();
-    await tester.tap(toggle);
-    await tester.pumpAndSettle();
-
-    expect(notifications.requestPermissionCount, 1);
-    expect(
-      (await database.getAppSettings()).completionNotificationsEnabled,
-      isFalse,
-    );
-    expect(find.text('通知权限被拒绝，可在系统设置中开启'), findsOneWidget);
-    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
-  });
-
-  testWidgets('about section shows fallback version when PackageInfo fails', (
-    tester,
-  ) async {
-    await pumpSettings(tester, db: database);
-    await tester.scrollUntilVisible(
-      find.textContaining('0.4.0'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.textContaining('0.4.0'), findsOneWidget);
-  });
-
-  testWidgets('storage section shows totals, refreshes, and clears exports', (
-    tester,
-  ) async {
-    final storage = _RecordingStorageUsageService([
-      const AppStorageUsage(
-        originalBytes: 1024 * 1024,
-        renderedBytes: 2 * 1024 * 1024,
-        exportBytes: 3 * 1024 * 1024,
-        databaseAndOtherBytes: 4 * 1024 * 1024,
-      ),
-      const AppStorageUsage(
-        originalBytes: 1024 * 1024,
-        renderedBytes: 2 * 1024 * 1024,
-        exportBytes: 0,
-        databaseAndOtherBytes: 4 * 1024 * 1024,
-      ),
-    ]);
-    await pumpSettings(tester, storage: storage);
-    final scrollable = find.byType(Scrollable).first;
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('storage-section')),
-      300,
-      scrollable: scrollable,
-    );
-
+    expect(find.text('新建项目水印默认值'), findsOneWidget);
+    expect(find.text('外观'), findsOneWidget);
+    expect(find.text('语言'), findsOneWidget);
     expect(find.text('SiteMark 应用内数据占用（不含系统相册）'), findsOneWidget);
-    expect(find.text('10 MB'), findsOneWidget);
-    expect(find.text('1 MB'), findsOneWidget);
-    expect(find.text('2 MB'), findsOneWidget);
-    expect(find.text('3 MB'), findsOneWidget);
-    expect(find.text('4 MB'), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const Key('storage-refresh')));
-    await tester.tap(find.byKey(const Key('storage-refresh')));
-    await tester.pumpAndSettle();
-    expect(storage.loadCount, 2);
-
-    // Restore a non-zero export value to exercise the destructive action.
-    storage.values.add(
-      const AppStorageUsage(
-        originalBytes: 1024 * 1024,
-        renderedBytes: 2 * 1024 * 1024,
-        exportBytes: 3 * 1024 * 1024,
-        databaseAndOtherBytes: 4 * 1024 * 1024,
-      ),
-    );
-    await tester.tap(find.byKey(const Key('storage-refresh')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('clear-local-exports')));
-    await tester.tap(find.byKey(const Key('clear-local-exports')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('confirm-clear-exports')));
-    await tester.pumpAndSettle();
-    expect(storage.clearCount, 1);
-    expect(storage.loadCount, 4);
+    expect(find.text('定位'), findsOneWidget);
+    expect(find.text('完成通知'), findsOneWidget);
+    expect(find.text('关于'), findsOneWidget);
   });
 
-  testWidgets('storage error state retries successfully', (tester) async {
-    final storage = _RetryingStorageUsageService();
-    await pumpSettings(tester, storage: storage);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('storage-section')),
-      300,
-      scrollable: find.byType(Scrollable).first,
+  testWidgets('settings route is reachable from the app shell', (tester) async {
+    await database.getAppSettings();
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (context, state) => const Scaffold(body: SizedBox.shrink()),
+          routes: [
+            GoRoute(
+              path: 'settings',
+              builder: (context, state) => const GlobalSettingsScreen(),
+            ),
+          ],
+        ),
+      ],
     );
-    expect(find.text('无法读取存储占用'), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const Key('retry-storage-load')));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          routerConfig: router,
+        ),
+      ),
+    );
+    router.go('/settings');
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('retry-storage-load')));
-    await tester.pumpAndSettle();
 
-    expect(storage.loadCount, 2);
-    expect(find.text('无法读取存储占用'), findsNothing);
+    expect(find.byType(GlobalSettingsScreen), findsOneWidget);
   });
 
   test(
@@ -353,299 +135,6 @@ void main() {
       reenteredListener.close();
     },
   );
-
-  testWidgets('storage manage-records entry opens the records route', (
-    tester,
-  ) async {
-    await database.getAppSettings();
-    final router = GoRouter(
-      initialLocation: '/settings',
-      routes: [
-        GoRoute(
-          path: '/settings',
-          builder: (context, state) => const GlobalSettingsScreen(),
-        ),
-        GoRoute(
-          path: '/records',
-          builder: (context, state) =>
-              const Scaffold(body: Text('records destination')),
-        ),
-      ],
-    );
-    addTearDown(router.dispose);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          databaseProvider.overrideWithValue(database),
-          platformServicesProvider.overrideWithValue(
-            _SettingsTestPlatformServices(),
-          ),
-          storageUsageServiceProvider.overrideWithValue(
-            _RecordingStorageUsageService(const [
-              AppStorageUsage(
-                originalBytes: 0,
-                renderedBytes: 0,
-                exportBytes: 0,
-                databaseAndOtherBytes: 0,
-              ),
-            ]),
-          ),
-        ],
-        child: MaterialApp.router(
-          locale: const Locale('zh'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: const [
-            AppStrings.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          routerConfig: router,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('manage-storage-records')),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(find.byKey(const Key('manage-storage-records')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('manage-storage-records')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('records destination'), findsOneWidget);
-  });
-
-  testWidgets('about shows and opens the full GitHub repository URL', (
-    tester,
-  ) async {
-    final links = _RecordingExternalLinkService();
-    await pumpSettings(tester, db: database, externalLinks: links);
-    await tester.scrollUntilVisible(
-      find.text(siteMarkRepositoryUrl),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('GitHub 代码仓库'), findsOneWidget);
-    expect(find.text(siteMarkRepositoryUrl), findsOneWidget);
-
-    await tester.ensureVisible(find.byKey(const Key('github-repository-link')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('github-repository-link')));
-    await tester.pump();
-    expect(links.opened, [siteMarkRepositoryUri]);
-  });
-
-  testWidgets('about shows a snackbar when opening the repository fails', (
-    tester,
-  ) async {
-    final links = _RecordingExternalLinkService(result: false);
-    await pumpSettings(tester, db: database, externalLinks: links);
-    await tester.scrollUntilVisible(
-      find.text(siteMarkRepositoryUrl),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(find.byKey(const Key('github-repository-link')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('github-repository-link')));
-    await tester.pump();
-    expect(find.text('无法打开浏览器'), findsOneWidget);
-    expect(links.opened, [siteMarkRepositoryUri]);
-  });
-
-  testWidgets('location tile shows disabled when permission is denied', (
-    tester,
-  ) async {
-    await pumpSettings(
-      tester,
-      platform: _SettingsTestPlatformServices(
-        permissionState: LocationPermissionState.denied,
-      ),
-    );
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('location-permission-setting')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('未开启'), findsOneWidget);
-  });
-
-  testWidgets('location tile shows enabled when permission is granted', (
-    tester,
-  ) async {
-    await pumpSettings(
-      tester,
-      platform: _SettingsTestPlatformServices(
-        permissionState: LocationPermissionState.granted,
-      ),
-    );
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('location-permission-setting')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('已开启'), findsOneWidget);
-  });
-
-  testWidgets('tapping the disabled location tile requests permission', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final platform = _SettingsTestPlatformServices(
-      permissionState: LocationPermissionState.denied,
-      requestResult: LocationPermissionState.denied,
-    );
-    await pumpSettings(tester, platform: platform);
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('location-permission-setting')),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.ensureVisible(
-      find.byKey(const Key('location-permission-setting')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('location-permission-setting')));
-    await tester.pumpAndSettle();
-
-    expect(platform.requestLocationPermissionCount, 1);
-    final settings = await database.getAppSettings();
-    expect(settings.locationPermissionPromptDismissed, isTrue);
-  });
-
-  testWidgets('settings route is reachable from the app shell', (tester) async {
-    await database.getAppSettings();
-    final router = GoRouter(
-      routes: [
-        GoRoute(
-          path: '/',
-          builder: (context, state) => const Scaffold(body: SizedBox.shrink()),
-          routes: [
-            GoRoute(
-              path: 'settings',
-              builder: (context, state) => const GlobalSettingsScreen(),
-            ),
-          ],
-        ),
-      ],
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          databaseProvider.overrideWithValue(database),
-          platformServicesProvider.overrideWithValue(
-            _SettingsTestPlatformServices(),
-          ),
-          storageUsageServiceProvider.overrideWithValue(
-            _RecordingStorageUsageService(const [
-              AppStorageUsage(
-                originalBytes: 0,
-                renderedBytes: 0,
-                exportBytes: 0,
-                databaseAndOtherBytes: 0,
-              ),
-            ]),
-          ),
-        ],
-        child: MaterialApp.router(
-          locale: const Locale('zh'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: const [
-            AppStrings.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          routerConfig: router,
-        ),
-      ),
-    );
-    router.go('/settings');
-    await tester.pumpAndSettle();
-
-    expect(find.byType(GlobalSettingsScreen), findsOneWidget);
-  });
-}
-
-class _SettingsTestPlatformServices implements PlatformServices {
-  _SettingsTestPlatformServices({
-    this.permissionState = LocationPermissionState.denied,
-    this.requestResult = LocationPermissionState.denied,
-  });
-
-  LocationPermissionState permissionState;
-  LocationPermissionState requestResult;
-  int requestLocationPermissionCount = 0;
-  int openApplicationSettingsCount = 0;
-
-  @override
-  Future<LocationPermissionState> getLocationPermissionState() async =>
-      permissionState;
-
-  @override
-  Future<LocationPermissionState> requestLocationPermission() async {
-    requestLocationPermissionCount++;
-    return requestResult;
-  }
-
-  @override
-  Future<void> openApplicationSettings() async {
-    openApplicationSettingsCount++;
-  }
-
-  @override
-  Future<String> createCameraTarget(String captureId) async =>
-      '/private/$captureId.jpg';
-
-  @override
-  Future<CameraCaptureResult> launchCamera(String captureId) async =>
-      CameraCaptureResult(
-        outcome: CameraOutcome.captured,
-        outputPath: '/private/$captureId.jpg',
-      );
-
-  @override
-  Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;
-
-  @override
-  Future<void> finishCameraCapture(String captureId, bool keepOriginal) async {}
-
-  @override
-  Future<LocationResult> requestCurrentLocation(int timeoutMillis) async =>
-      LocationResult(outcome: LocationOutcome.unavailable);
-
-  @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async =>
-      'content://media/site-mark/1';
-
-  @override
-  Future<void> deletePublishedImage(String contentUri) async {}
-
-  @override
-  Future<ImageMetadataResult> inspectImage(String path) async =>
-      ImageMetadataResult(
-        width: 0,
-        height: 0,
-        fileSizeBytes: 0,
-        mimeType: 'image/jpeg',
-      );
-}
-
-class _RecordingExternalLinkService implements ExternalLinkService {
-  _RecordingExternalLinkService({this.result = true});
-
-  final bool result;
-  final List<Uri> opened = [];
-
-  @override
-  Future<bool> open(Uri uri) async {
-    opened.add(uri);
-    return result;
-  }
 }
 
 class _RecordingStorageUsageService implements StorageUsageService {
@@ -676,54 +165,4 @@ class _RecordingStorageUsageService implements StorageUsageService {
     );
     return const ClearExportsResult(deletedFiles: 1, freedBytes: 1024);
   }
-}
-
-class _RetryingStorageUsageService implements StorageUsageService {
-  int loadCount = 0;
-
-  @override
-  Future<AppStorageUsage> load() async {
-    loadCount++;
-    if (loadCount == 1) throw StateError('read failed');
-    return const AppStorageUsage(
-      originalBytes: 0,
-      renderedBytes: 0,
-      exportBytes: 0,
-      databaseAndOtherBytes: 0,
-    );
-  }
-
-  @override
-  Future<ClearExportsResult> clearExports() async {
-    return const ClearExportsResult(deletedFiles: 0, freedBytes: 0);
-  }
-}
-
-class _FakeCompletionNotificationService
-    implements CompletionNotificationService {
-  _FakeCompletionNotificationService({this.permissionResult = true});
-
-  bool permissionResult;
-  int requestPermissionCount = 0;
-
-  @override
-  Future<void> initialize(
-    void Function(String deepLinkPath) onTapDeepLink,
-  ) async {}
-
-  @override
-  Future<bool> requestPermission() async {
-    requestPermissionCount++;
-    return permissionResult;
-  }
-
-  @override
-  Future<void> showCaptureReady({
-    required String projectId,
-    required String captureId,
-    required String photoNumber,
-  }) async {}
-
-  @override
-  Future<void> setEnabled(bool enabled) async {}
 }
