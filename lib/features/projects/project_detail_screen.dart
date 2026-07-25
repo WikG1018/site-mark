@@ -219,16 +219,21 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   )
                 : const SizedBox.shrink(key: Key('batch-bar-empty')),
           ),
-          floatingActionButton: AnimatedScale(
-            scale: project == null || editing ? 0 : 1,
+          floatingActionButton: AnimatedSwitcher(
             duration: AppMotion.medium2,
-            curve: AppMotion.emphasized,
-            child: FloatingActionButton.extended(
-              onPressed: () =>
-                  context.go('/projects/${widget.projectId}/capture'),
-              icon: const Icon(Icons.photo_camera_outlined),
-              label: Text(strings.capture),
-            ),
+            switchInCurve: AppMotion.emphasized,
+            switchOutCurve: AppMotion.emphasized,
+            transitionBuilder: (child, animation) =>
+                ScaleTransition(scale: animation, child: child),
+            child: project == null || editing
+                ? const SizedBox.shrink()
+                : FloatingActionButton.extended(
+                    key: const ValueKey('capture-fab'),
+                    onPressed: () =>
+                        context.go('/projects/${widget.projectId}/capture'),
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: Text(strings.capture),
+                  ),
           ),
         );
       },

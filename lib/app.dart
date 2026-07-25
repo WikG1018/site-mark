@@ -10,6 +10,13 @@ import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/projects/project_form_screen.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
+import 'package:sitemark/features/settings/sections/about_section_screen.dart';
+import 'package:sitemark/features/settings/sections/appearance_section_screen.dart';
+import 'package:sitemark/features/settings/sections/language_section_screen.dart';
+import 'package:sitemark/features/settings/sections/location_section_screen.dart';
+import 'package:sitemark/features/settings/sections/notification_section_screen.dart';
+import 'package:sitemark/features/settings/sections/storage_section_screen.dart';
+import 'package:sitemark/features/settings/sections/watermark_defaults_section_screen.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_edit_screen.dart';
@@ -274,6 +281,57 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'settings',
             pageBuilder: (context, state) =>
                 _fadeThroughPage(state, const GlobalSettingsScreen()),
+            routes: [
+              GoRoute(
+                path: 'watermark',
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  const WatermarkDefaultsSectionScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'appearance',
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  const AppearanceSectionScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'language',
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  const LanguageSectionScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'storage',
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  const StorageSectionScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'location',
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  const LocationSectionScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'notification',
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  const NotificationSectionScreen(),
+                ),
+              ),
+              GoRoute(
+                path: 'about',
+                pageBuilder: (context, state) => _sharedAxisPage(
+                  state,
+                  const AboutSectionScreen(),
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: 'projects/:projectId',

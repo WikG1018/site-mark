@@ -159,6 +159,8 @@ class AppStrings {
   String get storageScope => _english
       ? 'SiteMark app data usage (system gallery excluded)'
       : 'SiteMark 应用内数据占用（不含系统相册）';
+  // 二级菜单入口使用的短标签（storageScope 太长，不适合 ListTile 标题）。
+  String get storageMenuLabel => _english ? 'Storage' : '储存';
   String get storageTotal => _english ? 'Total' : '合计';
   String get privateOriginals => _english ? 'Private originals' : '私有原图';
   String get privateWatermarked =>
