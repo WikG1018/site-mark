@@ -577,16 +577,17 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
             (settings?.useDynamicColor ?? false) &&
             lightDynamic != null &&
             darkDynamic != null;
+        final seedColor = Color(settings?.appSeedColorArgb ?? 0xff37c58b);
         final lightScheme = useDynamicColor
             ? lightDynamic
             : ColorScheme.fromSeed(
-                seedColor: const Color(0xFF176B55),
+                seedColor: seedColor,
                 brightness: Brightness.light,
               );
         final darkScheme = useDynamicColor
             ? darkDynamic
             : ColorScheme.fromSeed(
-                seedColor: const Color(0xFF37C58B),
+                seedColor: seedColor,
                 brightness: Brightness.dark,
               );
         return MaterialApp.router(
