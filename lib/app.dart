@@ -464,7 +464,19 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
         // No production implementation injected; notifications stay inert.
       }
     });
-    Future<void>.microtask(() async {
+    // WorkManager must register its headless dispatcher before the first
+    // capture is handed to the location coordinator. v0.5.1 moved this work
+    // entirely to the first enqueue, which is too late on some Android
+    // devices: registering that first task can fail and marks its capture as
+    // failed. Deferring to the post-frame callback keeps the fast first paint
+    // while establishing the queue before the user can reach the capture form.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.read(captureBackgroundSchedulerProvider).initialize();
+      } catch (_) {
+        // The scheduler clears its failed initialization future. A later
+        // capture enqueue retries it instead of letting startup fail.
+      }
       if (ref.read(startupRecoveryEnabledProvider)) {
         await ref.read(appStartupRecoveryProvider).run();
       }
