@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
+import 'package:sitemark/features/settings/accent_choice_chip.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 void main() {
@@ -128,5 +129,14 @@ void main() {
     final project = await database.projectById('project-1');
     expect(project?.watermarkPosition, 'bottomLeft');
     expect(project?.watermarkAccentColorArgb, 0xff37c58b);
+  });
+
+  testWidgets('shows 9 accent chips', (tester) async {
+    await pumpWatermarkSettings(tester);
+    // Scroll to the bottom so the ListView builds the accent chips.
+    final scrollable = find.byType(Scrollable).first;
+    await tester.drag(scrollable, const Offset(0, -800));
+    await tester.pumpAndSettle();
+    expect(find.byType(AccentChoiceChip), findsNWidgets(9));
   });
 }
