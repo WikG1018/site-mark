@@ -4,7 +4,6 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/platform/local_notification_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
-import 'package:sitemark/src/rust/frb_generated.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:workmanager/workmanager.dart';
 
@@ -172,10 +171,6 @@ CaptureProcessor buildHeadlessCaptureProcessor(AppDatabase database) {
   );
 }
 
-/// Rust initialization future shared across headless invocations so FRB is
-/// initialized exactly once per background isolate.
-Future<void>? _backgroundRustInitialization;
-
 /// Sends the completion notification for a successfully processed capture
 /// when [enabled] (the persisted `AppSetting.completionNotificationsEnabled`
 /// switch) is true; a no-op otherwise.
@@ -244,7 +239,6 @@ void captureCallbackDispatcher() {
     if (taskName != captureProcessingTask) return true;
     final captureId = inputData?['captureId'] as String?;
     if (captureId == null || captureId.isEmpty) return true;
-    await (_backgroundRustInitialization ??= RustLib.init());
     final database = AppDatabase();
     try {
       final result = await buildHeadlessCaptureProcessor(
