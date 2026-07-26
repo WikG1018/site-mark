@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/features/settings/accent_choice_chip.dart';
 import 'package:sitemark/features/settings/sections/watermark_defaults_section_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
@@ -89,5 +90,10 @@ void main() {
       (await database.getAppSettings()).defaultWatermarkAccentColorArgb,
       0xffef6c00,
     );
+  });
+
+  testWidgets('shows 9 accent chips', (tester) async {
+    await pumpScreen(tester);
+    expect(find.byType(AccentChoiceChip), findsNWidgets(9));
   });
 }
