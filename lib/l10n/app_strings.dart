@@ -101,6 +101,12 @@ class AppStrings {
   String get green => _english ? 'Green' : '绿色';
   String get blue => _english ? 'Blue' : '蓝色';
   String get orange => _english ? 'Orange' : '橙色';
+  String get red => _english ? 'Red' : '红色';
+  String get purple => _english ? 'Purple' : '紫色';
+  String get teal => _english ? 'Teal' : '青色';
+  String get pink => _english ? 'Pink' : '粉色';
+  String get yellow => _english ? 'Yellow' : '黄色';
+  String get indigo => _english ? 'Indigo' : '靛蓝';
   String get immutableEvidence => _english
       ? 'Capture time, location result, photo number, and original hash remain unchanged.'
       : '拍摄时间、定位结果、照片编号和原图哈希不会被修改。';
@@ -133,6 +139,7 @@ class AppStrings {
   String get english => _english ? 'English' : 'English';
   String get newProjectDefaults =>
       _english ? 'New-project watermark defaults' : '新建项目水印默认值';
+  String get appThemeColor => _english ? 'App theme color' : '应用主题色';
   String get about => _english ? 'About' : '关于';
   String get version => _english ? 'Version' : '版本';
   String get privacyStatements => _english
