@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
+import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
@@ -116,6 +117,22 @@ void main() {
     expect(find.byKey(const Key('show-original')), findsOneWidget);
     expect(find.byKey(const Key('delete-original')), findsOneWidget);
     expect(find.byKey(const Key('delete-all')), findsOneWidget);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('original preview keeps the record photo Hero tag', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+
+    await tester.tap(find.byKey(const Key('show-original')));
+    await tester.pumpAndSettle();
+
+    final preview = tester.widget<CaptureImagePreview>(
+      find.byType(CaptureImagePreview),
+    );
+    expect(preview.source, CapturePreviewSource.original);
+    expect(preview.heroTag, 'capture-photo-capture-1');
     await disposeDetail(tester);
   });
 

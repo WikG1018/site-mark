@@ -114,7 +114,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               if (project != null && !editing) ...[
                 IconButton(
                   onPressed: () =>
-                      context.go('/projects/${project.id}/settings'),
+                      context.push('/projects/${project.id}/settings'),
                   tooltip: strings.projectWatermarkSettings,
                   icon: const Icon(Icons.tune_outlined),
                 ),
@@ -230,7 +230,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                 : FloatingActionButton.extended(
                     key: const ValueKey('capture-fab'),
                     onPressed: () =>
-                        context.go('/projects/${widget.projectId}/capture'),
+                        context.push('/projects/${widget.projectId}/capture'),
                     icon: const Icon(Icons.photo_camera_outlined),
                     label: Text(strings.capture),
                   ),
@@ -328,8 +328,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               },
             ),
           ),
-        ],
-      );
+      ],
+    );
   }
 
   Future<void> _exportProject(

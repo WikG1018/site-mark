@@ -479,6 +479,42 @@ void main() {
   });
 
   testWidgets(
+    'detail preview keeps its Hero while file resolution is pending',
+    (tester) async {
+      final originalExists = Completer<bool>();
+      final renderedExists = Completer<bool>();
+      final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _FakeOutputPaths(),
+              heroTag: 'capture-photo-capture-1',
+              fileExists: (path) => path == capture.originalPath
+                  ? originalExists.future
+                  : renderedExists.future,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final hero = tester.widget<Hero>(find.byType(Hero));
+      expect(hero.tag, 'capture-photo-capture-1');
+    },
+  );
+
+  testWidgets(
     'source change hides the previous image until delayed resolution',
     (tester) async {
       final paths = _DelayedOutputPaths();

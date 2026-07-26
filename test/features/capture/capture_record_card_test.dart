@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -83,26 +84,28 @@ CaptureRecord record({required String id, required CaptureStatus status}) {
 }
 
 void main() {
-  testWidgets('ready card pairs a Hero tag with the detail screen', (
-    tester,
-  ) async {
+  testWidgets('ready card passes its photo tag to the preview', (tester) async {
     await pumpCard(
       tester,
       capture: record(id: 'capture-1', status: CaptureStatus.ready),
     );
-    expect(find.byType(Hero), findsOneWidget);
-    expect(
-      tester.widget<Hero>(find.byType(Hero)).tag,
-      'capture-photo-capture-1',
+    final preview = tester.widget<CaptureImagePreview>(
+      find.byType(CaptureImagePreview),
     );
+    expect(preview.heroTag, 'capture-photo-capture-1');
   });
 
-  testWidgets('non-ready card renders no Hero', (tester) async {
+  testWidgets('non-ready card does not pass a photo tag to the preview', (
+    tester,
+  ) async {
     await pumpCard(
       tester,
       capture: record(id: 'capture-1', status: CaptureStatus.rendering),
     );
-    expect(find.byType(Hero), findsNothing);
+    final preview = tester.widget<CaptureImagePreview>(
+      find.byType(CaptureImagePreview),
+    );
+    expect(preview.heroTag, isNull);
   });
 
   testWidgets(

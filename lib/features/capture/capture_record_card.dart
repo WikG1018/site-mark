@@ -121,6 +121,9 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
           outputPaths: ref.watch(captureOutputPathsProvider),
           thumbnail: true,
           fileExists: _previewFileExists,
+          heroTag: capture.status == CaptureStatus.ready
+              ? 'capture-photo-${capture.id}'
+              : null,
         ),
       ),
     );
@@ -151,7 +154,9 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                             onChanged: widget.selectable
                                 ? (value) {
                                     HapticFeedback.selectionClick();
-                                    widget.onSelectedChanged?.call(value ?? false);
+                                    widget.onSelectedChanged?.call(
+                                      value ?? false,
+                                    );
                                   }
                                 : null,
                           ),
@@ -165,9 +170,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                 label: strings.photoSemanticsLabel(
                   capture.photoNumber ?? capture.workLocation,
                 ),
-                child: capture.status == CaptureStatus.ready
-                    ? Hero(tag: 'capture-photo-${capture.id}', child: thumbnail)
-                    : thumbnail,
+                child: thumbnail,
               ),
               const SizedBox(width: 12),
               Expanded(

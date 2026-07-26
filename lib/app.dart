@@ -202,15 +202,16 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
 /// Coordinator provider. Wires the service to the controller. Created lazily
 /// when first read; the root widget reads it in `initState` to start
 /// forwarding events.
-final memoryPressureCoordinatorProvider =
-    Provider<MemoryPressureCoordinator>((ref) {
-      final coordinator = MemoryPressureCoordinator(
-        service: ref.watch(memoryPressureServiceProvider),
-        controller: ref.watch(memoryPressureControllerProvider),
-      );
-      ref.onDispose(coordinator.dispose);
-      return coordinator;
-    });
+final memoryPressureCoordinatorProvider = Provider<MemoryPressureCoordinator>((
+  ref,
+) {
+  final coordinator = MemoryPressureCoordinator(
+    service: ref.watch(memoryPressureServiceProvider),
+    controller: ref.watch(memoryPressureControllerProvider),
+  );
+  ref.onDispose(coordinator.dispose);
+  return coordinator;
+});
 
 final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
   return ProjectExportService(
@@ -234,6 +235,34 @@ CustomTransitionPage<void> _sharedAxisPage(GoRouterState state, Widget child) {
         animation: animation,
         secondaryAnimation: secondaryAnimation,
         transitionType: SharedAxisTransitionType.horizontal,
+        child: child,
+      );
+    },
+    child: child,
+  );
+}
+
+/// Photo detail and its editor use a position-only transition so the Hero
+/// overlay is not also handed between two independently fading image trees.
+CustomTransitionPage<void> _captureDetailPage(
+  GoRouterState state,
+  Widget child,
+) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    transitionDuration: AppMotion.medium2,
+    reverseTransitionDuration: AppMotion.medium2,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: AppMotion.emphasizedDecelerate,
+        reverseCurve: AppMotion.emphasizedAccelerate,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.08, 0),
+          end: Offset.zero,
+        ).animate(curved),
         child: child,
       );
     },
@@ -291,45 +320,33 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: 'appearance',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  const AppearanceSectionScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _sharedAxisPage(state, const AppearanceSectionScreen()),
               ),
               GoRoute(
                 path: 'language',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  const LanguageSectionScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _sharedAxisPage(state, const LanguageSectionScreen()),
               ),
               GoRoute(
                 path: 'storage',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  const StorageSectionScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _sharedAxisPage(state, const StorageSectionScreen()),
               ),
               GoRoute(
                 path: 'location',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  const LocationSectionScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _sharedAxisPage(state, const LocationSectionScreen()),
               ),
               GoRoute(
                 path: 'notification',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  const NotificationSectionScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _sharedAxisPage(state, const NotificationSectionScreen()),
               ),
               GoRoute(
                 path: 'about',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  const AboutSectionScreen(),
-                ),
+                pageBuilder: (context, state) =>
+                    _sharedAxisPage(state, const AboutSectionScreen()),
               ),
             ],
           ),
@@ -362,7 +379,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: 'captures/:captureId',
-                pageBuilder: (context, state) => _sharedAxisPage(
+                pageBuilder: (context, state) => _captureDetailPage(
                   state,
                   CaptureDetailScreen(
                     projectId: state.pathParameters['projectId']!,
@@ -372,7 +389,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'edit',
-                    pageBuilder: (context, state) => _sharedAxisPage(
+                    pageBuilder: (context, state) => _captureDetailPage(
                       state,
                       CaptureEditScreen(
                         projectId: state.pathParameters['projectId']!,
@@ -402,6 +419,7 @@ class SiteMarkApp extends ConsumerStatefulWidget {
 class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
     with WidgetsBindingObserver {
   MemoryPressureCoordinator? _pressureCoordinator;
+
   /// Tracks whether background work was paused via the lifecycle path.
   /// `resumed` unconditionally resumes; this flag only suppresses a
   /// redundant resume when the app was never backgrounded (e.g. a transient

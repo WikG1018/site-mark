@@ -50,46 +50,49 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     });
   }
 
+  void _handleSearchAction() {
+    if (_query.isNotEmpty) {
+      _searchController.clear();
+      setState(() => _query = '');
+      _searchFocus.requestFocus();
+      return;
+    }
+    _closeSearch();
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final database = ref.watch(databaseProvider);
     return Scaffold(
       appBar: AppBar(
-        // Cross-fade between the app title and the inline search field; the
-        // ValueKey swap drives the AnimatedSwitcher transition.
-        title: AnimatedSwitcher(
-          duration: AppMotion.short4,
-          child: _searching
-              ? TextField(
-                  key: const Key('project-search-field'),
-                  controller: _searchController,
-                  focusNode: _searchFocus,
-                  decoration: InputDecoration(
-                    hintText: strings.searchProjectsHint,
-                    border: InputBorder.none,
-                  ),
-                  onChanged: (value) => setState(() => _query = value),
-                )
-              : Text(strings.appName, key: const ValueKey('project-title')),
+        title: SizedBox(
+          height: kToolbarHeight,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _searching
+                ? TextField(
+                    key: const Key('project-search-field'),
+                    controller: _searchController,
+                    focusNode: _searchFocus,
+                    decoration: InputDecoration(
+                      hintText: strings.searchProjectsHint,
+                      border: InputBorder.none,
+                    ),
+                    onChanged: (value) => setState(() => _query = value),
+                  )
+                : Text(strings.appName, key: const Key('project-title')),
+          ),
         ),
         actions: [
-          if (_searching) ...[
-            if (_query.isNotEmpty)
-              IconButton(
-                key: const Key('clear-project-search'),
-                onPressed: () {
-                  _searchController.clear();
-                  setState(() => _query = '');
-                },
-                icon: const Icon(Icons.clear),
-              ),
+          if (_searching)
             IconButton(
-              key: const Key('close-project-search'),
-              onPressed: _closeSearch,
-              icon: const Icon(Icons.close),
-            ),
-          ] else ...[
+              key: const Key('project-search-action'),
+              onPressed: _handleSearchAction,
+              tooltip: _query.isNotEmpty ? strings.clear : strings.cancel,
+              icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
+            )
+          else ...[
             IconButton(
               key: const Key('search-projects'),
               onPressed: _startSearch,
@@ -155,7 +158,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                   ),
                   subtitle: Text(project.description ?? strings.localOnly),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.go('/projects/${project.id}'),
+                  onTap: () => context.push('/projects/${project.id}'),
                 ),
               );
             },
@@ -163,7 +166,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/projects/new'),
+        onPressed: () => context.push('/projects/new'),
         icon: const Icon(Icons.add),
         label: Text(strings.newProject),
       ),

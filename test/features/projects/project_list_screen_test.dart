@@ -55,7 +55,9 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('home search ignores Latin case and clears', (tester) async {
+  testWidgets('home search ignores Latin case and clears then exits', (
+    tester,
+  ) async {
     await pumpProjects(tester);
     await tester.tap(find.byKey(const Key('search-projects')));
     await tester.pump();
@@ -65,9 +67,18 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Warehouse Alpha'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('clear-project-search')));
+    expect(find.byKey(const Key('project-search-action')), findsOneWidget);
+    expect(find.byIcon(Icons.clear), findsOneWidget);
+    expect(find.byIcon(Icons.close), findsNothing);
+    await tester.tap(find.byKey(const Key('project-search-action')));
     await tester.pump();
     expect(find.byType(Card), findsNWidgets(3));
+    expect(find.byKey(const Key('project-search-field')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('project-search-action')));
+    await tester.pump();
+    expect(find.byKey(const Key('project-search-field')), findsNothing);
+    expect(find.byKey(const Key('project-title')), findsOneWidget);
     await disposeApp(tester);
   });
 
@@ -81,7 +92,25 @@ void main() {
     );
     await tester.pump();
     expect(find.text('没有匹配的项目'), findsOneWidget);
-    expect(find.byKey(const Key('close-project-search')), findsOneWidget);
+    expect(find.byKey(const Key('project-search-action')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('project title area does not use a switching animation', (
+    tester,
+  ) async {
+    await pumpProjects(tester);
+    final appBar = find.byType(AppBar);
+    expect(
+      find.descendant(of: appBar, matching: find.byType(AnimatedSwitcher)),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('search-projects')));
+    await tester.pump();
+    expect(
+      find.descendant(of: appBar, matching: find.byType(AnimatedSwitcher)),
+      findsNothing,
+    );
     await disposeApp(tester);
   });
 }

@@ -122,7 +122,8 @@ void main() {
         privateFileStore: _WidgetTestPrivateFileStore(),
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
-        captureFormDraftStore: captureFormDraftStore ?? MemoryCaptureFormDraftStore(),
+        captureFormDraftStore:
+            captureFormDraftStore ?? MemoryCaptureFormDraftStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -411,39 +412,40 @@ void main() {
     },
   );
 
-  testWidgets(
-    'restores KILL draft even when project has captured records',
-    (tester) async {
-      // Seed a ready capture so the project has history and carry-forward
-      // data is available.
-      await seedReadyCapture(
-        workLocation: 'A 区三层',
-        workContent: '风管安装检查',
-        photographer: '张工',
-      );
+  testWidgets('restores KILL draft even when project has captured records', (
+    tester,
+  ) async {
+    // Seed a ready capture so the project has history and carry-forward
+    // data is available.
+    await seedReadyCapture(
+      workLocation: 'A 区三层',
+      workContent: '风管安装检查',
+      photographer: '张工',
+    );
 
-      // Simulate a KILL-persisted draft from a previous interrupted session.
-      // The draft contains different values (including notes) and must take
-      // priority over carry-forward.
-      final store = MemoryCaptureFormDraftStore();
-      await store.save(const CaptureFormDraftSnapshot(
+    // Simulate a KILL-persisted draft from a previous interrupted session.
+    // The draft contains different values (including notes) and must take
+    // priority over carry-forward.
+    final store = MemoryCaptureFormDraftStore();
+    await store.save(
+      const CaptureFormDraftSnapshot(
         projectId: 'project-1',
         workLocation: 'B 区二层',
         workContent: '管道验收',
         photographer: '李工',
         notes: '未完成备注',
-      ));
+      ),
+    );
 
-      await openCaptureForm(tester, captureFormDraftStore: store);
+    await openCaptureForm(tester, captureFormDraftStore: store);
 
-      // The KILL draft fields are restored, NOT the carry-forward fields.
-      expect(fieldText(tester, const Key('work-location')), 'B 区二层');
-      expect(fieldText(tester, const Key('work-content')), '管道验收');
-      expect(fieldText(tester, const Key('photographer')), '李工');
-      expect(fieldText(tester, const Key('notes')), '未完成备注');
-      await disposeApp(tester);
-    },
-  );
+    // The KILL draft fields are restored, NOT the carry-forward fields.
+    expect(fieldText(tester, const Key('work-location')), 'B 区二层');
+    expect(fieldText(tester, const Key('work-content')), '管道验收');
+    expect(fieldText(tester, const Key('photographer')), '李工');
+    expect(fieldText(tester, const Key('notes')), '未完成备注');
+    await disposeApp(tester);
+  });
 
   testWidgets(
     'queued capture stays on form, clears notes, and re-enables button',
@@ -484,6 +486,82 @@ void main() {
     expect(find.byKey(const Key('project-filter')), findsOneWidget);
     expect(find.byKey(const Key('filter-year')), findsOneWidget);
     expect(find.byType(CaptureRecordCard), findsWidgets);
+    await disposeApp(tester);
+  });
+
+  testWidgets('project details pop back to the project list', (tester) async {
+    await pumpAppWithRecords(tester);
+
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+    expect(find.text('拍摄记录'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('search-projects')), findsOneWidget);
+    expect(find.text('东区厂房改造'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('capture form pop returns to its project', (tester) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('capture-fab')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('capture-form')), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('拍摄记录'), findsOneWidget);
+    expect(find.text('东区厂房改造'), findsWidgets);
+    await disposeApp(tester);
+  });
+
+  testWidgets('record edit cancellation preserves the records origin', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.byTooltip('全部记录'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+
+    await tester.tap(find.byType(CaptureRecordCard));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('edit-work-location')),
+      '不应保存的新位置',
+    );
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('A 区三层'), findsWidgets);
+    final capture = await database.captureById('seed-capture');
+    expect(capture?.workLocation, 'A 区三层');
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('settings subsection pop returns to settings menu', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('外观'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('theme-system')), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.text('新建项目水印默认值'), findsOneWidget);
     await disposeApp(tester);
   });
 

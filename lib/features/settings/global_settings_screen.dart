@@ -12,12 +12,20 @@ class GlobalSettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final entries = <(IconData, String, String)>[
-      (Icons.water_drop_outlined, strings.newProjectDefaults, '/settings/watermark'),
+      (
+        Icons.water_drop_outlined,
+        strings.newProjectDefaults,
+        '/settings/watermark',
+      ),
       (Icons.palette_outlined, strings.appearance, '/settings/appearance'),
       (Icons.language, strings.language, '/settings/language'),
       (Icons.storage_outlined, strings.storageMenuLabel, '/settings/storage'),
       (Icons.location_on_outlined, strings.locationLabel, '/settings/location'),
-      (Icons.notifications_outlined, strings.completionNotificationTitle, '/settings/notification'),
+      (
+        Icons.notifications_outlined,
+        strings.completionNotificationTitle,
+        '/settings/notification',
+      ),
       (Icons.info_outline, strings.about, '/settings/about'),
     ];
     return Scaffold(
@@ -32,7 +40,7 @@ class GlobalSettingsScreen extends StatelessWidget {
               leading: Icon(icon),
               title: Text(title),
               trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.go(route),
+              onTap: () => context.push(route),
             ),
           );
         },
