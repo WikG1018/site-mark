@@ -46,6 +46,7 @@ class AppSettingController extends AsyncNotifier<AppSetting> {
         defaultWatermarkFontScale: next.defaultWatermarkFontScale,
         defaultWatermarkAccentColorArgb: next.defaultWatermarkAccentColorArgb,
         completionNotificationsEnabled: next.completionNotificationsEnabled,
+        appSeedColorArgb: next.appSeedColorArgb,
       );
       return next;
     } catch (e, st) {

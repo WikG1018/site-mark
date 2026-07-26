@@ -41,4 +41,18 @@ void main() {
     expect(fromDb.themeMode, 'dark');
     expect(container.read(appSettingControllerProvider).value?.themeMode, 'dark');
   });
+
+  test('update persists appSeedColorArgb', () async {
+    await database.getAppSettings();
+    final container = ProviderContainer(
+      overrides: [databaseProvider.overrideWithValue(database)],
+    );
+    addTearDown(container.dispose);
+    await container.read(appSettingControllerProvider.future);
+    await container
+        .read(appSettingControllerProvider.notifier)
+        .update((s) => s.copyWith(appSeedColorArgb: 0xff1565c0));
+    final persisted = await database.getAppSettings();
+    expect(persisted.appSeedColorArgb, 0xff1565c0);
+  });
 }
