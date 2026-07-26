@@ -24,6 +24,7 @@ void main() {
     required bool originalExists,
     bool settle = true,
     bool includeInitialCapture = false,
+    bool originalDeleted = false,
   }) async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -51,6 +52,9 @@ void main() {
       captureId: pending.id,
       publishedUri: 'content://media/site-mark/1',
     );
+    if (originalDeleted) {
+      await database.markOriginalDeleted(pending.id);
+    }
     final readyCapture = await database.captureById(pending.id);
 
     files = _DetailFiles();
@@ -136,10 +140,86 @@ void main() {
 
     final hero = tester.widget<Hero>(find.byType(Hero));
     final firstFrameHeroElement = tester.element(find.byType(Hero));
+    final firstFramePreviewElement = tester.element(
+      find.byType(CaptureImagePreview),
+    );
     expect(hero.tag, 'capture-photo-capture-1');
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .source,
+      CapturePreviewSource.bestAvailable,
+    );
 
     await tester.pumpAndSettle();
     expect(tester.element(find.byType(Hero)), same(firstFrameHeroElement));
+    expect(
+      tester.element(find.byType(CaptureImagePreview)),
+      same(firstFramePreviewElement),
+    );
+    await disposeDetail(tester);
+  });
+
+  testWidgets('cleared original keeps a stable watermarked Hero destination', (
+    tester,
+  ) async {
+    await pumpReadyDetail(
+      tester,
+      originalExists: false,
+      originalDeleted: true,
+      settle: false,
+      includeInitialCapture: true,
+    );
+
+    final firstFramePreviewElement = tester.element(
+      find.byType(CaptureImagePreview),
+    );
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .source,
+      CapturePreviewSource.watermarked,
+    );
+
+    await tester.pumpAndSettle();
+    expect(
+      tester.element(find.byType(CaptureImagePreview)),
+      same(firstFramePreviewElement),
+    );
+    await disposeDetail(tester);
+  });
+
+  testWidgets('unexpected missing original does not replace the Hero preview', (
+    tester,
+  ) async {
+    await pumpReadyDetail(
+      tester,
+      originalExists: false,
+      settle: false,
+      includeInitialCapture: true,
+    );
+
+    final firstFramePreviewElement = tester.element(
+      find.byType(CaptureImagePreview),
+    );
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .source,
+      CapturePreviewSource.bestAvailable,
+    );
+
+    await tester.pumpAndSettle();
+    expect(
+      tester.element(find.byType(CaptureImagePreview)),
+      same(firstFramePreviewElement),
+    );
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .source,
+      CapturePreviewSource.watermarked,
+    );
     await disposeDetail(tester);
   });
 

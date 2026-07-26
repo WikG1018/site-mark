@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -7,11 +9,27 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:skeletonizer/skeletonizer.dart';
+
+class _ControlledProjectsDatabase extends AppDatabase {
+  _ControlledProjectsDatabase() : super.forTesting(NativeDatabase.memory());
+
+  final projectEvents = StreamController<List<Project>>();
+
+  @override
+  Stream<List<Project>> watchProjects() => projectEvents.stream;
+
+  @override
+  Future<void> close() async {
+    await projectEvents.close();
+    await super.close();
+  }
+}
 
 void main() {
   late AppDatabase database;
 
-  Future<void> pumpProjects(WidgetTester tester) async {
+  Future<void> pumpProjects(WidgetTester tester, {bool settle = true}) async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     await database.createProject(id: 'east', name: '东区厂房改造');
@@ -33,7 +51,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) await tester.pumpAndSettle();
   }
 
   // Dispose the widget tree before the test ends so the StreamBuilder cancels
@@ -52,6 +70,33 @@ void main() {
     await tester.pump();
     expect(find.text('东区厂房改造'), findsOneWidget);
     expect(find.text('西区管线整改'), findsNothing);
+    await disposeApp(tester);
+  });
+
+  testWidgets('home first frame does not paint fake project rows', (
+    tester,
+  ) async {
+    database = _ControlledProjectsDatabase();
+    addTearDown(database.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ProjectListScreen(),
+        ),
+      ),
+    );
+
+    expect(find.byType(Skeletonizer), findsNothing);
+    expect(find.byType(Card), findsNothing);
     await disposeApp(tester);
   });
 

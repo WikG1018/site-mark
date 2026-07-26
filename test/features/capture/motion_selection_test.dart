@@ -84,7 +84,7 @@ void main() {
     );
   }
 
-  Widget buildProjectDetail() {
+  Widget buildProjectDetail({Project? initialProject}) {
     return ProviderScope(
       overrides: [databaseProvider.overrideWithValue(database)],
       child: MaterialApp(
@@ -96,7 +96,10 @@ void main() {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: const ProjectDetailScreen(projectId: 'project-1'),
+        home: ProjectDetailScreen(
+          projectId: 'project-1',
+          initialProject: initialProject,
+        ),
       ),
     );
   }
@@ -117,6 +120,21 @@ void main() {
     expect(find.text('拍摄记录'), findsOneWidget);
     expect(find.byType(Checkbox), findsNothing);
     expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+    await disposeTree(tester);
+  });
+
+  testWidgets('project first frame uses real header without fake photo rows', (
+    tester,
+  ) async {
+    await seedReadyCapture();
+    final project = await database.projectById('project-1');
+
+    await tester.pumpWidget(buildProjectDetail(initialProject: project));
+
+    expect(find.text('东区厂房改造'), findsNWidgets(2));
+    expect(find.byType(Card), findsOneWidget);
+    expect(find.text('拍摄记录'), findsOneWidget);
+    expect(find.byType(Skeletonizer), findsNothing);
     await disposeTree(tester);
   });
 

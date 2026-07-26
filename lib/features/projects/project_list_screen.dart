@@ -5,7 +5,6 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
   const ProjectListScreen({super.key});
@@ -125,7 +124,10 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           stream: database.watchProjects(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return const _ProjectListSkeleton();
+              // The local database normally emits within one frame. Keeping
+              // this state visually empty avoids flashing a fabricated list
+              // with the wrong number of projects.
+              return const SizedBox.shrink();
             }
             final projects = snapshot.data!;
             if (projects.isEmpty) {
@@ -163,7 +165,8 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                     ),
                     subtitle: Text(project.description ?? strings.localOnly),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/projects/${project.id}'),
+                    onTap: () =>
+                        context.push('/projects/${project.id}', extra: project),
                   ),
                 );
               },
@@ -174,38 +177,6 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           onPressed: () => context.push('/projects/new'),
           icon: const Icon(Icons.add),
           label: Text(strings.newProject),
-        ),
-      ),
-    );
-  }
-}
-
-/// First-frame loading placeholder: six bone cards mimicking the real
-/// project card layout (CircleAvatar + two-line ListTile). Taps are disabled
-/// while the stream has not delivered its first value.
-class _ProjectListSkeleton extends StatelessWidget {
-  const _ProjectListSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Skeletonizer(
-      enabled: true,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        itemCount: 6,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => Card(
-          clipBehavior: Clip.antiAlias,
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: const CircleAvatar(child: Text('项')),
-            title: Text(
-              '项目骨架占位',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            subtitle: const Text('项目描述骨架占位文本'),
-            trailing: const Icon(Icons.chevron_right),
-          ),
         ),
       ),
     );

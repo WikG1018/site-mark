@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
@@ -58,6 +60,7 @@ void main() {
     () async {
       await scheduler.enqueue('capture-1');
 
+      expect(client.initialized, isTrue);
       expect(client.appendCalls, hasLength(1));
       final call = client.appendCalls.single;
       expect(call.queueName, captureProcessingQueue);
@@ -66,6 +69,32 @@ void main() {
       expect(call.tag, 'capture:capture-1');
     },
   );
+
+  test('concurrent enqueue calls share one initialization future', () async {
+    client.initializeGate = Completer<void>();
+
+    final first = scheduler.enqueue('capture-1');
+    final second = scheduler.enqueue('capture-2');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(client.initializeCalls, 1);
+    expect(client.appendCalls, isEmpty);
+
+    client.initializeGate!.complete();
+    await Future.wait([first, second]);
+    expect(client.appendCalls, hasLength(2));
+  });
+
+  test('initialization can retry after a transient failure', () async {
+    client.initializeFailures = 1;
+
+    await expectLater(scheduler.enqueue('capture-1'), throwsStateError);
+    expect(client.appendCalls, isEmpty);
+
+    await scheduler.enqueue('capture-1');
+    expect(client.initializeCalls, 2);
+    expect(client.appendCalls, hasLength(1));
+  });
 
   test('retry re-enqueues with the same queue and tag', () async {
     // retry now resets the record before enqueueing, so seed a `failed`
@@ -275,12 +304,21 @@ class _AppendCall {
 class _RecordingBackgroundWorkClient implements BackgroundWorkClient {
   final List<_AppendCall> appendCalls = [];
   bool initialized = false;
+  int initializeCalls = 0;
+  int initializeFailures = 0;
+  Completer<void>? initializeGate;
   void Function()? dispatcher;
 
   @override
   Future<void> initialize(void Function() dispatcher) async {
+    initializeCalls++;
     initialized = true;
     this.dispatcher = dispatcher;
+    await initializeGate?.future;
+    if (initializeFailures > 0) {
+      initializeFailures--;
+      throw StateError('transient initialization failure');
+    }
   }
 
   @override

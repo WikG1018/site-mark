@@ -239,6 +239,49 @@ void main() {
     expect(previewResizeImage(tester).width, 2048);
   });
 
+  testWidgets('Hero destination reuses flight decode without a second fade', (
+    tester,
+  ) async {
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 240,
+            child: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _FakeOutputPaths(),
+              fileExists: (path) => true,
+              heroDestination: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final image = previewImage(tester);
+    expect((image.image as ResizeImage).width, 2048);
+    expect(image.gaplessPlayback, isTrue);
+    expect(
+      find.descendant(
+        of: find.byType(CaptureImagePreview),
+        matching: find.byType(AnimatedOpacity),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('detail preview uses media width for an unbounded layout', (
     tester,
   ) async {

@@ -103,7 +103,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             final info = infoSnapshot.data;
             final originalRetained =
                 info?.originalState == OriginalPhotoState.retained;
-            final effectiveSource = originalRetained
+            final effectiveSource = info == null
+                ? capture.originalDeletedAt != null
+                      ? CapturePreviewSource.watermarked
+                      : CapturePreviewSource.bestAvailable
+                : originalRetained
                 ? _previewSource
                 : CapturePreviewSource.watermarked;
             final canRetry =
@@ -121,10 +125,14 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                 child: AnimatedSwitcher(
                   duration: AppMotion.medium2,
                   child: CaptureImagePreview(
-                    key: ValueKey(effectiveSource),
+                    // Keep the destination element alive if an unexpected
+                    // missing original makes bestAvailable resolve to the
+                    // same rendered file as the explicit watermarked source.
+                    key: ValueKey('capture-preview-${capture.id}'),
                     capture: capture,
                     outputPaths: outputPaths,
                     source: effectiveSource,
+                    heroDestination: heroTag != null,
                   ),
                 ),
               ),

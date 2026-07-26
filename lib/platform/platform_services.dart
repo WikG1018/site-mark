@@ -4,6 +4,31 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
+import 'package:sitemark/src/rust/frb_generated.dart';
+
+Future<void>? _foregroundRustInitialization;
+
+/// Initializes the foreground Rust bridge once per isolate.
+///
+/// The first call is started after [runApp] so it cannot extend Android's
+/// system splash. Every foreground image operation also awaits this same
+/// future, keeping immediate user actions safe.
+Future<void> initializeForegroundRust() {
+  final cached = _foregroundRustInitialization;
+  if (cached != null) return cached;
+
+  final created = RustLib.init();
+  _foregroundRustInitialization = created;
+  created.then<void>(
+    (_) {},
+    onError: (Object error, StackTrace stackTrace) {
+      if (identical(_foregroundRustInitialization, created)) {
+        _foregroundRustInitialization = null;
+      }
+    },
+  );
+  return created;
+}
 
 abstract interface class PlatformServices {
   Future<String> createCameraTarget(String captureId);
@@ -159,6 +184,7 @@ class RustImagePipeline implements ImagePipeline {
 
   Future<T> _translateRustError<T>(Future<T> Function() operation) async {
     try {
+      await initializeForegroundRust();
       return await operation();
     } catch (error) {
       final translated = ImagePipelineException.tryParseRustError(error);

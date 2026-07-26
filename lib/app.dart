@@ -360,6 +360,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               state,
               ProjectDetailScreen(
                 projectId: state.pathParameters['projectId']!,
+                initialProject: state.extra is Project
+                    ? state.extra! as Project
+                    : null,
               ),
               freezeSecondary: shouldFreezeProjectCaptureList(state),
             ),

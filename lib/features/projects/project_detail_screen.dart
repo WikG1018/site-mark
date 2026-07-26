@@ -12,12 +12,16 @@ import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
-  const ProjectDetailScreen({super.key, required this.projectId});
+  const ProjectDetailScreen({
+    super.key,
+    required this.projectId,
+    this.initialProject,
+  });
 
   final String projectId;
+  final Project? initialProject;
 
   @override
   ConsumerState<ProjectDetailScreen> createState() =>
@@ -112,6 +116,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       },
       child: FutureBuilder<Project?>(
         future: _projectFuture,
+        initialData: widget.initialProject,
         builder: (context, projectSnapshot) {
           final project = projectSnapshot.data;
           return Scaffold(
@@ -169,7 +174,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               ],
             ),
             body: project == null
-                ? const Skeletonizer(child: _CaptureListSkeleton())
+                ? const SizedBox.shrink()
                 : StreamBuilder<List<CaptureSummary>>(
                     stream: _captureSummariesStream,
                     builder: (context, captureSnapshot) {
@@ -180,24 +185,24 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       if (captures != null) {
                         _latestCaptures = captures;
                       }
-                      return AnimatedSwitcher(
-                        duration: AppMotion.short4,
-                        child: captures == null
-                            ? const Skeletonizer(
-                                key: Key('capture-list-skeleton'),
-                                child: _CaptureListSkeleton(),
-                              )
-                            : KeyedSubtree(
-                                key: const Key('capture-list-content'),
-                                child: _projectCaptureList(
-                                  context,
-                                  strings,
-                                  project,
-                                  filter,
-                                  allProjectSummaries!,
-                                  captures,
-                                ),
-                              ),
+                      if (captures == null) {
+                        return _projectCaptureList(
+                          context,
+                          strings,
+                          project,
+                          filter,
+                          const [],
+                          const [],
+                          loadingCaptures: true,
+                        );
+                      }
+                      return _projectCaptureList(
+                        context,
+                        strings,
+                        project,
+                        filter,
+                        allProjectSummaries!,
+                        captures,
                       );
                     },
                   ),
@@ -254,8 +259,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     Project project,
     CaptureFilter filter,
     List<CaptureSummary> allProjectSummaries,
-    List<CaptureSummary> captures,
-  ) {
+    List<CaptureSummary> captures, {
+    bool loadingCaptures = false,
+  }) {
     final hasAnyRecord = allProjectSummaries.isNotEmpty;
     return CustomScrollView(
       slivers: [
@@ -274,7 +280,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           ),
         ),
-        if (hasAnyRecord)
+        if (!loadingCaptures && hasAnyRecord)
           SliverToBoxAdapter(
             child: CaptureDateFilterBar(
               filter: filter,
@@ -282,7 +288,12 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               onChanged: _onFilterChanged,
             ),
           ),
-        if (!hasAnyRecord)
+        if (loadingCaptures)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: SizedBox.shrink(),
+          )
+        else if (!hasAnyRecord)
           SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
@@ -430,61 +441,6 @@ class _ProjectHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(project.description!),
                   ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CaptureListSkeleton extends StatelessWidget {
-  const _CaptureListSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-      itemCount: 6,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) => const _CaptureCardSkeleton(),
-    );
-  }
-}
-
-class _CaptureCardSkeleton extends StatelessWidget {
-  const _CaptureCardSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 96,
-              height: 96,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: const ColoredBox(color: Colors.grey),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('SM-0000-000', style: textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text('0000/00/00 00:00', style: textTheme.bodyMedium),
-                  const SizedBox(height: 2),
-                  Text('---', style: textTheme.bodySmall),
                 ],
               ),
             ),

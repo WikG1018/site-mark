@@ -63,6 +63,7 @@ class CaptureImagePreview extends StatefulWidget {
     this.fileExists,
     this.source = CapturePreviewSource.bestAvailable,
     this.heroTag,
+    this.heroDestination = false,
   });
 
   final CaptureRecord capture;
@@ -83,6 +84,12 @@ class CaptureImagePreview extends StatefulWidget {
   /// after the concrete photo path has resolved, so both endpoints fly the
   /// same image instead of a loading or placeholder subtree.
   final String? heroTag;
+
+  /// Keeps the detail endpoint visually continuous with the list Hero flight.
+  ///
+  /// The flight shuttle decodes the same path at 2048 px, so the destination
+  /// reuses that cache key and skips its own switch/frame fades.
+  final bool heroDestination;
 
   @override
   State<CaptureImagePreview> createState() => _CaptureImagePreviewState();
@@ -186,7 +193,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         if (snapshot.connectionState != ConnectionState.done ||
             resolution == null) {
           return AnimatedSwitcher(
-            duration: AppMotion.medium2,
+            duration: widget.heroDestination
+                ? Duration.zero
+                : AppMotion.medium2,
             child: _placeholder(
               context,
               strings,
@@ -195,7 +204,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
           );
         }
         return AnimatedSwitcher(
-          duration: AppMotion.medium2,
+          duration: widget.heroDestination ? Duration.zero : AppMotion.medium2,
           child: switch (resolution.kind) {
             _PreviewResolutionKind.image => _image(
               context,
@@ -284,6 +293,8 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
       builder: (context, constraints) {
         final cacheWidth = widget.thumbnail
             ? 192
+            : widget.heroDestination
+            ? 2048
             : _detailCacheWidth(context, constraints);
         final provider = ResizeImage.resizeIfNeeded(
           cacheWidth,
@@ -293,8 +304,10 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         final image = Image(
           image: provider,
           fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
-          gaplessPlayback: widget.heroTag != null,
-          frameBuilder: widget.thumbnail && widget.heroTag != null
+          gaplessPlayback: widget.heroTag != null || widget.heroDestination,
+          frameBuilder:
+              widget.heroDestination ||
+                  (widget.thumbnail && widget.heroTag != null)
               ? null
               : (context, child, frame, wasSynchronouslyLoaded) {
                   if (wasSynchronouslyLoaded) return child;
