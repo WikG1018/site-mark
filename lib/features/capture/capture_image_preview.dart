@@ -282,14 +282,18 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final image = Image.file(
-          File(path),
+        final cacheWidth = widget.thumbnail
+            ? 192
+            : _detailCacheWidth(context, constraints);
+        final provider = ResizeImage.resizeIfNeeded(
+          cacheWidth,
+          widget.thumbnail ? 192 : null,
+          FileImage(File(path)),
+        );
+        final image = Image(
+          image: provider,
           fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
           gaplessPlayback: widget.heroTag != null,
-          cacheWidth: widget.thumbnail
-              ? 192
-              : _detailCacheWidth(context, constraints),
-          cacheHeight: widget.thumbnail ? 192 : null,
           frameBuilder: widget.thumbnail && widget.heroTag != null
               ? null
               : (context, child, frame, wasSynchronouslyLoaded) {
@@ -348,7 +352,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         }
         if (widget.thumbnail) return preview;
         return GestureDetector(
-          onTap: widget.onOpen ?? () => _openFullscreen(context, path),
+          onTap:
+              widget.onOpen ??
+              () => _openFullscreen(context, path, previewImage: provider),
           child: preview,
         );
       },
@@ -369,14 +375,18 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   /// Detail-surface decode width cap, derived from the available horizontal
   /// space and the device pixel ratio. The full-screen viewer does NOT use
   /// this cap — it keeps the original resolution so 4x zoom stays sharp.
-  void _openFullscreen(BuildContext context, String path) {
+  void _openFullscreen(
+    BuildContext context,
+    String path, {
+    required ImageProvider<Object> previewImage,
+  }) {
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         opaque: true,
         transitionDuration: AppMotion.long2,
         reverseTransitionDuration: AppMotion.medium4,
         pageBuilder: (context, animation, secondaryAnimation) =>
-            CaptureFullscreenScreen(path: path),
+            CaptureFullscreenScreen(path: path, previewImage: previewImage),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final curved = CurvedAnimation(
             parent: animation,

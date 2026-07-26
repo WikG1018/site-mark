@@ -36,10 +36,12 @@ class CaptureDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.projectId,
     required this.captureId,
+    this.initialCapture,
   });
 
   final String projectId;
   final String captureId;
+  final CaptureRecord? initialCapture;
 
   @override
   ConsumerState<CaptureDetailScreen> createState() =>
@@ -86,6 +88,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     final outputPaths = ref.watch(captureOutputPathsProvider);
     return StreamBuilder<CaptureRecord?>(
       stream: database.watchCaptureById(_captureId),
+      initialData: widget.initialCapture,
       builder: (context, snapshot) {
         final capture = snapshot.data;
         if (capture == null) {
@@ -108,6 +111,9 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             final isBusy =
                 capture.status == CaptureStatus.captured ||
                 capture.status == CaptureStatus.rendering;
+            final heroTag = capture.status == CaptureStatus.ready
+                ? 'capture-photo-${capture.id}'
+                : null;
             Widget preview = AspectRatio(
               aspectRatio: 4 / 3,
               child: ClipRRect(
@@ -119,13 +125,20 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     capture: capture,
                     outputPaths: outputPaths,
                     source: effectiveSource,
-                    heroTag: capture.status == CaptureStatus.ready
-                        ? 'capture-photo-${capture.id}'
-                        : null,
                   ),
                 ),
               ),
             );
+            if (heroTag != null) {
+              // Keep one HeroState alive while file metadata and preview
+              // resolution arrive. Replacing the Hero during a forward flight
+              // makes Flutter abandon the destination and fade the shuttle.
+              preview = Hero(
+                key: ValueKey('capture-photo-slot-${capture.id}'),
+                tag: heroTag,
+                child: preview,
+              );
+            }
             return Scaffold(
               appBar: AppBar(
                 title: Text(capture.photoNumber ?? strings.captureDetail),

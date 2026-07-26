@@ -193,6 +193,7 @@ void main() {
       // Use a custom GoRouter to avoid MyApp's Riverpod ref.listen-in-
       // initState assertion. The route tree mirrors app.dart but with a
       // minimal capture-detail stub.
+      CaptureRecord? pushedInitialCapture;
       final router = GoRouter(
         initialLocation: '/records',
         routes: [
@@ -210,10 +211,15 @@ void main() {
                 routes: [
                   GoRoute(
                     path: 'captures/:captureId',
-                    builder: (context, state) => Scaffold(
-                      appBar: AppBar(title: const Text('记录详情')),
-                      body: const SizedBox.shrink(),
-                    ),
+                    builder: (context, state) {
+                      if (state.extra case CaptureRecord capture) {
+                        pushedInitialCapture = capture;
+                      }
+                      return Scaffold(
+                        appBar: AppBar(title: const Text('记录详情')),
+                        body: const SizedBox.shrink(),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -250,6 +256,7 @@ void main() {
 
       // Verify we're on the capture detail screen.
       expect(find.text('记录详情'), findsOneWidget);
+      expect(pushedInitialCapture?.id, 'capture-1');
 
       // Pop back via the AppBar back button.
       await tester.tap(find.byType(BackButton));

@@ -126,6 +126,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
           onTap: () => context.push(
             '/projects/${summary.capture.projectId}'
             '/captures/$id',
+            extra: summary.capture,
           ),
         );
       },

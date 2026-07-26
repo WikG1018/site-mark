@@ -331,6 +331,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   onTap: () => context.push(
                     '/projects/${widget.projectId}'
                     '/captures/$id',
+                    extra: summary.capture,
                   ),
                 );
               },

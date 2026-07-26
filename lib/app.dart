@@ -389,6 +389,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                   CaptureDetailScreen(
                     projectId: state.pathParameters['projectId']!,
                     captureId: state.pathParameters['captureId']!,
+                    initialCapture: state.extra is CaptureRecord
+                        ? state.extra! as CaptureRecord
+                        : null,
                   ),
                 ),
                 routes: [

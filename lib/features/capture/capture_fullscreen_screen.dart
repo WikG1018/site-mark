@@ -28,17 +28,26 @@ import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 /// detail. Memory peaks are mitigated by the OS page cache and the fact that
 /// the viewer is only reached from the detail screen for a single image.
 class CaptureFullscreenScreen extends ConsumerStatefulWidget {
-  const CaptureFullscreenScreen({super.key, required this.path});
+  const CaptureFullscreenScreen({
+    super.key,
+    required this.path,
+    this.previewImage,
+  });
 
   /// Absolute path of the on-disk photo to display.
   final String path;
+
+  /// Already-decoded detail preview kept visible while the full-resolution
+  /// image is decoded for zooming.
+  final ImageProvider<Object>? previewImage;
 
   @override
   ConsumerState<CaptureFullscreenScreen> createState() =>
       _CaptureFullscreenScreenState();
 }
 
-class _CaptureFullscreenScreenState extends ConsumerState<CaptureFullscreenScreen>
+class _CaptureFullscreenScreenState
+    extends ConsumerState<CaptureFullscreenScreen>
     with TickerProviderStateMixin {
   static const double _dismissThreshold = 120;
   static const double _dismissVelocity = 700;
@@ -202,16 +211,48 @@ class _CaptureFullscreenScreenState extends ConsumerState<CaptureFullscreenScree
                     child: Semantics(
                       label: strings.fullscreenPhotoSemantics,
                       liveRegion: true,
-                      child: Image.file(
-                        File(widget.path),
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, _) => Center(
-                          child: Icon(
-                            Icons.broken_image_outlined,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.error,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (widget.previewImage != null)
+                            Image(
+                              image: widget.previewImage!,
+                              fit: BoxFit.contain,
+                              gaplessPlayback: true,
+                            ),
+                          Image.file(
+                            File(widget.path),
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                            frameBuilder:
+                                (
+                                  context,
+                                  child,
+                                  frame,
+                                  wasSynchronouslyLoaded,
+                                ) {
+                                  if (wasSynchronouslyLoaded) return child;
+                                  return AnimatedOpacity(
+                                    opacity: frame == null ? 0 : 1,
+                                    duration: AppMotion.short4,
+                                    curve: AppMotion.standard,
+                                    child: child,
+                                  );
+                                },
+                            errorBuilder: (context, error, _) =>
+                                widget.previewImage != null
+                                ? const SizedBox.shrink()
+                                : Center(
+                                    child: Icon(
+                                      Icons.broken_image_outlined,
+                                      size: 64,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
+                                    ),
+                                  ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
@@ -224,6 +265,7 @@ class _CaptureFullscreenScreenState extends ConsumerState<CaptureFullscreenScree
             left: 0,
             right: 0,
             child: AnimatedOpacity(
+              key: const Key('fullscreen-chrome'),
               opacity: _chromeVisible ? 1 : 0,
               duration: AppMotion.short4,
               child: IgnorePointer(

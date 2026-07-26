@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -69,6 +72,51 @@ Future<void> doubleTapViewer(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('cached detail preview remains behind full-resolution decode', (
+    tester,
+  ) async {
+    final preview = MemoryImage(
+      Uint8List.fromList(
+        base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
+          'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen(
+            path: '/nonexistent-photo.jpg',
+            previewImage: preview,
+          ),
+        ),
+      ),
+    );
+
+    final previewImages = tester.widgetList<Image>(
+      find.byWidgetPredicate(
+        (widget) => widget is Image && identical(widget.image, preview),
+      ),
+    );
+    expect(previewImages, hasLength(1));
+    expect(previewImages.single.gaplessPlayback, isTrue);
+
+    final fullImage = tester
+        .widgetList<Image>(find.byType(Image))
+        .firstWhere((image) => !identical(image.image, preview));
+    expect(fullImage.frameBuilder, isNotNull);
+  });
+
   testWidgets('double tap zooms to 2x and back to 1x', (tester) async {
     await pumpHost(tester);
     expect(viewerScale(tester), closeTo(1, 0.001));
@@ -114,10 +162,7 @@ void main() {
 
   testWidgets('tap toggles chrome and the close button pops', (tester) async {
     await pumpHost(tester);
-    final chrome = find.descendant(
-      of: find.byType(CaptureFullscreenScreen),
-      matching: find.byType(AnimatedOpacity),
-    );
+    final chrome = find.byKey(const Key('fullscreen-chrome'));
     expect(tester.widget<AnimatedOpacity>(chrome).opacity, 0);
 
     await tester.tap(find.byType(InteractiveViewer));
