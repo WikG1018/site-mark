@@ -4,6 +4,31 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/navigation/route_transitions.dart';
 
 void main() {
+  testWidgets('capture detail route fades continuously during reverse motion', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: buildCaptureDetailRouteTransition(
+          animation: const AlwaysStoppedAnimation(0.5),
+          child: const SizedBox(key: Key('capture-detail-content')),
+        ),
+      ),
+    );
+
+    final fades = tester.widgetList<FadeTransition>(
+      find.ancestor(
+        of: find.byKey(const Key('capture-detail-content')),
+        matching: find.byType(FadeTransition),
+      ),
+    );
+    expect(fades, isNotEmpty);
+    expect(
+      fades.any((fade) => fade.opacity.value > 0 && fade.opacity.value < 1),
+      isTrue,
+    );
+  });
+
   testWidgets('imperative photo push freezes only the project capture list', (
     tester,
   ) async {

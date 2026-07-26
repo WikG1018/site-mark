@@ -257,16 +257,8 @@ CustomTransitionPage<void> _captureDetailPage(
     transitionDuration: AppMotion.medium2,
     reverseTransitionDuration: AppMotion.medium2,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final curved = CurvedAnimation(
-        parent: animation,
-        curve: AppMotion.emphasizedDecelerate,
-        reverseCurve: AppMotion.emphasizedAccelerate,
-      );
-      return SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0.08, 0),
-          end: Offset.zero,
-        ).animate(curved),
+      return buildCaptureDetailRouteTransition(
+        animation: animation,
         child: child,
       );
     },
