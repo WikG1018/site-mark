@@ -2,12 +2,16 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
+import 'package:sitemark/workflow/app_startup_recovery.dart';
+
+Future<void> _noOpRecovery() async {}
 
 /// Tests that [_SiteMarkAppState] correctly delegates lifecycle and
 /// memory-pressure events to the [MemoryPressureController].
@@ -30,6 +34,36 @@ void main() {
   tearDown(() async {
     await database.close();
   });
+
+  testWidgets(
+    'initializes the background capture queue after the first app frame',
+    (tester) async {
+      final startupDatabase = AppDatabase.forTesting(NativeDatabase.memory());
+      final scheduler = _RecordingCaptureScheduler();
+
+      await tester.pumpWidget(
+        MyApp(
+          database: startupDatabase,
+          backgroundScheduler: scheduler,
+          completionNotificationService: _FakeCompletionNotificationService(),
+          memoryPressureService: _NoopMemoryPressureService(),
+          startupRecovery: const AppStartupRecovery(
+            recoverCamera: _noOpRecovery,
+            resolveLocations: _noOpRecovery,
+            reconcileQueue: _noOpRecovery,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
+
+      expect(scheduler.initializeCalls, 1);
+      await tester.pumpWidget(const SizedBox.shrink());
+      final closeFuture = startupDatabase.close();
+      await tester.pump(const Duration(milliseconds: 1));
+      await closeFuture;
+    },
+  );
 
   Future<void> disposeApp(WidgetTester tester) async {
     // Dispose the widget tree so provider-owned timers and stream
@@ -236,4 +270,22 @@ class _NoopMemoryPressureService implements MemoryPressureService {
     int? eventId,
     required bool success,
   }) async {}
+}
+
+class _RecordingCaptureScheduler implements CaptureBackgroundScheduler {
+  int initializeCalls = 0;
+
+  @override
+  Future<void> initialize() async {
+    initializeCalls++;
+  }
+
+  @override
+  Future<void> enqueue(String captureId) async {}
+
+  @override
+  Future<void> reconcilePending() async {}
+
+  @override
+  Future<void> retry(String captureId) async {}
 }
