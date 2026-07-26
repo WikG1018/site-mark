@@ -5,7 +5,6 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
   const ProjectListScreen({super.key});
@@ -64,142 +63,120 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final database = ref.watch(databaseProvider);
-    return Scaffold(
-      appBar: AppBar(
-        title: SizedBox(
-          height: kToolbarHeight,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _searching
-                ? TextField(
-                    key: const Key('project-search-field'),
-                    controller: _searchController,
-                    focusNode: _searchFocus,
-                    decoration: InputDecoration(
-                      hintText: strings.searchProjectsHint,
-                      border: InputBorder.none,
-                    ),
-                    onChanged: (value) => setState(() => _query = value),
-                  )
-                : Text(strings.appName, key: const Key('project-title')),
+    return PopScope(
+      canPop: !_searching,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _searching) _closeSearch();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: SizedBox(
+            height: kToolbarHeight,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _searching
+                  ? TextField(
+                      key: const Key('project-search-field'),
+                      controller: _searchController,
+                      focusNode: _searchFocus,
+                      decoration: InputDecoration(
+                        hintText: strings.searchProjectsHint,
+                        border: InputBorder.none,
+                      ),
+                      onChanged: (value) => setState(() => _query = value),
+                    )
+                  : Text(strings.appName, key: const Key('project-title')),
+            ),
           ),
-        ),
-        actions: [
-          if (_searching)
-            IconButton(
-              key: const Key('project-search-action'),
-              onPressed: _handleSearchAction,
-              tooltip: _query.isNotEmpty ? strings.clear : strings.cancel,
-              icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
-            )
-          else ...[
-            IconButton(
-              key: const Key('search-projects'),
-              onPressed: _startSearch,
-              tooltip: strings.searchProjects,
-              icon: AnimatedRotation(
-                turns: _searching ? 0.5 : 0,
-                duration: AppMotion.short4,
-                child: const Icon(Icons.search),
-              ),
-            ),
-            IconButton(
-              onPressed: () => context.go('/records'),
-              tooltip: strings.allRecords,
-              icon: const Icon(Icons.photo_library_outlined),
-            ),
-            IconButton(
-              onPressed: () => context.go('/settings'),
-              tooltip: strings.settings,
-              icon: const Icon(Icons.settings_outlined),
-            ),
-          ],
-        ],
-      ),
-      body: StreamBuilder<List<Project>>(
-        stream: database.watchProjects(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const _ProjectListSkeleton();
-          }
-          final projects = snapshot.data!;
-          if (projects.isEmpty) {
-            return _EmptyState(strings: strings);
-          }
-          final filtered = _filteredProjects(projects);
-          if (filtered.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  strings.noMatchingProjects,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                  textAlign: TextAlign.center,
+          actions: [
+            if (_searching)
+              IconButton(
+                key: const Key('project-search-action'),
+                onPressed: _handleSearchAction,
+                tooltip: _query.isNotEmpty ? strings.clear : strings.cancel,
+                icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
+              )
+            else ...[
+              IconButton(
+                key: const Key('search-projects'),
+                onPressed: _startSearch,
+                tooltip: strings.searchProjects,
+                icon: AnimatedRotation(
+                  turns: _searching ? 0.5 : 0,
+                  duration: AppMotion.short4,
+                  child: const Icon(Icons.search),
                 ),
               ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            itemCount: filtered.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final project = filtered[index];
-              return Card(
-                clipBehavior: Clip.antiAlias,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: CircleAvatar(
-                    child: Text(project.name.characters.first),
+              IconButton(
+                onPressed: () => context.go('/records'),
+                tooltip: strings.allRecords,
+                icon: const Icon(Icons.photo_library_outlined),
+              ),
+              IconButton(
+                onPressed: () => context.go('/settings'),
+                tooltip: strings.settings,
+                icon: const Icon(Icons.settings_outlined),
+              ),
+            ],
+          ],
+        ),
+        body: StreamBuilder<List<Project>>(
+          stream: database.watchProjects(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              // The local database normally emits within one frame. Keeping
+              // this state visually empty avoids flashing a fabricated list
+              // with the wrong number of projects.
+              return const SizedBox.shrink();
+            }
+            final projects = snapshot.data!;
+            if (projects.isEmpty) {
+              return _EmptyState(strings: strings);
+            }
+            final filtered = _filteredProjects(projects);
+            if (filtered.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Text(
+                    strings.noMatchingProjects,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    textAlign: TextAlign.center,
                   ),
-                  title: Text(
-                    project.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  subtitle: Text(project.description ?? strings.localOnly),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/projects/${project.id}'),
                 ),
               );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/projects/new'),
-        icon: const Icon(Icons.add),
-        label: Text(strings.newProject),
-      ),
-    );
-  }
-}
-
-/// First-frame loading placeholder: six bone cards mimicking the real
-/// project card layout (CircleAvatar + two-line ListTile). Taps are disabled
-/// while the stream has not delivered its first value.
-class _ProjectListSkeleton extends StatelessWidget {
-  const _ProjectListSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Skeletonizer(
-      enabled: true,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        itemCount: 6,
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemBuilder: (context, index) => Card(
-          clipBehavior: Clip.antiAlias,
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: const CircleAvatar(child: Text('项')),
-            title: Text(
-              '项目骨架占位',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            subtitle: const Text('项目描述骨架占位文本'),
-            trailing: const Icon(Icons.chevron_right),
-          ),
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              itemCount: filtered.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final project = filtered[index];
+                return Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(16),
+                    leading: CircleAvatar(
+                      child: Text(project.name.characters.first),
+                    ),
+                    title: Text(
+                      project.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    subtitle: Text(project.description ?? strings.localOnly),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () =>
+                        context.push('/projects/${project.id}', extra: project),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => context.push('/projects/new'),
+          icon: const Icon(Icons.add),
+          label: Text(strings.newProject),
         ),
       ),
     );

@@ -24,6 +24,7 @@ Future<void> pumpCard(
   bool selected = false,
   bool selectable = true,
   ValueChanged<bool>? onSelectedChanged,
+  ValueChanged<String?>? onTap,
 }) async {
   final database = AppDatabase.forTesting(NativeDatabase.memory());
   addTearDown(database.close);
@@ -52,7 +53,7 @@ Future<void> pumpCard(
         home: Scaffold(
           body: CaptureRecordCard(
             summary: CaptureSummary(capture: capture, projectName: '东区厂房改造'),
-            onTap: () {},
+            onTap: onTap ?? (_) {},
             selectionMode: selectionMode,
             selected: selected,
             selectable: selectable,
@@ -106,6 +107,20 @@ void main() {
       find.byType(CaptureImagePreview),
     );
     expect(preview.heroTag, isNull);
+  });
+
+  testWidgets('tap forwards the exact image path already shown by the card', (
+    tester,
+  ) async {
+    String? tappedPath;
+    await pumpCard(
+      tester,
+      capture: record(id: 'capture-1', status: CaptureStatus.ready),
+      onTap: (path) => tappedPath = path,
+    );
+
+    await tester.tap(find.byType(Card));
+    expect(tappedPath, '/private/capture-1.jpg');
   });
 
   testWidgets(
@@ -205,7 +220,7 @@ class _CardFiles implements PrivateFileStore {
 class _CardPaths implements CaptureOutputPaths {
   @override
   Future<String> renderedPhotoPath(String captureId) async =>
-      '/rendered/$captureId.jpg';
+      '/private/$captureId.jpg';
 }
 
 class _CardPlatform implements PlatformServices {

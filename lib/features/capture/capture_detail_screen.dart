@@ -14,6 +14,16 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 
+final class CaptureDetailArguments {
+  const CaptureDetailArguments({
+    required this.capture,
+    required this.initialImagePath,
+  });
+
+  final CaptureRecord capture;
+  final String? initialImagePath;
+}
+
 /// Photo detail surface with explicit watermarked/original preview, file
 /// metadata, and dual destructive actions.
 ///
@@ -36,10 +46,14 @@ class CaptureDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.projectId,
     required this.captureId,
+    this.initialCapture,
+    this.initialImagePath,
   });
 
   final String projectId;
   final String captureId;
+  final CaptureRecord? initialCapture;
+  final String? initialImagePath;
 
   @override
   ConsumerState<CaptureDetailScreen> createState() =>
@@ -86,6 +100,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     final outputPaths = ref.watch(captureOutputPathsProvider);
     return StreamBuilder<CaptureRecord?>(
       stream: database.watchCaptureById(_captureId),
+      initialData: widget.initialCapture,
       builder: (context, snapshot) {
         final capture = snapshot.data;
         if (capture == null) {
@@ -100,7 +115,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             final info = infoSnapshot.data;
             final originalRetained =
                 info?.originalState == OriginalPhotoState.retained;
-            final effectiveSource = originalRetained
+            final effectiveSource = info == null
+                ? capture.originalDeletedAt != null
+                      ? CapturePreviewSource.watermarked
+                      : CapturePreviewSource.bestAvailable
+                : originalRetained
                 ? _previewSource
                 : CapturePreviewSource.watermarked;
             final canRetry =
@@ -108,6 +127,9 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             final isBusy =
                 capture.status == CaptureStatus.captured ||
                 capture.status == CaptureStatus.rendering;
+            final heroTag = capture.status == CaptureStatus.ready
+                ? 'capture-photo-${capture.id}'
+                : null;
             Widget preview = AspectRatio(
               aspectRatio: 4 / 3,
               child: ClipRRect(
@@ -115,17 +137,29 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                 child: AnimatedSwitcher(
                   duration: AppMotion.medium2,
                   child: CaptureImagePreview(
-                    key: ValueKey(effectiveSource),
+                    // Keep the destination element alive if an unexpected
+                    // missing original makes bestAvailable resolve to the
+                    // same rendered file as the explicit watermarked source.
+                    key: ValueKey('capture-preview-${capture.id}'),
                     capture: capture,
                     outputPaths: outputPaths,
                     source: effectiveSource,
-                    heroTag: capture.status == CaptureStatus.ready
-                        ? 'capture-photo-${capture.id}'
-                        : null,
+                    heroDestination: heroTag != null,
+                    initialImagePath: widget.initialImagePath,
                   ),
                 ),
               ),
             );
+            if (heroTag != null) {
+              // Keep one HeroState alive while file metadata and preview
+              // resolution arrive. Replacing the Hero during a forward flight
+              // makes Flutter abandon the destination and fade the shuttle.
+              preview = Hero(
+                key: ValueKey('capture-photo-slot-${capture.id}'),
+                tag: heroTag,
+                child: preview,
+              );
+            }
             return Scaffold(
               appBar: AppBar(
                 title: Text(capture.photoNumber ?? strings.captureDetail),

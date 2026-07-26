@@ -22,6 +22,9 @@ void main() {
   Future<void> pumpReadyDetail(
     WidgetTester tester, {
     required bool originalExists,
+    bool settle = true,
+    bool includeInitialCapture = false,
+    bool originalDeleted = false,
   }) async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -49,6 +52,10 @@ void main() {
       captureId: pending.id,
       publishedUri: 'content://media/site-mark/1',
     );
+    if (originalDeleted) {
+      await database.markOriginalDeleted(pending.id);
+    }
+    final readyCapture = await database.captureById(pending.id);
 
     files = _DetailFiles();
     if (originalExists) files.existing.add('/private/original.jpg');
@@ -90,14 +97,15 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: const CaptureDetailScreen(
+          home: CaptureDetailScreen(
             projectId: 'project-1',
             captureId: 'capture-1',
+            initialCapture: includeInitialCapture ? readyCapture : null,
           ),
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) await tester.pumpAndSettle();
   }
 
   /// Disposes the widget tree by replacing it with an empty widget, then
@@ -120,6 +128,101 @@ void main() {
     await disposeDetail(tester);
   });
 
+  testWidgets('detail exposes the record Hero on its first route frame', (
+    tester,
+  ) async {
+    await pumpReadyDetail(
+      tester,
+      originalExists: true,
+      settle: false,
+      includeInitialCapture: true,
+    );
+
+    final hero = tester.widget<Hero>(find.byType(Hero));
+    final firstFrameHeroElement = tester.element(find.byType(Hero));
+    final firstFramePreviewElement = tester.element(
+      find.byType(CaptureImagePreview),
+    );
+    expect(hero.tag, 'capture-photo-capture-1');
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .source,
+      CapturePreviewSource.bestAvailable,
+    );
+
+    await tester.pumpAndSettle();
+    expect(tester.element(find.byType(Hero)), same(firstFrameHeroElement));
+    expect(
+      tester.element(find.byType(CaptureImagePreview)),
+      same(firstFramePreviewElement),
+    );
+    await disposeDetail(tester);
+  });
+
+  testWidgets('cleared original keeps a stable watermarked Hero destination', (
+    tester,
+  ) async {
+    await pumpReadyDetail(
+      tester,
+      originalExists: false,
+      originalDeleted: true,
+      settle: false,
+      includeInitialCapture: true,
+    );
+
+    final firstFramePreviewElement = tester.element(
+      find.byType(CaptureImagePreview),
+    );
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .source,
+      CapturePreviewSource.watermarked,
+    );
+
+    await tester.pumpAndSettle();
+    expect(
+      tester.element(find.byType(CaptureImagePreview)),
+      same(firstFramePreviewElement),
+    );
+    await disposeDetail(tester);
+  });
+
+  testWidgets('unexpected missing original does not replace the Hero preview', (
+    tester,
+  ) async {
+    await pumpReadyDetail(
+      tester,
+      originalExists: false,
+      settle: false,
+      includeInitialCapture: true,
+    );
+
+    final firstFramePreviewElement = tester.element(
+      find.byType(CaptureImagePreview),
+    );
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .source,
+      CapturePreviewSource.bestAvailable,
+    );
+
+    await tester.pumpAndSettle();
+    expect(
+      tester.element(find.byType(CaptureImagePreview)),
+      same(firstFramePreviewElement),
+    );
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .source,
+      CapturePreviewSource.watermarked,
+    );
+    await disposeDetail(tester);
+  });
+
   testWidgets('original preview keeps the record photo Hero tag', (
     tester,
   ) async {
@@ -132,7 +235,11 @@ void main() {
       find.byType(CaptureImagePreview),
     );
     expect(preview.source, CapturePreviewSource.original);
-    expect(preview.heroTag, 'capture-photo-capture-1');
+    expect(preview.heroTag, isNull);
+    expect(
+      tester.widget<Hero>(find.byType(Hero)).tag,
+      'capture-photo-capture-1',
+    );
     await disposeDetail(tester);
   });
 

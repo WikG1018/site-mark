@@ -10,7 +10,9 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
+import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
+import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
@@ -83,6 +85,76 @@ void main() {
     );
   }
 
+  Widget buildProjectDetail({Project? initialProject}) {
+    return ProviderScope(
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ProjectDetailScreen(
+          projectId: 'project-1',
+          initialProject: initialProject,
+        ),
+      ),
+    );
+  }
+
+  testWidgets('system back cancels project record selection mode', (
+    tester,
+  ) async {
+    await seedReadyCapture();
+    await tester.pumpWidget(buildProjectDetail());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    expect(find.byType(Checkbox), findsWidgets);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('拍摄记录'), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+    expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+    await disposeTree(tester);
+  });
+
+  testWidgets('project first frame uses real header without fake photo rows', (
+    tester,
+  ) async {
+    await seedReadyCapture();
+    final project = await database.projectById('project-1');
+
+    await tester.pumpWidget(buildProjectDetail(initialProject: project));
+
+    expect(find.text('东区厂房改造'), findsNWidgets(2));
+    expect(find.byType(Card), findsOneWidget);
+    expect(find.text('拍摄记录'), findsOneWidget);
+    expect(find.byType(Skeletonizer), findsNothing);
+    await disposeTree(tester);
+  });
+
+  testWidgets('system back cancels all-records selection mode', (tester) async {
+    await seedReadyCapture();
+    await tester.pumpWidget(buildAllCaptures());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    expect(find.byType(Checkbox), findsWidgets);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+    await disposeTree(tester);
+  });
+
   // ─── Test 1: 底部栏滑入 ────────────────────────────────────────────────
   testWidgets(
     'bottom batch bar animates in with SlideTransition when items selected',
@@ -140,6 +212,7 @@ void main() {
       // Use a custom GoRouter to avoid MyApp's Riverpod ref.listen-in-
       // initState assertion. The route tree mirrors app.dart but with a
       // minimal capture-detail stub.
+      CaptureRecord? pushedInitialCapture;
       final router = GoRouter(
         initialLocation: '/records',
         routes: [
@@ -157,10 +230,15 @@ void main() {
                 routes: [
                   GoRoute(
                     path: 'captures/:captureId',
-                    builder: (context, state) => Scaffold(
-                      appBar: AppBar(title: const Text('记录详情')),
-                      body: const SizedBox.shrink(),
-                    ),
+                    builder: (context, state) {
+                      if (state.extra case CaptureDetailArguments arguments) {
+                        pushedInitialCapture = arguments.capture;
+                      }
+                      return Scaffold(
+                        appBar: AppBar(title: const Text('记录详情')),
+                        body: const SizedBox.shrink(),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -197,6 +275,7 @@ void main() {
 
       // Verify we're on the capture detail screen.
       expect(find.text('记录详情'), findsOneWidget);
+      expect(pushedInitialCapture?.id, 'capture-1');
 
       // Pop back via the AppBar back button.
       await tester.tap(find.byType(BackButton));

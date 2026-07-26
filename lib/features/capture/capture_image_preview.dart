@@ -44,10 +44,10 @@ enum CapturePreviewSource { bestAvailable, watermarked, original }
 ///
 /// File existence is checked asynchronously via [File.exists] and the resolved
 /// [_PreviewResolution] is cached per `State` instance, refreshed only when the
-/// relevant inputs change. Decoded frames fade in via [Image.frameBuilder],
-/// and same-slot content swaps (status overlay to final photo, placeholder to
-/// image) cross-fade through an [AnimatedSwitcher] driven by the keyed subtrees
-/// below.
+/// relevant inputs change. Decoded frames fade in via [Image.frameBuilder]
+/// except for Hero thumbnails, whose immediate handoff avoids a second fade.
+/// Same-slot content swaps (status overlay to final photo, placeholder to
+/// image) cross-fade through an [AnimatedSwitcher] driven by the keyed subtrees.
 ///
 /// Pass an explicit [source] to render only the watermarked or original photo
 /// (used by the detail screen's segmented control). The default
@@ -63,6 +63,9 @@ class CaptureImagePreview extends StatefulWidget {
     this.fileExists,
     this.source = CapturePreviewSource.bestAvailable,
     this.heroTag,
+    this.heroDestination = false,
+    this.initialImagePath,
+    this.onImageResolved,
   });
 
   final CaptureRecord capture;
@@ -84,24 +87,47 @@ class CaptureImagePreview extends StatefulWidget {
   /// same image instead of a loading or placeholder subtree.
   final String? heroTag;
 
+  /// Keeps the detail endpoint visually continuous with the list Hero flight.
+  ///
+  /// The flight shuttle decodes the same path at 2048 px, so the destination
+  /// reuses that cache key and skips its own switch/frame fades.
+  final bool heroDestination;
+
+  /// Concrete image path already resolved by the source list item.
+  final String? initialImagePath;
+
+  /// Reports the concrete path represented by a successful image preview.
+  final ValueChanged<String>? onImageResolved;
+
   @override
   State<CaptureImagePreview> createState() => _CaptureImagePreviewState();
 }
 
 class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   late Future<_PreviewResolution> _resolution;
+  _PreviewResolution? _initialResolution;
+  bool _useInitialWhileWaiting = false;
 
   @override
   void initState() {
     super.initState();
-    _resolution = _resolve();
+    final initialImagePath = widget.initialImagePath;
+    if (initialImagePath != null) {
+      _initialResolution = _PreviewResolution.image(
+        initialImagePath,
+        status: null,
+      );
+      _useInitialWhileWaiting = true;
+    }
+    _resolution = _resolveAndReport();
   }
 
   @override
   void didUpdateWidget(covariant CaptureImagePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_resolutionInputsChanged(oldWidget)) {
-      _resolution = _resolve();
+      _useInitialWhileWaiting = false;
+      _resolution = _resolveAndReport();
     }
   }
 
@@ -176,17 +202,33 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     }
   }
 
+  Future<_PreviewResolution> _resolveAndReport() async {
+    final captureId = widget.capture.id;
+    final resolution = await _resolve();
+    if (mounted && widget.capture.id == captureId) {
+      _useInitialWhileWaiting = false;
+      if (resolution.kind == _PreviewResolutionKind.image) {
+        widget.onImageResolved?.call(resolution.path!);
+      }
+    }
+    return resolution;
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final preview = FutureBuilder<_PreviewResolution>(
       future: _resolution,
+      initialData: _initialResolution,
       builder: (context, snapshot) {
         final resolution = snapshot.data;
-        if (snapshot.connectionState != ConnectionState.done ||
-            resolution == null) {
+        if (resolution == null ||
+            (snapshot.connectionState != ConnectionState.done &&
+                !_useInitialWhileWaiting)) {
           return AnimatedSwitcher(
-            duration: AppMotion.medium2,
+            duration: widget.heroDestination
+                ? Duration.zero
+                : AppMotion.medium2,
             child: _placeholder(
               context,
               strings,
@@ -195,7 +237,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
           );
         }
         return AnimatedSwitcher(
-          duration: AppMotion.medium2,
+          duration: widget.heroDestination ? Duration.zero : AppMotion.medium2,
           child: switch (resolution.kind) {
             _PreviewResolutionKind.image => _image(
               context,
@@ -282,22 +324,33 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final image = Image.file(
-          File(path),
+        final cacheWidth = widget.thumbnail
+            ? 192
+            : widget.heroDestination
+            ? 2048
+            : _detailCacheWidth(context, constraints);
+        final provider = ResizeImage.resizeIfNeeded(
+          cacheWidth,
+          widget.thumbnail ? 192 : null,
+          FileImage(File(path)),
+        );
+        final image = Image(
+          image: provider,
           fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
-          cacheWidth: widget.thumbnail
-              ? 192
-              : _detailCacheWidth(context, constraints),
-          cacheHeight: widget.thumbnail ? 192 : null,
-          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            if (wasSynchronouslyLoaded) return child;
-            return AnimatedOpacity(
-              opacity: frame == null ? 0 : 1,
-              duration: AppMotion.medium2,
-              curve: AppMotion.standard,
-              child: child,
-            );
-          },
+          gaplessPlayback: widget.heroTag != null || widget.heroDestination,
+          frameBuilder:
+              widget.heroDestination ||
+                  (widget.thumbnail && widget.heroTag != null)
+              ? null
+              : (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded) return child;
+                  return AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: AppMotion.medium2,
+                    curve: AppMotion.standard,
+                    child: child,
+                  );
+                },
           errorBuilder: (context, error, _) => _placeholder(
             context,
             AppStrings.of(context),
@@ -345,7 +398,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         }
         if (widget.thumbnail) return preview;
         return GestureDetector(
-          onTap: widget.onOpen ?? () => _openFullscreen(context, path),
+          onTap:
+              widget.onOpen ??
+              () => _openFullscreen(context, path, previewImage: provider),
           child: preview,
         );
       },
@@ -366,14 +421,18 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   /// Detail-surface decode width cap, derived from the available horizontal
   /// space and the device pixel ratio. The full-screen viewer does NOT use
   /// this cap — it keeps the original resolution so 4x zoom stays sharp.
-  void _openFullscreen(BuildContext context, String path) {
+  void _openFullscreen(
+    BuildContext context,
+    String path, {
+    required ImageProvider<Object> previewImage,
+  }) {
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         opaque: true,
         transitionDuration: AppMotion.long2,
         reverseTransitionDuration: AppMotion.medium4,
         pageBuilder: (context, animation, secondaryAnimation) =>
-            CaptureFullscreenScreen(path: path),
+            CaptureFullscreenScreen(path: path, previewImage: previewImage),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final curved = CurvedAnimation(
             parent: animation,

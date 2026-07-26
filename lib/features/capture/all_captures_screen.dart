@@ -8,6 +8,7 @@ import 'package:sitemark/domain/capture_summary_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
+import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/capture/compact_filter_menu.dart';
@@ -123,9 +124,13 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
               _selectionController.toggle(id);
             }
           },
-          onTap: () => context.push(
+          onTap: (initialImagePath) => context.push(
             '/projects/${summary.capture.projectId}'
             '/captures/$id',
+            extra: CaptureDetailArguments(
+              capture: summary.capture,
+              initialImagePath: initialImagePath,
+            ),
           ),
         );
       },
@@ -139,115 +144,125 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     final allEligibleSelected = _selectionController.allSelected(
       _selectableIds(_latestCaptures),
     );
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(strings.allRecords),
-        actions: [
-          if (editing)
+    return PopScope(
+      canPop: !editing,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selectionController.editing) {
+          _selectionController.exit();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(strings.allRecords),
+          actions: [
+            if (editing)
+              IconButton(
+                key: const Key('select-all-captures'),
+                onPressed: () {
+                  _selectionController.toggleAll(
+                    _selectableIds(_latestCaptures),
+                  );
+                },
+                tooltip: allEligibleSelected
+                    ? strings.deselectAll
+                    : strings.selectAll,
+                icon: Icon(
+                  allEligibleSelected
+                      ? Icons.check_box_outline_blank
+                      : Icons.select_all_outlined,
+                ),
+              ),
             IconButton(
-              key: const Key('select-all-captures'),
+              key: const Key('edit-captures'),
               onPressed: () {
-                _selectionController.toggleAll(_selectableIds(_latestCaptures));
+                if (_selectionController.editing) {
+                  _selectionController.exit();
+                } else {
+                  _selectionController.enter();
+                }
               },
-              tooltip: allEligibleSelected
-                  ? strings.deselectAll
-                  : strings.selectAll,
-              icon: Icon(
-                allEligibleSelected
-                    ? Icons.check_box_outline_blank
-                    : Icons.select_all_outlined,
+              tooltip: editing ? strings.done : strings.editRecords,
+              icon: AnimatedSwitcher(
+                duration: AppMotion.short4,
+                child: Icon(
+                  editing ? Icons.done : Icons.edit_outlined,
+                  key: ValueKey(editing),
+                ),
               ),
             ),
-          IconButton(
-            key: const Key('edit-captures'),
-            onPressed: () {
-              if (_selectionController.editing) {
-                _selectionController.exit();
-              } else {
-                _selectionController.enter();
-              }
-            },
-            tooltip: editing ? strings.done : strings.editRecords,
-            icon: AnimatedSwitcher(
-              duration: AppMotion.short4,
-              child: Icon(
-                editing ? Icons.done : Icons.edit_outlined,
-                key: ValueKey(editing),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: StreamBuilder<List<Project>>(
-        stream: _projectsStream,
-        builder: (context, projectSnapshot) {
-          return StreamBuilder<List<CaptureSummary>>(
-            stream: _captureSummariesStream,
-            builder: (context, allSnapshot) {
-              final allSummaries = allSnapshot.data ?? const [];
-              final projects = projectSnapshot.data ?? const [];
-              final dateOptionSummaries = filterCaptureSummaries(
-                allSummaries,
-                CaptureFilter(projectId: _filter.projectId),
-              );
-              final rows = filterCaptureSummaries(allSummaries, _filter);
-              return Column(
-                children: [
-                  _filterBar(context, strings, projects, dateOptionSummaries),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: AppMotion.short4,
-                      child: !allSnapshot.hasData
-                          ? const Skeletonizer(
-                              key: Key('capture-list-skeleton'),
-                              child: _CaptureListSkeleton(),
-                            )
-                          : KeyedSubtree(
-                              key: const Key('capture-list-content'),
-                              child: Builder(
-                                builder: (context) {
-                                  _latestCaptures = rows;
-                                  return _captureListContent(
-                                    context,
-                                    strings,
-                                    allSummaries,
-                                    rows,
-                                  );
-                                },
+          ],
+        ),
+        body: StreamBuilder<List<Project>>(
+          stream: _projectsStream,
+          builder: (context, projectSnapshot) {
+            return StreamBuilder<List<CaptureSummary>>(
+              stream: _captureSummariesStream,
+              builder: (context, allSnapshot) {
+                final allSummaries = allSnapshot.data ?? const [];
+                final projects = projectSnapshot.data ?? const [];
+                final dateOptionSummaries = filterCaptureSummaries(
+                  allSummaries,
+                  CaptureFilter(projectId: _filter.projectId),
+                );
+                final rows = filterCaptureSummaries(allSummaries, _filter);
+                return Column(
+                  children: [
+                    _filterBar(context, strings, projects, dateOptionSummaries),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: AppMotion.short4,
+                        child: !allSnapshot.hasData
+                            ? const Skeletonizer(
+                                key: Key('capture-list-skeleton'),
+                                child: _CaptureListSkeleton(),
+                              )
+                            : KeyedSubtree(
+                                key: const Key('capture-list-content'),
+                                child: Builder(
+                                  builder: (context) {
+                                    _latestCaptures = rows;
+                                    return _captureListContent(
+                                      context,
+                                      strings,
+                                      allSummaries,
+                                      rows,
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
+                      ),
                     ),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      ),
-      bottomNavigationBar: AnimatedSwitcher(
-        duration: AppMotion.medium4,
-        transitionBuilder: (child, animation) {
-          final curved = animation.drive(
-            CurveTween(curve: AppMotion.emphasizedDecelerate),
-          );
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0, 1),
-              end: Offset.zero,
-            ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
-          );
-        },
-        child: editing && _selectionController.selectedIds.isNotEmpty
-            ? CaptureBatchActionBar(
-                key: const Key('batch-bar'),
-                controller: _selectionController,
-                mediaService: ref.watch(captureMediaServiceProvider),
-                exportService: ref.watch(projectExportServiceProvider),
-                shareService: ref.watch(shareFileServiceProvider),
-                summaries: _latestCaptures,
-              )
-            : const SizedBox.shrink(key: Key('batch-bar-empty')),
+                  ],
+                );
+              },
+            );
+          },
+        ),
+        bottomNavigationBar: AnimatedSwitcher(
+          duration: AppMotion.medium4,
+          transitionBuilder: (child, animation) {
+            final curved = animation.drive(
+              CurveTween(curve: AppMotion.emphasizedDecelerate),
+            );
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).animate(curved),
+              child: FadeTransition(opacity: curved, child: child),
+            );
+          },
+          child: editing && _selectionController.selectedIds.isNotEmpty
+              ? CaptureBatchActionBar(
+                  key: const Key('batch-bar'),
+                  controller: _selectionController,
+                  mediaService: ref.watch(captureMediaServiceProvider),
+                  exportService: ref.watch(projectExportServiceProvider),
+                  shareService: ref.watch(shareFileServiceProvider),
+                  summaries: _latestCaptures,
+                )
+              : const SizedBox.shrink(key: Key('batch-bar-empty')),
+        ),
       ),
     );
   }

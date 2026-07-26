@@ -8,8 +8,8 @@ import 'package:sitemark/l10n/app_strings.dart';
 
 /// Fallback version/build used when [PackageInfo.fromPlatform] fails (e.g. in
 /// unit tests where no platform plugin is available).
-const _fallbackVersion = '0.5.0';
-const _fallbackBuild = '4';
+const _fallbackVersion = '0.5.1';
+const _fallbackBuild = '6';
 
 class AboutSectionScreen extends ConsumerStatefulWidget {
   const AboutSectionScreen({super.key});

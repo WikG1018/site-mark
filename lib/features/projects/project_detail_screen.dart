@@ -8,16 +8,21 @@ import 'package:sitemark/domain/capture_summary_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
+import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
-  const ProjectDetailScreen({super.key, required this.projectId});
+  const ProjectDetailScreen({
+    super.key,
+    required this.projectId,
+    this.initialProject,
+  });
 
   final String projectId;
+  final Project? initialProject;
 
   @override
   ConsumerState<ProjectDetailScreen> createState() =>
@@ -103,140 +108,149 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     final allEligibleSelected = _selectionController.allSelected(
       _selectableIds(_latestCaptures),
     );
-    return FutureBuilder<Project?>(
-      future: _projectFuture,
-      builder: (context, projectSnapshot) {
-        final project = projectSnapshot.data;
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(project?.name ?? strings.appName),
-            actions: [
-              if (project != null && !editing) ...[
+    return PopScope(
+      canPop: !editing,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selectionController.editing) {
+          _selectionController.exit();
+        }
+      },
+      child: FutureBuilder<Project?>(
+        future: _projectFuture,
+        initialData: widget.initialProject,
+        builder: (context, projectSnapshot) {
+          final project = projectSnapshot.data;
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(project?.name ?? strings.appName),
+              actions: [
+                if (project != null && !editing) ...[
+                  IconButton(
+                    onPressed: () =>
+                        context.push('/projects/${project.id}/settings'),
+                    tooltip: strings.projectWatermarkSettings,
+                    icon: const Icon(Icons.tune_outlined),
+                  ),
+                  IconButton(
+                    onPressed: () => _exportProject(context, ref, project.id),
+                    tooltip: strings.exportProject,
+                    icon: const Icon(Icons.archive_outlined),
+                  ),
+                ],
+                if (editing)
+                  IconButton(
+                    key: const Key('select-all-captures'),
+                    onPressed: () {
+                      _selectionController.toggleAll(
+                        _selectableIds(_latestCaptures),
+                      );
+                    },
+                    tooltip: allEligibleSelected
+                        ? strings.deselectAll
+                        : strings.selectAll,
+                    icon: Icon(
+                      allEligibleSelected
+                          ? Icons.check_box_outline_blank
+                          : Icons.select_all_outlined,
+                    ),
+                  ),
                 IconButton(
-                  onPressed: () =>
-                      context.push('/projects/${project.id}/settings'),
-                  tooltip: strings.projectWatermarkSettings,
-                  icon: const Icon(Icons.tune_outlined),
-                ),
-                IconButton(
-                  onPressed: () => _exportProject(context, ref, project.id),
-                  tooltip: strings.exportProject,
-                  icon: const Icon(Icons.archive_outlined),
+                  key: const Key('edit-captures'),
+                  onPressed: () {
+                    if (_selectionController.editing) {
+                      _selectionController.exit();
+                    } else {
+                      _selectionController.enter();
+                    }
+                  },
+                  tooltip: editing ? strings.done : strings.editRecords,
+                  icon: AnimatedSwitcher(
+                    duration: AppMotion.short4,
+                    child: Icon(
+                      editing ? Icons.done : Icons.edit_outlined,
+                      key: ValueKey(editing),
+                    ),
+                  ),
                 ),
               ],
-              if (editing)
-                IconButton(
-                  key: const Key('select-all-captures'),
-                  onPressed: () {
-                    _selectionController.toggleAll(
-                      _selectableIds(_latestCaptures),
-                    );
-                  },
-                  tooltip: allEligibleSelected
-                      ? strings.deselectAll
-                      : strings.selectAll,
-                  icon: Icon(
-                    allEligibleSelected
-                        ? Icons.check_box_outline_blank
-                        : Icons.select_all_outlined,
-                  ),
-                ),
-              IconButton(
-                key: const Key('edit-captures'),
-                onPressed: () {
-                  if (_selectionController.editing) {
-                    _selectionController.exit();
-                  } else {
-                    _selectionController.enter();
-                  }
-                },
-                tooltip: editing ? strings.done : strings.editRecords,
-                icon: AnimatedSwitcher(
-                  duration: AppMotion.short4,
-                  child: Icon(
-                    editing ? Icons.done : Icons.edit_outlined,
-                    key: ValueKey(editing),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          body: project == null
-              ? const Skeletonizer(child: _CaptureListSkeleton())
-              : StreamBuilder<List<CaptureSummary>>(
-                  stream: _captureSummariesStream,
-                  builder: (context, captureSnapshot) {
-                    final allProjectSummaries = captureSnapshot.data;
-                    final captures = allProjectSummaries == null
-                        ? null
-                        : filterCaptureSummaries(allProjectSummaries, filter);
-                    if (captures != null) {
-                      _latestCaptures = captures;
-                    }
-                    return AnimatedSwitcher(
-                      duration: AppMotion.short4,
-                      child: captures == null
-                          ? const Skeletonizer(
-                              key: Key('capture-list-skeleton'),
-                              child: _CaptureListSkeleton(),
-                            )
-                          : KeyedSubtree(
-                              key: const Key('capture-list-content'),
-                              child: _projectCaptureList(
-                                context,
-                                strings,
-                                project,
-                                filter,
-                                allProjectSummaries!,
-                                captures,
-                              ),
-                            ),
-                    );
-                  },
-                ),
-          bottomNavigationBar: AnimatedSwitcher(
-            duration: AppMotion.medium4,
-            transitionBuilder: (child, animation) {
-              final curved = animation.drive(
-                CurveTween(curve: AppMotion.emphasizedDecelerate),
-              );
-              return SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 1),
-                  end: Offset.zero,
-                ).animate(curved),
-                child: FadeTransition(opacity: curved, child: child),
-              );
-            },
-            child: editing && _selectionController.selectedIds.isNotEmpty
-                ? CaptureBatchActionBar(
-                    key: const Key('batch-bar'),
-                    controller: _selectionController,
-                    mediaService: ref.watch(captureMediaServiceProvider),
-                    exportService: ref.watch(projectExportServiceProvider),
-                    shareService: ref.watch(shareFileServiceProvider),
-                    summaries: _latestCaptures,
-                  )
-                : const SizedBox.shrink(key: Key('batch-bar-empty')),
-          ),
-          floatingActionButton: AnimatedSwitcher(
-            duration: AppMotion.medium2,
-            switchInCurve: AppMotion.emphasized,
-            switchOutCurve: AppMotion.emphasized,
-            transitionBuilder: (child, animation) =>
-                ScaleTransition(scale: animation, child: child),
-            child: project == null || editing
+            ),
+            body: project == null
                 ? const SizedBox.shrink()
-                : FloatingActionButton.extended(
-                    key: const ValueKey('capture-fab'),
-                    onPressed: () =>
-                        context.push('/projects/${widget.projectId}/capture'),
-                    icon: const Icon(Icons.photo_camera_outlined),
-                    label: Text(strings.capture),
+                : StreamBuilder<List<CaptureSummary>>(
+                    stream: _captureSummariesStream,
+                    builder: (context, captureSnapshot) {
+                      final allProjectSummaries = captureSnapshot.data;
+                      final captures = allProjectSummaries == null
+                          ? null
+                          : filterCaptureSummaries(allProjectSummaries, filter);
+                      if (captures != null) {
+                        _latestCaptures = captures;
+                      }
+                      if (captures == null) {
+                        return _projectCaptureList(
+                          context,
+                          strings,
+                          project,
+                          filter,
+                          const [],
+                          const [],
+                          loadingCaptures: true,
+                        );
+                      }
+                      return _projectCaptureList(
+                        context,
+                        strings,
+                        project,
+                        filter,
+                        allProjectSummaries!,
+                        captures,
+                      );
+                    },
                   ),
-          ),
-        );
-      },
+            bottomNavigationBar: AnimatedSwitcher(
+              duration: AppMotion.medium4,
+              transitionBuilder: (child, animation) {
+                final curved = animation.drive(
+                  CurveTween(curve: AppMotion.emphasizedDecelerate),
+                );
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(curved),
+                  child: FadeTransition(opacity: curved, child: child),
+                );
+              },
+              child: editing && _selectionController.selectedIds.isNotEmpty
+                  ? CaptureBatchActionBar(
+                      key: const Key('batch-bar'),
+                      controller: _selectionController,
+                      mediaService: ref.watch(captureMediaServiceProvider),
+                      exportService: ref.watch(projectExportServiceProvider),
+                      shareService: ref.watch(shareFileServiceProvider),
+                      summaries: _latestCaptures,
+                    )
+                  : const SizedBox.shrink(key: Key('batch-bar-empty')),
+            ),
+            floatingActionButton: AnimatedSwitcher(
+              duration: AppMotion.medium2,
+              switchInCurve: AppMotion.emphasized,
+              switchOutCurve: AppMotion.emphasized,
+              transitionBuilder: (child, animation) =>
+                  ScaleTransition(scale: animation, child: child),
+              child: project == null || editing
+                  ? const SizedBox.shrink()
+                  : FloatingActionButton.extended(
+                      key: const ValueKey('capture-fab'),
+                      onPressed: () =>
+                          context.push('/projects/${widget.projectId}/capture'),
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: Text(strings.capture),
+                    ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -246,8 +260,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     Project project,
     CaptureFilter filter,
     List<CaptureSummary> allProjectSummaries,
-    List<CaptureSummary> captures,
-  ) {
+    List<CaptureSummary> captures, {
+    bool loadingCaptures = false,
+  }) {
     final hasAnyRecord = allProjectSummaries.isNotEmpty;
     return CustomScrollView(
       slivers: [
@@ -266,7 +281,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           ),
         ),
-        if (hasAnyRecord)
+        if (!loadingCaptures && hasAnyRecord)
           SliverToBoxAdapter(
             child: CaptureDateFilterBar(
               filter: filter,
@@ -274,7 +289,12 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               onChanged: _onFilterChanged,
             ),
           ),
-        if (!hasAnyRecord)
+        if (loadingCaptures)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: SizedBox.shrink(),
+          )
+        else if (!hasAnyRecord)
           SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
@@ -320,9 +340,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       _selectionController.toggle(id);
                     }
                   },
-                  onTap: () => context.push(
+                  onTap: (initialImagePath) => context.push(
                     '/projects/${widget.projectId}'
                     '/captures/$id',
+                    extra: CaptureDetailArguments(
+                      capture: summary.capture,
+                      initialImagePath: initialImagePath,
+                    ),
                   ),
                 );
               },
@@ -421,61 +445,6 @@ class _ProjectHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(project.description!),
                   ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CaptureListSkeleton extends StatelessWidget {
-  const _CaptureListSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-      itemCount: 6,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) => const _CaptureCardSkeleton(),
-    );
-  }
-}
-
-class _CaptureCardSkeleton extends StatelessWidget {
-  const _CaptureCardSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 96,
-              height: 96,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: const ColoredBox(color: Colors.grey),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('SM-0000-000', style: textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text('0000/00/00 00:00', style: textTheme.bodyMedium),
-                  const SizedBox(height: 2),
-                  Text('---', style: textTheme.bodySmall),
                 ],
               ),
             ),

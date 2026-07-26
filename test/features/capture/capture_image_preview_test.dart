@@ -8,6 +8,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
+import 'package:sitemark/features/capture/capture_photo_hero.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 
@@ -237,6 +238,89 @@ void main() {
 
     expect(previewResizeImage(tester).width, 2048);
   });
+
+  testWidgets('Hero destination reuses flight decode without a second fade', (
+    tester,
+  ) async {
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 240,
+            child: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _FakeOutputPaths(),
+              fileExists: (path) => true,
+              heroDestination: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final image = previewImage(tester);
+    expect((image.image as ResizeImage).width, 2048);
+    expect(image.gaplessPlayback, isTrue);
+    expect(
+      find.descendant(
+        of: find.byType(CaptureImagePreview),
+        matching: find.byType(AnimatedOpacity),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+    'Hero destination paints the list-resolved image before async lookup',
+    (tester) async {
+      final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+      final paths = _DelayedOutputPaths();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: SizedBox(
+              width: 360,
+              height: 240,
+              child: CaptureImagePreview(
+                capture: capture,
+                outputPaths: paths,
+                heroDestination: true,
+                initialImagePath: '/private/rendered/capture-1.jpg',
+                fileExists: (_) => true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.text('失败'), findsNothing);
+
+      paths.renderedPath.complete('/private/rendered/capture-1.jpg');
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('detail preview uses media width for an unbounded layout', (
     tester,
@@ -513,6 +597,42 @@ void main() {
       expect(hero.tag, 'capture-photo-capture-1');
     },
   );
+
+  testWidgets('Hero thumbnail skips a second decoded-image fade', (
+    tester,
+  ) async {
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureImagePreview(
+            capture: capture,
+            outputPaths: _FakeOutputPaths(),
+            thumbnail: true,
+            heroTag: 'capture-photo-capture-1',
+            fileExists: (path) => true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    final hero = find.byType(CapturePhotoHero);
+    expect(hero, findsOneWidget);
+    expect(
+      find.descendant(of: hero, matching: find.byType(AnimatedOpacity)),
+      findsNothing,
+    );
+  });
 
   testWidgets(
     'source change hides the previous image until delayed resolution',

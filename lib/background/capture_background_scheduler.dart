@@ -62,14 +62,28 @@ final class PersistentCaptureBackgroundScheduler
 
   final BackgroundWorkClient _client;
   final AppDatabase _database;
+  Future<void>? _initialization;
 
   @override
-  Future<void> initialize() async {
-    await _client.initialize(captureCallbackDispatcher);
+  Future<void> initialize() {
+    return _initialization ??= _initializeClient();
+  }
+
+  Future<void> _initializeClient() async {
+    try {
+      await _client.initialize(captureCallbackDispatcher);
+    } catch (_) {
+      // A transient platform-channel failure must remain retryable.
+      _initialization = null;
+      rethrow;
+    }
   }
 
   @override
   Future<void> enqueue(String captureId) async {
+    // Initialization is intentionally lazy so Android can draw Flutter's first
+    // frame without waiting behind the WorkManager platform channel.
+    await initialize();
     await _client.appendCapture(
       queueName: captureProcessingQueue,
       taskName: captureProcessingTask,

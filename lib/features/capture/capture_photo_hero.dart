@@ -24,6 +24,10 @@ class CapturePhotoHero extends StatelessWidget {
   Widget build(BuildContext context) {
     return Hero(
       tag: tag,
+      // Keep the list thumbnail painted underneath the overlay. The default
+      // empty placeholder creates a one-frame hole when the reverse flight is
+      // handed back to the destination route.
+      placeholderBuilder: (context, heroSize, child) => child,
       flightShuttleBuilder:
           (
             flightContext,
