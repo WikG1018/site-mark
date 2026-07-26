@@ -282,6 +282,46 @@ void main() {
     );
   });
 
+  testWidgets(
+    'Hero destination paints the list-resolved image before async lookup',
+    (tester) async {
+      final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+      final paths = _DelayedOutputPaths();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: SizedBox(
+              width: 360,
+              height: 240,
+              child: CaptureImagePreview(
+                capture: capture,
+                outputPaths: paths,
+                heroDestination: true,
+                initialImagePath: '/private/rendered/capture-1.jpg',
+                fileExists: (_) => true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.text('失败'), findsNothing);
+
+      paths.renderedPath.complete('/private/rendered/capture-1.jpg');
+      await tester.pumpAndSettle();
+    },
+  );
+
   testWidgets('detail preview uses media width for an unbounded layout', (
     tester,
   ) async {

@@ -10,6 +10,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
+import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -230,8 +231,8 @@ void main() {
                   GoRoute(
                     path: 'captures/:captureId',
                     builder: (context, state) {
-                      if (state.extra case CaptureRecord capture) {
-                        pushedInitialCapture = capture;
+                      if (state.extra case CaptureDetailArguments arguments) {
+                        pushedInitialCapture = arguments.capture;
                       }
                       return Scaffold(
                         appBar: AppBar(title: const Text('记录详情')),

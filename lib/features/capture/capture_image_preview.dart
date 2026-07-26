@@ -64,6 +64,8 @@ class CaptureImagePreview extends StatefulWidget {
     this.source = CapturePreviewSource.bestAvailable,
     this.heroTag,
     this.heroDestination = false,
+    this.initialImagePath,
+    this.onImageResolved,
   });
 
   final CaptureRecord capture;
@@ -91,24 +93,41 @@ class CaptureImagePreview extends StatefulWidget {
   /// reuses that cache key and skips its own switch/frame fades.
   final bool heroDestination;
 
+  /// Concrete image path already resolved by the source list item.
+  final String? initialImagePath;
+
+  /// Reports the concrete path represented by a successful image preview.
+  final ValueChanged<String>? onImageResolved;
+
   @override
   State<CaptureImagePreview> createState() => _CaptureImagePreviewState();
 }
 
 class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   late Future<_PreviewResolution> _resolution;
+  _PreviewResolution? _initialResolution;
+  bool _useInitialWhileWaiting = false;
 
   @override
   void initState() {
     super.initState();
-    _resolution = _resolve();
+    final initialImagePath = widget.initialImagePath;
+    if (initialImagePath != null) {
+      _initialResolution = _PreviewResolution.image(
+        initialImagePath,
+        status: null,
+      );
+      _useInitialWhileWaiting = true;
+    }
+    _resolution = _resolveAndReport();
   }
 
   @override
   void didUpdateWidget(covariant CaptureImagePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_resolutionInputsChanged(oldWidget)) {
-      _resolution = _resolve();
+      _useInitialWhileWaiting = false;
+      _resolution = _resolveAndReport();
     }
   }
 
@@ -183,15 +202,29 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     }
   }
 
+  Future<_PreviewResolution> _resolveAndReport() async {
+    final captureId = widget.capture.id;
+    final resolution = await _resolve();
+    if (mounted && widget.capture.id == captureId) {
+      _useInitialWhileWaiting = false;
+      if (resolution.kind == _PreviewResolutionKind.image) {
+        widget.onImageResolved?.call(resolution.path!);
+      }
+    }
+    return resolution;
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final preview = FutureBuilder<_PreviewResolution>(
       future: _resolution,
+      initialData: _initialResolution,
       builder: (context, snapshot) {
         final resolution = snapshot.data;
-        if (snapshot.connectionState != ConnectionState.done ||
-            resolution == null) {
+        if (resolution == null ||
+            (snapshot.connectionState != ConnectionState.done &&
+                !_useInitialWhileWaiting)) {
           return AnimatedSwitcher(
             duration: widget.heroDestination
                 ? Duration.zero

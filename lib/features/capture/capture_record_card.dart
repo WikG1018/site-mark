@@ -48,7 +48,7 @@ class CaptureRecordCard extends ConsumerStatefulWidget {
   });
 
   final CaptureSummary summary;
-  final VoidCallback onTap;
+  final ValueChanged<String?> onTap;
   final bool showProjectName;
   final bool selectionMode;
   final bool selected;
@@ -61,6 +61,7 @@ class CaptureRecordCard extends ConsumerStatefulWidget {
 
 class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
   late Future<OriginalPhotoState> _originalState;
+  String? _resolvedPreviewPath;
   late final FutureOr<bool> Function(String) _previewFileExists =
       _previewFileExistsForPath;
 
@@ -110,7 +111,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                   widget.onSelectedChanged?.call(!widget.selected);
                 }
               : null
-        : widget.onTap;
+        : () => widget.onTap(_resolvedPreviewPath);
     final thumbnail = SizedBox(
       width: 96,
       height: 96,
@@ -124,6 +125,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
           heroTag: capture.status == CaptureStatus.ready
               ? 'capture-photo-${capture.id}'
               : null,
+          onImageResolved: (path) => _resolvedPreviewPath = path,
         ),
       ),
     );

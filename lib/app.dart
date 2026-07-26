@@ -387,16 +387,24 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               GoRoute(
                 path: 'captures/:captureId',
-                pageBuilder: (context, state) => _captureDetailPage(
-                  state,
-                  CaptureDetailScreen(
-                    projectId: state.pathParameters['projectId']!,
-                    captureId: state.pathParameters['captureId']!,
-                    initialCapture: state.extra is CaptureRecord
-                        ? state.extra! as CaptureRecord
-                        : null,
-                  ),
-                ),
+                pageBuilder: (context, state) {
+                  final arguments = state.extra is CaptureDetailArguments
+                      ? state.extra! as CaptureDetailArguments
+                      : null;
+                  return _captureDetailPage(
+                    state,
+                    CaptureDetailScreen(
+                      projectId: state.pathParameters['projectId']!,
+                      captureId: state.pathParameters['captureId']!,
+                      initialCapture:
+                          arguments?.capture ??
+                          (state.extra is CaptureRecord
+                              ? state.extra! as CaptureRecord
+                              : null),
+                      initialImagePath: arguments?.initialImagePath,
+                    ),
+                  );
+                },
                 routes: [
                   GoRoute(
                     path: 'edit',

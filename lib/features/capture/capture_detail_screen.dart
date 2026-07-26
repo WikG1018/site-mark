@@ -14,6 +14,16 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 
+final class CaptureDetailArguments {
+  const CaptureDetailArguments({
+    required this.capture,
+    required this.initialImagePath,
+  });
+
+  final CaptureRecord capture;
+  final String? initialImagePath;
+}
+
 /// Photo detail surface with explicit watermarked/original preview, file
 /// metadata, and dual destructive actions.
 ///
@@ -37,11 +47,13 @@ class CaptureDetailScreen extends ConsumerStatefulWidget {
     required this.projectId,
     required this.captureId,
     this.initialCapture,
+    this.initialImagePath,
   });
 
   final String projectId;
   final String captureId;
   final CaptureRecord? initialCapture;
+  final String? initialImagePath;
 
   @override
   ConsumerState<CaptureDetailScreen> createState() =>
@@ -133,6 +145,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     outputPaths: outputPaths,
                     source: effectiveSource,
                     heroDestination: heroTag != null,
+                    initialImagePath: widget.initialImagePath,
                   ),
                 ),
               ),
