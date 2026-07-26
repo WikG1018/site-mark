@@ -242,7 +242,7 @@ CustomTransitionPage<void> _sharedAxisPage(GoRouterState state, Widget child) {
   );
 }
 
-/// Detail pages with a photo Hero use a position-only transition so the Hero
+/// Photo detail and its editor use a position-only transition so the Hero
 /// overlay is not also handed between two independently fading image trees.
 CustomTransitionPage<void> _captureDetailPage(
   GoRouterState state,
@@ -389,7 +389,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'edit',
-                    pageBuilder: (context, state) => _sharedAxisPage(
+                    pageBuilder: (context, state) => _captureDetailPage(
                       state,
                       CaptureEditScreen(
                         projectId: state.pathParameters['projectId']!,

@@ -119,9 +119,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     capture: capture,
                     outputPaths: outputPaths,
                     source: effectiveSource,
-                    heroTag:
-                        capture.status == CaptureStatus.ready &&
-                            effectiveSource != CapturePreviewSource.original
+                    heroTag: capture.status == CaptureStatus.ready
                         ? 'capture-photo-${capture.id}'
                         : null,
                   ),
