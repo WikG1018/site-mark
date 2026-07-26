@@ -179,7 +179,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return FutureBuilder<_PreviewResolution>(
+    final preview = FutureBuilder<_PreviewResolution>(
       future: _resolution,
       builder: (context, snapshot) {
         final resolution = snapshot.data;
@@ -233,6 +233,13 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         );
       },
     );
+    // The detail endpoint must participate in Hero matching from its first
+    // frame. Its concrete image path resolves asynchronously, while the list
+    // thumbnail already supplies the custom, image-only flight shuttle.
+    if (widget.heroTag != null && !widget.thumbnail) {
+      return Hero(tag: widget.heroTag!, child: preview);
+    }
+    return preview;
   }
 
   /// Label shown while the existence check is in flight. Mirrors the most
@@ -329,7 +336,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
               );
 
         Widget preview = KeyedSubtree(key: Key(key), child: content);
-        if (widget.heroTag != null) {
+        if (widget.heroTag != null && widget.thumbnail) {
           preview = CapturePhotoHero(
             tag: widget.heroTag!,
             path: path,
