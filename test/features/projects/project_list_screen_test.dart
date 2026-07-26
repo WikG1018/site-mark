@@ -96,6 +96,23 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('system back closes home search instead of leaving the app', (
+    tester,
+  ) async {
+    await pumpProjects(tester);
+    await tester.tap(find.byKey(const Key('search-projects')));
+    await tester.pump();
+    expect(find.byKey(const Key('project-search-field')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-search-field')), findsNothing);
+    expect(find.byKey(const Key('project-title')), findsOneWidget);
+    expect(find.text('东区厂房改造'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
   testWidgets('project title area does not use a switching animation', (
     tester,
   ) async {

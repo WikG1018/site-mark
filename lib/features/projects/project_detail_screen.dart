@@ -103,140 +103,148 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     final allEligibleSelected = _selectionController.allSelected(
       _selectableIds(_latestCaptures),
     );
-    return FutureBuilder<Project?>(
-      future: _projectFuture,
-      builder: (context, projectSnapshot) {
-        final project = projectSnapshot.data;
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(project?.name ?? strings.appName),
-            actions: [
-              if (project != null && !editing) ...[
+    return PopScope(
+      canPop: !editing,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _selectionController.editing) {
+          _selectionController.exit();
+        }
+      },
+      child: FutureBuilder<Project?>(
+        future: _projectFuture,
+        builder: (context, projectSnapshot) {
+          final project = projectSnapshot.data;
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(project?.name ?? strings.appName),
+              actions: [
+                if (project != null && !editing) ...[
+                  IconButton(
+                    onPressed: () =>
+                        context.push('/projects/${project.id}/settings'),
+                    tooltip: strings.projectWatermarkSettings,
+                    icon: const Icon(Icons.tune_outlined),
+                  ),
+                  IconButton(
+                    onPressed: () => _exportProject(context, ref, project.id),
+                    tooltip: strings.exportProject,
+                    icon: const Icon(Icons.archive_outlined),
+                  ),
+                ],
+                if (editing)
+                  IconButton(
+                    key: const Key('select-all-captures'),
+                    onPressed: () {
+                      _selectionController.toggleAll(
+                        _selectableIds(_latestCaptures),
+                      );
+                    },
+                    tooltip: allEligibleSelected
+                        ? strings.deselectAll
+                        : strings.selectAll,
+                    icon: Icon(
+                      allEligibleSelected
+                          ? Icons.check_box_outline_blank
+                          : Icons.select_all_outlined,
+                    ),
+                  ),
                 IconButton(
-                  onPressed: () =>
-                      context.push('/projects/${project.id}/settings'),
-                  tooltip: strings.projectWatermarkSettings,
-                  icon: const Icon(Icons.tune_outlined),
-                ),
-                IconButton(
-                  onPressed: () => _exportProject(context, ref, project.id),
-                  tooltip: strings.exportProject,
-                  icon: const Icon(Icons.archive_outlined),
+                  key: const Key('edit-captures'),
+                  onPressed: () {
+                    if (_selectionController.editing) {
+                      _selectionController.exit();
+                    } else {
+                      _selectionController.enter();
+                    }
+                  },
+                  tooltip: editing ? strings.done : strings.editRecords,
+                  icon: AnimatedSwitcher(
+                    duration: AppMotion.short4,
+                    child: Icon(
+                      editing ? Icons.done : Icons.edit_outlined,
+                      key: ValueKey(editing),
+                    ),
+                  ),
                 ),
               ],
-              if (editing)
-                IconButton(
-                  key: const Key('select-all-captures'),
-                  onPressed: () {
-                    _selectionController.toggleAll(
-                      _selectableIds(_latestCaptures),
-                    );
-                  },
-                  tooltip: allEligibleSelected
-                      ? strings.deselectAll
-                      : strings.selectAll,
-                  icon: Icon(
-                    allEligibleSelected
-                        ? Icons.check_box_outline_blank
-                        : Icons.select_all_outlined,
-                  ),
-                ),
-              IconButton(
-                key: const Key('edit-captures'),
-                onPressed: () {
-                  if (_selectionController.editing) {
-                    _selectionController.exit();
-                  } else {
-                    _selectionController.enter();
-                  }
-                },
-                tooltip: editing ? strings.done : strings.editRecords,
-                icon: AnimatedSwitcher(
-                  duration: AppMotion.short4,
-                  child: Icon(
-                    editing ? Icons.done : Icons.edit_outlined,
-                    key: ValueKey(editing),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          body: project == null
-              ? const Skeletonizer(child: _CaptureListSkeleton())
-              : StreamBuilder<List<CaptureSummary>>(
-                  stream: _captureSummariesStream,
-                  builder: (context, captureSnapshot) {
-                    final allProjectSummaries = captureSnapshot.data;
-                    final captures = allProjectSummaries == null
-                        ? null
-                        : filterCaptureSummaries(allProjectSummaries, filter);
-                    if (captures != null) {
-                      _latestCaptures = captures;
-                    }
-                    return AnimatedSwitcher(
-                      duration: AppMotion.short4,
-                      child: captures == null
-                          ? const Skeletonizer(
-                              key: Key('capture-list-skeleton'),
-                              child: _CaptureListSkeleton(),
-                            )
-                          : KeyedSubtree(
-                              key: const Key('capture-list-content'),
-                              child: _projectCaptureList(
-                                context,
-                                strings,
-                                project,
-                                filter,
-                                allProjectSummaries!,
-                                captures,
+            ),
+            body: project == null
+                ? const Skeletonizer(child: _CaptureListSkeleton())
+                : StreamBuilder<List<CaptureSummary>>(
+                    stream: _captureSummariesStream,
+                    builder: (context, captureSnapshot) {
+                      final allProjectSummaries = captureSnapshot.data;
+                      final captures = allProjectSummaries == null
+                          ? null
+                          : filterCaptureSummaries(allProjectSummaries, filter);
+                      if (captures != null) {
+                        _latestCaptures = captures;
+                      }
+                      return AnimatedSwitcher(
+                        duration: AppMotion.short4,
+                        child: captures == null
+                            ? const Skeletonizer(
+                                key: Key('capture-list-skeleton'),
+                                child: _CaptureListSkeleton(),
+                              )
+                            : KeyedSubtree(
+                                key: const Key('capture-list-content'),
+                                child: _projectCaptureList(
+                                  context,
+                                  strings,
+                                  project,
+                                  filter,
+                                  allProjectSummaries!,
+                                  captures,
+                                ),
                               ),
-                            ),
-                    );
-                  },
-                ),
-          bottomNavigationBar: AnimatedSwitcher(
-            duration: AppMotion.medium4,
-            transitionBuilder: (child, animation) {
-              final curved = animation.drive(
-                CurveTween(curve: AppMotion.emphasizedDecelerate),
-              );
-              return SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 1),
-                  end: Offset.zero,
-                ).animate(curved),
-                child: FadeTransition(opacity: curved, child: child),
-              );
-            },
-            child: editing && _selectionController.selectedIds.isNotEmpty
-                ? CaptureBatchActionBar(
-                    key: const Key('batch-bar'),
-                    controller: _selectionController,
-                    mediaService: ref.watch(captureMediaServiceProvider),
-                    exportService: ref.watch(projectExportServiceProvider),
-                    shareService: ref.watch(shareFileServiceProvider),
-                    summaries: _latestCaptures,
-                  )
-                : const SizedBox.shrink(key: Key('batch-bar-empty')),
-          ),
-          floatingActionButton: AnimatedSwitcher(
-            duration: AppMotion.medium2,
-            switchInCurve: AppMotion.emphasized,
-            switchOutCurve: AppMotion.emphasized,
-            transitionBuilder: (child, animation) =>
-                ScaleTransition(scale: animation, child: child),
-            child: project == null || editing
-                ? const SizedBox.shrink()
-                : FloatingActionButton.extended(
-                    key: const ValueKey('capture-fab'),
-                    onPressed: () =>
-                        context.push('/projects/${widget.projectId}/capture'),
-                    icon: const Icon(Icons.photo_camera_outlined),
-                    label: Text(strings.capture),
+                      );
+                    },
                   ),
-          ),
-        );
-      },
+            bottomNavigationBar: AnimatedSwitcher(
+              duration: AppMotion.medium4,
+              transitionBuilder: (child, animation) {
+                final curved = animation.drive(
+                  CurveTween(curve: AppMotion.emphasizedDecelerate),
+                );
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, 1),
+                    end: Offset.zero,
+                  ).animate(curved),
+                  child: FadeTransition(opacity: curved, child: child),
+                );
+              },
+              child: editing && _selectionController.selectedIds.isNotEmpty
+                  ? CaptureBatchActionBar(
+                      key: const Key('batch-bar'),
+                      controller: _selectionController,
+                      mediaService: ref.watch(captureMediaServiceProvider),
+                      exportService: ref.watch(projectExportServiceProvider),
+                      shareService: ref.watch(shareFileServiceProvider),
+                      summaries: _latestCaptures,
+                    )
+                  : const SizedBox.shrink(key: Key('batch-bar-empty')),
+            ),
+            floatingActionButton: AnimatedSwitcher(
+              duration: AppMotion.medium2,
+              switchInCurve: AppMotion.emphasized,
+              switchOutCurve: AppMotion.emphasized,
+              transitionBuilder: (child, animation) =>
+                  ScaleTransition(scale: animation, child: child),
+              child: project == null || editing
+                  ? const SizedBox.shrink()
+                  : FloatingActionButton.extended(
+                      key: const ValueKey('capture-fab'),
+                      onPressed: () =>
+                          context.push('/projects/${widget.projectId}/capture'),
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: Text(strings.capture),
+                    ),
+            ),
+          );
+        },
+      ),
     );
   }
 

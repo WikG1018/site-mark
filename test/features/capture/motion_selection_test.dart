@@ -11,6 +11,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
+import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
@@ -82,6 +83,58 @@ void main() {
       ),
     );
   }
+
+  Widget buildProjectDetail() {
+    return ProviderScope(
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: const ProjectDetailScreen(projectId: 'project-1'),
+      ),
+    );
+  }
+
+  testWidgets('system back cancels project record selection mode', (
+    tester,
+  ) async {
+    await seedReadyCapture();
+    await tester.pumpWidget(buildProjectDetail());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    expect(find.byType(Checkbox), findsWidgets);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('拍摄记录'), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+    expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+    await disposeTree(tester);
+  });
+
+  testWidgets('system back cancels all-records selection mode', (tester) async {
+    await seedReadyCapture();
+    await tester.pumpWidget(buildAllCaptures());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+    expect(find.byType(Checkbox), findsWidgets);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+    await disposeTree(tester);
+  });
 
   // ─── Test 1: 底部栏滑入 ────────────────────────────────────────────────
   testWidgets(

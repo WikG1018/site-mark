@@ -1,4 +1,3 @@
-import 'package:animations/animations.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -24,6 +23,7 @@ import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/route_transitions.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
@@ -225,16 +225,20 @@ final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
 
 /// Shared Axis (horizontal) page for hierarchical navigation (list → detail
 /// → form/edit), per M3 motion guidance.
-CustomTransitionPage<void> _sharedAxisPage(GoRouterState state, Widget child) {
+CustomTransitionPage<void> _sharedAxisPage(
+  GoRouterState state,
+  Widget child, {
+  bool freezeSecondary = false,
+}) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
     transitionDuration: AppMotion.medium2,
     reverseTransitionDuration: AppMotion.medium2,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return SharedAxisTransition(
+      return buildSharedAxisRouteTransition(
         animation: animation,
         secondaryAnimation: secondaryAnimation,
-        transitionType: SharedAxisTransitionType.horizontal,
+        freezeSecondary: freezeSecondary,
         child: child,
       );
     },
@@ -272,15 +276,20 @@ CustomTransitionPage<void> _captureDetailPage(
 
 /// Fade Through page for top-level destination switches (projects ↔ all
 /// records ↔ settings), per M3 motion guidance.
-CustomTransitionPage<void> _fadeThroughPage(GoRouterState state, Widget child) {
+CustomTransitionPage<void> _fadeThroughPage(
+  GoRouterState state,
+  Widget child, {
+  bool freezeSecondary = false,
+}) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
     transitionDuration: AppMotion.medium2,
     reverseTransitionDuration: AppMotion.medium2,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return FadeThroughTransition(
+      return buildFadeThroughRouteTransition(
         animation: animation,
         secondaryAnimation: secondaryAnimation,
+        freezeSecondary: freezeSecondary,
         child: child,
       );
     },
@@ -303,8 +312,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: 'records',
-            pageBuilder: (context, state) =>
-                _fadeThroughPage(state, const AllCapturesScreen()),
+            pageBuilder: (context, state) => _fadeThroughPage(
+              state,
+              const AllCapturesScreen(),
+              freezeSecondary: true,
+            ),
           ),
           GoRoute(
             path: 'settings',
@@ -357,6 +369,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               ProjectDetailScreen(
                 projectId: state.pathParameters['projectId']!,
               ),
+              freezeSecondary: shouldFreezeProjectCaptureList(state),
             ),
             routes: [
               GoRoute(

@@ -68,7 +68,10 @@ void main() {
                   child: CapturePhotoHero(
                     tag: 'capture-photo-test',
                     path: photoPath,
-                    child: Image.file(File(photoPath), fit: BoxFit.cover),
+                    child: KeyedSubtree(
+                      key: const Key('record-thumbnail-content'),
+                      child: Image.file(File(photoPath), fit: BoxFit.cover),
+                    ),
                   ),
                 ),
               ),
@@ -118,5 +121,18 @@ void main() {
     expect(find.byKey(const Key('capture-photo-hero-flight')), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('record-thumbnail')), findsOneWidget);
+  });
+
+  testWidgets('record thumbnail stays painted under the reverse flight', (
+    tester,
+  ) async {
+    await pumpHeroPair(tester);
+    await tester.tap(find.byKey(const Key('open-hero-detail')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(find.byKey(const Key('record-thumbnail-content')), findsOneWidget);
   });
 }

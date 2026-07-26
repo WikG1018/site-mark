@@ -44,10 +44,10 @@ enum CapturePreviewSource { bestAvailable, watermarked, original }
 ///
 /// File existence is checked asynchronously via [File.exists] and the resolved
 /// [_PreviewResolution] is cached per `State` instance, refreshed only when the
-/// relevant inputs change. Decoded frames fade in via [Image.frameBuilder],
-/// and same-slot content swaps (status overlay to final photo, placeholder to
-/// image) cross-fade through an [AnimatedSwitcher] driven by the keyed subtrees
-/// below.
+/// relevant inputs change. Decoded frames fade in via [Image.frameBuilder]
+/// except for Hero thumbnails, whose immediate handoff avoids a second fade.
+/// Same-slot content swaps (status overlay to final photo, placeholder to
+/// image) cross-fade through an [AnimatedSwitcher] driven by the keyed subtrees.
 ///
 /// Pass an explicit [source] to render only the watermarked or original photo
 /// (used by the detail screen's segmented control). The default
@@ -285,19 +285,22 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         final image = Image.file(
           File(path),
           fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
+          gaplessPlayback: widget.heroTag != null,
           cacheWidth: widget.thumbnail
               ? 192
               : _detailCacheWidth(context, constraints),
           cacheHeight: widget.thumbnail ? 192 : null,
-          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-            if (wasSynchronouslyLoaded) return child;
-            return AnimatedOpacity(
-              opacity: frame == null ? 0 : 1,
-              duration: AppMotion.medium2,
-              curve: AppMotion.standard,
-              child: child,
-            );
-          },
+          frameBuilder: widget.thumbnail && widget.heroTag != null
+              ? null
+              : (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded) return child;
+                  return AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: AppMotion.medium2,
+                    curve: AppMotion.standard,
+                    child: child,
+                  );
+                },
           errorBuilder: (context, error, _) => _placeholder(
             context,
             AppStrings.of(context),
