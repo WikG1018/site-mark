@@ -54,4 +54,24 @@ void main() {
     await tester.pumpAndSettle();
     expect((await database.getAppSettings()).useDynamicColor, isTrue);
   });
+
+  testWidgets('shows 9 theme color chips when dynamic color is off', (tester) async {
+    await pumpScreen(tester);
+    expect(find.text('应用主题色'), findsOneWidget);
+    expect(find.byType(ChoiceChip), findsNWidgets(9));
+  });
+
+  testWidgets('hides theme color chips when dynamic color is on', (tester) async {
+    await pumpScreen(tester);
+    await tester.tap(find.byKey(const Key('dynamic-color-switch')));
+    await tester.pumpAndSettle();
+    expect(find.text('应用主题色'), findsNothing);
+  });
+
+  testWidgets('tapping a theme color chip persists appSeedColorArgb', (tester) async {
+    await pumpScreen(tester);
+    await tester.tap(find.byType(ChoiceChip).at(1));
+    await tester.pumpAndSettle();
+    expect((await database.getAppSettings()).appSeedColorArgb, 0xff1565c0);
+  });
 }
