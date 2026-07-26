@@ -119,16 +119,15 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     capture: capture,
                     outputPaths: outputPaths,
                     source: effectiveSource,
+                    heroTag:
+                        capture.status == CaptureStatus.ready &&
+                            effectiveSource != CapturePreviewSource.original
+                        ? 'capture-photo-${capture.id}'
+                        : null,
                   ),
                 ),
               ),
             );
-            if (capture.status == CaptureStatus.ready) {
-              preview = Hero(
-                tag: 'capture-photo-${capture.id}',
-                child: preview,
-              );
-            }
             return Scaffold(
               appBar: AppBar(
                 title: Text(capture.photoNumber ?? strings.captureDetail),

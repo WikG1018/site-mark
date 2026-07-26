@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/features/capture/capture_photo_hero.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -61,6 +62,7 @@ class CaptureImagePreview extends StatefulWidget {
     this.onOpen,
     this.fileExists,
     this.source = CapturePreviewSource.bestAvailable,
+    this.heroTag,
   });
 
   final CaptureRecord capture;
@@ -76,6 +78,11 @@ class CaptureImagePreview extends StatefulWidget {
 
   /// Selects which on-disk source to render. See [CapturePreviewSource].
   final CapturePreviewSource source;
+
+  /// Optional Hero tag for a ready record preview. The Hero is created only
+  /// after the concrete photo path has resolved, so both endpoints fly the
+  /// same image instead of a loading or placeholder subtree.
+  final String? heroTag;
 
   @override
   State<CaptureImagePreview> createState() => _CaptureImagePreviewState();
@@ -321,12 +328,18 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
                 ],
               );
 
-        if (widget.thumbnail) {
-          return KeyedSubtree(key: Key(key), child: content);
+        Widget preview = KeyedSubtree(key: Key(key), child: content);
+        if (widget.heroTag != null) {
+          preview = CapturePhotoHero(
+            tag: widget.heroTag!,
+            path: path,
+            child: preview,
+          );
         }
+        if (widget.thumbnail) return preview;
         return GestureDetector(
           onTap: widget.onOpen ?? () => _openFullscreen(context, path),
-          child: KeyedSubtree(key: Key(key), child: content),
+          child: preview,
         );
       },
     );
