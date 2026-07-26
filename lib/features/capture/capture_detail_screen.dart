@@ -135,7 +135,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                 actions: [
                   if (!isBusy && originalRetained)
                     IconButton(
-                      onPressed: () => context.go(
+                      onPressed: () => context.push(
                         '/projects/$_projectId/captures/$_captureId/edit',
                       ),
                       tooltip: strings.editRecord,

@@ -158,7 +158,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                   ),
                   subtitle: Text(project.description ?? strings.localOnly),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.go('/projects/${project.id}'),
+                  onTap: () => context.push('/projects/${project.id}'),
                 ),
               );
             },
@@ -166,7 +166,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/projects/new'),
+        onPressed: () => context.push('/projects/new'),
         icon: const Icon(Icons.add),
         label: Text(strings.newProject),
       ),
