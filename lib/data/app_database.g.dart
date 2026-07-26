@@ -2072,6 +2072,18 @@ class $AppSettingsTable extends AppSettings
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _appSeedColorArgbMeta = const VerificationMeta(
+    'appSeedColorArgb',
+  );
+  @override
+  late final GeneratedColumn<int> appSeedColorArgb = GeneratedColumn<int>(
+    'app_seed_color_argb',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0xff37c58b),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -2095,6 +2107,7 @@ class $AppSettingsTable extends AppSettings
     locationPermissionPromptDismissed,
     useDynamicColor,
     completionNotificationsEnabled,
+    appSeedColorArgb,
     updatedAt,
   ];
   @override
@@ -2187,6 +2200,15 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('app_seed_color_argb')) {
+      context.handle(
+        _appSeedColorArgbMeta,
+        appSeedColorArgb.isAcceptableOrUnknown(
+          data['app_seed_color_argb']!,
+          _appSeedColorArgbMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -2244,6 +2266,10 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.bool,
         data['${effectivePrefix}completion_notifications_enabled'],
       )!,
+      appSeedColorArgb: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}app_seed_color_argb'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -2268,6 +2294,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   final bool locationPermissionPromptDismissed;
   final bool useDynamicColor;
   final bool completionNotificationsEnabled;
+  final int appSeedColorArgb;
   final DateTime updatedAt;
   const AppSetting({
     required this.id,
@@ -2280,6 +2307,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     required this.locationPermissionPromptDismissed,
     required this.useDynamicColor,
     required this.completionNotificationsEnabled,
+    required this.appSeedColorArgb,
     required this.updatedAt,
   });
   @override
@@ -2309,6 +2337,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     map['completion_notifications_enabled'] = Variable<bool>(
       completionNotificationsEnabled,
     );
+    map['app_seed_color_argb'] = Variable<int>(appSeedColorArgb);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -2329,6 +2358,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       ),
       useDynamicColor: Value(useDynamicColor),
       completionNotificationsEnabled: Value(completionNotificationsEnabled),
+      appSeedColorArgb: Value(appSeedColorArgb),
       updatedAt: Value(updatedAt),
     );
   }
@@ -2361,6 +2391,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       completionNotificationsEnabled: serializer.fromJson<bool>(
         json['completionNotificationsEnabled'],
       ),
+      appSeedColorArgb: serializer.fromJson<int>(json['appSeedColorArgb']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -2390,6 +2421,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'completionNotificationsEnabled': serializer.toJson<bool>(
         completionNotificationsEnabled,
       ),
+      'appSeedColorArgb': serializer.toJson<int>(appSeedColorArgb),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -2405,6 +2437,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     bool? locationPermissionPromptDismissed,
     bool? useDynamicColor,
     bool? completionNotificationsEnabled,
+    int? appSeedColorArgb,
     DateTime? updatedAt,
   }) => AppSetting(
     id: id ?? this.id,
@@ -2424,6 +2457,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     useDynamicColor: useDynamicColor ?? this.useDynamicColor,
     completionNotificationsEnabled:
         completionNotificationsEnabled ?? this.completionNotificationsEnabled,
+    appSeedColorArgb: appSeedColorArgb ?? this.appSeedColorArgb,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   AppSetting copyWithCompanion(AppSettingsCompanion data) {
@@ -2457,6 +2491,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           data.completionNotificationsEnabled.present
           ? data.completionNotificationsEnabled.value
           : this.completionNotificationsEnabled,
+      appSeedColorArgb: data.appSeedColorArgb.present
+          ? data.appSeedColorArgb.value
+          : this.appSeedColorArgb,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -2480,6 +2517,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write(
             'completionNotificationsEnabled: $completionNotificationsEnabled, ',
           )
+          ..write('appSeedColorArgb: $appSeedColorArgb, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -2497,6 +2535,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     locationPermissionPromptDismissed,
     useDynamicColor,
     completionNotificationsEnabled,
+    appSeedColorArgb,
     updatedAt,
   );
   @override
@@ -2516,6 +2555,7 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.useDynamicColor == this.useDynamicColor &&
           other.completionNotificationsEnabled ==
               this.completionNotificationsEnabled &&
+          other.appSeedColorArgb == this.appSeedColorArgb &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -2530,6 +2570,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<bool> locationPermissionPromptDismissed;
   final Value<bool> useDynamicColor;
   final Value<bool> completionNotificationsEnabled;
+  final Value<int> appSeedColorArgb;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const AppSettingsCompanion({
@@ -2543,6 +2584,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.locationPermissionPromptDismissed = const Value.absent(),
     this.useDynamicColor = const Value.absent(),
     this.completionNotificationsEnabled = const Value.absent(),
+    this.appSeedColorArgb = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2557,6 +2599,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.locationPermissionPromptDismissed = const Value.absent(),
     this.useDynamicColor = const Value.absent(),
     this.completionNotificationsEnabled = const Value.absent(),
+    this.appSeedColorArgb = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : updatedAt = Value(updatedAt);
@@ -2571,6 +2614,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<bool>? locationPermissionPromptDismissed,
     Expression<bool>? useDynamicColor,
     Expression<bool>? completionNotificationsEnabled,
+    Expression<int>? appSeedColorArgb,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -2592,6 +2636,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       if (useDynamicColor != null) 'use_dynamic_color': useDynamicColor,
       if (completionNotificationsEnabled != null)
         'completion_notifications_enabled': completionNotificationsEnabled,
+      if (appSeedColorArgb != null) 'app_seed_color_argb': appSeedColorArgb,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2608,6 +2653,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<bool>? locationPermissionPromptDismissed,
     Value<bool>? useDynamicColor,
     Value<bool>? completionNotificationsEnabled,
+    Value<int>? appSeedColorArgb,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -2630,6 +2676,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       useDynamicColor: useDynamicColor ?? this.useDynamicColor,
       completionNotificationsEnabled:
           completionNotificationsEnabled ?? this.completionNotificationsEnabled,
+      appSeedColorArgb: appSeedColorArgb ?? this.appSeedColorArgb,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2680,6 +2727,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         completionNotificationsEnabled.value,
       );
     }
+    if (appSeedColorArgb.present) {
+      map['app_seed_color_argb'] = Variable<int>(appSeedColorArgb.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -2708,6 +2758,7 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write(
             'completionNotificationsEnabled: $completionNotificationsEnabled, ',
           )
+          ..write('appSeedColorArgb: $appSeedColorArgb, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3839,6 +3890,7 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<bool> locationPermissionPromptDismissed,
       Value<bool> useDynamicColor,
       Value<bool> completionNotificationsEnabled,
+      Value<int> appSeedColorArgb,
       required DateTime updatedAt,
       Value<int> rowid,
     });
@@ -3854,6 +3906,7 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<bool> locationPermissionPromptDismissed,
       Value<bool> useDynamicColor,
       Value<bool> completionNotificationsEnabled,
+      Value<int> appSeedColorArgb,
       Value<DateTime> updatedAt,
       Value<int> rowid,
     });
@@ -3915,6 +3968,11 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<bool> get completionNotificationsEnabled => $composableBuilder(
     column: $table.completionNotificationsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get appSeedColorArgb => $composableBuilder(
+    column: $table.appSeedColorArgb,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3986,6 +4044,11 @@ class $$AppSettingsTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<int> get appSeedColorArgb => $composableBuilder(
+    column: $table.appSeedColorArgb,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -4050,6 +4113,11 @@ class $$AppSettingsTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<int> get appSeedColorArgb => $composableBuilder(
+    column: $table.appSeedColorArgb,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
@@ -4098,6 +4166,7 @@ class $$AppSettingsTableTableManager
                 Value<bool> useDynamicColor = const Value.absent(),
                 Value<bool> completionNotificationsEnabled =
                     const Value.absent(),
+                Value<int> appSeedColorArgb = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AppSettingsCompanion(
@@ -4113,6 +4182,7 @@ class $$AppSettingsTableTableManager
                     locationPermissionPromptDismissed,
                 useDynamicColor: useDynamicColor,
                 completionNotificationsEnabled: completionNotificationsEnabled,
+                appSeedColorArgb: appSeedColorArgb,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -4131,6 +4201,7 @@ class $$AppSettingsTableTableManager
                 Value<bool> useDynamicColor = const Value.absent(),
                 Value<bool> completionNotificationsEnabled =
                     const Value.absent(),
+                Value<int> appSeedColorArgb = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => AppSettingsCompanion.insert(
@@ -4146,6 +4217,7 @@ class $$AppSettingsTableTableManager
                     locationPermissionPromptDismissed,
                 useDynamicColor: useDynamicColor,
                 completionNotificationsEnabled: completionNotificationsEnabled,
+                appSeedColorArgb: appSeedColorArgb,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

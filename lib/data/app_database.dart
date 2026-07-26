@@ -56,6 +56,8 @@ class AppSettings extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get completionNotificationsEnabled =>
       boolean().withDefault(const Constant(false))();
+  IntColumn get appSeedColorArgb =>
+      integer().withDefault(const Constant(0xff37c58b))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -135,7 +137,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -211,6 +213,12 @@ class AppDatabase extends _$AppDatabase {
         // converge at v6.
         await _ensureDynamicColorColumns();
       }
+      if (from < 7) {
+        // Adds the persisted app theme seed color. Users on any prior
+        // schema version converge here; the default (0xff37c58b) keeps
+        // the existing green brand identity.
+        await _ensureAppSeedColorColumn();
+      }
       await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
@@ -235,6 +243,7 @@ class AppDatabase extends _$AppDatabase {
         locationPermissionPromptDismissed: const Value(false),
         useDynamicColor: const Value(false),
         completionNotificationsEnabled: const Value(false),
+        appSeedColorArgb: const Value(0xff37c58b),
         updatedAt: now,
       ),
       mode: InsertMode.insertOrIgnore,
@@ -286,6 +295,23 @@ class AppDatabase extends _$AppDatabase {
       await customStatement(
         'ALTER TABLE app_settings ADD COLUMN '
         'completion_notifications_enabled INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+  }
+
+  /// Adds the `app_seed_color_argb` column to `app_settings` if missing.
+  ///
+  /// Called from the v7 migration step. Uses `PRAGMA table_info` so the
+  /// operation is idempotent and never raises "duplicate column name".
+  Future<void> _ensureAppSeedColorColumn() async {
+    final columns = await customSelect(
+      'PRAGMA table_info(app_settings)',
+    ).get();
+    final columnNames = columns.map((row) => row.read<String>('name')).toSet();
+    if (!columnNames.contains('app_seed_color_argb')) {
+      await customStatement(
+        'ALTER TABLE app_settings ADD COLUMN app_seed_color_argb '
+        'INTEGER NOT NULL DEFAULT 4281845131',
       );
     }
   }
@@ -664,6 +690,7 @@ class AppDatabase extends _$AppDatabase {
     bool? locationPermissionPromptDismissed,
     bool? useDynamicColor,
     bool? completionNotificationsEnabled,
+    int? appSeedColorArgb,
   }) async {
     final companion = AppSettingsCompanion(
       themeMode: themeMode == null ? const Value.absent() : Value(themeMode),
@@ -692,6 +719,9 @@ class AppDatabase extends _$AppDatabase {
       completionNotificationsEnabled: completionNotificationsEnabled == null
           ? const Value.absent()
           : Value(completionNotificationsEnabled),
+      appSeedColorArgb: appSeedColorArgb == null
+          ? const Value.absent()
+          : Value(appSeedColorArgb),
       updatedAt: Value(DateTime.now()),
     );
     await (update(
