@@ -62,6 +62,7 @@ class AppearanceSectionScreen extends ConsumerWidget {
               children: [
                 for (final swatch in accentSwatches)
                   AccentChoiceChip(
+                    key: swatch.key,
                     argb: swatch.argb,
                     label: accentLabel(strings, swatch.argb),
                     selected: settings.appSeedColorArgb == swatch.argb,

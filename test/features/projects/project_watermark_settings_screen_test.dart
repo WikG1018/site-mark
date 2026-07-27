@@ -133,9 +133,12 @@ void main() {
 
   testWidgets('shows 9 accent chips', (tester) async {
     await pumpWatermarkSettings(tester);
-    // Scroll to the bottom so the ListView builds the accent chips.
-    final scrollable = find.byType(Scrollable).first;
-    await tester.drag(scrollable, const Offset(0, -800));
+    // Scroll the last chip into view so the ListView builds all chips.
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('accent-indigo')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     expect(find.byType(AccentChoiceChip), findsNWidgets(9));
   });

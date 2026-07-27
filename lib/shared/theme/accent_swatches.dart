@@ -2,15 +2,23 @@
 import 'package:flutter/material.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
+/// Default ARGB value used by both the app seed color and the watermark
+/// accent color. Centralized here so the database schema defaults, the
+/// migration fallback, and [app.dart] all reference one source of truth.
+const int kDefaultSeedColorArgb = 0xff37c58b;
+
 /// Accent swatches offered as new-project watermark defaults AND app theme
 /// seed colors. Each entry carries a stable [Key] for test discovery.
+///
+/// The first swatch's ARGB matches [kDefaultSeedColorArgb] so existing users
+/// keep the original green branding after the v6→v7 migration.
 ///
 /// Label resolution is handled by [accentLabel], which is the single source
 /// of truth for mapping ARGB → localized name. Adding a new swatch requires
 /// updating both this list and [_accentLabelMap]; the debug assertion in
 /// [accentLabel] and [debugAssertAccentSwatchesComplete] catch omissions.
 const accentSwatches = <({int argb, Key key})>[
-  (argb: 0xff37c58b, key: Key('accent-green')),
+  (argb: kDefaultSeedColorArgb, key: Key('accent-green')),
   (argb: 0xff1565c0, key: Key('accent-blue')),
   (argb: 0xffef6c00, key: Key('accent-orange')),
   (argb: 0xffc62828, key: Key('accent-red')),

@@ -5,6 +5,7 @@ import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/photo_number.dart';
 import 'package:sitemark/domain/project_name.dart';
+import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 part 'app_database.g.dart';
 
@@ -57,7 +58,7 @@ class AppSettings extends Table {
   BoolColumn get completionNotificationsEnabled =>
       boolean().withDefault(const Constant(false))();
   IntColumn get appSeedColorArgb =>
-      integer().withDefault(const Constant(0xff37c58b))();
+      integer().withDefault(const Constant(kDefaultSeedColorArgb))();
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -243,7 +244,7 @@ class AppDatabase extends _$AppDatabase {
         locationPermissionPromptDismissed: const Value(false),
         useDynamicColor: const Value(false),
         completionNotificationsEnabled: const Value(false),
-        appSeedColorArgb: const Value(0xff37c58b),
+        appSeedColorArgb: const Value(kDefaultSeedColorArgb),
         updatedAt: now,
       ),
       mode: InsertMode.insertOrIgnore,
@@ -311,7 +312,7 @@ class AppDatabase extends _$AppDatabase {
     if (!columnNames.contains('app_seed_color_argb')) {
       await customStatement(
         'ALTER TABLE app_settings ADD COLUMN app_seed_color_argb '
-        'INTEGER NOT NULL DEFAULT 4281845131',
+        'INTEGER NOT NULL DEFAULT $kDefaultSeedColorArgb',
       );
     }
   }

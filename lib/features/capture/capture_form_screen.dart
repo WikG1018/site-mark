@@ -264,7 +264,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
               )
             : null;
         return Scaffold(
-          appBar: AppBar(title: Text(strings.newCapture)),
+          appBar: AppBar(title: Text(strings.captureFormTitle)),
           body: project == null
               ? const Center(child: CircularProgressIndicator())
               : SafeArea(
