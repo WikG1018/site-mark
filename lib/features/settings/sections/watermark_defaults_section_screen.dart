@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/theme/accent_choice_chip.dart';
+import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 class WatermarkDefaultsSectionScreen extends ConsumerStatefulWidget {
   const WatermarkDefaultsSectionScreen({super.key});
@@ -148,9 +150,10 @@ class _WatermarkDefaultsSectionScreenState
             runSpacing: 10,
             children: [
               for (final swatch in accentSwatches)
-                _AccentChoice(
-                  choiceKey: swatch.key,
-                  colorArgb: swatch.argb,
+                AccentChoiceChip(
+                  key: swatch.key,
+                  argb: swatch.argb,
+                  label: accentLabel(strings, swatch.argb),
                   selected:
                       settings.defaultWatermarkAccentColorArgb == swatch.argb,
                   onSelected: () => ref
@@ -163,38 +166,5 @@ class _WatermarkDefaultsSectionScreenState
         ],
       ),
     );
-  }
-}
-
-class _AccentChoice extends StatelessWidget {
-  const _AccentChoice({
-    required this.choiceKey,
-    required this.colorArgb,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final Key choiceKey;
-  final int colorArgb;
-  final bool selected;
-  final VoidCallback onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      key: choiceKey,
-      selected: selected,
-      avatar: CircleAvatar(backgroundColor: Color(colorArgb)),
-      label: Text(_label(context, colorArgb)),
-      onSelected: (_) => onSelected(),
-    );
-  }
-
-  String _label(BuildContext context, int argb) {
-    final strings = AppStrings.of(context);
-    if (argb == 0xff37c58b) return strings.green;
-    if (argb == 0xff1565c0) return strings.blue;
-    if (argb == 0xffef6c00) return strings.orange;
-    return '';
   }
 }

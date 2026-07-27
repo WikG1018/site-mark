@@ -5,6 +5,8 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/shared/theme/accent_choice_chip.dart' show AccentChoiceChip;
+import 'package:sitemark/shared/theme/accent_swatches.dart' show accentSwatches, accentLabel;
 
 class ProjectWatermarkSettingsScreen extends ConsumerStatefulWidget {
   const ProjectWatermarkSettingsScreen({super.key, required this.projectId});
@@ -188,30 +190,15 @@ class _ProjectWatermarkSettingsScreenState
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _AccentChoice(
-                    choiceKey: const Key('accent-green'),
-                    colorArgb: 0xff37c58b,
-                    label: strings.green,
-                    selected: _accentColorArgb == 0xff37c58b,
-                    onSelected: () =>
-                        setState(() => _accentColorArgb = 0xff37c58b),
-                  ),
-                  _AccentChoice(
-                    choiceKey: const Key('accent-blue'),
-                    colorArgb: 0xff1565c0,
-                    label: strings.blue,
-                    selected: _accentColorArgb == 0xff1565c0,
-                    onSelected: () =>
-                        setState(() => _accentColorArgb = 0xff1565c0),
-                  ),
-                  _AccentChoice(
-                    choiceKey: const Key('accent-orange'),
-                    colorArgb: 0xffef6c00,
-                    label: strings.orange,
-                    selected: _accentColorArgb == 0xffef6c00,
-                    onSelected: () =>
-                        setState(() => _accentColorArgb = 0xffef6c00),
-                  ),
+                  for (final swatch in accentSwatches)
+                    AccentChoiceChip(
+                      key: swatch.key,
+                      argb: swatch.argb,
+                      label: accentLabel(strings, swatch.argb),
+                      selected: _accentColorArgb == swatch.argb,
+                      onSelected: () =>
+                          setState(() => _accentColorArgb = swatch.argb),
+                    ),
                 ],
               ),
               const SizedBox(height: 36),
@@ -308,31 +295,4 @@ class _PreviewGridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _AccentChoice extends StatelessWidget {
-  const _AccentChoice({
-    required this.choiceKey,
-    required this.colorArgb,
-    required this.label,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  final Key choiceKey;
-  final int colorArgb;
-  final String label;
-  final bool selected;
-  final VoidCallback onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      key: choiceKey,
-      selected: selected,
-      avatar: CircleAvatar(backgroundColor: Color(colorArgb)),
-      label: Text(label),
-      onSelected: (_) => onSelected(),
-    );
-  }
 }

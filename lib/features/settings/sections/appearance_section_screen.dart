@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/theme/accent_choice_chip.dart';
+import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 class AppearanceSectionScreen extends ConsumerWidget {
   const AppearanceSectionScreen({super.key});
@@ -49,6 +51,30 @@ class AppearanceSectionScreen extends ConsumerWidget {
                 .update((s) => s.copyWith(themeMode: selection.single)),
           ),
           const SizedBox(height: 8),
+          if (!settings.useDynamicColor) ...[
+            const SizedBox(height: 12),
+            Text(strings.appThemeColor,
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final swatch in accentSwatches)
+                  AccentChoiceChip(
+                    key: swatch.key,
+                    argb: swatch.argb,
+                    label: accentLabel(strings, swatch.argb),
+                    selected: settings.appSeedColorArgb == swatch.argb,
+                    onSelected: () => ref
+                        .read(appSettingControllerProvider.notifier)
+                        .update((s) =>
+                            s.copyWith(appSeedColorArgb: swatch.argb)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
           SwitchListTile(
             key: const Key('dynamic-color-switch'),
             title: Text(strings.dynamicColorTitle),

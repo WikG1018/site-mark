@@ -1,13 +1,6 @@
 // lib/features/settings/settings_section_scaffold.dart
 import 'package:flutter/material.dart';
 
-/// Accent swatches offered as new-project watermark defaults.
-const accentSwatches = <({int argb, Key key})>[
-  (argb: 0xff37c58b, key: Key('accent-green')),
-  (argb: 0xff1565c0, key: Key('accent-blue')),
-  (argb: 0xffef6c00, key: Key('accent-orange')),
-];
-
 /// Segmented buttons default to 40dp; lifting to 48dp meets Android tap-target.
 const segmentTapTargetStyle = ButtonStyle(
   minimumSize: WidgetStatePropertyAll<Size>(Size.fromHeight(48)),

@@ -722,4 +722,93 @@ void main() {
 
     await expectCaptureIndexes(database);
   });
+
+  test('v6 to v7 migration adds app_seed_color_argb column', () async {
+    // Open a genuine v6 schema (with use_dynamic_color and
+    // completion_notifications_enabled already present), then bump
+    // user_version to 6 and reopen via AppDatabase.forTesting so onUpgrade
+    // runs the v7 branch and adds app_seed_color_argb.
+    final db = sqlite3.openInMemory();
+
+    // Create a complete v6 app_settings row so _ensureGlobalSettingsRow()
+    // does not need to insert anything (we want to verify the ALTER TABLE
+    // path, not the insert path).
+    db.execute('''
+      CREATE TABLE app_settings (
+        id TEXT NOT NULL,
+        theme_mode TEXT NOT NULL DEFAULT 'system',
+        locale_code TEXT,
+        default_watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+        default_watermark_opacity REAL NOT NULL DEFAULT 0.78,
+        default_watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+        default_watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+        location_permission_prompt_dismissed INTEGER NOT NULL DEFAULT 0,
+        use_dynamic_color INTEGER NOT NULL DEFAULT 0,
+        completion_notifications_enabled INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (id)
+      );
+    ''');
+    db.execute(
+      "INSERT INTO app_settings (id, theme_mode, updated_at) VALUES ('global', 'dark', 0);",
+    );
+    // Minimal projects + captures tables so onCreate doesn't fail.
+    db.execute('''
+      CREATE TABLE projects (
+        id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+        watermark_opacity REAL NOT NULL DEFAULT 0.78,
+        watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+        watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (id)
+      );
+    ''');
+    db.execute('''
+      CREATE TABLE captures (
+        id TEXT NOT NULL,
+        project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+        photo_number TEXT,
+        work_location TEXT NOT NULL,
+        work_content TEXT NOT NULL,
+        photographer TEXT NOT NULL,
+        notes TEXT,
+        original_path TEXT NOT NULL,
+        published_uri TEXT,
+        original_sha256 TEXT,
+        status TEXT NOT NULL,
+        failure_reason TEXT,
+        created_at INTEGER NOT NULL,
+        captured_at INTEGER,
+        latitude REAL,
+        longitude REAL,
+        accuracy_meters REAL,
+        address TEXT,
+        location_outcome TEXT,
+        processing_attempts INTEGER NOT NULL DEFAULT 0,
+        watermark_locale_code TEXT NOT NULL DEFAULT 'zh',
+        location_resolution TEXT NOT NULL DEFAULT 'resolved',
+        original_deleted_at INTEGER,
+        PRIMARY KEY (id)
+      );
+    ''');
+    db.execute('PRAGMA user_version = 6;');
+
+    final database = AppDatabase.forTesting(
+      NativeDatabase.opened(db, closeUnderlyingOnClose: true),
+    );
+    addTearDown(database.close);
+
+    final settings = await database.getAppSettings();
+    expect(settings.id, 'global');
+    expect(settings.appSeedColorArgb, 0xff37c58b);
+
+    final updated = await database.updateAppSettings(
+      appSeedColorArgb: 0xff1565c0,
+    );
+    expect(updated.appSeedColorArgb, 0xff1565c0);
+  });
 }

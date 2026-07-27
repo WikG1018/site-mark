@@ -37,6 +37,7 @@ import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
+import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
   final database = AppDatabase();
@@ -577,16 +578,17 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
             (settings?.useDynamicColor ?? false) &&
             lightDynamic != null &&
             darkDynamic != null;
+        final seedColor = Color(settings?.appSeedColorArgb ?? kDefaultSeedColorArgb);
         final lightScheme = useDynamicColor
             ? lightDynamic
             : ColorScheme.fromSeed(
-                seedColor: const Color(0xFF176B55),
+                seedColor: seedColor,
                 brightness: Brightness.light,
               );
         final darkScheme = useDynamicColor
             ? darkDynamic
             : ColorScheme.fromSeed(
-                seedColor: const Color(0xFF37C58B),
+                seedColor: seedColor,
                 brightness: Brightness.dark,
               );
         return MaterialApp.router(
