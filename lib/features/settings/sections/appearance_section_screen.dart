@@ -1,10 +1,11 @@
 // lib/features/settings/sections/appearance_section_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sitemark/features/settings/accent_choice_chip.dart';
 import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/theme/accent_choice_chip.dart';
+import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 class AppearanceSectionScreen extends ConsumerWidget {
   const AppearanceSectionScreen({super.key});

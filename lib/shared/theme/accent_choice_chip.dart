@@ -1,6 +1,5 @@
+// lib/shared/theme/accent_choice_chip.dart
 import 'package:flutter/material.dart';
-import 'package:sitemark/features/settings/settings_section_scaffold.dart';
-import 'package:sitemark/l10n/app_strings.dart';
 
 /// Shared ChoiceChip for accent color selection.
 ///
@@ -29,27 +28,4 @@ class AccentChoiceChip extends StatelessWidget {
       onSelected: (_) => onSelected(),
     );
   }
-}
-
-/// Maps a swatch ARGB value to its localized label.
-///
-/// Returns the empty string for unknown ARGB values.
-String accentLabel(AppStrings strings, int argb) {
-  for (final swatch in accentSwatches) {
-    if (swatch.argb == argb) {
-      return switch (swatch.labelKey) {
-        'green' => strings.green,
-        'blue' => strings.blue,
-        'orange' => strings.orange,
-        'red' => strings.red,
-        'purple' => strings.purple,
-        'teal' => strings.teal,
-        'pink' => strings.pink,
-        'yellow' => strings.yellow,
-        'indigo' => strings.indigo,
-        _ => '',
-      };
-    }
-  }
-  return '';
 }

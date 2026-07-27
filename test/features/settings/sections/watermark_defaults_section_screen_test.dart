@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
-import 'package:sitemark/features/settings/accent_choice_chip.dart';
+import 'package:sitemark/shared/theme/accent_choice_chip.dart';
 import 'package:sitemark/features/settings/sections/watermark_defaults_section_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
