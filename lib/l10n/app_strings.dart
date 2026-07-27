@@ -41,13 +41,16 @@ class AppStrings {
   String get captureRecords => _english ? 'Capture records' : '拍摄记录';
   String get noCaptures => _english ? 'No site records yet' : '暂无拍摄记录';
   String get capture => _english ? 'Capture' : '拍摄';
-  String get newCapture => _english ? 'New site record' : '新建现场记录';
+  String get newCapture => _english ? 'Watermark content' : '水印内容';
   String get workLocation => _english ? 'Work location' : '工程部位';
   String get workContent => _english ? 'Work content' : '工作内容';
   String get photographer => _english ? 'Photographer' : '拍摄人';
   String get notesOptional => _english ? 'Notes (optional)' : '备注（选填）';
   String get requiredField => _english ? 'This field is required' : '此项为必填';
-  String get openSystemCamera => _english ? 'Open system camera' : '调用系统相机';
+  String get openSystemCamera => _english ? 'Capture' : '拍摄';
+  String get captureWorkflowHint => _english
+      ? 'Capture will invoke the system camera. Watermarks are processed in the background after capture. You can tap capture repeatedly; return to the previous page to view watermarked photos.'
+      : '拍摄将调用系统相机，水印将在拍摄完成后台处理，可以连续点击拍摄，查看水印照片返回上一层页面即可';
   String get captureLocationHint => _english
       ? 'Foreground location is requested once before capture. Capture still works if you decline.'
       : '拍摄前仅请求一次前台位置；拒绝授权也可以继续拍摄。';

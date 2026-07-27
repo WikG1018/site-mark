@@ -336,7 +336,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('work-location')), 'A 区三层');
     await tester.enterText(find.byKey(const Key('work-content')), '风管安装检查');
     await tester.enterText(find.byKey(const Key('photographer')), '张工');
-    await tester.tap(find.text('调用系统相机'));
+    await tester.tap(find.byKey(const Key('capture-button')));
     await tester.pumpAndSettle();
 
     // The capture form now stays open for consecutive shooting and surfaces a
