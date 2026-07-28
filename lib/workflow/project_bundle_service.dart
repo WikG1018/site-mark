@@ -722,7 +722,10 @@ class ProjectBundleService {
         cause: error,
         failure: pending.phase == PendingBundleRestorePhase.committing
             ? ProjectBundleRestoreFailure.general
-            : ProjectBundleRestoreFailure.rolledBack,
+            : _classifyRestoreFailure(
+                error,
+                fallback: ProjectBundleRestoreFailure.rolledBack,
+              ),
       );
     }
   }

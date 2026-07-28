@@ -508,6 +508,48 @@ void main() {
       expect(importer.markerSeenBeforeFirstImport, isTrue);
     });
 
+    test(
+      'item two ENOSPC keeps storage classification after rollback',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore();
+        final rollback = _FakeProjectRollback();
+        final importer = _FakeProjectImporter(
+          failSource: 'p2.zip',
+          importFailure: const ImagePipelineException(
+            ImagePipelineFailureKind.transientIo,
+            'No space left on device',
+          ),
+        );
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: importer,
+          pending: pending,
+          rollback: rollback,
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        await expectLater(
+          service.restorePrepared(
+            prepared: prepared,
+            projectNames: const {'p1': '东区', 'p2': '西区'},
+          ),
+          throwsA(
+            isA<ProjectBundleRestoreException>().having(
+              (error) => error.failure,
+              'failure',
+              ProjectBundleRestoreFailure.insufficientStorage,
+            ),
+          ),
+        );
+
+        expect(rollback.projectIds, ['target-1']);
+        expect(pending.items, isEmpty);
+      },
+    );
+
     test('restore progress is monotonic across projects', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -1318,11 +1360,17 @@ class _FakeProjectRollback implements ProjectBundleRollback {
 }
 
 class _FakeProjectImporter implements ProjectArchiveImporter {
-  _FakeProjectImporter({this.failSource, this.importGate, this.inspectFailure});
+  _FakeProjectImporter({
+    this.failSource,
+    this.importGate,
+    this.inspectFailure,
+    this.importFailure,
+  });
 
   final String? failSource;
   final Completer<void>? importGate;
   final Object? inspectFailure;
+  final Object? importFailure;
   final inspected = <String>[];
   final imports = <String>[];
   _FakeBundlePendingStore? pendingStore;
@@ -1352,7 +1400,7 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
     imports.add(zipPath);
     await importGate?.future;
     if (zipPath.endsWith(failSource ?? '\u0000')) {
-      throw StateError('item import failed');
+      throw importFailure ?? StateError('item import failed');
     }
     await database?.createProject(
       id: projectId!,
