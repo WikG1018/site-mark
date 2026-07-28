@@ -636,6 +636,34 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('project rename refreshes detail and back returns one level', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rename-project')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('rename-project-name')),
+      '东区厂房更新',
+    );
+    await tester.tap(find.byKey(const Key('confirm-rename-project')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('东区厂房更新'), findsWidgets);
+    expect((await database.projectById('project-1'))?.name, '东区厂房更新');
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-title')), findsOneWidget);
+    expect(find.text('东区厂房更新'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
   testWidgets('granted location hides the explanation card', (tester) async {
     await database.createProject(id: 'project-1', name: '东区厂房改造');
     final platform = _WidgetTestPlatformServices()

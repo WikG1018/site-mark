@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math' show max, min;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
@@ -13,6 +15,8 @@ import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/project_deletion_service.dart';
 
 CaptureRecord _record({required String id, required DateTime capturedAt}) {
   return CaptureRecord(
@@ -619,11 +623,57 @@ void main() {
     );
   }
 
-  Widget pumpProjectDetail(AppDatabase database, String projectId) {
+  Widget pumpProjectDetail(
+    AppDatabase database,
+    String projectId, {
+    ProjectDeletionService? deletionService,
+    Locale locale = const Locale('zh'),
+    bool withRouter = false,
+  }) {
+    final overrides = [
+      databaseProvider.overrideWithValue(database),
+      if (deletionService != null)
+        projectDeletionServiceProvider.overrideWithValue(deletionService),
+    ];
+    if (withRouter) {
+      final router = GoRouter(
+        initialLocation: '/projects/$projectId',
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) =>
+                const Scaffold(body: SizedBox(key: Key('project-list-root'))),
+            routes: [
+              GoRoute(
+                path: 'projects/:projectId',
+                builder: (_, state) => ProjectDetailScreen(
+                  projectId: state.pathParameters['projectId']!,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      return ProviderScope(
+        overrides: overrides,
+        child: MaterialApp.router(
+          locale: locale,
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          routerConfig: router,
+        ),
+      );
+    }
     return ProviderScope(
-      overrides: [databaseProvider.overrideWithValue(database)],
+      overrides: overrides,
       child: MaterialApp(
-        locale: const Locale('zh'),
+        locale: locale,
         supportedLocales: AppStrings.supportedLocales,
         localizationsDelegates: const [
           AppStrings.delegate,
@@ -835,6 +885,264 @@ void main() {
     await unmountTree(tester);
   });
 
+  testWidgets(
+    'project actions rename while preserving historical capture evidence',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-1', name: '旧项目');
+      await seedReadyCaptureForFilterTest(
+        database,
+        id: 'capture-a',
+        projectId: 'project-1',
+        capturedAt: DateTime(2026, 7, 16, 9),
+      );
+      final before = await database.captureById('capture-a');
+
+      await tester.pumpWidget(pumpProjectDetail(database, 'project-1'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-actions')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('rename-project')), findsOneWidget);
+      expect(find.byKey(const Key('delete-project')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('rename-project')));
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextFormField>(
+        find.byKey(const Key('rename-project-name')),
+      );
+      expect(field.controller?.text, '旧项目');
+      await tester.enterText(
+        find.byKey(const Key('rename-project-name')),
+        '新项目',
+      );
+      await tester.tap(find.byKey(const Key('confirm-rename-project')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('新项目'), findsWidgets);
+      expect((await database.projectById('project-1'))?.name, '新项目');
+      final after = await database.captureById('capture-a');
+      expect(after?.photoNumber, before?.photoNumber);
+      expect(after?.originalPath, before?.originalPath);
+      expect(after?.originalSha256, before?.originalSha256);
+      await unmountTree(tester);
+    },
+  );
+
+  testWidgets('rename keeps dialog open for invalid and conflicting names', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '旧项目');
+    await database.createProject(id: 'project-2', name: 'Cloud Site');
+    await database.createProject(id: 'project-3', name: 'A/B');
+
+    await tester.pumpWidget(pumpProjectDetail(database, 'project-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rename-project')));
+    await tester.pumpAndSettle();
+
+    Future<void> submit(String name) async {
+      await tester.enterText(
+        find.byKey(const Key('rename-project-name')),
+        name,
+      );
+      await tester.tap(find.byKey(const Key('confirm-rename-project')));
+      await tester.pumpAndSettle();
+    }
+
+    await submit(' ');
+    expect(find.text('请输入项目名称'), findsOneWidget);
+    expect(find.byKey(const Key('rename-project-name')), findsOneWidget);
+
+    await submit(' cloud   site ');
+    expect(find.text('已存在同名项目'), findsOneWidget);
+    expect(find.byKey(const Key('rename-project-name')), findsOneWidget);
+
+    await submit('A?B');
+    expect(find.text('项目名称生成的文件名与已有项目重复'), findsOneWidget);
+    expect(find.byKey(const Key('rename-project-name')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets(
+    'delete preview retains gallery and backups then returns to root once',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-1', name: '东区项目');
+      final deleteGate = Completer<void>();
+      final service = _FakeProjectDeletionService(
+        database: database,
+        previewResult: const ProjectDeletionPreview(
+          projectName: '东区项目',
+          captureCount: 12,
+          privateOriginalCount: 7,
+        ),
+        deleteResult: const ProjectDeletionResult(cleanupPending: false),
+        deleteGate: deleteGate,
+      );
+
+      await tester.pumpWidget(
+        pumpProjectDetail(
+          database,
+          'project-1',
+          deletionService: service,
+          withRouter: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('delete-project')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('东区项目'), findsWidgets);
+      expect(find.textContaining('12'), findsOneWidget);
+      expect(find.textContaining('7'), findsOneWidget);
+      expect(find.textContaining('系统相册'), findsOneWidget);
+      expect(find.textContaining('已导出备份'), findsOneWidget);
+      expect(find.textContaining('同时删除'), findsNothing);
+      expect(find.byType(Checkbox), findsNothing);
+
+      await tester.tap(find.byKey(const Key('confirm-delete-project')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('confirm-delete-project')));
+      deleteGate.complete();
+      await tester.pumpAndSettle();
+
+      expect(service.deleteCalls, 1);
+      expect(find.byKey(const Key('project-list-root')), findsOneWidget);
+      await unmountTree(tester);
+    },
+  );
+
+  testWidgets('delete cleanup pending notice survives root navigation', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区项目');
+    final service = _FakeProjectDeletionService(
+      database: database,
+      previewResult: const ProjectDeletionPreview(
+        projectName: '东区项目',
+        captureCount: 1,
+        privateOriginalCount: 1,
+      ),
+      deleteResult: const ProjectDeletionResult(cleanupPending: true),
+    );
+    await tester.pumpWidget(
+      pumpProjectDetail(
+        database,
+        'project-1',
+        deletionService: service,
+        withRouter: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-project')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-delete-project')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-list-root')), findsOneWidget);
+    expect(find.textContaining('下次启动继续清理'), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets('delete failure stays on project and back cancels one layer', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区项目');
+    final service = _FakeProjectDeletionService(
+      database: database,
+      previewResult: const ProjectDeletionPreview(
+        projectName: '东区项目',
+        captureCount: 1,
+        privateOriginalCount: 1,
+      ),
+      deleteError: StateError('sensitive raw failure'),
+    );
+    await tester.pumpWidget(
+      pumpProjectDetail(
+        database,
+        'project-1',
+        deletionService: service,
+        withRouter: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-project')));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-actions')), findsOneWidget);
+    expect(find.byKey(const Key('project-list-root')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-project')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm-delete-project')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-actions')), findsOneWidget);
+    expect(find.text('项目删除失败，请稍后重试'), findsOneWidget);
+    expect(find.textContaining('sensitive raw failure'), findsNothing);
+    await unmountTree(tester);
+  });
+
+  testWidgets('project action dialogs fit at 360dp and expose English labels', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: 'East Plant');
+    final service = _FakeProjectDeletionService(
+      database: database,
+      previewResult: const ProjectDeletionPreview(
+        projectName: 'East Plant',
+        captureCount: 999,
+        privateOriginalCount: 999,
+      ),
+    );
+    await tester.pumpWidget(
+      pumpProjectDetail(
+        database,
+        'project-1',
+        deletionService: service,
+        locale: const Locale('en'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Project actions'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('Rename project'), findsOneWidget);
+    expect(find.text('Delete project'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('delete-project')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('system gallery'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await unmountTree(tester);
+  });
+
   testWidgets('busy record tap is disabled while editing', (tester) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -871,4 +1179,62 @@ void main() {
     expect(tester.takeException(), isNull);
     await unmountTree(tester);
   });
+}
+
+class _FakeProjectDeletionService extends ProjectDeletionService {
+  _FakeProjectDeletionService({
+    required super.database,
+    required this.previewResult,
+    this.deleteResult = const ProjectDeletionResult(cleanupPending: false),
+    this.deleteError,
+    this.deleteGate,
+  }) : super(
+         capturePaths: _UnusedCapturePaths(),
+         files: _UnusedPrivateFiles(),
+         pendingStore: _UnusedPendingStore(),
+       );
+
+  final ProjectDeletionPreview previewResult;
+  final ProjectDeletionResult deleteResult;
+  final Object? deleteError;
+  final Completer<void>? deleteGate;
+  int deleteCalls = 0;
+
+  @override
+  Future<ProjectDeletionPreview> preview(String projectId) async =>
+      previewResult;
+
+  @override
+  Future<ProjectDeletionResult> deleteProject(String projectId) async {
+    deleteCalls++;
+    await deleteGate?.future;
+    if (deleteError != null) throw deleteError!;
+    return deleteResult;
+  }
+}
+
+class _UnusedCapturePaths implements CaptureOutputPaths {
+  @override
+  Future<String> renderedPhotoPath(String captureId) =>
+      throw UnimplementedError();
+}
+
+class _UnusedPrivateFiles implements PrivateFileStore {
+  @override
+  Future<void> deleteIfExists(String path) => throw UnimplementedError();
+
+  @override
+  Future<bool> exists(String path) => throw UnimplementedError();
+}
+
+class _UnusedPendingStore implements ProjectDeletionPendingStore {
+  @override
+  Future<void> clear(String projectId) => throw UnimplementedError();
+
+  @override
+  Future<List<PendingProjectDeletion>> list() => throw UnimplementedError();
+
+  @override
+  Future<void> write(PendingProjectDeletion pending) =>
+      throw UnimplementedError();
 }

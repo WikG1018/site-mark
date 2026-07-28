@@ -33,6 +33,43 @@ class AppStrings {
   String get projectFileNameConflict => _english
       ? 'This name conflicts with an existing project file name'
       : '项目名称生成的文件名与已有项目重复';
+  String get projectActions => _english ? 'Project actions' : '项目操作';
+  String get renameProject => _english ? 'Rename project' : '重命名项目';
+  String get deleteProject => _english ? 'Delete project' : '删除项目';
+  String get renameProjectTitle => _english ? 'Rename this project' : '重命名此项目';
+  String get renameProjectFailed => _english
+      ? 'Could not rename the project. Please try again.'
+      : '项目重命名失败，请稍后重试';
+  String get projectNameTooLong => _english
+      ? 'Project name must be 120 characters or fewer'
+      : '项目名称不能超过 120 个字符';
+  String get deleteProjectTitle => _english ? 'Delete this project?' : '删除此项目？';
+  String deleteProjectSummary({
+    required String projectName,
+    required int captureCount,
+    required int privateOriginalCount,
+  }) => _english
+      ? 'Project: $projectName\n'
+            'Capture records: $captureCount\n'
+            'Private originals retained: $privateOriginalCount'
+      : '项目：$projectName\n'
+            '拍摄记录：$captureCount 条\n'
+            '保留的私有原图：$privateOriginalCount 张';
+  String get deleteProjectRetentionNotice => _english
+      ? 'Photos already saved in the system gallery and exported backups will remain.'
+      : '系统相册中的照片和已导出备份会保留。';
+  String get deleteProjectIrreversible => _english
+      ? 'Project data and private files in this app cannot be recovered after deletion.'
+      : '删除后，应用内的项目数据和私有文件无法恢复。';
+  String get deleteProjectFailed => _english
+      ? 'Could not delete the project. Please try again.'
+      : '项目删除失败，请稍后重试';
+  String get deleteProjectPreviewFailed => _english
+      ? 'Could not load deletion details. Please try again.'
+      : '无法读取删除信息，请稍后重试';
+  String get projectDeletedCleanupPending => _english
+      ? 'Project deleted. Remaining private files will be cleaned up the next time the app starts.'
+      : '项目已删除，残留私有文件将在下次启动继续清理';
   String get descriptionOptional =>
       _english ? 'Description (optional)' : '项目说明（选填）';
   String get save => _english ? 'Save' : '保存';
