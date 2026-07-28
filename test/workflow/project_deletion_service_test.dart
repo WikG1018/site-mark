@@ -121,7 +121,7 @@ void main() {
 
     final marker = File(
       '${documents.path}${Platform.pathSeparator}cleanup'
-      '${Platform.pathSeparator}project-project-1-r0.json',
+      '${Platform.pathSeparator}${_markerName('project-1', 0)}',
     );
     expect(jsonDecode(await marker.readAsString()), {
       'projectId': 'project-1',
@@ -169,7 +169,7 @@ void main() {
         '${documents.path}${Platform.pathSeparator}cleanup',
       );
       await File(
-        '${cleanup.path}${Platform.pathSeparator}project-project-1-r1.json',
+        '${cleanup.path}${Platform.pathSeparator}${_markerName('project-1', 1)}',
       ).writeAsString('{', flush: true);
 
       final listed = await store.list();
@@ -257,7 +257,7 @@ void main() {
           .where((entity) => entity is File)
           .map((entity) => entity.uri.pathSegments.last)
           .toList();
-      expect(names, ['project-other-project-r0.json']);
+      expect(names, [_markerName('other-project', 0)]);
     },
   );
 
@@ -273,7 +273,7 @@ void main() {
       );
       await cleanup.create(recursive: true);
       await File(
-        '${cleanup.path}${Platform.pathSeparator}project-project-1-r0.json',
+        '${cleanup.path}${Platform.pathSeparator}${_markerName('project-1', 0)}',
       ).writeAsString('{', flush: true);
       final store = AppProjectDeletionPendingStore(
         documentsDirectory: () async => documents,
@@ -285,7 +285,7 @@ void main() {
           isA<StateError>().having(
             (error) => error.message,
             'message',
-            contains('project-project-1'),
+            contains('project-1'),
           ),
         ),
       );
@@ -330,6 +330,127 @@ void main() {
     await store.clear('project-1');
     expect(await legacy.exists(), isFalse);
   });
+
+  test(
+    'colliding legacy-safe IDs keep separate generations and clear',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-collision-',
+      );
+      addTearDown(() => documents.delete(recursive: true));
+      final store = AppProjectDeletionPendingStore(
+        documentsDirectory: () async => documents,
+      );
+      await store.write(
+        const PendingProjectDeletion(
+          projectId: 'a/b',
+          paths: ['/private/slash-a.jpg'],
+        ),
+      );
+      await store.write(
+        const PendingProjectDeletion(
+          projectId: 'a?b',
+          paths: ['/private/question.jpg'],
+        ),
+      );
+      await store.write(
+        const PendingProjectDeletion(
+          projectId: 'a/b',
+          paths: ['/private/slash-b.jpg'],
+        ),
+      );
+
+      final listed = await store.list();
+      expect(
+        {for (final pending in listed) pending.projectId: pending.paths},
+        {
+          'a/b': ['/private/slash-b.jpg'],
+          'a?b': ['/private/question.jpg'],
+        },
+      );
+
+      await store.clear('a/b');
+
+      final remaining = await store.list();
+      expect(remaining, hasLength(1));
+      expect(remaining.single.projectId, 'a?b');
+      expect(remaining.single.paths, ['/private/question.jpg']);
+    },
+  );
+
+  test(
+    'legacy project ID ending in revision text is not a generation',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-r-suffix-',
+      );
+      addTearDown(() => documents.delete(recursive: true));
+      final cleanup = Directory(
+        '${documents.path}${Platform.pathSeparator}cleanup',
+      );
+      await cleanup.create(recursive: true);
+      final legacy = File(
+        '${cleanup.path}${Platform.pathSeparator}project-foo-r3.json',
+      );
+      await legacy.writeAsString(
+        jsonEncode({
+          'projectId': 'foo-r3',
+          'paths': ['/private/legacy-r3.jpg'],
+        }),
+        flush: true,
+      );
+      final store = AppProjectDeletionPendingStore(
+        documentsDirectory: () async => documents,
+      );
+
+      final listed = await store.list();
+      expect(listed, hasLength(1));
+      expect(listed.single.projectId, 'foo-r3');
+      expect(listed.single.paths, ['/private/legacy-r3.jpg']);
+
+      await store.clear('foo');
+      expect(await legacy.exists(), isTrue);
+      await store.clear('foo-r3');
+      expect(await legacy.exists(), isFalse);
+    },
+  );
+
+  test(
+    'previous generation filename remains readable by JSON identity',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-previous-generation-',
+      );
+      addTearDown(() => documents.delete(recursive: true));
+      final cleanup = Directory(
+        '${documents.path}${Platform.pathSeparator}cleanup',
+      );
+      await cleanup.create(recursive: true);
+      final previousGeneration = File(
+        '${cleanup.path}${Platform.pathSeparator}project-foo-r3.json',
+      );
+      await previousGeneration.writeAsString(
+        jsonEncode({
+          'projectId': 'foo',
+          'paths': ['/private/previous-r3.jpg'],
+        }),
+        flush: true,
+      );
+      final store = AppProjectDeletionPendingStore(
+        documentsDirectory: () async => documents,
+      );
+
+      final listed = await store.list();
+      expect(listed, hasLength(1));
+      expect(listed.single.projectId, 'foo');
+      expect(listed.single.paths, ['/private/previous-r3.jpg']);
+
+      await store.clear('foo-r3');
+      expect(await previousGeneration.exists(), isTrue);
+      await store.clear('foo');
+      expect(await previousGeneration.exists(), isFalse);
+    },
+  );
 
   test(
     'marker clear failure reports pending cleanup after rows are removed',
@@ -416,6 +537,11 @@ Future<void> _seedPublishedCapture(AppDatabase database) async {
     captureId: 'capture-1',
     publishedUri: 'content://media/published',
   );
+}
+
+String _markerName(String projectId, int revision) {
+  final encoded = base64Url.encode(utf8.encode(projectId)).replaceAll('=', '');
+  return 'deletion-v2-$encoded-g$revision.json';
 }
 
 class _FakeCaptureOutputPaths implements CaptureOutputPaths {

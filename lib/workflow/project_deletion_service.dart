@@ -77,21 +77,33 @@ class AppProjectDeletionPendingStore implements ProjectDeletionPendingStore {
   @override
   Future<void> write(PendingProjectDeletion pending) async {
     final directory = await _cleanupDirectory();
-    final safeId = _safeProjectId(pending.projectId);
+    final encodedId = _encodeProjectId(pending.projectId);
     var latestRevision = -1;
     await for (final entity in directory.list()) {
       if (entity is! File) continue;
-      final marker = _parseMarkerName(entity.uri.pathSegments.last);
+      final name = entity.uri.pathSegments.last;
+      final marker = _parseNewMarkerName(name);
       if (marker != null &&
-          marker.safeProjectId == safeId &&
+          marker.encodedProjectId == encodedId &&
           marker.revision > latestRevision) {
         latestRevision = marker.revision;
+        continue;
+      }
+      try {
+        final generation = await _readGeneration(entity, name);
+        if (generation.pending.projectId == pending.projectId &&
+            generation.revision > latestRevision) {
+          latestRevision = generation.revision;
+        }
+      } catch (_) {
+        // A corrupt new-format marker was already counted by its reversible
+        // filename. An unreadable legacy marker cannot safely claim an ID.
       }
     }
     final nextRevision = latestRevision + 1;
     final marker = File(
       '${directory.path}${Platform.pathSeparator}'
-      'project-$safeId-r$nextRevision.json',
+      'deletion-v2-$encodedId-g$nextRevision.json',
     );
     await _writer.write(marker, jsonEncode(pending.toJson()));
   }
@@ -101,43 +113,42 @@ class AppProjectDeletionPendingStore implements ProjectDeletionPendingStore {
     final directory = await _cleanupDirectory();
     final latest = <String, _PendingDeletionGeneration>{};
     final corruptProjectIds = <String>{};
+    final unreadableLegacyMarkers = <String>[];
     await for (final entity in directory.list()) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
-      final marker = _parseMarkerName(name);
-      if (marker == null) continue;
+      if (!_isMarkerName(name)) continue;
       try {
-        final decoded = jsonDecode(await entity.readAsString());
-        if (decoded is! Map<String, dynamic>) {
-          throw const FormatException('Marker is not a JSON object');
-        }
-        final projectId = decoded['projectId'];
-        final paths = decoded['paths'];
-        if (projectId is! String ||
-            projectId.isEmpty ||
-            paths is! List ||
-            paths.any((path) => path is! String) ||
-            _safeProjectId(projectId) != marker.safeProjectId) {
-          throw const FormatException('Invalid project deletion marker');
-        }
-        final item = PendingProjectDeletion.fromJson(decoded);
-        final current = latest[marker.safeProjectId];
-        if (current == null || marker.revision > current.revision) {
-          latest[marker.safeProjectId] = _PendingDeletionGeneration(
-            pending: item,
-            revision: marker.revision,
-          );
+        final generation = await _readGeneration(entity, name);
+        final projectId = generation.pending.projectId;
+        final current = latest[projectId];
+        if (current == null || generation.revision > current.revision) {
+          latest[projectId] = generation;
         }
       } catch (_) {
-        corruptProjectIds.add(marker.safeProjectId);
+        final marker = _parseNewMarkerName(name);
+        final projectId = marker == null
+            ? null
+            : _decodeProjectId(marker.encodedProjectId);
+        if (projectId == null) {
+          unreadableLegacyMarkers.add(name);
+        } else {
+          corruptProjectIds.add(projectId);
+        }
       }
     }
+    if (unreadableLegacyMarkers.isNotEmpty) {
+      throw StateError(
+        'Unreadable project deletion marker: '
+        '${unreadableLegacyMarkers.first}',
+      );
+    }
     final corruptOnly = corruptProjectIds
-        .where((safeId) => !latest.containsKey(safeId))
+        .where((projectId) => !latest.containsKey(projectId))
         .toList(growable: false);
     if (corruptOnly.isNotEmpty) {
       throw StateError(
-        'Unreadable project deletion marker: project-${corruptOnly.first}',
+        'Unreadable project deletion marker for ${corruptOnly.first}',
       );
     }
     return latest.values
@@ -148,38 +159,113 @@ class AppProjectDeletionPendingStore implements ProjectDeletionPendingStore {
   @override
   Future<void> clear(String projectId) async {
     final directory = await _cleanupDirectory();
-    final safeId = _safeProjectId(projectId);
+    final encodedId = _encodeProjectId(projectId);
     await for (final entity in directory.list()) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
-      final marker = _parseMarkerName(name);
-      if (marker?.safeProjectId == safeId ||
-          _isTemporaryMarkerFor(name, safeId)) {
+      final marker = _parseNewMarkerName(name);
+      if (marker?.encodedProjectId == encodedId ||
+          _isTemporaryMarkerFor(name, encodedId)) {
         await entity.delete();
+        continue;
+      }
+      if (!_isMarkerName(name)) continue;
+      try {
+        final generation = await _readGeneration(entity, name);
+        if (generation.pending.projectId == projectId) {
+          await entity.delete();
+        }
+      } catch (_) {
+        // An unreadable legacy filename is not reversible, so deleting it
+        // based on a lossy guess could erase another project's ownership.
       }
     }
   }
 
-  static String _safeProjectId(String projectId) =>
+  static String _legacySafeProjectId(String projectId) =>
       projectId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
 
-  static _DeletionMarkerName? _parseMarkerName(String name) {
-    final generation = RegExp(
-      r'^project-(.+)-r([0-9]+)\.json$',
-    ).firstMatch(name);
-    if (generation != null) {
-      return _DeletionMarkerName(
-        safeProjectId: generation.group(1)!,
-        revision: int.parse(generation.group(2)!),
-      );
+  static String _encodeProjectId(String projectId) =>
+      base64Url.encode(utf8.encode(projectId)).replaceAll('=', '');
+
+  static String? _decodeProjectId(String encodedProjectId) {
+    try {
+      final paddingLength = (4 - encodedProjectId.length % 4) % 4;
+      final padded = '$encodedProjectId${'=' * paddingLength}';
+      final decoded = utf8.decode(base64Url.decode(padded));
+      return _encodeProjectId(decoded) == encodedProjectId ? decoded : null;
+    } catch (_) {
+      return null;
     }
-    final legacy = RegExp(r'^project-(.+)\.json$').firstMatch(name);
-    if (legacy == null) return null;
-    return _DeletionMarkerName(safeProjectId: legacy.group(1)!, revision: -1);
   }
 
-  static bool _isTemporaryMarkerFor(String name, String safeId) {
-    final prefix = 'project-$safeId-r';
+  static _NewDeletionMarkerName? _parseNewMarkerName(String name) {
+    final match = RegExp(
+      r'^deletion-v2-([A-Za-z0-9_-]*)-g([0-9]+)\.json$',
+    ).firstMatch(name);
+    if (match == null || _decodeProjectId(match.group(1)!) == null) return null;
+    final revision = int.tryParse(match.group(2)!);
+    if (revision == null) return null;
+    return _NewDeletionMarkerName(
+      encodedProjectId: match.group(1)!,
+      revision: revision,
+    );
+  }
+
+  static bool _isMarkerName(String name) =>
+      _parseNewMarkerName(name) != null ||
+      RegExp(r'^project-(.+)\.json$').hasMatch(name);
+
+  static Future<_PendingDeletionGeneration> _readGeneration(
+    File file,
+    String name,
+  ) async {
+    final decoded = jsonDecode(await file.readAsString());
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Marker is not a JSON object');
+    }
+    final projectId = decoded['projectId'];
+    final paths = decoded['paths'];
+    if (projectId is! String ||
+        projectId.isEmpty ||
+        paths is! List ||
+        paths.any((path) => path is! String)) {
+      throw const FormatException('Invalid project deletion marker');
+    }
+    final revision = _revisionForIdentity(name, projectId);
+    if (revision == null) {
+      throw const FormatException('Marker filename does not match project ID');
+    }
+    return _PendingDeletionGeneration(
+      pending: PendingProjectDeletion.fromJson(decoded),
+      revision: revision,
+    );
+  }
+
+  static int? _revisionForIdentity(String name, String projectId) {
+    final current = _parseNewMarkerName(name);
+    if (current != null &&
+        _decodeProjectId(current.encodedProjectId) == projectId) {
+      return current.revision;
+    }
+
+    final legacy = RegExp(r'^project-(.+)\.json$').firstMatch(name);
+    if (legacy == null) return null;
+    final legacyIdentity = legacy.group(1)!;
+    if (legacyIdentity == projectId) return -1;
+
+    final previousGeneration = RegExp(
+      r'^project-(.+)-r([0-9]+)\.json$',
+    ).firstMatch(name);
+    if (previousGeneration == null ||
+        previousGeneration.group(1)! != _legacySafeProjectId(projectId)) {
+      return null;
+    }
+    return int.tryParse(previousGeneration.group(2)!);
+  }
+
+  static bool _isTemporaryMarkerFor(String name, String encodedId) {
+    final prefix = 'deletion-v2-$encodedId-g';
     if (!name.startsWith(prefix)) return false;
     return RegExp(
       '^${RegExp.escape(prefix)}[0-9]+'
@@ -188,13 +274,13 @@ class AppProjectDeletionPendingStore implements ProjectDeletionPendingStore {
   }
 }
 
-class _DeletionMarkerName {
-  const _DeletionMarkerName({
-    required this.safeProjectId,
+class _NewDeletionMarkerName {
+  const _NewDeletionMarkerName({
+    required this.encodedProjectId,
     required this.revision,
   });
 
-  final String safeProjectId;
+  final String encodedProjectId;
   final int revision;
 }
 
