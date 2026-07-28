@@ -960,6 +960,93 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Inserts a fully-restored capture row from a project backup archive,
+  /// bypassing the camera/render state machine. The row lands directly in
+  /// `ready` with its photo number, capture time, location fix, and SHA-256
+  /// evidence hash preserved. `publishedUri` stays null until the user
+  /// re-saves the photo to the system gallery via the existing republish
+  /// flow. Validation mirrors the invariants enforced at capture time.
+  Future<CaptureRecord> insertRestoredCapture({
+    required String id,
+    required String projectId,
+    required String photoNumber,
+    required String originalPath,
+    required String workLocation,
+    required String workContent,
+    required String photographer,
+    required String originalSha256,
+    required DateTime createdAt,
+    required DateTime capturedAt,
+    String? notes,
+    String? address,
+    double? latitude,
+    double? longitude,
+    double? accuracyMeters,
+    String watermarkLocaleCode = 'zh',
+    DateTime? originalDeletedAt,
+  }) {
+    if (photoNumber.trim().isEmpty) {
+      throw ArgumentError.value(photoNumber, 'photoNumber');
+    }
+    if (!RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(originalSha256)) {
+      throw ArgumentError.value(
+        originalSha256,
+        'originalSha256',
+        'Expected a 64-character SHA-256 digest',
+      );
+    }
+    if ([
+      workLocation,
+      workContent,
+      photographer,
+    ].any((value) => value.trim().isEmpty)) {
+      throw ArgumentError('Capture description fields must not be empty');
+    }
+    if (!{'zh', 'en'}.contains(watermarkLocaleCode)) {
+      throw ArgumentError.value(watermarkLocaleCode, 'watermarkLocaleCode');
+    }
+    final hasLocationFix = latitude != null && longitude != null;
+    return into(captureRecords).insertReturning(
+      CaptureRecordsCompanion.insert(
+        id: id,
+        projectId: projectId,
+        photoNumber: Value(photoNumber),
+        workLocation: workLocation.trim(),
+        workContent: workContent.trim(),
+        photographer: photographer.trim(),
+        notes: Value(notes?.trim()),
+        originalPath: originalPath,
+        publishedUri: const Value(null),
+        originalSha256: Value(originalSha256.toLowerCase()),
+        status: CaptureStatus.ready,
+        createdAt: createdAt,
+        capturedAt: Value(capturedAt),
+        latitude: Value(latitude),
+        longitude: Value(longitude),
+        accuracyMeters: Value(accuracyMeters),
+        address: Value(address),
+        locationOutcome: const Value(null),
+        watermarkLocaleCode: Value(watermarkLocaleCode),
+        locationResolution: Value(hasLocationFix ? 'resolved' : 'unavailable'),
+        originalDeletedAt: Value(originalDeletedAt),
+      ),
+    );
+  }
+
+  /// Deletes a project together with all of its capture rows. Used to roll
+  /// back a failed backup import; the caller is responsible for removing any
+  /// files it already extracted before invoking this.
+  Future<int> deleteProjectCascade(String projectId) {
+    return transaction(() async {
+      await (delete(
+        captureRecords,
+      )..where((row) => row.projectId.equals(projectId))).go();
+      return (delete(
+        projects,
+      )..where((row) => row.id.equals(projectId))).go();
+    });
+  }
+
   /// Shared select with a join on `captures.project_id = projects.id`,
   /// excluding `pendingCamera` rows, applying an optional [filter], and
   /// sorting by `coalesce(captured_at, created_at)` descending.

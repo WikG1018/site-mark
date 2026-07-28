@@ -169,6 +169,16 @@ class _ExportImagePipeline implements ImagePipeline {
   ExportSelectionRequest? selectionRequest;
 
   @override
+  Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExtractedArchivePhoto> extractArchivePhoto(
+    ExtractArchivePhotoRequest request,
+  ) =>
+      throw UnimplementedError();
+
+  @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async {
     this.request = request;
     return ExportProjectResult(

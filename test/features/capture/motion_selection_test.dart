@@ -560,6 +560,16 @@ class _TestOutputPaths implements CaptureOutputPaths {
 
 class _TestImagePipeline implements ImagePipeline {
   @override
+  Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExtractedArchivePhoto> extractArchivePhoto(
+    ExtractArchivePhotoRequest request,
+  ) =>
+      throw UnimplementedError();
+
+  @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async =>
       throw UnimplementedError();
   @override

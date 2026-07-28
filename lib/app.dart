@@ -37,6 +37,7 @@ import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
+import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -118,6 +119,10 @@ final captureOutputPathsProvider = Provider<CaptureOutputPaths>(
 
 final projectExportPathsProvider = Provider<ProjectExportPaths>(
   (ref) => AppProjectExportPaths(),
+);
+
+final originalPhotoPathsProvider = Provider<OriginalPhotoPaths>(
+  (ref) => AppOriginalPhotoPaths(),
 );
 
 final selectionExportPathsProvider = Provider<SelectionExportPaths>(
@@ -221,6 +226,16 @@ final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
     capturePaths: ref.watch(captureOutputPathsProvider),
     exportPaths: ref.watch(projectExportPathsProvider),
     selectionExportPaths: ref.watch(selectionExportPathsProvider),
+  );
+});
+
+final projectImportServiceProvider = Provider<ProjectImportService>((ref) {
+  return ProjectImportService(
+    database: ref.watch(databaseProvider),
+    images: ref.watch(imagePipelineProvider),
+    capturePaths: ref.watch(captureOutputPathsProvider),
+    originalPaths: ref.watch(originalPhotoPathsProvider),
+    fileStore: ref.watch(privateFileStoreProvider),
   );
 });
 

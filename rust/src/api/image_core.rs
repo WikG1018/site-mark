@@ -61,6 +61,26 @@ pub struct ExportPhotoRecord {
     pub address: Option<String>,
     pub coordinates: Option<String>,
     pub notes: Option<String>,
+    // Backup-restore fields (manifest schema v2). Optional so v1 archives
+    // remain readable by the importer.
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
+    #[serde(default)]
+    pub accuracy_meters: Option<f64>,
+    #[serde(default)]
+    pub watermark_locale_code: Option<String>,
+}
+
+/// Project-level watermark template persisted in v2 manifests so a restored
+/// project keeps its original look instead of falling back to defaults.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportWatermarkSettings {
+    pub position: String,
+    pub opacity: f64,
+    pub accent_color_argb: u32,
+    pub font_scale: f64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -69,6 +89,7 @@ pub struct ExportProjectRequest {
     pub project_name: String,
     pub output_zip_path: String,
     pub include_originals: bool,
+    pub watermark: ExportWatermarkSettings,
     pub photos: Vec<ExportPhotoRecord>,
 }
 
@@ -100,6 +121,7 @@ struct ExportManifest<'a> {
     project_id: &'a str,
     project_name: &'a str,
     includes_originals: bool,
+    watermark: &'a ExportWatermarkSettings,
     photos: &'a [ExportPhotoRecord],
 }
 
@@ -288,12 +310,16 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         .write_all(&csv_bytes)
         .map_err(|error| io_failure("write CSV entry", error))?;
 
+    // Single-project exports are the restorable backup format: schema v2
+    // records the project watermark template and per-photo restore fields.
+    // Selection archives intentionally stay at v1 and are not restorable.
     let manifest = serde_json::to_vec_pretty(&ExportManifest {
-        schema_version: 1,
+        schema_version: 2,
         app: "SiteMark",
         project_id: &request.project_id,
         project_name: &request.project_name,
         includes_originals: request.include_originals,
+        watermark: &request.watermark,
         photos: &request.photos,
     })
     .map_err(|error| invalid_data("serialize manifest", error))?;
@@ -1050,4 +1076,323 @@ mod archive_tests {
         // ZWNBSP / BOM (U+FEFF)
         assert!(safe_photo_number_component("A\u{FEFF}B").is_err());
     }
+}
+
+// ---------------------------------------------------------------------------
+// Backup restore (import)
+// ---------------------------------------------------------------------------
+
+/// One restorable photo entry from a project backup manifest.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ArchivePhotoPreview {
+    pub photo_number: String,
+    pub has_original: bool,
+    pub original_sha256: String,
+    pub captured_at: String,
+    pub work_location: String,
+    pub work_content: String,
+    pub photographer: String,
+    pub address: Option<String>,
+    pub notes: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub accuracy_meters: Option<f64>,
+    pub watermark_locale_code: Option<String>,
+}
+
+/// Watermark template recovered from a v2 manifest.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ArchiveWatermarkSettings {
+    pub position: String,
+    pub opacity: f64,
+    pub accent_color_argb: u32,
+    pub font_scale: f64,
+}
+
+/// Validated content of a restorable single-project backup ZIP.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProjectArchivePreview {
+    pub schema_version: u32,
+    pub project_name: String,
+    pub includes_originals: bool,
+    pub watermark: Option<ArchiveWatermarkSettings>,
+    pub photos: Vec<ArchivePhotoPreview>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExtractArchivePhotoRequest {
+    pub zip_path: String,
+    pub photo_number: String,
+    pub rendered_destination: String,
+    pub original_destination: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExtractedArchivePhoto {
+    pub rendered_path: String,
+    pub original_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ManifestWatermark {
+    position: String,
+    opacity: f64,
+    accent_color_argb: u32,
+    font_scale: f64,
+}
+
+/// Tolerant view of one manifest photo entry. v1 fields that the restore
+/// flow does not need (`watermarked_path`, `original_path`, `coordinates`)
+/// are ignored; v2 restore fields default to `None` for v1 archives.
+#[derive(Deserialize)]
+struct ManifestPhoto {
+    photo_number: String,
+    original_sha256: String,
+    captured_at: String,
+    work_location: String,
+    work_content: String,
+    photographer: String,
+    #[serde(default)]
+    address: Option<String>,
+    #[serde(default)]
+    notes: Option<String>,
+    #[serde(default)]
+    latitude: Option<f64>,
+    #[serde(default)]
+    longitude: Option<f64>,
+    #[serde(default)]
+    accuracy_meters: Option<f64>,
+    #[serde(default)]
+    watermark_locale_code: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ProjectManifestFile {
+    schema_version: u32,
+    app: String,
+    project_name: String,
+    includes_originals: bool,
+    #[serde(default)]
+    watermark: Option<ManifestWatermark>,
+    photos: Vec<ManifestPhoto>,
+}
+
+fn open_zip(zip_path: &str) -> Result<zip::ZipArchive<BufReader<File>>, String> {
+    let file =
+        File::open(zip_path).map_err(|error| io_failure(&format!("open {zip_path}"), error))?;
+    zip::ZipArchive::new(BufReader::new(file)).map_err(|error| zip_failure("open archive", error))
+}
+
+/// Reads and validates the manifest of a single-project backup archive.
+/// Selection exports (`projects` key) are explicitly rejected.
+fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> {
+    let mut archive = open_zip(zip_path)?;
+    let mut text = String::new();
+    archive
+        .by_name("manifest.json")
+        .map_err(|_| invalid_data("read manifest", "archive has no manifest.json"))?
+        .read_to_string(&mut text)
+        .map_err(|error| io_failure("read manifest entry", error))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| invalid_data("parse manifest", error))?;
+    if value.get("projects").is_some() {
+        return Err(invalid_data(
+            "parse manifest",
+            "selection archive: multi-project selection exports cannot be restored",
+        ));
+    }
+    let manifest: ProjectManifestFile =
+        serde_json::from_value(value).map_err(|error| invalid_data("parse manifest", error))?;
+    if manifest.app != "SiteMark" {
+        return Err(invalid_data("validate manifest", "not a SiteMark archive"));
+    }
+    if !(1..=2).contains(&manifest.schema_version) {
+        return Err(invalid_data(
+            "validate manifest",
+            format!("unsupported schema version {}", manifest.schema_version),
+        ));
+    }
+    if manifest.project_name.trim().is_empty() {
+        return Err(invalid_data("validate manifest", "project name is empty"));
+    }
+    if manifest.photos.is_empty() {
+        return Err(invalid_data(
+            "validate manifest",
+            "archive contains no photos",
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for photo in &manifest.photos {
+        safe_photo_number_component(&photo.photo_number)?;
+        if !seen.insert(photo.photo_number.as_str()) {
+            return Err(invalid_data(
+                "validate manifest",
+                format!("duplicate photo number {}", photo.photo_number),
+            ));
+        }
+        if photo.original_sha256.len() != 64
+            || !photo
+                .original_sha256
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
+        {
+            return Err(invalid_data(
+                "validate manifest",
+                format!("invalid SHA-256 digest for {}", photo.photo_number),
+            ));
+        }
+    }
+    Ok(manifest)
+}
+
+/// Locates the `photos/<number>.jpg` and `originals/<number>.<ext>` entries
+/// for one photo. Entry names are only ever *matched*, never used as output
+/// paths — extraction always writes to caller-chosen destinations, so a
+/// crafted archive cannot escape the app-private directory (no Zip Slip).
+fn find_archive_entries(
+    archive: &mut zip::ZipArchive<BufReader<File>>,
+    photo_number: &str,
+) -> Result<(String, Option<String>), String> {
+    let rendered_name = format!("photos/{photo_number}.jpg");
+    let original_prefix = format!("originals/{photo_number}.");
+    let mut rendered: Option<String> = None;
+    let mut original: Option<String> = None;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| zip_failure("read archive entry", error))?;
+        let name = entry.name();
+        if name == rendered_name {
+            rendered = Some(rendered_name.clone());
+        } else if let Some(remainder) = name.strip_prefix(&original_prefix) {
+            // Require a plain extension with no nested path components.
+            if !remainder.is_empty()
+                && remainder
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric())
+            {
+                original = Some(name.to_string());
+            }
+        }
+    }
+    let rendered = rendered.ok_or_else(|| {
+        invalid_data(
+            "validate archive",
+            format!("archive is missing the watermarked photo for {photo_number}"),
+        )
+    })?;
+    Ok((rendered, original))
+}
+
+/// Extracts one archive entry to `destination`, creating parent directories.
+fn extract_entry_to(
+    archive: &mut zip::ZipArchive<BufReader<File>>,
+    entry_name: &str,
+    destination: &str,
+) -> Result<(), String> {
+    let mut entry = archive
+        .by_name(entry_name)
+        .map_err(|error| zip_failure(&format!("open archive entry {entry_name}"), error))?;
+    let output = Path::new(destination);
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| io_failure("create import directory", error))?;
+    }
+    let mut file =
+        File::create(output).map_err(|error| io_failure("create imported file", error))?;
+    std::io::copy(&mut entry, &mut file)
+        .map_err(|error| io_failure("write imported file", error))?;
+    Ok(())
+}
+
+/// Validates a backup ZIP and returns its restorable content. Only
+/// single-project archives (schema v1/v2) are restorable.
+pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, String> {
+    let manifest = read_project_manifest(&zip_path)?;
+    let mut archive = open_zip(&zip_path)?;
+    let mut photos = Vec::with_capacity(manifest.photos.len());
+    for photo in &manifest.photos {
+        let (_, original_entry) = find_archive_entries(&mut archive, &photo.photo_number)?;
+        if manifest.includes_originals && original_entry.is_none() {
+            return Err(invalid_data(
+                "validate archive",
+                format!("archive is missing the original for {}", photo.photo_number),
+            ));
+        }
+        photos.push(ArchivePhotoPreview {
+            photo_number: photo.photo_number.clone(),
+            has_original: original_entry.is_some(),
+            original_sha256: photo.original_sha256.clone(),
+            captured_at: photo.captured_at.clone(),
+            work_location: photo.work_location.clone(),
+            work_content: photo.work_content.clone(),
+            photographer: photo.photographer.clone(),
+            address: photo.address.clone(),
+            notes: photo.notes.clone(),
+            latitude: photo.latitude,
+            longitude: photo.longitude,
+            accuracy_meters: photo.accuracy_meters,
+            watermark_locale_code: photo.watermark_locale_code.clone(),
+        });
+    }
+    Ok(ProjectArchivePreview {
+        schema_version: manifest.schema_version,
+        project_name: manifest.project_name,
+        includes_originals: manifest.includes_originals,
+        watermark: manifest
+            .watermark
+            .map(|watermark| ArchiveWatermarkSettings {
+                position: watermark.position,
+                opacity: watermark.opacity,
+                accent_color_argb: watermark.accent_color_argb,
+                font_scale: watermark.font_scale,
+            }),
+        photos,
+    })
+}
+
+/// Extracts one photo (and its original when requested) from a backup ZIP
+/// into caller-chosen destination paths. The original's SHA-256 is verified
+/// against the manifest; a mismatch removes the extracted files and fails.
+pub fn extract_archive_photo(
+    request: ExtractArchivePhotoRequest,
+) -> Result<ExtractedArchivePhoto, String> {
+    safe_photo_number_component(&request.photo_number)?;
+    let manifest = read_project_manifest(&request.zip_path)?;
+    let photo = manifest
+        .photos
+        .iter()
+        .find(|candidate| candidate.photo_number == request.photo_number)
+        .ok_or_else(|| {
+            invalid_data(
+                "validate archive",
+                format!("manifest has no entry for {}", request.photo_number),
+            )
+        })?;
+    let mut archive = open_zip(&request.zip_path)?;
+    let (rendered_entry, original_entry) = find_archive_entries(&mut archive, &photo.photo_number)?;
+    extract_entry_to(&mut archive, &rendered_entry, &request.rendered_destination)?;
+    let mut extracted_original: Option<String> = None;
+    if let Some(destination) = request.original_destination.as_deref() {
+        let Some(entry_name) = original_entry else {
+            let _ = fs::remove_file(&request.rendered_destination);
+            return Err(invalid_data(
+                "validate archive",
+                format!("archive is missing the original for {}", photo.photo_number),
+            ));
+        };
+        extract_entry_to(&mut archive, &entry_name, destination)?;
+        if !verify_file(destination.to_string(), photo.original_sha256.clone())? {
+            let _ = fs::remove_file(destination);
+            let _ = fs::remove_file(&request.rendered_destination);
+            return Err(invalid_data(
+                "verify original",
+                format!("SHA-256 mismatch for {}", photo.photo_number),
+            ));
+        }
+        extracted_original = Some(destination.to_string());
+    }
+    Ok(ExtractedArchivePhoto {
+        rendered_path: request.rendered_destination,
+        original_path: extracted_original,
+    })
 }

@@ -124,6 +124,12 @@ abstract interface class ImagePipeline {
     rust.ExportSelectionRequest request,
   );
 
+  Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath);
+
+  Future<rust.ExtractedArchivePhoto> extractArchivePhoto(
+    rust.ExtractArchivePhotoRequest request,
+  );
+
   Future<String> sha256(String path);
 
   Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request);
@@ -170,6 +176,20 @@ class RustImagePipeline implements ImagePipeline {
     rust.ExportSelectionRequest request,
   ) {
     return _translateRustError(() => rust.exportSelection(request: request));
+  }
+
+  @override
+  Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath) {
+    return _translateRustError(() => rust.readProjectArchive(zipPath: zipPath));
+  }
+
+  @override
+  Future<rust.ExtractedArchivePhoto> extractArchivePhoto(
+    rust.ExtractArchivePhotoRequest request,
+  ) {
+    return _translateRustError(
+      () => rust.extractArchivePhoto(request: request),
+    );
   }
 
   @override
@@ -241,6 +261,55 @@ class AppCaptureOutputPaths implements CaptureOutputPaths {
 
 abstract interface class ProjectExportPaths {
   Future<String> projectZipPath(String projectId);
+}
+
+/// Resolves app-private original photo paths for captures created outside
+/// the system-camera flow (e.g. restored from a backup archive). Mirrors the
+/// `<filesDir>/originals/<captureId>.jpg` layout the Android host uses for
+/// camera originals; on Android, `getApplicationSupportDirectory()` maps to
+/// the app `filesDir`.
+abstract interface class OriginalPhotoPaths {
+  Future<String> originalPhotoPath(String captureId);
+}
+
+class AppOriginalPhotoPaths implements OriginalPhotoPaths {
+  AppOriginalPhotoPaths({Future<Directory> Function()? supportDirectory})
+    : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+
+  final Future<Directory> Function() _supportDirectory;
+  Future<Directory>? _originalsDirectory;
+
+  @override
+  Future<String> originalPhotoPath(String captureId) async {
+    final directory = await _resolveOriginalsDirectory();
+    return '${directory.path}${Platform.pathSeparator}$captureId.jpg';
+  }
+
+  Future<Directory> _resolveOriginalsDirectory() {
+    final cached = _originalsDirectory;
+    if (cached != null) return cached;
+
+    final created = _createOriginalsDirectory();
+    _originalsDirectory = created;
+    created.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        if (identical(_originalsDirectory, created)) {
+          _originalsDirectory = null;
+        }
+      },
+    );
+    return created;
+  }
+
+  Future<Directory> _createOriginalsDirectory() async {
+    final root = await _supportDirectory();
+    final directory = Directory(
+      '${root.path}${Platform.pathSeparator}originals',
+    );
+    await directory.create(recursive: true);
+    return directory;
+  }
 }
 
 class AppProjectExportPaths implements ProjectExportPaths {

@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `compute_rendered_lines`, `draw_watermark_card`, `image_failure`, `invalid_data`, `io_failure`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `safe_archive_component`, `tokenize`, `validate_render_request`, `wrap_text`, `zip_failure`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `compute_rendered_lines`, `draw_watermark_card`, `extract_entry_to`, `find_archive_entries`, `image_failure`, `invalid_data`, `io_failure`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `open_zip`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `tokenize`, `validate_render_request`, `wrap_text`, `zip_failure`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestPhoto`, `ManifestWatermark`, `ProjectManifestFile`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<String> sha256File({required String path}) =>
     RustLib.instance.api.crateApiImageCoreSha256File(path: path);
@@ -32,6 +32,119 @@ Future<ExportProjectResult> exportSelection({
   required ExportSelectionRequest request,
 }) => RustLib.instance.api.crateApiImageCoreExportSelection(request: request);
 
+/// Validates a backup ZIP and returns its restorable content. Only
+/// single-project archives (schema v1/v2) are restorable.
+Future<ProjectArchivePreview> readProjectArchive({required String zipPath}) =>
+    RustLib.instance.api.crateApiImageCoreReadProjectArchive(zipPath: zipPath);
+
+/// Extracts one photo (and its original when requested) from a backup ZIP
+/// into caller-chosen destination paths. The original's SHA-256 is verified
+/// against the manifest; a mismatch removes the extracted files and fails.
+Future<ExtractedArchivePhoto> extractArchivePhoto({
+  required ExtractArchivePhotoRequest request,
+}) =>
+    RustLib.instance.api.crateApiImageCoreExtractArchivePhoto(request: request);
+
+/// One restorable photo entry from a project backup manifest.
+class ArchivePhotoPreview {
+  final String photoNumber;
+  final bool hasOriginal;
+  final String originalSha256;
+  final String capturedAt;
+  final String workLocation;
+  final String workContent;
+  final String photographer;
+  final String? address;
+  final String? notes;
+  final double? latitude;
+  final double? longitude;
+  final double? accuracyMeters;
+  final String? watermarkLocaleCode;
+
+  const ArchivePhotoPreview({
+    required this.photoNumber,
+    required this.hasOriginal,
+    required this.originalSha256,
+    required this.capturedAt,
+    required this.workLocation,
+    required this.workContent,
+    required this.photographer,
+    this.address,
+    this.notes,
+    this.latitude,
+    this.longitude,
+    this.accuracyMeters,
+    this.watermarkLocaleCode,
+  });
+
+  @override
+  int get hashCode =>
+      photoNumber.hashCode ^
+      hasOriginal.hashCode ^
+      originalSha256.hashCode ^
+      capturedAt.hashCode ^
+      workLocation.hashCode ^
+      workContent.hashCode ^
+      photographer.hashCode ^
+      address.hashCode ^
+      notes.hashCode ^
+      latitude.hashCode ^
+      longitude.hashCode ^
+      accuracyMeters.hashCode ^
+      watermarkLocaleCode.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArchivePhotoPreview &&
+          runtimeType == other.runtimeType &&
+          photoNumber == other.photoNumber &&
+          hasOriginal == other.hasOriginal &&
+          originalSha256 == other.originalSha256 &&
+          capturedAt == other.capturedAt &&
+          workLocation == other.workLocation &&
+          workContent == other.workContent &&
+          photographer == other.photographer &&
+          address == other.address &&
+          notes == other.notes &&
+          latitude == other.latitude &&
+          longitude == other.longitude &&
+          accuracyMeters == other.accuracyMeters &&
+          watermarkLocaleCode == other.watermarkLocaleCode;
+}
+
+/// Watermark template recovered from a v2 manifest.
+class ArchiveWatermarkSettings {
+  final String position;
+  final double opacity;
+  final int accentColorArgb;
+  final double fontScale;
+
+  const ArchiveWatermarkSettings({
+    required this.position,
+    required this.opacity,
+    required this.accentColorArgb,
+    required this.fontScale,
+  });
+
+  @override
+  int get hashCode =>
+      position.hashCode ^
+      opacity.hashCode ^
+      accentColorArgb.hashCode ^
+      fontScale.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArchiveWatermarkSettings &&
+          runtimeType == other.runtimeType &&
+          position == other.position &&
+          opacity == other.opacity &&
+          accentColorArgb == other.accentColorArgb &&
+          fontScale == other.fontScale;
+}
+
 class ExportPhotoRecord {
   final String photoNumber;
   final String watermarkedPath;
@@ -44,6 +157,10 @@ class ExportPhotoRecord {
   final String? address;
   final String? coordinates;
   final String? notes;
+  final double? latitude;
+  final double? longitude;
+  final double? accuracyMeters;
+  final String? watermarkLocaleCode;
 
   const ExportPhotoRecord({
     required this.photoNumber,
@@ -57,6 +174,10 @@ class ExportPhotoRecord {
     this.address,
     this.coordinates,
     this.notes,
+    this.latitude,
+    this.longitude,
+    this.accuracyMeters,
+    this.watermarkLocaleCode,
   });
 
   @override
@@ -71,7 +192,11 @@ class ExportPhotoRecord {
       photographer.hashCode ^
       address.hashCode ^
       coordinates.hashCode ^
-      notes.hashCode;
+      notes.hashCode ^
+      latitude.hashCode ^
+      longitude.hashCode ^
+      accuracyMeters.hashCode ^
+      watermarkLocaleCode.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -88,7 +213,11 @@ class ExportPhotoRecord {
           photographer == other.photographer &&
           address == other.address &&
           coordinates == other.coordinates &&
-          notes == other.notes;
+          notes == other.notes &&
+          latitude == other.latitude &&
+          longitude == other.longitude &&
+          accuracyMeters == other.accuracyMeters &&
+          watermarkLocaleCode == other.watermarkLocaleCode;
 }
 
 class ExportProjectRequest {
@@ -96,6 +225,7 @@ class ExportProjectRequest {
   final String projectName;
   final String outputZipPath;
   final bool includeOriginals;
+  final ExportWatermarkSettings watermark;
   final List<ExportPhotoRecord> photos;
 
   const ExportProjectRequest({
@@ -103,6 +233,7 @@ class ExportProjectRequest {
     required this.projectName,
     required this.outputZipPath,
     required this.includeOriginals,
+    required this.watermark,
     required this.photos,
   });
 
@@ -112,6 +243,7 @@ class ExportProjectRequest {
       projectName.hashCode ^
       outputZipPath.hashCode ^
       includeOriginals.hashCode ^
+      watermark.hashCode ^
       photos.hashCode;
 
   @override
@@ -123,6 +255,7 @@ class ExportProjectRequest {
           projectName == other.projectName &&
           outputZipPath == other.outputZipPath &&
           includeOriginals == other.includeOriginals &&
+          watermark == other.watermark &&
           photos == other.photos;
 }
 
@@ -199,6 +332,124 @@ class ExportSelectionRequest {
           outputZipPath == other.outputZipPath &&
           includeOriginals == other.includeOriginals &&
           projects == other.projects;
+}
+
+/// Project-level watermark template persisted in v2 manifests so a restored
+/// project keeps its original look instead of falling back to defaults.
+class ExportWatermarkSettings {
+  final String position;
+  final double opacity;
+  final int accentColorArgb;
+  final double fontScale;
+
+  const ExportWatermarkSettings({
+    required this.position,
+    required this.opacity,
+    required this.accentColorArgb,
+    required this.fontScale,
+  });
+
+  @override
+  int get hashCode =>
+      position.hashCode ^
+      opacity.hashCode ^
+      accentColorArgb.hashCode ^
+      fontScale.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportWatermarkSettings &&
+          runtimeType == other.runtimeType &&
+          position == other.position &&
+          opacity == other.opacity &&
+          accentColorArgb == other.accentColorArgb &&
+          fontScale == other.fontScale;
+}
+
+class ExtractArchivePhotoRequest {
+  final String zipPath;
+  final String photoNumber;
+  final String renderedDestination;
+  final String? originalDestination;
+
+  const ExtractArchivePhotoRequest({
+    required this.zipPath,
+    required this.photoNumber,
+    required this.renderedDestination,
+    this.originalDestination,
+  });
+
+  @override
+  int get hashCode =>
+      zipPath.hashCode ^
+      photoNumber.hashCode ^
+      renderedDestination.hashCode ^
+      originalDestination.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExtractArchivePhotoRequest &&
+          runtimeType == other.runtimeType &&
+          zipPath == other.zipPath &&
+          photoNumber == other.photoNumber &&
+          renderedDestination == other.renderedDestination &&
+          originalDestination == other.originalDestination;
+}
+
+class ExtractedArchivePhoto {
+  final String renderedPath;
+  final String? originalPath;
+
+  const ExtractedArchivePhoto({required this.renderedPath, this.originalPath});
+
+  @override
+  int get hashCode => renderedPath.hashCode ^ originalPath.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExtractedArchivePhoto &&
+          runtimeType == other.runtimeType &&
+          renderedPath == other.renderedPath &&
+          originalPath == other.originalPath;
+}
+
+/// Validated content of a restorable single-project backup ZIP.
+class ProjectArchivePreview {
+  final int schemaVersion;
+  final String projectName;
+  final bool includesOriginals;
+  final ArchiveWatermarkSettings? watermark;
+  final List<ArchivePhotoPreview> photos;
+
+  const ProjectArchivePreview({
+    required this.schemaVersion,
+    required this.projectName,
+    required this.includesOriginals,
+    this.watermark,
+    required this.photos,
+  });
+
+  @override
+  int get hashCode =>
+      schemaVersion.hashCode ^
+      projectName.hashCode ^
+      includesOriginals.hashCode ^
+      watermark.hashCode ^
+      photos.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProjectArchivePreview &&
+          runtimeType == other.runtimeType &&
+          schemaVersion == other.schemaVersion &&
+          projectName == other.projectName &&
+          includesOriginals == other.includesOriginals &&
+          watermark == other.watermark &&
+          photos == other.photos;
 }
 
 class RenderPhotoRequest {

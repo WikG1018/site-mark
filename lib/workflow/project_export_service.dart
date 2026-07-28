@@ -45,6 +45,10 @@ class ProjectExportService {
           address: capture.address,
           coordinates: _coordinates(capture),
           notes: capture.notes,
+          latitude: capture.latitude,
+          longitude: capture.longitude,
+          accuracyMeters: capture.accuracyMeters,
+          watermarkLocaleCode: capture.watermarkLocaleCode,
         ),
       );
     }
@@ -55,6 +59,12 @@ class ProjectExportService {
         projectName: project.name,
         outputZipPath: outputPath,
         includeOriginals: includeOriginals,
+        watermark: ExportWatermarkSettings(
+          position: project.watermarkPosition,
+          opacity: project.watermarkOpacity,
+          accentColorArgb: project.watermarkAccentColorArgb,
+          fontScale: project.watermarkFontScale,
+        ),
         photos: photos,
       ),
     );
@@ -118,6 +128,10 @@ class ProjectExportService {
             address: capture.address,
             coordinates: _coordinates(capture),
             notes: capture.notes,
+            latitude: capture.latitude,
+            longitude: capture.longitude,
+            accuracyMeters: capture.accuracyMeters,
+            watermarkLocaleCode: capture.watermarkLocaleCode,
           ),
         );
       }

@@ -25,7 +25,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  ArchivePhotoPreview dco_decode_archive_photo_preview(dynamic raw);
+
+  @protected
+  ArchiveWatermarkSettings dco_decode_archive_watermark_settings(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
+
+  @protected
+  ArchiveWatermarkSettings dco_decode_box_autoadd_archive_watermark_settings(
+    dynamic raw,
+  );
 
   @protected
   ExportProjectRequest dco_decode_box_autoadd_export_project_request(
@@ -36,6 +47,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ExportSelectionRequest dco_decode_box_autoadd_export_selection_request(
     dynamic raw,
   );
+
+  @protected
+  ExtractArchivePhotoRequest
+  dco_decode_box_autoadd_extract_archive_photo_request(dynamic raw);
+
+  @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw);
 
   @protected
   RenderPhotoRequest dco_decode_box_autoadd_render_photo_request(dynamic raw);
@@ -56,10 +74,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ExportSelectionRequest dco_decode_export_selection_request(dynamic raw);
 
   @protected
+  ExportWatermarkSettings dco_decode_export_watermark_settings(dynamic raw);
+
+  @protected
+  ExtractArchivePhotoRequest dco_decode_extract_archive_photo_request(
+    dynamic raw,
+  );
+
+  @protected
+  ExtractedArchivePhoto dco_decode_extracted_archive_photo(dynamic raw);
+
+  @protected
   double dco_decode_f_64(dynamic raw);
 
   @protected
   int dco_decode_i_32(dynamic raw);
+
+  @protected
+  List<ArchivePhotoPreview> dco_decode_list_archive_photo_preview(dynamic raw);
 
   @protected
   List<ExportPhotoRecord> dco_decode_list_export_photo_record(dynamic raw);
@@ -74,6 +106,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  ArchiveWatermarkSettings?
+  dco_decode_opt_box_autoadd_archive_watermark_settings(dynamic raw);
+
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
+
+  @protected
+  ProjectArchivePreview dco_decode_project_archive_preview(dynamic raw);
 
   @protected
   RenderPhotoRequest dco_decode_render_photo_request(dynamic raw);
@@ -97,7 +139,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  ArchivePhotoPreview sse_decode_archive_photo_preview(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArchiveWatermarkSettings sse_decode_archive_watermark_settings(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  ArchiveWatermarkSettings sse_decode_box_autoadd_archive_watermark_settings(
+    SseDeserializer deserializer,
+  );
 
   @protected
   ExportProjectRequest sse_decode_box_autoadd_export_project_request(
@@ -108,6 +165,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ExportSelectionRequest sse_decode_box_autoadd_export_selection_request(
     SseDeserializer deserializer,
   );
+
+  @protected
+  ExtractArchivePhotoRequest
+  sse_decode_box_autoadd_extract_archive_photo_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
 
   @protected
   RenderPhotoRequest sse_decode_box_autoadd_render_photo_request(
@@ -140,10 +206,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExportWatermarkSettings sse_decode_export_watermark_settings(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ExtractArchivePhotoRequest sse_decode_extract_archive_photo_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ExtractedArchivePhoto sse_decode_extracted_archive_photo(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  List<ArchivePhotoPreview> sse_decode_list_archive_photo_preview(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<ExportPhotoRecord> sse_decode_list_export_photo_record(
@@ -160,6 +246,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  ArchiveWatermarkSettings?
+  sse_decode_opt_box_autoadd_archive_watermark_settings(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  ProjectArchivePreview sse_decode_project_archive_preview(
+    SseDeserializer deserializer,
+  );
 
   @protected
   RenderPhotoRequest sse_decode_render_photo_request(
@@ -187,7 +287,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_archive_photo_preview(
+    ArchivePhotoPreview self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_archive_watermark_settings(
+    ArchiveWatermarkSettings self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_archive_watermark_settings(
+    ArchiveWatermarkSettings self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_export_project_request(
@@ -200,6 +318,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ExportSelectionRequest self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_box_autoadd_extract_archive_photo_request(
+    ExtractArchivePhotoRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_render_photo_request(
@@ -238,10 +365,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_export_watermark_settings(
+    ExportWatermarkSettings self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_extract_archive_photo_request(
+    ExtractArchivePhotoRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_extracted_archive_photo(
+    ExtractedArchivePhoto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_archive_photo_preview(
+    List<ArchivePhotoPreview> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_export_photo_record(
@@ -263,6 +414,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_archive_watermark_settings(
+    ArchiveWatermarkSettings? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_project_archive_preview(
+    ProjectArchivePreview self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_render_photo_request(

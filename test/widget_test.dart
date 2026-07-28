@@ -897,6 +897,16 @@ class _WidgetTestPlatformServices implements PlatformServices {
 
 class _WidgetTestImagePipeline implements ImagePipeline {
   @override
+  Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExtractedArchivePhoto> extractArchivePhoto(
+    ExtractArchivePhotoRequest request,
+  ) =>
+      throw UnimplementedError();
+
+  @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async {
     return ExportProjectResult(
       outputZipPath: request.outputZipPath,

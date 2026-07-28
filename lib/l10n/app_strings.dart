@@ -285,6 +285,37 @@ class AppStrings {
   String get notificationPermissionDenied => _english
       ? 'Notification permission denied. You can enable it in system settings.'
       : '通知权限被拒绝，可在系统设置中开启';
+
+  // Project backup restore (import)
+  String get importProject => _english ? 'Import project backup' : '导入项目备份';
+  String get importDialogTitle =>
+      _english ? 'Import project backup' : '导入项目备份';
+  String importPhotoCount(int count) =>
+      _english ? '$count photo(s)' : '$count 张照片';
+  String get importIncludesOriginals =>
+      _english ? 'Includes private originals' : '包含私有原图';
+  String get importNoOriginals =>
+      _english ? 'Watermarked photos only' : '仅水印成片';
+  String get importWatermarkRestored =>
+      _english ? 'Project watermark settings will be restored.' : '将恢复该项目的水印设置。';
+  String get importWatermarkDefault => _english
+      ? 'The archive predates watermark backup; current defaults apply.'
+      : '备份不含水印设置，将使用默认值。';
+  String get importAction => _english ? 'Import' : '导入';
+  String importingProgress(int completed, int total) => _english
+      ? 'Importing $completed/$total…'
+      : '正在导入 $completed/$total…';
+  String importSuccess(String name, int count) => _english
+      ? 'Imported "$name" ($count photo(s))'
+      : '已导入「$name」（$count 张）';
+  String get importFailed => _english ? 'Import failed' : '导入失败';
+  String get importInvalidArchive =>
+      _english ? 'Not a valid SiteMark project backup' : '不是有效的 SiteMark 项目备份';
+  String get importSelectionUnsupported => _english
+      ? 'Selection exports cannot be restored. Export a single project instead.'
+      : '多选导出包暂不支持导入，请使用单项目导出包。';
+  String get importNameConflict =>
+      _english ? 'A project with this name already exists' : '已存在同名项目';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {
