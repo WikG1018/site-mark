@@ -52,6 +52,7 @@ void main() {
             resolveLocations: _noOpRecovery,
             reconcileQueue: _noOpRecovery,
             cleanupInterruptedImports: _noOpRecovery,
+            cleanupInterruptedBundleRestores: _noOpRecovery,
             cleanupInterruptedProjectDeletions: _noOpRecovery,
           ),
         ),

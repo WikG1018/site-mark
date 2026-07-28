@@ -248,6 +248,9 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
         ref.read(captureBackgroundSchedulerProvider).reconcilePending(),
     cleanupInterruptedImports: () =>
         ref.read(projectImportServiceProvider).cleanupInterruptedImports(),
+    cleanupInterruptedBundleRestores: () => ref
+        .read(projectBundleServiceProvider)
+        .cleanupInterruptedBundleRestores(),
     cleanupInterruptedProjectDeletions: () =>
         ref.read(projectDeletionServiceProvider).cleanupInterruptedDeletions(),
   );
