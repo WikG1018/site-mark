@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -1237,6 +1237,48 @@ mod archive_tests {
     }
 }
 
+#[cfg(test)]
+mod bundle_extraction_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn bundle_commit_refuses_a_destination_created_after_copy() {
+        let directory = tempdir().unwrap();
+        let project_archive = directory.path().join("project-1.zip");
+        fs::write(&project_archive, b"project archive").unwrap();
+        let bundle = directory.path().join("bundle.zip");
+        export_project_bundle(ExportProjectBundleRequest {
+            output_zip_path: bundle.to_string_lossy().into_owned(),
+            projects: vec![ProjectBundleSource {
+                project_id: "project-1".to_string(),
+                project_name: "东区".to_string(),
+                archive_path: project_archive.to_string_lossy().into_owned(),
+            }],
+        })
+        .unwrap();
+        let destination = directory.path().join("staging/project-1.zip");
+        let request = ExtractProjectBundleEntryRequest {
+            zip_path: bundle.to_string_lossy().into_owned(),
+            archive_path: "projects/project-1.zip".to_string(),
+            output_path: destination.to_string_lossy().into_owned(),
+        };
+
+        let error = extract_project_bundle_entry_with_before_commit(request, |output| {
+            fs::write(output, b"written-by-a-competing-operation")
+                .map_err(|source| io_failure("create competing destination", source))
+        })
+        .unwrap_err();
+
+        assert!(error.contains("already exists"), "{error}");
+        assert_eq!(
+            fs::read(&destination).unwrap(),
+            b"written-by-a-competing-operation"
+        );
+        assert!(!destination.with_file_name("project-1.zip.tmp").exists());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Backup restore (import)
 // ---------------------------------------------------------------------------
@@ -1634,7 +1676,7 @@ pub fn read_project_bundle(zip_path: String) -> Result<ProjectBundlePreview, Str
 fn copy_bundle_entry_to(
     archive: &mut zip::ZipArchive<BufReader<File>>,
     archive_path: &str,
-    destination: &Path,
+    destination: &mut File,
 ) -> Result<(), String> {
     let mut entry = archive
         .by_name(archive_path)
@@ -1645,14 +1687,8 @@ fn copy_bundle_entry_to(
             format!("entry {archive_path} exceeds the 8 GiB size limit"),
         ));
     }
-    if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| io_failure("create bundle extraction directory", error))?;
-    }
-    let mut output = File::create(destination)
-        .map_err(|error| io_failure("create extracted project archive", error))?;
     let mut limited = entry.by_ref().take(MAX_BUNDLE_ENTRY_BYTES + 1);
-    let copied = std::io::copy(&mut limited, &mut output)
+    let copied = std::io::copy(&mut limited, destination)
         .map_err(|error| io_failure("copy extracted project archive", error))?;
     if copied > MAX_BUNDLE_ENTRY_BYTES {
         return Err(invalid_data(
@@ -1663,12 +1699,45 @@ fn copy_bundle_entry_to(
     Ok(())
 }
 
+/// Atomically publishes an owned temporary file without replacing a file that
+/// appeared after the caller's initial destination check. A hard link is a
+/// no-replace create operation on the same filesystem; the temporary name is
+/// then removed to leave the expected single destination path.
+fn commit_bundle_temporary_no_replace(temporary: &Path, output: &Path) -> Result<(), String> {
+    fs::hard_link(temporary, output).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::AlreadyExists {
+            invalid_data(
+                "extract bundle entry",
+                "destination already exists at commit time",
+            )
+        } else {
+            io_failure("finalize extracted project archive", error)
+        }
+    })?;
+    fs::remove_file(temporary)
+        .map_err(|error| io_failure("remove committed bundle temporary", error))?;
+    Ok(())
+}
+
 /// Extracts one validated inner project ZIP into a caller-selected staging
 /// location. The destination must not already exist, and all bytes are first
 /// written to `<destination>.tmp`; only a final hash match permits rename.
 pub fn extract_project_bundle_entry(
     request: ExtractProjectBundleEntryRequest,
 ) -> Result<(), String> {
+    extract_project_bundle_entry_with_before_commit(request, |_| Ok(()))
+}
+
+/// Private test seam: the public extraction path always uses a no-op closure.
+/// It lets the unit test deterministically create a competing destination in
+/// the otherwise tiny interval between verified temporary output and commit.
+fn extract_project_bundle_entry_with_before_commit<F>(
+    request: ExtractProjectBundleEntryRequest,
+    before_commit: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&Path) -> Result<(), String>,
+{
     if request.output_path.trim().is_empty() {
         return Err(invalid_data("extract bundle entry", "output path is empty"));
     }
@@ -1692,9 +1761,21 @@ pub fn extract_project_bundle_entry(
         ));
     }
 
+    let mut temporary_created = false;
     let extraction = (|| -> Result<(), String> {
         let mut archive = open_zip(&request.zip_path)?;
-        copy_bundle_entry_to(&mut archive, &request.archive_path, &temporary)?;
+        if let Some(parent) = temporary.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|error| io_failure("create bundle extraction directory", error))?;
+        }
+        let mut temporary_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|error| io_failure("create exclusive bundle temporary", error))?;
+        temporary_created = true;
+        copy_bundle_entry_to(&mut archive, &request.archive_path, &mut temporary_file)?;
+        drop(temporary_file);
         if !verify_file(
             temporary.to_string_lossy().into_owned(),
             expected.archive_sha256.clone(),
@@ -1704,12 +1785,14 @@ pub fn extract_project_bundle_entry(
                 format!("SHA-256 mismatch for {}", request.archive_path),
             ));
         }
-        fs::rename(&temporary, &output)
-            .map_err(|error| io_failure("finalize extracted project archive", error))?;
+        before_commit(&output)?;
+        commit_bundle_temporary_no_replace(&temporary, &output)?;
         Ok(())
     })();
     if let Err(error) = extraction {
-        let _ = fs::remove_file(&temporary);
+        if temporary_created {
+            let _ = fs::remove_file(&temporary);
+        }
         return Err(error);
     }
     Ok(())

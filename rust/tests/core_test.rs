@@ -195,6 +195,40 @@ fn project_bundle_extraction_uses_a_temporary_file_and_rejects_overwrite() {
 }
 
 #[test]
+fn project_bundle_extraction_preserves_a_preexisting_temporary_file() {
+    let directory = tempdir().unwrap();
+    let project_zip = directory.path().join("project-1.zip");
+    write_zip(&project_zip, &[("manifest.json", b"project archive")]);
+    let bundle_path = directory.path().join("bundle.zip");
+    export_project_bundle(ExportProjectBundleRequest {
+        output_zip_path: bundle_path.to_string_lossy().into_owned(),
+        projects: vec![ProjectBundleSource {
+            project_id: "project-1".to_string(),
+            project_name: "东区".to_string(),
+            archive_path: project_zip.to_string_lossy().into_owned(),
+        }],
+    })
+    .unwrap();
+    let destination = directory.path().join("staging/project-1.zip");
+    let temporary = destination.with_file_name("project-1.zip.tmp");
+    fs::create_dir_all(temporary.parent().unwrap()).unwrap();
+    fs::write(&temporary, b"belongs-to-another-operation").unwrap();
+
+    let error = extract_project_bundle_entry(ExtractProjectBundleEntryRequest {
+        zip_path: bundle_path.to_string_lossy().into_owned(),
+        archive_path: "projects/project-1.zip".to_string(),
+        output_path: destination.to_string_lossy().into_owned(),
+    })
+    .unwrap_err();
+    assert!(error.contains("already exists"), "{error}");
+    assert_eq!(
+        fs::read(&temporary).unwrap(),
+        b"belongs-to-another-operation"
+    );
+    assert!(!destination.exists());
+}
+
+#[test]
 fn project_bundle_rejects_traversal_and_duplicate_project_ids() {
     let directory = tempdir().unwrap();
     let traversal = directory.path().join("traversal.zip");
