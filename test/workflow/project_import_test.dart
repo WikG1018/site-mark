@@ -97,6 +97,25 @@ void main() {
     expect(committer.deletedTrees, ['/staging/${result.projectId}']);
   });
 
+  test('importProject uses a caller-specified target project id', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: _RecordingFileStore(),
+    );
+
+    final result = await service.importProject(
+      zipPath: '/backups/p.zip',
+      projectName: '东区厂房改造',
+      projectId: 'preallocated-project-id',
+    );
+
+    expect(result.projectId, 'preallocated-project-id');
+    expect(await database.projectById('preallocated-project-id'), isNotNull);
+  });
+
   test('importProject rolls everything back when extraction fails', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
@@ -135,6 +136,18 @@ abstract interface class ImagePipeline {
   Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request);
 }
 
+abstract interface class ProjectBundlePipeline {
+  Future<rust.ExportProjectResult> exportBundle(
+    rust.ExportProjectBundleRequest request,
+  );
+
+  Future<rust.ProjectBundlePreview> readBundle(String zipPath);
+
+  Future<void> extractBundleEntry(
+    rust.ExtractProjectBundleEntryRequest request,
+  );
+}
+
 enum ImagePipelineFailureKind { notFound, transientIo, invalidData }
 
 class ImagePipelineException implements Exception {
@@ -200,6 +213,42 @@ class RustImagePipeline implements ImagePipeline {
   @override
   Future<String> sha256(String path) {
     return _translateRustError(() => rust.sha256File(path: path));
+  }
+
+  Future<T> _translateRustError<T>(Future<T> Function() operation) async {
+    try {
+      await initializeForegroundRust();
+      return await operation();
+    } catch (error) {
+      final translated = ImagePipelineException.tryParseRustError(error);
+      if (translated != null) throw translated;
+      rethrow;
+    }
+  }
+}
+
+class RustProjectBundlePipeline implements ProjectBundlePipeline {
+  @override
+  Future<rust.ExportProjectResult> exportBundle(
+    rust.ExportProjectBundleRequest request,
+  ) {
+    return _translateRustError(
+      () => rust.exportProjectBundle(request: request),
+    );
+  }
+
+  @override
+  Future<void> extractBundleEntry(
+    rust.ExtractProjectBundleEntryRequest request,
+  ) {
+    return _translateRustError(
+      () => rust.extractProjectBundleEntry(request: request),
+    );
+  }
+
+  @override
+  Future<rust.ProjectBundlePreview> readBundle(String zipPath) {
+    return _translateRustError(() => rust.readProjectBundle(zipPath: zipPath));
   }
 
   Future<T> _translateRustError<T>(Future<T> Function() operation) async {
@@ -336,6 +385,88 @@ class AppSelectionExportPaths implements SelectionExportPaths {
     final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch;
     return '${directory.path}${Platform.pathSeparator}'
         'sitemark-selection-$timestamp.zip';
+  }
+}
+
+abstract interface class ProjectBundlePaths {
+  Future<String> backupZipPath();
+
+  Future<String> exportStagingDirectory(String bundleId);
+
+  Future<String> restoreStagingDirectory(String bundleId);
+
+  Future<String> projectArchivePath(String stagingDirectory, String projectId);
+}
+
+class AppProjectBundlePaths implements ProjectBundlePaths {
+  AppProjectBundlePaths({
+    Future<Directory> Function()? documentsDirectory,
+    DateTime Function()? clock,
+  }) : _documentsDirectory =
+           documentsDirectory ?? getApplicationDocumentsDirectory,
+       _clock = clock ?? DateTime.now;
+
+  final Future<Directory> Function() _documentsDirectory;
+  final DateTime Function() _clock;
+
+  @override
+  Future<String> backupZipPath() async {
+    final root = await _documentsDirectory();
+    final exports = Directory('${root.path}${Platform.pathSeparator}exports');
+    await exports.create(recursive: true);
+    final timestamp = _clock().toUtc().millisecondsSinceEpoch;
+    return '${exports.path}${Platform.pathSeparator}'
+        'sitemark-backup-$timestamp.zip';
+  }
+
+  @override
+  Future<String> exportStagingDirectory(String bundleId) {
+    return _stagingDirectory('bundle-export', bundleId);
+  }
+
+  @override
+  Future<String> restoreStagingDirectory(String bundleId) {
+    return _stagingDirectory('bundle-restore', bundleId);
+  }
+
+  @override
+  Future<String> projectArchivePath(
+    String stagingDirectory,
+    String projectId,
+  ) async {
+    final safeId = RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(projectId)
+        ? projectId
+        : 'id-${base64Url.encode(utf8.encode(projectId)).replaceAll('=', '')}';
+    final projects = Directory(
+      '$stagingDirectory${Platform.pathSeparator}projects',
+    );
+    await projects.create(recursive: true);
+    return '${projects.path}${Platform.pathSeparator}$safeId.zip';
+  }
+
+  Future<String> _stagingDirectory(String prefix, String bundleId) async {
+    final safeId = bundleId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final root = await _documentsDirectory();
+    final directory = Directory(
+      '${root.path}${Platform.pathSeparator}imports'
+      '${Platform.pathSeparator}$prefix-$safeId',
+    );
+    await directory.create(recursive: true);
+    return directory.path;
+  }
+}
+
+abstract interface class ProjectBundleFileSystem {
+  Future<void> deleteTree(String path);
+}
+
+class DartProjectBundleFileSystem implements ProjectBundleFileSystem {
+  @override
+  Future<void> deleteTree(String path) async {
+    final directory = Directory(path);
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
   }
 }
 

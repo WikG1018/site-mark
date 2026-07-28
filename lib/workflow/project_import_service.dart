@@ -36,6 +36,17 @@ class InvalidArchiveException implements Exception {
   String toString() => message;
 }
 
+abstract interface class ProjectArchiveImporter {
+  Future<rust.ProjectArchivePreview> inspect(String zipPath);
+
+  Future<ProjectImportResult> importProject({
+    required String zipPath,
+    required String projectName,
+    String? projectId,
+    void Function(int completed, int total)? onProgress,
+  });
+}
+
 /// A not-yet-committed import recorded on disk, so an import interrupted by
 /// a process kill can be cleaned up on the next launch. The marker lists
 /// every file the import may have created, staged and final alike.
@@ -227,7 +238,7 @@ class DartImportFileCommitter implements ImportFileCommitter {
 /// verifies does the import commit — database rows first, then files are
 /// moved into place. [cleanupInterruptedImports] removes the leftovers of
 /// any import that never committed (e.g. the process was killed).
-class ProjectImportService {
+class ProjectImportService implements ProjectArchiveImporter {
   ProjectImportService({
     required this.database,
     required this.images,
@@ -254,6 +265,7 @@ class ProjectImportService {
   final DateTime Function() _clock;
 
   /// Reads and validates a backup archive without restoring anything.
+  @override
   Future<rust.ProjectArchivePreview> inspect(String zipPath) {
     return images.readProjectArchive(zipPath);
   }
@@ -301,9 +313,11 @@ class ProjectImportService {
   /// Throws [InvalidArchiveException] when a photo's capture timestamp does
   /// not match the export format — restoring it with a substituted "now"
   /// would falsify an evidence field, so the backup is rejected as a whole.
+  @override
   Future<ProjectImportResult> importProject({
     required String zipPath,
     required String projectName,
+    String? projectId,
     void Function(int completed, int total)? onProgress,
   }) async {
     final preview = await inspect(zipPath);
@@ -319,8 +333,8 @@ class ProjectImportService {
     }
 
     final watermark = preview.watermark;
-    final projectId = _uuid.v4();
-    final stagingDir = await stagingPaths.stagingDirectory(projectId);
+    final targetProjectId = projectId ?? _uuid.v4();
+    final stagingDir = await stagingPaths.stagingDirectory(targetProjectId);
 
     // Plan every path up front so the pending marker covers all of them.
     final plans = <_PhotoPlan>[];
@@ -330,11 +344,11 @@ class ProjectImportService {
         _PhotoPlan(
           captureId: captureId,
           stagedRendered: await stagingPaths.stagedRenderedPath(
-            projectId,
+            targetProjectId,
             captureId,
           ),
           stagedOriginal: await stagingPaths.stagedOriginalPath(
-            projectId,
+            targetProjectId,
             captureId,
           ),
           finalRendered: await capturePaths.renderedPhotoPath(captureId),
@@ -343,7 +357,7 @@ class ProjectImportService {
       );
     }
     final pending = PendingImport(
-      projectId: projectId,
+      projectId: targetProjectId,
       stagingDirectory: stagingDir,
       stagedFiles: [
         for (final plan in plans) ...[plan.stagedRendered, plan.stagedOriginal],
@@ -371,7 +385,7 @@ class ProjectImportService {
       }
 
       await database.createProject(
-        id: projectId,
+        id: targetProjectId,
         name: projectName,
         watermarkPosition: _validPosition(watermark?.position),
         watermarkOpacity: _validOpacity(watermark?.opacity),
@@ -384,7 +398,7 @@ class ProjectImportService {
           final plan = plans[index];
           await database.insertRestoredCapture(
             id: plan.captureId,
-            projectId: projectId,
+            projectId: targetProjectId,
             photoNumber: photo.photoNumber,
             // An archive without the original still needs an original_path:
             // point at the canonical location and mark it cleared, the same
@@ -406,7 +420,7 @@ class ProjectImportService {
           );
         }
       } catch (_) {
-        await database.deleteProjectCascade(projectId);
+        await database.deleteProjectCascade(targetProjectId);
         rethrow;
       }
 
@@ -428,7 +442,7 @@ class ProjectImportService {
       }
     }
 
-    await pendingStore.clearPending(projectId);
+    await pendingStore.clearPending(targetProjectId);
     try {
       await committer.deleteTree(stagingDir);
     } catch (_) {
@@ -437,7 +451,7 @@ class ProjectImportService {
       // turn a successful restore into a user-visible failure.
     }
     return ProjectImportResult(
-      projectId: projectId,
+      projectId: targetProjectId,
       projectName: projectName.trim(),
       photoCount: preview.photos.length,
       restoredOriginals: preview.photos

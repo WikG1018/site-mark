@@ -36,6 +36,7 @@ import 'package:sitemark/workflow/capture_location_coordinator.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
+import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
@@ -114,6 +115,10 @@ final imagePipelineProvider = Provider<ImagePipeline>(
   (ref) => RustImagePipeline(),
 );
 
+final projectBundlePipelineProvider = Provider<ProjectBundlePipeline>(
+  (ref) => RustProjectBundlePipeline(),
+);
+
 final captureOutputPathsProvider = Provider<CaptureOutputPaths>(
   (ref) => AppCaptureOutputPaths(),
 );
@@ -140,6 +145,18 @@ final importFileCommitterProvider = Provider<ImportFileCommitter>(
 
 final selectionExportPathsProvider = Provider<SelectionExportPaths>(
   (ref) => AppSelectionExportPaths(),
+);
+
+final projectBundlePathsProvider = Provider<ProjectBundlePaths>(
+  (ref) => AppProjectBundlePaths(),
+);
+
+final projectBundleFileSystemProvider = Provider<ProjectBundleFileSystem>(
+  (ref) => DartProjectBundleFileSystem(),
+);
+
+final bundleRestorePendingStoreProvider = Provider<BundleRestorePendingStore>(
+  (ref) => AppBundleRestorePendingStore(),
 );
 
 final shareFileServiceProvider = Provider<ShareFileService>(
@@ -270,6 +287,35 @@ final projectImportServiceProvider = Provider<ProjectImportService>((ref) {
     stagingPaths: ref.watch(importStagingPathsProvider),
     pendingStore: ref.watch(importPendingStoreProvider),
     committer: ref.watch(importFileCommitterProvider),
+  );
+});
+
+final projectBackupServiceProvider = Provider<ProjectBackupService>((ref) {
+  return ProjectBackupService(
+    projectExporter: ref.watch(projectExportServiceProvider),
+    database: ref.watch(databaseProvider),
+    bundles: ref.watch(projectBundlePipelineProvider),
+    paths: ref.watch(projectBundlePathsProvider),
+    files: ref.watch(projectBundleFileSystemProvider),
+  );
+});
+
+final projectBundleRollbackProvider = Provider<ProjectBundleRollback>((ref) {
+  return ProjectDeletionBundleRollback(
+    database: ref.watch(databaseProvider),
+    deletions: ref.watch(projectDeletionServiceProvider),
+  );
+});
+
+final projectBundleServiceProvider = Provider<ProjectBundleService>((ref) {
+  return ProjectBundleService(
+    database: ref.watch(databaseProvider),
+    bundles: ref.watch(projectBundlePipelineProvider),
+    importer: ref.watch(projectImportServiceProvider),
+    paths: ref.watch(projectBundlePathsProvider),
+    files: ref.watch(projectBundleFileSystemProvider),
+    pendingStore: ref.watch(bundleRestorePendingStoreProvider),
+    rollback: ref.watch(projectBundleRollbackProvider),
   );
 });
 
