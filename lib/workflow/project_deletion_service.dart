@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/project_import_service.dart'
+    show AtomicMarkerWriter, DartAtomicMarkerWriter;
 
 class ProjectDeletionPreview {
   const ProjectDeletionPreview({
@@ -57,10 +59,13 @@ abstract interface class ProjectDeletionPendingStore {
 class AppProjectDeletionPendingStore implements ProjectDeletionPendingStore {
   AppProjectDeletionPendingStore({
     Future<Directory> Function()? documentsDirectory,
+    AtomicMarkerWriter? writer,
   }) : _documentsDirectory =
-           documentsDirectory ?? getApplicationDocumentsDirectory;
+           documentsDirectory ?? getApplicationDocumentsDirectory,
+       _writer = writer ?? DartAtomicMarkerWriter();
 
   final Future<Directory> Function() _documentsDirectory;
+  final AtomicMarkerWriter _writer;
 
   Future<Directory> _cleanupDirectory() async {
     final root = await _documentsDirectory();
@@ -71,43 +76,136 @@ class AppProjectDeletionPendingStore implements ProjectDeletionPendingStore {
 
   @override
   Future<void> write(PendingProjectDeletion pending) async {
-    final marker = await _markerFile(pending.projectId);
-    await marker.writeAsString(jsonEncode(pending.toJson()));
+    final directory = await _cleanupDirectory();
+    final safeId = _safeProjectId(pending.projectId);
+    var latestRevision = -1;
+    await for (final entity in directory.list()) {
+      if (entity is! File) continue;
+      final marker = _parseMarkerName(entity.uri.pathSegments.last);
+      if (marker != null &&
+          marker.safeProjectId == safeId &&
+          marker.revision > latestRevision) {
+        latestRevision = marker.revision;
+      }
+    }
+    final nextRevision = latestRevision + 1;
+    final marker = File(
+      '${directory.path}${Platform.pathSeparator}'
+      'project-$safeId-r$nextRevision.json',
+    );
+    await _writer.write(marker, jsonEncode(pending.toJson()));
   }
 
   @override
   Future<List<PendingProjectDeletion>> list() async {
     final directory = await _cleanupDirectory();
-    final pending = <PendingProjectDeletion>[];
+    final latest = <String, _PendingDeletionGeneration>{};
+    final corruptProjectIds = <String>{};
     await for (final entity in directory.list()) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
-      if (!name.startsWith('project-') || !name.endsWith('.json')) continue;
+      final marker = _parseMarkerName(name);
+      if (marker == null) continue;
       try {
         final decoded = jsonDecode(await entity.readAsString());
-        if (decoded is Map<String, dynamic>) {
-          final item = PendingProjectDeletion.fromJson(decoded);
-          if (item.projectId.isNotEmpty) pending.add(item);
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('Marker is not a JSON object');
+        }
+        final projectId = decoded['projectId'];
+        final paths = decoded['paths'];
+        if (projectId is! String ||
+            projectId.isEmpty ||
+            paths is! List ||
+            paths.any((path) => path is! String) ||
+            _safeProjectId(projectId) != marker.safeProjectId) {
+          throw const FormatException('Invalid project deletion marker');
+        }
+        final item = PendingProjectDeletion.fromJson(decoded);
+        final current = latest[marker.safeProjectId];
+        if (current == null || marker.revision > current.revision) {
+          latest[marker.safeProjectId] = _PendingDeletionGeneration(
+            pending: item,
+            revision: marker.revision,
+          );
         }
       } catch (_) {
-        // Ignore corrupt markers: their contents cannot safely guide cleanup.
+        corruptProjectIds.add(marker.safeProjectId);
       }
     }
-    return pending;
+    final corruptOnly = corruptProjectIds
+        .where((safeId) => !latest.containsKey(safeId))
+        .toList(growable: false);
+    if (corruptOnly.isNotEmpty) {
+      throw StateError(
+        'Unreadable project deletion marker: project-${corruptOnly.first}',
+      );
+    }
+    return latest.values
+        .map((generation) => generation.pending)
+        .toList(growable: false);
   }
 
   @override
   Future<void> clear(String projectId) async {
-    final marker = await _markerFile(projectId);
-    if (await marker.exists()) await marker.delete();
+    final directory = await _cleanupDirectory();
+    final safeId = _safeProjectId(projectId);
+    await for (final entity in directory.list()) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments.last;
+      final marker = _parseMarkerName(name);
+      if (marker?.safeProjectId == safeId ||
+          _isTemporaryMarkerFor(name, safeId)) {
+        await entity.delete();
+      }
+    }
   }
 
-  Future<File> _markerFile(String projectId) async {
-    final directory = await _cleanupDirectory();
-    return File(
-      '${directory.path}${Platform.pathSeparator}project-$projectId.json',
-    );
+  static String _safeProjectId(String projectId) =>
+      projectId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+
+  static _DeletionMarkerName? _parseMarkerName(String name) {
+    final generation = RegExp(
+      r'^project-(.+)-r([0-9]+)\.json$',
+    ).firstMatch(name);
+    if (generation != null) {
+      return _DeletionMarkerName(
+        safeProjectId: generation.group(1)!,
+        revision: int.parse(generation.group(2)!),
+      );
+    }
+    final legacy = RegExp(r'^project-(.+)\.json$').firstMatch(name);
+    if (legacy == null) return null;
+    return _DeletionMarkerName(safeProjectId: legacy.group(1)!, revision: -1);
   }
+
+  static bool _isTemporaryMarkerFor(String name, String safeId) {
+    final prefix = 'project-$safeId-r';
+    if (!name.startsWith(prefix)) return false;
+    return RegExp(
+      '^${RegExp.escape(prefix)}[0-9]+'
+      r'\.json\.tmp-.+$',
+    ).hasMatch(name);
+  }
+}
+
+class _DeletionMarkerName {
+  const _DeletionMarkerName({
+    required this.safeProjectId,
+    required this.revision,
+  });
+
+  final String safeProjectId;
+  final int revision;
+}
+
+class _PendingDeletionGeneration {
+  const _PendingDeletionGeneration({
+    required this.pending,
+    required this.revision,
+  });
+
+  final PendingProjectDeletion pending;
+  final int revision;
 }
 
 class ProjectDeletionService {

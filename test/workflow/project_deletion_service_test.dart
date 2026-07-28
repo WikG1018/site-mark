@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
+import 'package:sitemark/workflow/project_import_service.dart';
 
 void main() {
   test(
@@ -120,7 +121,7 @@ void main() {
 
     final marker = File(
       '${documents.path}${Platform.pathSeparator}cleanup'
-      '${Platform.pathSeparator}project-project-1.json',
+      '${Platform.pathSeparator}project-project-1-r0.json',
     );
     expect(jsonDecode(await marker.readAsString()), {
       'projectId': 'project-1',
@@ -133,6 +134,201 @@ void main() {
     await store.clear('project-1');
 
     expect(await marker.exists(), isFalse);
+  });
+
+  test(
+    'interrupted or corrupt next generation keeps the last valid marker',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-generations-',
+      );
+      addTearDown(() => documents.delete(recursive: true));
+      final store = AppProjectDeletionPendingStore(
+        documentsDirectory: () async => documents,
+      );
+      const original = PendingProjectDeletion(
+        projectId: 'project-1',
+        paths: ['/private/original-a.jpg'],
+      );
+      await store.write(original);
+
+      final interruptedStore = AppProjectDeletionPendingStore(
+        documentsDirectory: () async => documents,
+        writer: _FailBeforeCommitMarkerWriter(),
+      );
+      await expectLater(
+        interruptedStore.write(
+          const PendingProjectDeletion(
+            projectId: 'project-1',
+            paths: ['/private/original-b.jpg'],
+          ),
+        ),
+        throwsStateError,
+      );
+      final cleanup = Directory(
+        '${documents.path}${Platform.pathSeparator}cleanup',
+      );
+      await File(
+        '${cleanup.path}${Platform.pathSeparator}project-project-1-r1.json',
+      ).writeAsString('{', flush: true);
+
+      final listed = await store.list();
+
+      expect(listed, hasLength(1));
+      expect(listed.single.projectId, 'project-1');
+      expect(listed.single.paths, original.paths);
+    },
+  );
+
+  test('completed next generation replaces the previous marker', () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'sitemark-deletion-next-generation-',
+    );
+    addTearDown(() => documents.delete(recursive: true));
+    final store = AppProjectDeletionPendingStore(
+      documentsDirectory: () async => documents,
+    );
+    await store.write(
+      const PendingProjectDeletion(
+        projectId: 'project-1',
+        paths: ['/private/original-a.jpg'],
+      ),
+    );
+
+    await store.write(
+      const PendingProjectDeletion(
+        projectId: 'project-1',
+        paths: ['/private/original-b.jpg'],
+      ),
+    );
+
+    final listed = await store.list();
+    expect(listed, hasLength(1));
+    expect(listed.single.paths, ['/private/original-b.jpg']);
+    final cleanup = Directory(
+      '${documents.path}${Platform.pathSeparator}cleanup',
+    );
+    final generations = await cleanup
+        .list()
+        .where((entity) => entity is File && entity.path.endsWith('.json'))
+        .length;
+    expect(generations, 2);
+  });
+
+  test(
+    'clear removes every project generation but keeps unrelated markers',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-clear-generations-',
+      );
+      addTearDown(() => documents.delete(recursive: true));
+      final store = AppProjectDeletionPendingStore(
+        documentsDirectory: () async => documents,
+      );
+      await store.write(
+        const PendingProjectDeletion(
+          projectId: 'project-1',
+          paths: ['/private/original-a.jpg'],
+        ),
+      );
+      await store.write(
+        const PendingProjectDeletion(
+          projectId: 'project-1',
+          paths: ['/private/original-b.jpg'],
+        ),
+      );
+      await store.write(
+        const PendingProjectDeletion(
+          projectId: 'other-project',
+          paths: ['/private/other.jpg'],
+        ),
+      );
+
+      await store.clear('project-1');
+
+      final listed = await store.list();
+      expect(listed, hasLength(1));
+      expect(listed.single.projectId, 'other-project');
+      final cleanup = Directory(
+        '${documents.path}${Platform.pathSeparator}cleanup',
+      );
+      final names = await cleanup
+          .list()
+          .where((entity) => entity is File)
+          .map((entity) => entity.uri.pathSegments.last)
+          .toList();
+      expect(names, ['project-other-project-r0.json']);
+    },
+  );
+
+  test(
+    'corrupt-only marker is reported and recovers with a later generation',
+    () async {
+      final documents = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-corrupt-only-',
+      );
+      addTearDown(() => documents.delete(recursive: true));
+      final cleanup = Directory(
+        '${documents.path}${Platform.pathSeparator}cleanup',
+      );
+      await cleanup.create(recursive: true);
+      await File(
+        '${cleanup.path}${Platform.pathSeparator}project-project-1-r0.json',
+      ).writeAsString('{', flush: true);
+      final store = AppProjectDeletionPendingStore(
+        documentsDirectory: () async => documents,
+      );
+
+      await expectLater(
+        store.list(),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('project-project-1'),
+          ),
+        ),
+      );
+
+      const recovered = PendingProjectDeletion(
+        projectId: 'project-1',
+        paths: ['/private/recovered.jpg'],
+      );
+      await store.write(recovered);
+      final listed = await store.list();
+      expect(listed, hasLength(1));
+      expect(listed.single.paths, recovered.paths);
+    },
+  );
+
+  test('legacy marker remains readable and clearable', () async {
+    final documents = await Directory.systemTemp.createTemp(
+      'sitemark-deletion-legacy-',
+    );
+    addTearDown(() => documents.delete(recursive: true));
+    final cleanup = Directory(
+      '${documents.path}${Platform.pathSeparator}cleanup',
+    );
+    await cleanup.create(recursive: true);
+    final legacy = File(
+      '${cleanup.path}${Platform.pathSeparator}project-project-1.json',
+    );
+    await legacy.writeAsString(
+      jsonEncode({
+        'projectId': 'project-1',
+        'paths': ['/private/legacy.jpg'],
+      }),
+      flush: true,
+    );
+    final store = AppProjectDeletionPendingStore(
+      documentsDirectory: () async => documents,
+    );
+
+    final listed = await store.list();
+    expect(listed.single.paths, ['/private/legacy.jpg']);
+
+    await store.clear('project-1');
+    expect(await legacy.exists(), isFalse);
   });
 
   test(
@@ -274,5 +470,13 @@ class _FailingCascadeDatabase extends AppDatabase {
   @override
   Future<int> deleteProjectCascade(String projectId) {
     throw StateError('simulated cascade failure');
+  }
+}
+
+class _FailBeforeCommitMarkerWriter implements AtomicMarkerWriter {
+  @override
+  Future<void> write(File target, String contents) async {
+    await File('${target.path}.tmp-power-loss').writeAsString('{', flush: true);
+    throw StateError('simulated power loss before atomic rename');
   }
 }
