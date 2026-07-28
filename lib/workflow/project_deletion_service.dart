@@ -164,6 +164,10 @@ class ProjectDeletionService {
   Future<void> cleanupInterruptedDeletions() async {
     final pendings = await pendingStore.list();
     for (final pending in pendings) {
+      // Markers are written before the transactional database cascade. A
+      // failed cascade leaves its marker in place, so a present project proves
+      // this marker is not yet safe to execute against private files.
+      if (await database.projectById(pending.projectId) != null) continue;
       final cleaned = await _deletePaths(pending.paths);
       if (cleaned) {
         try {

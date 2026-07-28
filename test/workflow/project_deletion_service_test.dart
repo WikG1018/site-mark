@@ -157,6 +157,39 @@ void main() {
       expect(pendingStore.pending, hasLength(1));
     },
   );
+
+  test(
+    'cascade failure leaves the project and private files untouched on cleanup',
+    () async {
+      final database = _FailingCascadeDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      await _seedPublishedCapture(database);
+      final files = _RecordingPrivateFileStore();
+      final pendingStore = _MemoryProjectDeletionPendingStore();
+      final service = ProjectDeletionService(
+        database: database,
+        capturePaths: const _FakeCaptureOutputPaths(),
+        files: files,
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.deleteProject('project-1'),
+        throwsA(isA<StateError>()),
+      );
+      expect(await database.projectById('project-1'), isNotNull);
+      expect(await database.captureById('capture-1'), isNotNull);
+      expect(files.attemptedDeletes, isEmpty);
+      expect(pendingStore.pending, hasLength(1));
+
+      await service.cleanupInterruptedDeletions();
+
+      expect(await database.projectById('project-1'), isNotNull);
+      expect(await database.captureById('capture-1'), isNotNull);
+      expect(files.attemptedDeletes, isEmpty);
+      expect(pendingStore.pending, hasLength(1));
+    },
+  );
 }
 
 Future<void> _seedPublishedCapture(AppDatabase database) async {
@@ -232,5 +265,14 @@ class _MemoryProjectDeletionPendingStore
   @override
   Future<void> write(PendingProjectDeletion item) async {
     pending.add(item);
+  }
+}
+
+class _FailingCascadeDatabase extends AppDatabase {
+  _FailingCascadeDatabase(super.executor) : super.forTesting();
+
+  @override
+  Future<int> deleteProjectCascade(String projectId) {
+    throw StateError('simulated cascade failure');
   }
 }
