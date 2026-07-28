@@ -263,6 +263,7 @@ class ProjectImportService implements ProjectArchiveImporter {
   final ImportFileCommitter committer;
   final Uuid _uuid;
   final DateTime Function() _clock;
+  static final Set<String> _activeProjectIds = <String>{};
 
   /// Reads and validates a backup archive without restoring anything.
   @override
@@ -320,6 +321,31 @@ class ProjectImportService implements ProjectArchiveImporter {
     String? projectId,
     void Function(int completed, int total)? onProgress,
   }) async {
+    final targetProjectId = projectId ?? _uuid.v4();
+    if (!_activeProjectIds.add(targetProjectId)) {
+      throw StateError('Project restore is already in progress');
+    }
+    try {
+      if (await database.projectById(targetProjectId) != null) {
+        throw StateError('Target project already exists');
+      }
+      return await _importProject(
+        zipPath: zipPath,
+        projectName: projectName,
+        targetProjectId: targetProjectId,
+        onProgress: onProgress,
+      );
+    } finally {
+      _activeProjectIds.remove(targetProjectId);
+    }
+  }
+
+  Future<ProjectImportResult> _importProject({
+    required String zipPath,
+    required String projectName,
+    required String targetProjectId,
+    void Function(int completed, int total)? onProgress,
+  }) async {
     final preview = await inspect(zipPath);
     final capturedTimes = <DateTime>[];
     for (final photo in preview.photos) {
@@ -333,7 +359,6 @@ class ProjectImportService implements ProjectArchiveImporter {
     }
 
     final watermark = preview.watermark;
-    final targetProjectId = projectId ?? _uuid.v4();
     final stagingDir = await stagingPaths.stagingDirectory(targetProjectId);
 
     // Plan every path up front so the pending marker covers all of them.
@@ -369,6 +394,7 @@ class ProjectImportService implements ProjectArchiveImporter {
     await pendingStore.writePending(pending);
 
     var committed = false;
+    var ownsProject = false;
     try {
       for (var index = 0; index < preview.photos.length; index++) {
         final photo = preview.photos[index];
@@ -392,36 +418,32 @@ class ProjectImportService implements ProjectArchiveImporter {
         watermarkAccentColorArgb: watermark?.accentColorArgb,
         watermarkFontScale: _validFontScale(watermark?.fontScale),
       );
-      try {
-        for (var index = 0; index < preview.photos.length; index++) {
-          final photo = preview.photos[index];
-          final plan = plans[index];
-          await database.insertRestoredCapture(
-            id: plan.captureId,
-            projectId: targetProjectId,
-            photoNumber: photo.photoNumber,
-            // An archive without the original still needs an original_path:
-            // point at the canonical location and mark it cleared, the same
-            // state "clear originals" produces, so the hash stays as evidence.
-            originalPath: plan.finalOriginal,
-            originalDeletedAt: photo.hasOriginal ? null : _clock(),
-            workLocation: photo.workLocation,
-            workContent: photo.workContent,
-            photographer: photo.photographer,
-            notes: photo.notes,
-            address: photo.address,
-            latitude: photo.latitude,
-            longitude: photo.longitude,
-            accuracyMeters: photo.accuracyMeters,
-            watermarkLocaleCode: _validLocale(photo.watermarkLocaleCode),
-            originalSha256: photo.originalSha256,
-            createdAt: capturedTimes[index],
-            capturedAt: capturedTimes[index],
-          );
-        }
-      } catch (_) {
-        await database.deleteProjectCascade(targetProjectId);
-        rethrow;
+      ownsProject = true;
+      for (var index = 0; index < preview.photos.length; index++) {
+        final photo = preview.photos[index];
+        final plan = plans[index];
+        await database.insertRestoredCapture(
+          id: plan.captureId,
+          projectId: targetProjectId,
+          photoNumber: photo.photoNumber,
+          // An archive without the original still needs an original_path:
+          // point at the canonical location and mark it cleared, the same
+          // state "clear originals" produces, so the hash stays as evidence.
+          originalPath: plan.finalOriginal,
+          originalDeletedAt: photo.hasOriginal ? null : _clock(),
+          workLocation: photo.workLocation,
+          workContent: photo.workContent,
+          photographer: photo.photographer,
+          notes: photo.notes,
+          address: photo.address,
+          latitude: photo.latitude,
+          longitude: photo.longitude,
+          accuracyMeters: photo.accuracyMeters,
+          watermarkLocaleCode: _validLocale(photo.watermarkLocaleCode),
+          originalSha256: photo.originalSha256,
+          createdAt: capturedTimes[index],
+          capturedAt: capturedTimes[index],
+        );
       }
 
       // Commit point: move staged files into their final locations.
@@ -438,7 +460,7 @@ class ProjectImportService implements ProjectArchiveImporter {
       committed = true;
     } finally {
       if (!committed) {
-        await _rollback(pending);
+        await _rollback(pending, deleteProject: ownsProject);
       }
     }
 
@@ -485,7 +507,10 @@ class ProjectImportService implements ProjectArchiveImporter {
   /// the staging tree, and the database rows. Individual failures are
   /// swallowed so one stubborn file never blocks the rest; the pending
   /// marker stays in place for the startup cleanup to retry.
-  Future<bool> _rollback(PendingImport pending) async {
+  Future<bool> _rollback(
+    PendingImport pending, {
+    bool deleteProject = true,
+  }) async {
     var fullyCleaned = true;
     for (final path in pending.allFiles) {
       try {
@@ -500,10 +525,12 @@ class ProjectImportService implements ProjectArchiveImporter {
     } catch (_) {
       fullyCleaned = false;
     }
-    try {
-      await database.deleteProjectCascade(pending.projectId);
-    } catch (_) {
-      fullyCleaned = false;
+    if (deleteProject) {
+      try {
+        await database.deleteProjectCascade(pending.projectId);
+      } catch (_) {
+        fullyCleaned = false;
+      }
     }
     return fullyCleaned;
   }

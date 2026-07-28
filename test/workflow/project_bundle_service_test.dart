@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -346,6 +348,68 @@ void main() {
 
       expect(pending.items, hasLength(1));
     });
+
+    test(
+      'marker write failure cleans staging and never starts import',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore(throwOnWrite: true);
+        final files = _FakeBundleFiles();
+        final importer = _FakeProjectImporter();
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: importer,
+          pending: pending,
+          files: files,
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        await expectLater(
+          service.restorePrepared(
+            prepared: prepared,
+            projectNames: const {'p1': '东区', 'p2': '西区'},
+          ),
+          throwsA(isA<ProjectBundleRestoreException>()),
+        );
+
+        expect(importer.imports, isEmpty);
+        expect(files.deletedTrees, [prepared.stagingDirectory]);
+      },
+    );
+
+    test('concurrent submit of one prepared restore is rejected', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final gate = Completer<void>();
+      final importer = _FakeProjectImporter(importGate: gate);
+      final service = _bundleService(
+        database: database,
+        bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+        importer: importer,
+      );
+      final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+      final first = service.restorePrepared(
+        prepared: prepared,
+        projectNames: const {'p1': '东区', 'p2': '西区'},
+      );
+      while (importer.imports.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final secondExpectation = expectLater(
+        service.restorePrepared(
+          prepared: prepared,
+          projectNames: const {'p1': '东区', 'p2': '西区'},
+        ),
+        throwsA(isA<ProjectBundleRestoreException>()),
+      );
+      gate.complete();
+
+      await first;
+      await secondExpectation;
+    });
   });
 }
 
@@ -493,6 +557,9 @@ class _FakeBundleFiles implements ProjectBundleFileSystem {
 }
 
 class _FakeBundlePendingStore implements BundleRestorePendingStore {
+  _FakeBundlePendingStore({this.throwOnWrite = false});
+
+  final bool throwOnWrite;
   final items = <PendingBundleRestore>[];
 
   @override
@@ -505,6 +572,7 @@ class _FakeBundlePendingStore implements BundleRestorePendingStore {
 
   @override
   Future<void> write(PendingBundleRestore pending) async {
+    if (throwOnWrite) throw StateError('marker write failed');
     items.add(pending);
   }
 }
@@ -523,9 +591,10 @@ class _FakeProjectRollback implements ProjectBundleRollback {
 }
 
 class _FakeProjectImporter implements ProjectArchiveImporter {
-  _FakeProjectImporter({this.failSource});
+  _FakeProjectImporter({this.failSource, this.importGate});
 
   final String? failSource;
+  final Completer<void>? importGate;
   final inspected = <String>[];
   final imports = <String>[];
   _FakeBundlePendingStore? pendingStore;
@@ -564,6 +633,7 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
       markerSeenBeforeFirstImport = pendingStore?.items.isNotEmpty ?? false;
     }
     imports.add(zipPath);
+    await importGate?.future;
     if (zipPath.endsWith(failSource ?? '\u0000')) {
       throw StateError('item import failed');
     }

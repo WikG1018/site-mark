@@ -116,6 +116,82 @@ void main() {
     expect(await database.projectById('preallocated-project-id'), isNotNull);
   });
 
+  test('existing caller-specified target id is never deleted', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'existing-id', name: '保留项目');
+    final files = _RecordingFileStore();
+    final images = _ImportImagePipeline(_preview());
+    final service = _service(database: database, images: images, files: files);
+
+    await expectLater(
+      service.importProject(
+        zipPath: '/backups/p.zip',
+        projectName: '新项目',
+        projectId: 'existing-id',
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect((await database.projectById('existing-id'))?.name, '保留项目');
+    expect(images.extractRequests, isEmpty);
+    expect(files.attemptedDeletes, isEmpty);
+  });
+
+  test('double-submit cannot delete the first successful restore', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final files = _RecordingFileStore();
+    final images = _ImportImagePipeline(_preview());
+    final service = _service(database: database, images: images, files: files);
+
+    await service.importProject(
+      zipPath: '/backups/p.zip',
+      projectName: '第一次恢复',
+      projectId: 'shared-target-id',
+    );
+    await expectLater(
+      service.importProject(
+        zipPath: '/backups/p.zip',
+        projectName: '第二次恢复',
+        projectId: 'shared-target-id',
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect((await database.projectById('shared-target-id'))?.name, '第一次恢复');
+    expect(await database.capturesForProject('shared-target-id'), hasLength(2));
+    expect(files.attemptedDeletes, isEmpty);
+  });
+
+  test('concurrent imports cannot claim the same target id', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: _RecordingFileStore(),
+    );
+
+    final first = service.importProject(
+      zipPath: '/backups/p.zip',
+      projectName: '第一次恢复',
+      projectId: 'concurrent-target-id',
+    );
+    final secondExpectation = expectLater(
+      service.importProject(
+        zipPath: '/backups/p.zip',
+        projectName: '第二次恢复',
+        projectId: 'concurrent-target-id',
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    await first;
+    await secondExpectation;
+    expect((await database.projectById('concurrent-target-id'))?.name, '第一次恢复');
+  });
+
   test('importProject rolls everything back when extraction fails', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);

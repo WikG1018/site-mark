@@ -314,6 +314,7 @@ class ProjectBundleService {
   final BundleRestorePendingStore pendingStore;
   final ProjectBundleRollback rollback;
   final String Function() _idGenerator;
+  static final Set<String> _activeRestoreTargetIds = <String>{};
 
   Future<PreparedProjectRestore> prepareRestore(String zipPath) async {
     rust.ProjectBundlePreview bundlePreview;
@@ -399,6 +400,29 @@ class ProjectBundleService {
     required Map<String, String> projectNames,
     void Function(int completed, int total)? onProgress,
   }) async {
+    final targetIds = {for (final item in prepared.items) item.targetProjectId};
+    if (targetIds.any(_activeRestoreTargetIds.contains)) {
+      throw const ProjectBundleRestoreException(
+        'This prepared restore is already in progress',
+      );
+    }
+    _activeRestoreTargetIds.addAll(targetIds);
+    try {
+      return await _restorePreparedReserved(
+        prepared: prepared,
+        projectNames: projectNames,
+        onProgress: onProgress,
+      );
+    } finally {
+      _activeRestoreTargetIds.removeAll(targetIds);
+    }
+  }
+
+  Future<List<ProjectImportResult>> _restorePreparedReserved({
+    required PreparedProjectRestore prepared,
+    required Map<String, String> projectNames,
+    void Function(int completed, int total)? onProgress,
+  }) async {
     final names = await _validatedNames(prepared, projectNames);
     if (!prepared.isBundle) {
       final item = prepared.items.single;
@@ -418,7 +442,19 @@ class ProjectBundleService {
         for (final item in prepared.items) item.targetProjectId,
       ],
     );
-    await pendingStore.write(pending);
+    try {
+      await pendingStore.write(pending);
+    } catch (error) {
+      try {
+        await files.deleteTree(pending.stagingDirectory);
+      } catch (_) {
+        // Best effort. A partially written marker, if any, owns the retry.
+      }
+      throw ProjectBundleRestoreException(
+        'Project bundle restore could not be started',
+        cause: error,
+      );
+    }
     try {
       final totalPhotos = prepared.items.fold<int>(
         0,
