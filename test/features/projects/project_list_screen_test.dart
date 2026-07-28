@@ -73,6 +73,12 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('home no longer exposes the old restore action', (tester) async {
+    await pumpProjects(tester);
+    expect(find.byKey(const Key('import-project')), findsNothing);
+    await disposeApp(tester);
+  });
+
   testWidgets('home first frame does not paint fake project rows', (
     tester,
   ) async {

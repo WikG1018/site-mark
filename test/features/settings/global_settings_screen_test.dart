@@ -8,6 +8,8 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
+import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
+import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/app_storage_service.dart';
 
@@ -45,9 +47,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows 7 settings entries', (tester) async {
+  testWidgets('shows backup and restore among 8 settings entries', (
+    tester,
+  ) async {
     await pumpSettings(tester);
     expect(find.text('新建项目水印默认值'), findsOneWidget);
+    expect(find.byKey(const Key('backup-restore-menu')), findsOneWidget);
+    expect(find.text('备份与恢复'), findsOneWidget);
     expect(find.text('外观'), findsOneWidget);
     expect(find.text('语言'), findsOneWidget);
     expect(find.text('储存'), findsOneWidget);
@@ -92,6 +98,44 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(GlobalSettingsScreen), findsOneWidget);
+  });
+
+  testWidgets('backup and nested selection routes are registered', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [databaseProvider.overrideWithValue(database)],
+    );
+    final router = container.read(routerProvider);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          routerConfig: router,
+        ),
+      ),
+    );
+
+    router.go('/settings/backup-restore');
+    await tester.pumpAndSettle();
+    expect(find.byType(BackupRestoreSectionScreen), findsOneWidget);
+
+    router.go('/settings/backup-restore/backup');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(ProjectBackupSelectionScreen), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+    container.dispose();
   });
 
   test(

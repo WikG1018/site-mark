@@ -288,26 +288,24 @@ class AppStrings {
 
   // Project backup restore (import)
   String get importProject => _english ? 'Import project backup' : '导入项目备份';
-  String get importDialogTitle =>
-      _english ? 'Import project backup' : '导入项目备份';
+  String get importDialogTitle => _english ? 'Import project backup' : '导入项目备份';
   String importPhotoCount(int count) =>
       _english ? '$count photo(s)' : '$count 张照片';
   String get importIncludesOriginals =>
       _english ? 'Includes private originals' : '包含私有原图';
   String get importNoOriginals =>
       _english ? 'Watermarked photos only' : '仅水印成片';
-  String get importWatermarkRestored =>
-      _english ? 'Project watermark settings will be restored.' : '将恢复该项目的水印设置。';
+  String get importWatermarkRestored => _english
+      ? 'Project watermark settings will be restored.'
+      : '将恢复该项目的水印设置。';
   String get importWatermarkDefault => _english
       ? 'The archive predates watermark backup; current defaults apply.'
       : '备份不含水印设置，将使用默认值。';
   String get importAction => _english ? 'Import' : '导入';
-  String importingProgress(int completed, int total) => _english
-      ? 'Importing $completed/$total…'
-      : '正在导入 $completed/$total…';
-  String importSuccess(String name, int count) => _english
-      ? 'Imported "$name" ($count photo(s))'
-      : '已导入「$name」（$count 张）';
+  String importingProgress(int completed, int total) =>
+      _english ? 'Importing $completed/$total…' : '正在导入 $completed/$total…';
+  String importSuccess(String name, int count) =>
+      _english ? 'Imported "$name" ($count photo(s))' : '已导入「$name」（$count 张）';
   String get importFailed => _english ? 'Import failed' : '导入失败';
   String get importInvalidArchive =>
       _english ? 'Not a valid SiteMark project backup' : '不是有效的 SiteMark 项目备份';
@@ -316,6 +314,54 @@ class AppStrings {
       : '多选导出包暂不支持导入，请使用单项目导出包。';
   String get importNameConflict =>
       _english ? 'A project with this name already exists' : '已存在同名项目';
+
+  // Unified backup and restore settings
+  String get backupAndRestore => _english ? 'Backup & restore' : '备份与恢复';
+  String get backupProjects => _english ? 'Back up projects' : '备份项目';
+  String get restoreProjects => _english ? 'Restore projects' : '恢复项目';
+  String get backupExplanation => _english
+      ? 'Create a SiteMark ZIP for one or more projects. Photos already saved to the system gallery remain independent.'
+      : '将一个或多个项目生成 SiteMark ZIP 备份。已保存到系统相册的照片独立保留。';
+  String get restoreExplanation => _english
+      ? 'Choose a ZIP exported by SiteMark. Regular photo-sharing ZIP files cannot be restored.'
+      : '请选择由 SiteMark 导出的备份 ZIP；普通照片分享 ZIP 无法恢复。';
+  String selectedProjectCount(int count) =>
+      _english ? '$count project(s) selected' : '已选择 $count 个项目';
+  String get continueLabel => _english ? 'Continue' : '继续';
+  String get noProjectsToBackup =>
+      _english ? 'No projects available to back up' : '暂无可备份项目';
+  String get includePrivateOriginals =>
+      _english ? 'Include private originals' : '包含私有原图';
+  String get includePrivateOriginalsConsequence => _english
+      ? 'The backup will be larger and take longer to create.'
+      : '备份文件会更大，生成时间也会更长。';
+  String get excludePrivateOriginals =>
+      _english ? 'Exclude originals' : '不包含原图';
+  String backingUpProgress(int completed, int total) =>
+      _english ? 'Backing up $completed/$total' : '正在备份 $completed/$total';
+  String get backupComplete => _english
+      ? 'Backup created. Choose where to share or save it.'
+      : '备份已生成，请选择分享或保存位置';
+  String get backupFailedFriendly =>
+      _english ? 'Could not create the backup' : '无法生成备份';
+  String get chooseRestoreZip => _english ? 'Choose backup ZIP' : '选择备份 ZIP';
+  String get restorePreview => _english ? 'Restore preview' : '恢复预览';
+  String get restoreName => _english ? 'Name after restore' : '恢复后的项目名称';
+  String get bundleRestoreRollback => _english
+      ? 'All projects are restored together. If any item fails, this restore is rolled back completely.'
+      : '所有项目将作为一个整体恢复；任一项目失败时，本次恢复会全部回滚。';
+  String get restoreAction => _english ? 'Restore' : '恢复';
+  String restoringProgress(int completed, int total) =>
+      _english ? 'Restoring $completed/$total' : '正在恢复 $completed/$total';
+  String get restoreComplete => _english ? 'Restore complete' : '恢复完成';
+  String get backupInvalidArchive =>
+      _english ? 'Not a valid SiteMark backup' : '不是有效的 SiteMark 备份';
+  String get backupStorageInsufficient => _english
+      ? 'Not enough storage space to complete this operation'
+      : '存储空间不足，无法完成操作';
+  String get restoreFailedRollback => _english
+      ? 'Restore failed. Any changes from this restore were rolled back.'
+      : '恢复失败，本次产生的内容已回滚';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

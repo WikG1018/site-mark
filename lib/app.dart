@@ -11,11 +11,13 @@ import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/features/settings/sections/about_section_screen.dart';
 import 'package:sitemark/features/settings/sections/appearance_section_screen.dart';
+import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
 import 'package:sitemark/features/settings/sections/language_section_screen.dart';
 import 'package:sitemark/features/settings/sections/location_section_screen.dart';
 import 'package:sitemark/features/settings/sections/notification_section_screen.dart';
 import 'package:sitemark/features/settings/sections/storage_section_screen.dart';
 import 'package:sitemark/features/settings/sections/watermark_defaults_section_screen.dart';
+import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_edit_screen.dart';
@@ -425,6 +427,20 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'appearance',
                 pageBuilder: (context, state) =>
                     _sharedAxisPage(state, const AppearanceSectionScreen()),
+              ),
+              GoRoute(
+                path: 'backup-restore',
+                pageBuilder: (context, state) =>
+                    _sharedAxisPage(state, const BackupRestoreSectionScreen()),
+                routes: [
+                  GoRoute(
+                    path: 'backup',
+                    pageBuilder: (context, state) => _sharedAxisPage(
+                      state,
+                      const ProjectBackupSelectionScreen(),
+                    ),
+                  ),
+                ],
               ),
               GoRoute(
                 path: 'language',
