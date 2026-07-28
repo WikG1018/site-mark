@@ -88,9 +88,6 @@ class AppStrings {
   String get captureWorkflowHint => _english
       ? 'Capture will invoke the system camera. Watermarks are processed in the background. You can tap capture repeatedly; return to the project detail to view records as they finish.'
       : '拍摄将调用系统相机，水印将在后台处理。可连续点击拍摄，返回项目详情即可查看处理中的记录。';
-  String get captureLocationHint => _english
-      ? 'Foreground location is requested once before capture. Capture still works if you decline.'
-      : '拍摄前仅请求一次前台位置；拒绝授权也可以继续拍摄。';
   String get ready => _english ? 'Ready' : '已完成';
   String get failed => _english ? 'Failed' : '失败';
   String get pendingCamera => _english ? 'Waiting for camera' : '等待相机';

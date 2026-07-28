@@ -696,12 +696,9 @@ void main() {
       await tester.enterText(find.byKey(const Key('work-location')), 'A 区');
       await tester.enterText(find.byKey(const Key('work-content')), '检查');
       await tester.enterText(find.byKey(const Key('photographer')), '张工');
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('capture-button')),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.byKey(const Key('capture-button')));
+      await tester.drag(find.byType(ListView), const Offset(0, -500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('capture-button')).hitTestable());
       await tester.pumpAndSettle();
 
       // The capture button path must never request runtime permission or

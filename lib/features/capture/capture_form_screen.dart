@@ -368,20 +368,6 @@ class _CaptureFormBody extends StatelessWidget {
             alignLabelWithHint: true,
           ),
         ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.location_on_outlined),
-                const SizedBox(width: 12),
-                Expanded(child: Text(strings.captureLocationHint)),
-              ],
-            ),
-          ),
-        ),
         const SizedBox(height: 24),
         FilledButton.icon(
           key: const Key('capture-button'),
