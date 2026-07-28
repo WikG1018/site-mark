@@ -6,6 +6,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
 import 'package:sitemark/workflow/project_bundle_service.dart';
+import 'package:sitemark/workflow/project_deletion_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 
@@ -239,7 +240,7 @@ void main() {
         throwsA(isA<ProjectBundleRestoreException>()),
       );
 
-      expect(rollback.projectIds, ['target-1', 'target-2']);
+      expect(rollback.projectIds, ['target-1']);
       expect(pending.items, isEmpty);
       expect(importer.markerSeenBeforeFirstImport, isTrue);
     });
@@ -275,6 +276,7 @@ void main() {
               bundleId: 'b1',
               stagingDirectory: '/staging/b1',
               plannedProjectIds: ['new-p1', 'new-p2'],
+              ownedProjectIds: ['new-p1', 'new-p2'],
             ),
           );
         final rollback = _FakeProjectRollback();
@@ -307,6 +309,7 @@ void main() {
               bundleId: 'b1',
               stagingDirectory: '/staging/b1',
               plannedProjectIds: ['new-p1', 'new-p2'],
+              ownedProjectIds: ['new-p1', 'new-p2'],
             ),
           );
         final rollback = _FakeProjectRollback(failProjectId: 'new-p1');
@@ -334,6 +337,7 @@ void main() {
             bundleId: 'b1',
             stagingDirectory: '/staging/b1',
             plannedProjectIds: ['new-p1', 'new-p2'],
+            ownedProjectIds: ['new-p1', 'new-p2'],
           ),
         );
       final service = _bundleService(
@@ -410,19 +414,130 @@ void main() {
       await first;
       await secondExpectation;
     });
+
+    test(
+      'sequential reuse cannot roll back first successful projects',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore();
+        final importer = _DatabaseProjectImporter(database);
+        final deletionFiles = _DeletionFiles();
+        final deletions = ProjectDeletionService(
+          database: database,
+          capturePaths: _DeletionCapturePaths(),
+          files: deletionFiles,
+          pendingStore: _DeletionPendingStore(),
+        );
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: importer,
+          pending: pending,
+          rollback: ProjectDeletionBundleRollback(
+            database: database,
+            deletions: deletions,
+          ),
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        await service.restorePrepared(
+          prepared: prepared,
+          projectNames: const {'p1': '第一次东区', 'p2': '第一次西区'},
+        );
+        final writesAfterFirst = pending.writes;
+
+        await expectLater(
+          service.restorePrepared(
+            prepared: prepared,
+            projectNames: const {'p1': '第二次东区', 'p2': '第二次西区'},
+          ),
+          throwsA(isA<ProjectBundleRestoreException>()),
+        );
+
+        expect(await database.getProjects(), hasLength(2));
+        expect(await database.getAllCaptures(), hasLength(2));
+        expect(deletionFiles.deleted, isEmpty);
+        expect(pending.writes, writesAfterFirst);
+      },
+    );
+
+    test('caller prepared existing target is rejected before marker', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'existing-target', name: '原项目');
+      final pending = _FakeBundlePendingStore();
+      final service = _bundleService(
+        database: database,
+        bundles: _FakeBundlePipeline(),
+        importer: _FakeProjectImporter(),
+        pending: pending,
+      );
+      final prepared = PreparedProjectRestore(
+        sourceZipPath: '/backups/single.zip',
+        items: [
+          PreparedProjectRestoreItem(
+            sourceProjectId: 'single',
+            targetProjectId: 'existing-target',
+            archivePath: '/backups/single.zip',
+            preview: _archivePreview('原项目'),
+          ),
+        ],
+      );
+
+      await expectLater(
+        service.restorePrepared(
+          prepared: prepared,
+          projectNames: const {'single': '恢复项目'},
+        ),
+        throwsA(isA<ProjectBundleRestoreException>()),
+      );
+
+      expect((await database.projectById('existing-target'))?.name, '原项目');
+      expect(pending.writes, 0);
+    });
+
+    test('unowned existing target is preserved with its marker', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'unowned-target', name: '保留项目');
+      final pending = _FakeBundlePendingStore()
+        ..items.add(
+          const PendingBundleRestore(
+            bundleId: 'b-unowned',
+            stagingDirectory: '/staging/b-unowned',
+            plannedProjectIds: ['unowned-target'],
+          ),
+        );
+      final rollback = _FakeProjectRollback();
+      final service = _bundleService(
+        database: database,
+        bundles: _FakeBundlePipeline(),
+        importer: _FakeProjectImporter(),
+        pending: pending,
+        rollback: rollback,
+      );
+
+      await service.cleanupInterruptedBundleRestores();
+
+      expect(await database.projectById('unowned-target'), isNotNull);
+      expect(rollback.projectIds, isEmpty);
+      expect((service.files as _FakeBundleFiles).deletedTrees, isEmpty);
+      expect(pending.items, hasLength(1));
+    });
   });
 }
 
 ProjectBundleService _bundleService({
   required AppDatabase database,
   required _FakeBundlePipeline bundles,
-  required _FakeProjectImporter importer,
+  required ProjectArchiveImporter importer,
   _FakeBundlePendingStore? pending,
-  _FakeProjectRollback? rollback,
+  ProjectBundleRollback? rollback,
   _FakeBundleFiles? files,
 }) {
   final store = pending ?? _FakeBundlePendingStore();
-  importer.pendingStore = store;
+  if (importer is _FakeProjectImporter) importer.pendingStore = store;
   var nextTarget = 0;
   return ProjectBundleService(
     database: database,
@@ -459,6 +574,24 @@ rust.ProjectBundlePreview _bundlePreview() => const rust.ProjectBundlePreview(
     ),
   ],
 );
+
+rust.ProjectArchivePreview _archivePreview(String name) =>
+    rust.ProjectArchivePreview(
+      schemaVersion: 2,
+      projectName: name,
+      includesOriginals: true,
+      photos: [
+        rust.ArchivePhotoPreview(
+          photoNumber: '$name-SM-20260728-001',
+          hasOriginal: true,
+          originalSha256: 'a' * 64,
+          capturedAt: '2026-07-28 08:00:00 +08:00',
+          workLocation: '现场',
+          workContent: '检查',
+          photographer: '张工',
+        ),
+      ],
+    );
 
 class _ExportCall {
   const _ExportCall(this.projectId, this.includeOriginals, this.outputZipPath);
@@ -561,6 +694,7 @@ class _FakeBundlePendingStore implements BundleRestorePendingStore {
 
   final bool throwOnWrite;
   final items = <PendingBundleRestore>[];
+  var writes = 0;
 
   @override
   Future<void> clear(String bundleId) async {
@@ -573,6 +707,8 @@ class _FakeBundlePendingStore implements BundleRestorePendingStore {
   @override
   Future<void> write(PendingBundleRestore pending) async {
     if (throwOnWrite) throw StateError('marker write failed');
+    writes++;
+    items.removeWhere((item) => item.bundleId == pending.bundleId);
     items.add(pending);
   }
 }
@@ -604,22 +740,7 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
   Future<rust.ProjectArchivePreview> inspect(String zipPath) async {
     inspected.add(zipPath);
     final name = zipPath.contains('p2') ? '西区' : '东区';
-    return rust.ProjectArchivePreview(
-      schemaVersion: 2,
-      projectName: name,
-      includesOriginals: true,
-      photos: [
-        rust.ArchivePhotoPreview(
-          photoNumber: '$name-SM-20260728-001',
-          hasOriginal: true,
-          originalSha256: 'a' * 64,
-          capturedAt: '2026-07-28 08:00:00 +08:00',
-          workLocation: '现场',
-          workContent: '检查',
-          photographer: '张工',
-        ),
-      ],
-    );
+    return _archivePreview(name);
   }
 
   @override
@@ -645,4 +766,71 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
       restoredOriginals: 1,
     );
   }
+}
+
+class _DatabaseProjectImporter implements ProjectArchiveImporter {
+  _DatabaseProjectImporter(this.database);
+
+  final AppDatabase database;
+
+  @override
+  Future<rust.ProjectArchivePreview> inspect(String zipPath) async {
+    return _archivePreview(zipPath.contains('p2') ? '西区' : '东区');
+  }
+
+  @override
+  Future<ProjectImportResult> importProject({
+    required String zipPath,
+    required String projectName,
+    String? projectId,
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    await database.createProject(id: projectId!, name: projectName);
+    await database.createPendingCapture(
+      id: '$projectId-capture',
+      projectId: projectId,
+      originalPath: '/originals/$projectId.jpg',
+      workLocation: '现场',
+      workContent: '检查',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      locationResolution: 'resolved',
+    );
+    onProgress?.call(1, 1);
+    return ProjectImportResult(
+      projectId: projectId,
+      projectName: projectName,
+      photoCount: 1,
+      restoredOriginals: 1,
+    );
+  }
+}
+
+class _DeletionCapturePaths implements CaptureOutputPaths {
+  @override
+  Future<String> renderedPhotoPath(String captureId) async =>
+      '/rendered/$captureId.jpg';
+}
+
+class _DeletionFiles implements PrivateFileStore {
+  final deleted = <String>[];
+
+  @override
+  Future<void> deleteIfExists(String path) async {
+    deleted.add(path);
+  }
+
+  @override
+  Future<bool> exists(String path) async => true;
+}
+
+class _DeletionPendingStore implements ProjectDeletionPendingStore {
+  @override
+  Future<void> clear(String projectId) async {}
+
+  @override
+  Future<List<PendingProjectDeletion>> list() async => const [];
+
+  @override
+  Future<void> write(PendingProjectDeletion pending) async {}
 }

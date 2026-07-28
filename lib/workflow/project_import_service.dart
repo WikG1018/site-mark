@@ -50,18 +50,22 @@ abstract interface class ProjectArchiveImporter {
 /// A not-yet-committed import recorded on disk, so an import interrupted by
 /// a process kill can be cleaned up on the next launch. The marker lists
 /// every file the import may have created, staged and final alike.
+enum PendingImportPhase { planned, ownsProject }
+
 class PendingImport {
   const PendingImport({
     required this.projectId,
     required this.stagingDirectory,
     required this.stagedFiles,
     required this.finalFiles,
+    this.phase = PendingImportPhase.planned,
   });
 
   final String projectId;
   final String stagingDirectory;
   final List<String> stagedFiles;
   final List<String> finalFiles;
+  final PendingImportPhase phase;
 
   List<String> get allFiles => [...stagedFiles, ...finalFiles];
 
@@ -70,6 +74,7 @@ class PendingImport {
     'stagingDirectory': stagingDirectory,
     'stagedFiles': stagedFiles,
     'finalFiles': finalFiles,
+    'phase': phase.name,
   };
 
   factory PendingImport.fromJson(Map<String, dynamic> json) {
@@ -80,8 +85,19 @@ class PendingImport {
       stagingDirectory: json['stagingDirectory'] as String? ?? '',
       stagedFiles: strings('stagedFiles'),
       finalFiles: strings('finalFiles'),
+      phase: json['phase'] == PendingImportPhase.ownsProject.name
+          ? PendingImportPhase.ownsProject
+          : PendingImportPhase.planned,
     );
   }
+
+  PendingImport withPhase(PendingImportPhase value) => PendingImport(
+    projectId: projectId,
+    stagingDirectory: stagingDirectory,
+    stagedFiles: stagedFiles,
+    finalFiles: finalFiles,
+    phase: value,
+  );
 }
 
 /// Persists [PendingImport] markers as JSON files under
@@ -381,7 +397,7 @@ class ProjectImportService implements ProjectArchiveImporter {
         ),
       );
     }
-    final pending = PendingImport(
+    var pending = PendingImport(
       projectId: targetProjectId,
       stagingDirectory: stagingDir,
       stagedFiles: [
@@ -394,7 +410,6 @@ class ProjectImportService implements ProjectArchiveImporter {
     await pendingStore.writePending(pending);
 
     var committed = false;
-    var ownsProject = false;
     try {
       for (var index = 0; index < preview.photos.length; index++) {
         final photo = preview.photos[index];
@@ -418,7 +433,8 @@ class ProjectImportService implements ProjectArchiveImporter {
         watermarkAccentColorArgb: watermark?.accentColorArgb,
         watermarkFontScale: _validFontScale(watermark?.fontScale),
       );
-      ownsProject = true;
+      pending = pending.withPhase(PendingImportPhase.ownsProject);
+      await pendingStore.writePending(pending);
       for (var index = 0; index < preview.photos.length; index++) {
         final photo = preview.photos[index];
         final plan = plans[index];
@@ -460,7 +476,14 @@ class ProjectImportService implements ProjectArchiveImporter {
       committed = true;
     } finally {
       if (!committed) {
-        await _rollback(pending, deleteProject: ownsProject);
+        final fullyCleaned = await _rollback(pending);
+        if (pending.phase == PendingImportPhase.planned && fullyCleaned) {
+          try {
+            await pendingStore.clearPending(targetProjectId);
+          } catch (_) {
+            // A non-owning marker is safe to retain for a later retry.
+          }
+        }
       }
     }
 
@@ -507,10 +530,13 @@ class ProjectImportService implements ProjectArchiveImporter {
   /// the staging tree, and the database rows. Individual failures are
   /// swallowed so one stubborn file never blocks the rest; the pending
   /// marker stays in place for the startup cleanup to retry.
-  Future<bool> _rollback(
-    PendingImport pending, {
-    bool deleteProject = true,
-  }) async {
+  Future<bool> _rollback(PendingImport pending) async {
+    if (pending.phase == PendingImportPhase.planned &&
+        await database.projectById(pending.projectId) != null) {
+      // This marker never durably proved ownership of the database row.
+      // Preserve the row, all files, and the marker for explicit resolution.
+      return false;
+    }
     var fullyCleaned = true;
     for (final path in pending.allFiles) {
       try {
@@ -525,7 +551,7 @@ class ProjectImportService implements ProjectArchiveImporter {
     } catch (_) {
       fullyCleaned = false;
     }
-    if (deleteProject) {
+    if (pending.phase == PendingImportPhase.ownsProject) {
       try {
         await database.deleteProjectCascade(pending.projectId);
       } catch (_) {

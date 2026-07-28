@@ -168,16 +168,19 @@ class PendingBundleRestore {
     required this.bundleId,
     required this.stagingDirectory,
     required this.plannedProjectIds,
+    this.ownedProjectIds = const [],
   });
 
   final String bundleId;
   final String stagingDirectory;
   final List<String> plannedProjectIds;
+  final List<String> ownedProjectIds;
 
   Map<String, dynamic> toJson() => {
     'bundleId': bundleId,
     'stagingDirectory': stagingDirectory,
     'plannedProjectIds': plannedProjectIds,
+    'ownedProjectIds': ownedProjectIds,
   };
 
   factory PendingBundleRestore.fromJson(Map<String, dynamic> json) {
@@ -187,6 +190,19 @@ class PendingBundleRestore {
       plannedProjectIds: (json['plannedProjectIds'] as List? ?? const [])
           .whereType<String>()
           .toList(growable: false),
+      ownedProjectIds: (json['ownedProjectIds'] as List? ?? const [])
+          .whereType<String>()
+          .toList(growable: false),
+    );
+  }
+
+  PendingBundleRestore withOwnedProject(String projectId) {
+    if (ownedProjectIds.contains(projectId)) return this;
+    return PendingBundleRestore(
+      bundleId: bundleId,
+      stagingDirectory: stagingDirectory,
+      plannedProjectIds: plannedProjectIds,
+      ownedProjectIds: [...ownedProjectIds, projectId],
     );
   }
 }
@@ -401,6 +417,11 @@ class ProjectBundleService {
     void Function(int completed, int total)? onProgress,
   }) async {
     final targetIds = {for (final item in prepared.items) item.targetProjectId};
+    if (targetIds.length != prepared.items.length) {
+      throw const ProjectBundleRestoreException(
+        'Prepared target project IDs must be unique',
+      );
+    }
     if (targetIds.any(_activeRestoreTargetIds.contains)) {
       throw const ProjectBundleRestoreException(
         'This prepared restore is already in progress',
@@ -423,6 +444,13 @@ class ProjectBundleService {
     required Map<String, String> projectNames,
     void Function(int completed, int total)? onProgress,
   }) async {
+    for (final item in prepared.items) {
+      if (await database.projectById(item.targetProjectId) != null) {
+        throw const ProjectBundleRestoreException(
+          'A prepared target project already exists',
+        );
+      }
+    }
     final names = await _validatedNames(prepared, projectNames);
     if (!prepared.isBundle) {
       final item = prepared.items.single;
@@ -435,7 +463,7 @@ class ProjectBundleService {
       return [result];
     }
 
-    final pending = PendingBundleRestore(
+    var pending = PendingBundleRestore(
       bundleId: prepared.bundleId!,
       stagingDirectory: prepared.stagingDirectory!,
       plannedProjectIds: [
@@ -481,6 +509,8 @@ class ProjectBundleService {
           },
         );
         results.add(result);
+        pending = pending.withOwnedProject(item.targetProjectId);
+        await pendingStore.write(pending);
         completedBeforeItem += itemPhotos;
       }
       await files.deleteTree(pending.stagingDirectory);
@@ -552,17 +582,31 @@ class ProjectBundleService {
 
   Future<bool> _rollbackPending(PendingBundleRestore pending) async {
     var safelyHandedOff = true;
-    for (final projectId in pending.plannedProjectIds) {
+    var hasAmbiguousOwnership = false;
+    final plannedIds = pending.plannedProjectIds.toSet();
+    final ownedIds = pending.ownedProjectIds.where(plannedIds.contains).toSet();
+    for (final projectId in ownedIds) {
       try {
         await rollback.handoff(projectId);
       } catch (_) {
         safelyHandedOff = false;
       }
     }
-    try {
-      await files.deleteTree(pending.stagingDirectory);
-    } catch (_) {
-      safelyHandedOff = false;
+    for (final projectId in plannedIds.difference(ownedIds)) {
+      if (await database.projectById(projectId) != null) {
+        // A project exists, but the bundle marker never durably recorded that
+        // this restore owns it. Preserve both data and marker for a later,
+        // explicit resolution instead of risking an unrelated project.
+        safelyHandedOff = false;
+        hasAmbiguousOwnership = true;
+      }
+    }
+    if (!hasAmbiguousOwnership) {
+      try {
+        await files.deleteTree(pending.stagingDirectory);
+      } catch (_) {
+        safelyHandedOff = false;
+      }
     }
     if (safelyHandedOff) {
       try {

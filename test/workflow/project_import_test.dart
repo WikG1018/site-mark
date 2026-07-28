@@ -92,7 +92,7 @@ void main() {
     ]);
 
     // The pending marker was written before work and cleared after commit.
-    expect(pendingStore.writes, 1);
+    expect(pendingStore.writes, 2);
     expect(pendingStore.cleared, [result.projectId]);
     expect(committer.deletedTrees, ['/staging/${result.projectId}']);
   });
@@ -214,10 +214,10 @@ void main() {
     expect(await database.getAllCaptures(), isEmpty);
     // Both staged and final paths of every photo were deleted best-effort.
     expect(files.deleted.length, 8);
-    // The marker stays so the startup cleanup can retry stubborn files.
+    // A fully cleaned pre-create failure clears its non-owning marker.
     expect(pendingStore.writes, 1);
-    expect(pendingStore.cleared, isEmpty);
-    expect(pendingStore.pending.length, 1);
+    expect(pendingStore.cleared, hasLength(1));
+    expect(pendingStore.pending, isEmpty);
   });
 
   test('rollback stays best-effort when a delete throws', () async {
@@ -307,6 +307,7 @@ void main() {
           stagingDirectory: '/staging/dead-project',
           stagedFiles: ['/staging/dead-project/rendered/a.jpg'],
           finalFiles: ['/rendered/a.jpg'],
+          phase: PendingImportPhase.ownsProject,
         ),
       );
 
@@ -354,6 +355,59 @@ void main() {
       expect(pendingStore.pending, hasLength(1));
     },
   );
+
+  test('pending import JSON is backward-compatible and safely non-owning', () {
+    final legacy = PendingImport.fromJson(const {
+      'projectId': 'legacy-id',
+      'stagingDirectory': '/staging/legacy-id',
+      'stagedFiles': <String>[],
+      'finalFiles': <String>[],
+    });
+    expect(legacy.phase, PendingImportPhase.planned);
+
+    const owning = PendingImport(
+      projectId: 'owned-id',
+      stagingDirectory: '/staging/owned-id',
+      stagedFiles: [],
+      finalFiles: [],
+      phase: PendingImportPhase.ownsProject,
+    );
+    expect(
+      PendingImport.fromJson(owning.toJson()).phase,
+      PendingImportPhase.ownsProject,
+    );
+  });
+
+  test('non-owning startup marker preserves a raced project', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'raced-id', name: '其他恢复创建的项目');
+    final files = _RecordingFileStore();
+    final committer = _RecordingCommitter();
+    final pendingStore = _FakePendingStore()
+      ..pending.add(
+        const PendingImport(
+          projectId: 'raced-id',
+          stagingDirectory: '/staging/raced-id',
+          stagedFiles: ['/staging/raced-id/photo.jpg'],
+          finalFiles: ['/rendered/raced-id.jpg'],
+        ),
+      );
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: files,
+      pendingStore: pendingStore,
+      committer: committer,
+    );
+
+    await service.cleanupInterruptedImports();
+
+    expect(await database.projectById('raced-id'), isNotNull);
+    expect(files.attemptedDeletes, isEmpty);
+    expect(committer.deletedTrees, isEmpty);
+    expect(pendingStore.pending, hasLength(1));
+  });
 
   test(
     'successful import ignores a staging-directory cleanup failure',
@@ -597,6 +651,7 @@ class _FakePendingStore implements ImportPendingStore {
   @override
   Future<void> writePending(PendingImport pending) async {
     writes++;
+    this.pending.removeWhere((entry) => entry.projectId == pending.projectId);
     this.pending.add(pending);
   }
 
