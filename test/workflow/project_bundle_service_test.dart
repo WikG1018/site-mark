@@ -150,6 +150,93 @@ void main() {
 
   group('ProjectBundleService', () {
     test(
+      'prepare classifies archive failures without exposing parser text',
+      () async {
+        final cases =
+            <
+              (
+                Object bundleFailure,
+                Object singleFailure,
+                ProjectBundleRestoreFailure expected,
+              )
+            >[
+              (
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.invalidData,
+                  'not a bundle',
+                ),
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.invalidData,
+                  'not a project archive',
+                ),
+                ProjectBundleRestoreFailure.notSiteMarkBackup,
+              ),
+              (
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.invalidData,
+                  'unsupported schema version 99',
+                ),
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.invalidData,
+                  'not a project archive',
+                ),
+                ProjectBundleRestoreFailure.unsupportedVersion,
+              ),
+              (
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.invalidData,
+                  'archive checksum mismatch',
+                ),
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.invalidData,
+                  'not a project archive',
+                ),
+                ProjectBundleRestoreFailure.corrupted,
+              ),
+              (
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.invalidData,
+                  'not a bundle',
+                ),
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.invalidData,
+                  'selection archive: cannot restore',
+                ),
+                ProjectBundleRestoreFailure.selectionArchive,
+              ),
+              (
+                const ImagePipelineException(
+                  ImagePipelineFailureKind.transientIo,
+                  'No space left on device',
+                ),
+                StateError('unused'),
+                ProjectBundleRestoreFailure.insufficientStorage,
+              ),
+            ];
+
+        for (final item in cases) {
+          final database = AppDatabase.forTesting(NativeDatabase.memory());
+          final service = _bundleService(
+            database: database,
+            bundles: _FakeBundlePipeline(readFailure: item.$1),
+            importer: _FakeProjectImporter(inspectFailure: item.$2),
+          );
+          await expectLater(
+            service.prepareRestore('/backups/input.zip'),
+            throwsA(
+              isA<ProjectBundleRestoreException>().having(
+                (error) => error.failure,
+                'failure',
+                item.$3,
+              ),
+            ),
+          );
+          await database.close();
+        }
+      },
+    );
+
+    test(
       'prepare validates, extracts and previews every inner archive',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -362,14 +449,26 @@ void main() {
           prepared: prepared,
           projectNames: const {'p1': '已有项目', 'p2': '新项目'},
         ),
-        throwsA(isA<ProjectBundleRestoreException>()),
+        throwsA(
+          isA<ProjectBundleRestoreException>().having(
+            (error) => error.failure,
+            'failure',
+            ProjectBundleRestoreFailure.nameConflict,
+          ),
+        ),
       );
       await expectLater(
         service.restorePrepared(
           prepared: prepared,
           projectNames: const {'p1': 'A/B', 'p2': 'A:B'},
         ),
-        throwsA(isA<ProjectBundleRestoreException>()),
+        throwsA(
+          isA<ProjectBundleRestoreException>().having(
+            (error) => error.failure,
+            'failure',
+            ProjectBundleRestoreFailure.nameConflict,
+          ),
+        ),
       );
 
       expect(importer.imports, isEmpty);
@@ -395,7 +494,13 @@ void main() {
           prepared: prepared,
           projectNames: const {'p1': '东区', 'p2': '西区'},
         ),
-        throwsA(isA<ProjectBundleRestoreException>()),
+        throwsA(
+          isA<ProjectBundleRestoreException>().having(
+            (error) => error.failure,
+            'failure',
+            ProjectBundleRestoreFailure.rolledBack,
+          ),
+        ),
       );
 
       expect(rollback.projectIds, ['target-1']);
@@ -1213,10 +1318,11 @@ class _FakeProjectRollback implements ProjectBundleRollback {
 }
 
 class _FakeProjectImporter implements ProjectArchiveImporter {
-  _FakeProjectImporter({this.failSource, this.importGate});
+  _FakeProjectImporter({this.failSource, this.importGate, this.inspectFailure});
 
   final String? failSource;
   final Completer<void>? importGate;
+  final Object? inspectFailure;
   final inspected = <String>[];
   final imports = <String>[];
   _FakeBundlePendingStore? pendingStore;
@@ -1226,6 +1332,7 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
   @override
   Future<rust.ProjectArchivePreview> inspect(String zipPath) async {
     inspected.add(zipPath);
+    if (inspectFailure case final failure?) throw failure;
     final name = zipPath.contains('p2') ? '西区' : '东区';
     return _archivePreview(name);
   }

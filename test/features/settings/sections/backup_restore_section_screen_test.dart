@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/projects/project_restore_flow.dart';
@@ -111,6 +112,8 @@ void main() {
     expect(pickerCalls, 1);
     expect(find.text('源项目'), findsWidgets);
     expect(find.text('1 张照片'), findsOneWidget);
+    expect(find.text('使用备份中的水印设置'), findsOneWidget);
+    expect(find.text('左下 · 透明度 72% · 字体 110%'), findsOneWidget);
     expect(find.textContaining('全部回滚'), findsOneWidget);
 
     await tester.enterText(
@@ -221,6 +224,7 @@ void main() {
         pickZip: () async => '/tmp/not-a-backup.zip',
         prepareRestore: (_) async => throw const ProjectBundleRestoreException(
           'raw internal parser failure',
+          failure: ProjectBundleRestoreFailure.notSiteMarkBackup,
         ),
         restorePrepared:
             ({required prepared, required projectNames, onProgress}) async =>
@@ -233,8 +237,31 @@ void main() {
     await tester.tap(find.byKey(const Key('choose-restore-zip')));
     await tester.pumpAndSettle();
 
-    expect(find.text('不是有效的 SiteMark 备份'), findsOneWidget);
+    expect(find.text('不是 SiteMark 备份文件'), findsOneWidget);
     expect(find.textContaining('raw internal'), findsNothing);
+  });
+
+  testWidgets('preview explains when a backup has no watermark settings', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      dependencies: ProjectRestoreFlowDependencies(
+        pickZip: () async => '/tmp/backup.zip',
+        prepareRestore: (_) async => _prepared(includeWatermark: false),
+        restorePrepared:
+            ({required prepared, required projectNames, onProgress}) async =>
+                const [],
+        discardPrepared: (_) async {},
+      ),
+    );
+    await tester.tap(find.byKey(const Key('restore-projects')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('choose-restore-zip')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('备份未包含水印设置，将使用默认设置'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('picker failures show friendly copy and re-enable restore', (
@@ -296,10 +323,111 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('choose-restore-zip')), findsOneWidget);
   });
+
+  test('typed restore failures have distinct localized messages', () {
+    final strings = AppStrings(const Locale('zh'));
+    final expected = <ProjectBundleRestoreFailure, String>{
+      ProjectBundleRestoreFailure.notSiteMarkBackup: '不是 SiteMark 备份文件',
+      ProjectBundleRestoreFailure.unsupportedVersion: '此备份版本暂不支持',
+      ProjectBundleRestoreFailure.corrupted: '备份已损坏或校验不一致',
+      ProjectBundleRestoreFailure.selectionArchive: '照片分享 ZIP 不能用于恢复项目',
+      ProjectBundleRestoreFailure.nameConflict: '项目名称与已有或所选项目冲突',
+      ProjectBundleRestoreFailure.insufficientStorage: '存储空间不足，无法完成操作',
+      ProjectBundleRestoreFailure.rolledBack: '恢复失败，本次产生的内容已回滚',
+    };
+    final actual = <String>{};
+    for (final entry in expected.entries) {
+      final message = describeProjectRestoreError(
+        strings,
+        ProjectBundleRestoreException(
+          'raw internal detail',
+          failure: entry.key,
+        ),
+        preparing: true,
+      );
+      expect(message, entry.value);
+      expect(message, isNot(contains('raw internal')));
+      actual.add(message);
+    }
+    expect(actual, hasLength(expected.length));
+  });
+
+  testWidgets(
+    'successful restore returns home and keeps its success snackbar',
+    (tester) async {
+      final prepared = _prepared();
+      var discardCalls = 0;
+      final router = GoRouter(
+        initialLocation: '/settings/backup-restore',
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (context, state) =>
+                const Scaffold(key: Key('project-home')),
+          ),
+          GoRoute(
+            path: '/settings/backup-restore',
+            builder: (context, state) => BackupRestoreSectionScreen(
+              restoreDependencies: ProjectRestoreFlowDependencies(
+                pickZip: () async => '/tmp/backup.zip',
+                prepareRestore: (_) async => prepared,
+                restorePrepared:
+                    ({
+                      required prepared,
+                      required projectNames,
+                      onProgress,
+                    }) async {
+                      onProgress?.call(1, 1);
+                      return const [
+                        ProjectImportResult(
+                          projectId: 'target',
+                          projectName: '源项目',
+                          photoCount: 1,
+                          restoredOriginals: 1,
+                        ),
+                      ];
+                    },
+                discardPrepared: (_) async => discardCalls++,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [databaseProvider.overrideWithValue(database)],
+          child: MaterialApp.router(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('restore-projects')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('choose-restore-zip')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('restore-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-home')), findsOneWidget);
+      expect(find.text('恢复完成'), findsOneWidget);
+      expect(discardCalls, 0);
+    },
+  );
 }
 
-PreparedProjectRestore _prepared() {
-  return const PreparedProjectRestore(
+PreparedProjectRestore _prepared({bool includeWatermark = true}) {
+  return PreparedProjectRestore(
     sourceZipPath: '/tmp/backup.zip',
     items: [
       PreparedProjectRestoreItem(
@@ -310,6 +438,14 @@ PreparedProjectRestore _prepared() {
           schemaVersion: 2,
           projectName: '源项目',
           includesOriginals: true,
+          watermark: includeWatermark
+              ? const rust.ArchiveWatermarkSettings(
+                  position: 'bottomLeft',
+                  opacity: 0.72,
+                  accentColorArgb: 0xFF009688,
+                  fontScale: 1.1,
+                )
+              : null,
           photos: [
             rust.ArchivePhotoPreview(
               photoNumber: '001',

@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_name.dart';
@@ -169,7 +170,7 @@ Future<void> runProjectRestoreFlow(
     progress.dispose();
     if (!context.mounted) return;
     if (results != null) {
-      _showMessage(context, strings.restoreComplete);
+      _showRestoreSuccess(context, strings);
     } else {
       _showMessage(
         context,
@@ -203,35 +204,34 @@ String describeProjectRestoreError(
   Object error, {
   required bool preparing,
 }) {
-  if (_containsStorageFailure(error)) {
-    return strings.backupStorageInsufficient;
+  if (error is ProjectBundleRestoreException) {
+    return switch (error.failure) {
+      ProjectBundleRestoreFailure.notSiteMarkBackup =>
+        strings.backupNotSiteMark,
+      ProjectBundleRestoreFailure.unsupportedVersion =>
+        strings.backupUnsupportedVersion,
+      ProjectBundleRestoreFailure.corrupted => strings.backupCorrupted,
+      ProjectBundleRestoreFailure.selectionArchive =>
+        strings.backupSelectionNotRestorable,
+      ProjectBundleRestoreFailure.nameConflict =>
+        strings.backupRestoreNameConflict,
+      ProjectBundleRestoreFailure.insufficientStorage =>
+        strings.backupStorageInsufficient,
+      ProjectBundleRestoreFailure.rolledBack => strings.restoreFailedRollback,
+      ProjectBundleRestoreFailure.general => strings.restoreFailedGeneral,
+    };
   }
   if (error is ProjectNameConflictException) {
-    return strings.importNameConflict;
+    return strings.backupRestoreNameConflict;
   }
   if (error is InvalidArchiveException) {
-    return strings.backupInvalidArchive;
+    return strings.backupCorrupted;
   }
   if (error is ImagePipelineException &&
       error.kind == ImagePipelineFailureKind.invalidData) {
-    return strings.backupInvalidArchive;
+    return strings.backupCorrupted;
   }
-  if (preparing && error is ProjectBundleRestoreException) {
-    return strings.backupInvalidArchive;
-  }
-  return strings.restoreFailedRollback;
-}
-
-bool _containsStorageFailure(Object error) {
-  final text = error.toString().toLowerCase();
-  if (text.contains('no space') ||
-      text.contains('disk full') ||
-      text.contains('enospc')) {
-    return true;
-  }
-  return error is ProjectBundleRestoreException &&
-      error.cause != null &&
-      _containsStorageFailure(error.cause!);
+  return strings.restoreFailedGeneral;
 }
 
 Map<String, String> _suggestRestoreNames(
@@ -321,6 +321,12 @@ void _showRestoreProgress(
 
 void _showMessage(BuildContext context, String message) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
+void _showRestoreSuccess(BuildContext context, AppStrings strings) {
+  final messenger = ScaffoldMessenger.of(context);
+  GoRouter.maybeOf(context)?.go('/');
+  messenger.showSnackBar(SnackBar(content: Text(strings.restoreComplete)));
 }
 
 class _PreparedDiscardGuard {
@@ -437,6 +443,19 @@ class _RestorePreviewDialogState extends State<_RestorePreviewDialog> {
                       ? strings.importIncludesOriginals
                       : strings.importNoOriginals,
                 ),
+                const SizedBox(height: 4),
+                if (item.preview.watermark case final watermark?) ...[
+                  Text(strings.restoreUsesBackupWatermark),
+                  Text(
+                    strings.restoreWatermarkSummary(
+                      _watermarkPositionLabel(strings, watermark.position),
+                      (watermark.opacity * 100).round(),
+                      (watermark.fontScale * 100).round(),
+                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ] else
+                  Text(strings.restoreUsesDefaultWatermark),
                 const SizedBox(height: 8),
                 TextField(
                   key: Key('restore-name-${item.sourceProjectId}'),
@@ -467,4 +486,11 @@ class _RestorePreviewDialogState extends State<_RestorePreviewDialog> {
       ],
     );
   }
+}
+
+String _watermarkPositionLabel(AppStrings strings, String position) {
+  return switch (position) {
+    'bottomRight' => strings.bottomRight,
+    _ => strings.bottomLeft,
+  };
 }

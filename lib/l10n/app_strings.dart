@@ -393,12 +393,40 @@ class AppStrings {
   String get restoreComplete => _english ? 'Restore complete' : '恢复完成';
   String get backupInvalidArchive =>
       _english ? 'Not a valid SiteMark backup' : '不是有效的 SiteMark 备份';
+  String get backupNotSiteMark =>
+      _english ? 'This is not a SiteMark backup file' : '不是 SiteMark 备份文件';
+  String get backupUnsupportedVersion =>
+      _english ? 'This backup version is not supported' : '此备份版本暂不支持';
+  String get backupCorrupted => _english
+      ? 'The backup is corrupted or its checksum does not match'
+      : '备份已损坏或校验不一致';
+  String get backupSelectionNotRestorable => _english
+      ? 'Photo sharing ZIP files cannot restore projects'
+      : '照片分享 ZIP 不能用于恢复项目';
+  String get backupRestoreNameConflict => _english
+      ? 'A project name conflicts with an existing or selected project'
+      : '项目名称与已有或所选项目冲突';
   String get backupStorageInsufficient => _english
       ? 'Not enough storage space to complete this operation'
       : '存储空间不足，无法完成操作';
   String get restoreFailedRollback => _english
       ? 'Restore failed. Any changes from this restore were rolled back.'
       : '恢复失败，本次产生的内容已回滚';
+  String get restoreFailedGeneral => _english
+      ? 'Could not complete the restore. Please try again.'
+      : '无法完成恢复，请重试';
+  String get restoreUsesBackupWatermark =>
+      _english ? 'Use watermark settings from this backup' : '使用备份中的水印设置';
+  String restoreWatermarkSummary(
+    String position,
+    int opacityPercent,
+    int fontPercent,
+  ) => _english
+      ? '$position · Opacity $opacityPercent% · Font $fontPercent%'
+      : '$position · 透明度 $opacityPercent% · 字体 $fontPercent%';
+  String get restoreUsesDefaultWatermark => _english
+      ? 'No watermark settings in this backup; defaults will be used'
+      : '备份未包含水印设置，将使用默认设置';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {
