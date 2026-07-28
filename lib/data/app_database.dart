@@ -377,15 +377,25 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<List<Project>> watchProjects() {
-    return (select(
-      projects,
-    )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).watch();
+    return (select(projects)
+          ..where((row) => row.restoreOperationId.isNull())
+          ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
+        .watch();
   }
 
   /// One-shot read of all projects newest-first. Use this instead of
   /// `watchProjects().first` in widget tests, because the watch stream's
   /// stream-store timers do not fire under `FakeAsync` until frames are pumped.
   Future<List<Project>> getProjects() {
+    return (select(projects)
+          ..where((row) => row.restoreOperationId.isNull())
+          ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
+        .get();
+  }
+
+  /// Internal project inventory, including rows owned by an in-flight
+  /// restore. Use this for collision validation and recovery only.
+  Future<List<Project>> getAllProjectsInternal() {
     return (select(
       projects,
     )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).get();
@@ -467,11 +477,22 @@ class AppDatabase extends _$AppDatabase {
   Future<void> clearProjectRestoreOwnership({
     required String projectId,
     required String operationId,
+  }) {
+    return clearProjectsRestoreOwnership(
+      projectIds: [projectId],
+      operationId: operationId,
+    );
+  }
+
+  Future<void> clearProjectsRestoreOwnership({
+    required Iterable<String> projectIds,
+    required String operationId,
   }) async {
+    final ids = projectIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return;
     await (update(projects)..where(
           (row) =>
-              row.id.equals(projectId) &
-              row.restoreOperationId.equals(operationId),
+              row.id.isIn(ids) & row.restoreOperationId.equals(operationId),
         ))
         .write(const ProjectsCompanion(restoreOperationId: Value(null)));
   }
@@ -1121,8 +1142,9 @@ class AppDatabase extends _$AppDatabase {
           ])
           ..where(
             captureRecords.status
-                .equals(CaptureStatus.pendingCamera.name)
-                .not(),
+                    .equals(CaptureStatus.pendingCamera.name)
+                    .not() &
+                projects.restoreOperationId.isNull(),
           )
           ..orderBy([
             OrderingTerm(

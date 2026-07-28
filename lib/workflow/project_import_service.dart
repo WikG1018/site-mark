@@ -364,7 +364,7 @@ class ProjectImportService implements ProjectArchiveImporter {
     if (trimmed.isEmpty) return false;
     final displayKey = normalizedProjectNameKey(trimmed);
     final safeKey = safeProjectFileNameKey(trimmed);
-    for (final project in await database.getProjects()) {
+    for (final project in await database.getAllProjectsInternal()) {
       if (normalizedProjectNameKey(project.name) == displayKey) return true;
       if (safeProjectFileNameKey(project.name) == safeKey) return true;
     }

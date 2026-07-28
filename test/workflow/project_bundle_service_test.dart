@@ -137,12 +137,20 @@ void main() {
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
         addTearDown(database.close);
-        final bundles = _FakeBundlePipeline(preview: _bundlePreview());
+        final pending = _FakeBundlePendingStore();
+        var markerSeenBeforeExtract = false;
+        final bundles = _FakeBundlePipeline(
+          preview: _bundlePreview(),
+          onExtract: () {
+            markerSeenBeforeExtract = pending.items.isNotEmpty;
+          },
+        );
         final importer = _FakeProjectImporter();
         final service = _bundleService(
           database: database,
           bundles: bundles,
           importer: importer,
+          pending: pending,
         );
 
         final prepared = await service.prepareRestore('/backups/bundle.zip');
@@ -157,6 +165,10 @@ void main() {
           '/imports/bundle-restore-bundle-prepare/projects/p2.zip',
         ]);
         expect(importer.inspected, hasLength(2));
+        expect(markerSeenBeforeExtract, isTrue);
+        expect(pending.writes, 1);
+        expect(pending.items.single.plannedProjectIds, isEmpty);
+        expect(pending.items.single.operationId, prepared.bundleId);
       },
     );
 
@@ -185,13 +197,134 @@ void main() {
         expect(prepared.isBundle, isFalse);
         expect(prepared.items.single.archivePath, '/backups/single.zip');
         expect(files.deletedTrees, isEmpty);
+        expect((service.pendingStore as _FakeBundlePendingStore).writes, 0);
+      },
+    );
+
+    test(
+      'prepared marker cleanup removes staging without handing off projects',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore();
+        final files = _FakeBundleFiles();
+        final rollback = _FakeProjectRollback();
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: _FakeProjectImporter(),
+          pending: pending,
+          files: files,
+          rollback: rollback,
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        await service.cleanupInterruptedBundleRestores();
+
+        expect(files.deletedTrees, [prepared.stagingDirectory]);
+        expect(pending.items, isEmpty);
+        expect(rollback.projectIds, isEmpty);
+      },
+    );
+
+    test('discardPrepared deletes staging then clears its marker', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final pending = _FakeBundlePendingStore();
+      final files = _FakeBundleFiles();
+      final service = _bundleService(
+        database: database,
+        bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+        importer: _FakeProjectImporter(),
+        pending: pending,
+        files: files,
+      );
+      final prepared = await service.prepareRestore('/backups/bundle.zip');
+      expect(pending.items, hasLength(1));
+
+      await service.discardPrepared(prepared);
+
+      expect(files.deletedTrees, [prepared.stagingDirectory]);
+      expect(pending.items, isEmpty);
+    });
+
+    test(
+      'prepare failure retains marker when staging cleanup fails and startup retries',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore();
+        final files = _FakeBundleFiles(
+          failPath: '/imports/bundle-restore-bundle-prepare',
+        );
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(
+            preview: _bundlePreview(),
+            extractFailureAt: 1,
+          ),
+          importer: _FakeProjectImporter(),
+          pending: pending,
+          files: files,
+        );
+
+        await expectLater(
+          service.prepareRestore('/backups/bundle.zip'),
+          throwsA(isA<ProjectBundleRestoreException>()),
+        );
+        expect(pending.items, hasLength(1));
+        expect(pending.items.single.plannedProjectIds, isEmpty);
+
+        files.failPath = null;
+        await service.cleanupInterruptedBundleRestores();
+
+        expect(pending.items, isEmpty);
+        expect(files.deletedTrees, [
+          '/imports/bundle-restore-bundle-prepare',
+          '/imports/bundle-restore-bundle-prepare',
+        ]);
+      },
+    );
+
+    test(
+      'prepare failure retains marker when marker clear fails and startup retries',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore(throwOnClear: true);
+        final files = _FakeBundleFiles();
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(
+            preview: _bundlePreview(),
+            extractFailureAt: 1,
+          ),
+          importer: _FakeProjectImporter(),
+          pending: pending,
+          files: files,
+        );
+
+        await expectLater(
+          service.prepareRestore('/backups/bundle.zip'),
+          throwsA(isA<ProjectBundleRestoreException>()),
+        );
+        expect(pending.items, hasLength(1));
+
+        pending.throwOnClear = false;
+        await service.cleanupInterruptedBundleRestores();
+
+        expect(pending.items, isEmpty);
       },
     );
 
     test('batch name conflicts are rejected before first import', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
-      await database.createProject(id: 'existing', name: '已有项目');
+      await database.createProject(
+        id: 'existing',
+        name: '已有项目',
+        restoreOperationId: 'hidden-restore',
+      );
       final importer = _FakeProjectImporter();
       final service = _bundleService(
         database: database,
@@ -421,6 +554,31 @@ void main() {
     );
 
     test(
+      'empty preparation marker round-trips through the app store',
+      () async {
+        final root = await Directory.systemTemp.createTemp(
+          'sitemark-empty-bundle-marker-',
+        );
+        addTearDown(() => root.delete(recursive: true));
+        final store = AppBundleRestorePendingStore(
+          documentsDirectory: () async => root,
+        );
+        const marker = PendingBundleRestore(
+          bundleId: 'preparing-bundle',
+          stagingDirectory: '/staging/preparing-bundle',
+          plannedProjectIds: [],
+          operationId: 'preparing-bundle',
+        );
+
+        await store.write(marker);
+
+        final listed = await store.list();
+        expect(listed, hasLength(1));
+        expect(listed.single.plannedProjectIds, isEmpty);
+      },
+    );
+
+    test(
       'rollback failure keeps the bundle marker for startup retry',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -487,32 +645,29 @@ void main() {
     });
 
     test(
-      'marker write failure cleans staging and never starts import',
+      'preparation marker write failure cleans staging before extraction',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
         addTearDown(database.close);
         final pending = _FakeBundlePendingStore(throwOnWrite: true);
         final files = _FakeBundleFiles();
         final importer = _FakeProjectImporter();
+        final bundles = _FakeBundlePipeline(preview: _bundlePreview());
         final service = _bundleService(
           database: database,
-          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          bundles: bundles,
           importer: importer,
           pending: pending,
           files: files,
         );
-        final prepared = await service.prepareRestore('/backups/bundle.zip');
-
         await expectLater(
-          service.restorePrepared(
-            prepared: prepared,
-            projectNames: const {'p1': '东区', 'p2': '西区'},
-          ),
+          service.prepareRestore('/backups/bundle.zip'),
           throwsA(isA<ProjectBundleRestoreException>()),
         );
 
         expect(importer.imports, isEmpty);
-        expect(files.deletedTrees, [prepared.stagingDirectory]);
+        expect(bundles.extractRequests, isEmpty);
+        expect(files.deletedTrees, ['/imports/bundle-restore-bundle-prepare']);
       },
     );
 
@@ -760,10 +915,17 @@ class _FakeProjectExporter implements ProjectArchiveExporter {
 }
 
 class _FakeBundlePipeline implements ProjectBundlePipeline {
-  _FakeBundlePipeline({this.preview, this.readFailure});
+  _FakeBundlePipeline({
+    this.preview,
+    this.readFailure,
+    this.onExtract,
+    this.extractFailureAt,
+  });
 
   final rust.ProjectBundlePreview? preview;
   final Object? readFailure;
+  final void Function()? onExtract;
+  final int? extractFailureAt;
   final exportRequests = <rust.ExportProjectBundleRequest>[];
   final extractRequests = <rust.ExtractProjectBundleEntryRequest>[];
 
@@ -783,7 +945,11 @@ class _FakeBundlePipeline implements ProjectBundlePipeline {
   Future<void> extractBundleEntry(
     rust.ExtractProjectBundleEntryRequest request,
   ) async {
+    onExtract?.call();
     extractRequests.add(request);
+    if (extractRequests.length == extractFailureAt) {
+      throw StateError('extract failed');
+    }
   }
 
   @override
@@ -815,7 +981,7 @@ class _FakeBundlePaths implements ProjectBundlePaths {
 class _FakeBundleFiles implements ProjectBundleFileSystem {
   _FakeBundleFiles({this.failPath});
 
-  final String? failPath;
+  String? failPath;
   final deletedTrees = <String>[];
 
   @override
@@ -826,14 +992,19 @@ class _FakeBundleFiles implements ProjectBundleFileSystem {
 }
 
 class _FakeBundlePendingStore implements BundleRestorePendingStore {
-  _FakeBundlePendingStore({this.throwOnWrite = false});
+  _FakeBundlePendingStore({
+    this.throwOnWrite = false,
+    this.throwOnClear = false,
+  });
 
   final bool throwOnWrite;
+  bool throwOnClear;
   final items = <PendingBundleRestore>[];
   var writes = 0;
 
   @override
   Future<void> clear(String bundleId) async {
+    if (throwOnClear) throw StateError('marker clear failed');
     items.removeWhere((item) => item.bundleId == bundleId);
   }
 

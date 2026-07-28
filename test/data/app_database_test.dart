@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,6 +36,82 @@ void main() {
     final projects = await database.watchProjects().first;
 
     expect(projects.map((project) => project.name), ['二号厂房', '一号厂房']);
+  });
+
+  test('in-progress restores stay hidden until ownership clears', () async {
+    await database.createProject(id: 'normal', name: '正常项目');
+    await database.createProject(
+      id: 'restoring',
+      name: '恢复中的项目',
+      restoreOperationId: 'restore-operation',
+    );
+    final normalCapture = await database.createPendingCapture(
+      id: 'normal-capture',
+      projectId: 'normal',
+      originalPath: '/private/normal.jpg',
+      workLocation: 'A 区',
+      workContent: '正常记录',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+    );
+    await database.markCaptured(
+      captureId: normalCapture.id,
+      capturedAt: DateTime(2026, 7, 28, 9),
+    );
+    final restoringCapture = await database.createPendingCapture(
+      id: 'restoring-capture',
+      projectId: 'restoring',
+      originalPath: '/private/restoring.jpg',
+      workLocation: 'B 区',
+      workContent: '恢复记录',
+      photographer: '李工',
+      watermarkLocaleCode: 'zh',
+    );
+    await database.markCaptured(
+      captureId: restoringCapture.id,
+      capturedAt: DateTime(2026, 7, 28, 10),
+    );
+
+    final projectUpdates = StreamIterator(database.watchProjects());
+    final summaryUpdates = StreamIterator(database.watchAllCaptureSummaries());
+    addTearDown(projectUpdates.cancel);
+    addTearDown(summaryUpdates.cancel);
+    expect(await projectUpdates.moveNext(), isTrue);
+    expect(projectUpdates.current.map((project) => project.id), ['normal']);
+    expect((await database.getProjects()).map((project) => project.id), [
+      'normal',
+    ]);
+    expect(
+      (await database.getAllProjectsInternal()).map((project) => project.id),
+      containsAll(['normal', 'restoring']),
+    );
+    expect(await summaryUpdates.moveNext(), isTrue);
+    expect(summaryUpdates.current.map((summary) => summary.capture.id), [
+      'normal-capture',
+    ]);
+    expect(
+      (await database.watchCaptureSummaries(const CaptureFilter()).first).map(
+        (summary) => summary.capture.id,
+      ),
+      ['normal-capture'],
+    );
+    expect(await database.projectById('restoring'), isNotNull);
+
+    await database.clearProjectRestoreOwnership(
+      projectId: 'restoring',
+      operationId: 'restore-operation',
+    );
+
+    expect(await projectUpdates.moveNext(), isTrue);
+    expect(
+      projectUpdates.current.map((project) => project.id),
+      containsAll(['normal', 'restoring']),
+    );
+    expect(await summaryUpdates.moveNext(), isTrue);
+    expect(summaryUpdates.current.map((summary) => summary.capture.id), [
+      'restoring-capture',
+      'normal-capture',
+    ]);
   });
 
   test('rejects normalized duplicate project names', () async {

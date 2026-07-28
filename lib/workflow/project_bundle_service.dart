@@ -129,11 +129,13 @@ class PreparedProjectRestore {
     required this.items,
     this.bundleId,
     this.stagingDirectory,
+    this.bundleMarkerRevision = 0,
   });
 
   final String sourceZipPath;
   final String? bundleId;
   final String? stagingDirectory;
+  final int bundleMarkerRevision;
   final List<PreparedProjectRestoreItem> items;
 
   bool get isBundle => bundleId != null;
@@ -256,9 +258,7 @@ class AppBundleRestorePendingStore implements BundleRestorePendingStore {
         final decoded = jsonDecode(await entity.readAsString());
         if (decoded is Map<String, dynamic>) {
           final item = PendingBundleRestore.fromJson(decoded);
-          if (item.bundleId.isNotEmpty &&
-              item.stagingDirectory.isNotEmpty &&
-              item.plannedProjectIds.isNotEmpty) {
+          if (item.bundleId.isNotEmpty && item.stagingDirectory.isNotEmpty) {
             final current = latest[item.bundleId];
             if (current == null || item.revision > current.revision) {
               latest[item.bundleId] = item;
@@ -400,6 +400,21 @@ class ProjectBundleService {
 
     final bundleId = _idGenerator();
     final stagingDirectory = await paths.restoreStagingDirectory(bundleId);
+    final preparationPending = PendingBundleRestore(
+      bundleId: bundleId,
+      stagingDirectory: stagingDirectory,
+      plannedProjectIds: const [],
+      operationId: bundleId,
+    );
+    try {
+      await pendingStore.write(preparationPending);
+    } catch (error) {
+      await _cleanupPreparedBundle(preparationPending);
+      throw ProjectBundleRestoreException(
+        'The project bundle could not be prepared',
+        cause: error,
+      );
+    }
     try {
       final items = <PreparedProjectRestoreItem>[];
       for (final project in bundlePreview.projects) {
@@ -428,15 +443,11 @@ class ProjectBundleService {
         sourceZipPath: zipPath,
         bundleId: bundleId,
         stagingDirectory: stagingDirectory,
+        bundleMarkerRevision: preparationPending.revision,
         items: items,
       );
     } catch (error) {
-      try {
-        await files.deleteTree(stagingDirectory);
-      } catch (_) {
-        // Preparation has not persisted any app data. A leftover private
-        // staging directory is safe and can be manually retried by the user.
-      }
+      await _cleanupPreparedBundle(preparationPending);
       throw ProjectBundleRestoreException(
         'The project bundle could not be prepared',
         cause: error,
@@ -503,15 +514,12 @@ class ProjectBundleService {
         for (final item in prepared.items) item.targetProjectId,
       ],
       operationId: prepared.bundleId!,
+      revision: prepared.bundleMarkerRevision + 1,
     );
     try {
       await pendingStore.write(pending);
     } catch (error) {
-      try {
-        await files.deleteTree(pending.stagingDirectory);
-      } catch (_) {
-        // Best effort. A partially written marker, if any, owns the retry.
-      }
+      await _cleanupPreparedBundle(pending);
       throw ProjectBundleRestoreException(
         'Project bundle restore could not be started',
         cause: error,
@@ -553,16 +561,14 @@ class ProjectBundleService {
       await pendingStore.clear(pending.bundleId);
       final operationId = pending.operationId;
       if (operationId != null) {
-        for (final projectId in pending.plannedProjectIds) {
-          try {
-            await database.clearProjectRestoreOwnership(
-              projectId: projectId,
-              operationId: operationId,
-            );
-          } catch (_) {
-            // Marker removal is the durable commit point. A leftover token is
-            // inert without that marker and can be cleared on a later pass.
-          }
+        try {
+          await database.clearProjectsRestoreOwnership(
+            projectIds: pending.plannedProjectIds,
+            operationId: operationId,
+          );
+        } catch (_) {
+          // Marker removal is the durable commit point. Leftover tokens are
+          // inert without that marker and can be cleared on a later pass.
         }
       }
       return results;
@@ -577,7 +583,11 @@ class ProjectBundleService {
 
   Future<void> discardPrepared(PreparedProjectRestore prepared) async {
     final stagingDirectory = prepared.stagingDirectory;
-    if (stagingDirectory != null) {
+    final bundleId = prepared.bundleId;
+    if (stagingDirectory != null && bundleId != null) {
+      await files.deleteTree(stagingDirectory);
+      await pendingStore.clear(bundleId);
+    } else if (stagingDirectory != null) {
       await files.deleteTree(stagingDirectory);
     }
   }
@@ -587,6 +597,23 @@ class ProjectBundleService {
     for (final pending in pendings) {
       await _rollbackPending(pending);
     }
+  }
+
+  Future<bool> _cleanupPreparedBundle(PendingBundleRestore pending) async {
+    try {
+      await files.deleteTree(pending.stagingDirectory);
+    } catch (_) {
+      // Keep the durable marker so startup recovery retries the staging tree.
+      return false;
+    }
+    try {
+      await pendingStore.clear(pending.bundleId);
+    } catch (_) {
+      // The marker remains safe: its empty or token-checked plan cannot delete
+      // an unrelated project, and startup recovery retries the clear.
+      return false;
+    }
+    return true;
   }
 
   Future<Map<String, String>> _validatedNames(
@@ -603,7 +630,7 @@ class ProjectBundleService {
       );
     }
 
-    final existing = await database.getProjects();
+    final existing = await database.getAllProjectsInternal();
     final displayKeys = {
       for (final project in existing) normalizedProjectNameKey(project.name),
     };

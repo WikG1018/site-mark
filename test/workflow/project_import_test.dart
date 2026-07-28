@@ -607,7 +607,11 @@ void main() {
     await database.createProject(id: 'p1', name: '东区厂房改造');
     expect(await service.suggestAvailableName('东区厂房改造'), '东区厂房改造（导入）');
 
-    await database.createProject(id: 'p2', name: '东区厂房改造（导入）');
+    await database.createProject(
+      id: 'p2',
+      name: '东区厂房改造（导入）',
+      restoreOperationId: 'hidden-restore',
+    );
     expect(await service.suggestAvailableName('东区厂房改造'), '东区厂房改造（导入 2）');
   });
 
