@@ -39,6 +39,7 @@ void main() {
       resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
       cleanupInterruptedImports: () async => events.add('imports'),
+      cleanupInterruptedProjectDeletions: () async {},
     );
 
     await tester.pumpWidget(

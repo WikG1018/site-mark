@@ -38,6 +38,7 @@ import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
+import 'package:sitemark/workflow/project_deletion_service.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -149,6 +150,20 @@ final privateFileStoreProvider = Provider<PrivateFileStore>(
   (ref) => DartIoPrivateFileStore(),
 );
 
+final projectDeletionPendingStoreProvider =
+    Provider<ProjectDeletionPendingStore>(
+      (ref) => AppProjectDeletionPendingStore(),
+    );
+
+final projectDeletionServiceProvider = Provider<ProjectDeletionService>((ref) {
+  return ProjectDeletionService(
+    database: ref.watch(databaseProvider),
+    capturePaths: ref.watch(captureOutputPathsProvider),
+    files: ref.watch(privateFileStoreProvider),
+    pendingStore: ref.watch(projectDeletionPendingStoreProvider),
+  );
+});
+
 final storageUsageServiceProvider = Provider<StorageUsageService>((ref) {
   return AppStorageUsageService(database: ref.watch(databaseProvider));
 });
@@ -216,6 +231,8 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
         ref.read(captureBackgroundSchedulerProvider).reconcilePending(),
     cleanupInterruptedImports: () =>
         ref.read(projectImportServiceProvider).cleanupInterruptedImports(),
+    cleanupInterruptedProjectDeletions: () =>
+        ref.read(projectDeletionServiceProvider).cleanupInterruptedDeletions(),
   );
 });
 
