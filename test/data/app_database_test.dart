@@ -66,6 +66,46 @@ void main() {
     );
   });
 
+  test('renameProject rejects display and safe-file-name conflicts', () async {
+    await database.createProject(id: 'a', name: '东区');
+    await database.createProject(id: 'b', name: '西区');
+    await expectLater(
+      database.renameProject(projectId: 'b', name: '  东区  '),
+      throwsA(isA<ProjectNameConflictException>()),
+    );
+    await database.createProject(id: 'c', name: 'A/B');
+    await expectLater(
+      database.renameProject(projectId: 'b', name: 'A:B'),
+      throwsA(isA<ProjectNameConflictException>()),
+    );
+  });
+
+  test('renameProject preserves existing capture evidence', () async {
+    await database.createProject(id: 'a', name: '东区');
+    final pending = await database.createPendingCapture(
+      id: 'capture-1',
+      projectId: 'a',
+      originalPath: '/private/capture-1.jpg',
+      workLocation: 'A 区',
+      workContent: '风管安装',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 9, 30),
+    );
+    await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 32),
+    );
+
+    final before = await database.capturesForProject('a');
+    final renamed = await database.renameProject(projectId: 'a', name: '东区新名称');
+    final after = await database.capturesForProject('a');
+
+    expect(renamed.name, '东区新名称');
+    expect(after.single.photoNumber, before.single.photoNumber);
+    expect(after.single.originalPath, before.single.originalPath);
+  });
+
   test('persists constrained project watermark settings', () async {
     await database.createProject(id: 'project', name: '车间改造');
 

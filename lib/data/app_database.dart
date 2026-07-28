@@ -449,6 +449,42 @@ class AppDatabase extends _$AppDatabase {
     )..where((row) => row.id.equals(projectId))).getSingleOrNull();
   }
 
+  Future<Project> renameProject({
+    required String projectId,
+    required String name,
+  }) {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty || trimmedName.length > 120) {
+      throw ArgumentError.value(name, 'name');
+    }
+    return transaction(() async {
+      final current = await projectById(projectId);
+      if (current == null) throw StateError('Project does not exist');
+      final displayKey = normalizedProjectNameKey(trimmedName);
+      final safeKey = safeProjectFileNameKey(trimmedName);
+      for (final existing in await select(projects).get()) {
+        if (existing.id == projectId) continue;
+        if (normalizedProjectNameKey(existing.name) == displayKey) {
+          throw const ProjectNameConflictException(
+            ProjectNameConflictKind.displayName,
+          );
+        }
+        if (safeProjectFileNameKey(existing.name) == safeKey) {
+          throw const ProjectNameConflictException(
+            ProjectNameConflictKind.safeFileName,
+          );
+        }
+      }
+      await (update(projects)..where((row) => row.id.equals(projectId))).write(
+        ProjectsCompanion(
+          name: Value(trimmedName),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      return (await projectById(projectId))!;
+    });
+  }
+
   Future<Project> updateProjectWatermarkSettings({
     required String projectId,
     required String position,
