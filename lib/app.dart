@@ -125,6 +125,18 @@ final originalPhotoPathsProvider = Provider<OriginalPhotoPaths>(
   (ref) => AppOriginalPhotoPaths(),
 );
 
+final importStagingPathsProvider = Provider<ImportStagingPaths>(
+  (ref) => AppImportStagingPaths(),
+);
+
+final importPendingStoreProvider = Provider<ImportPendingStore>(
+  (ref) => AppImportPendingStore(),
+);
+
+final importFileCommitterProvider = Provider<ImportFileCommitter>(
+  (ref) => DartImportFileCommitter(),
+);
+
 final selectionExportPathsProvider = Provider<SelectionExportPaths>(
   (ref) => AppSelectionExportPaths(),
 );
@@ -202,6 +214,8 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
         .reconcilePendingLocations(),
     reconcileQueue: () =>
         ref.read(captureBackgroundSchedulerProvider).reconcilePending(),
+    cleanupInterruptedImports: () =>
+        ref.read(projectImportServiceProvider).cleanupInterruptedImports(),
   );
 });
 
@@ -236,6 +250,9 @@ final projectImportServiceProvider = Provider<ProjectImportService>((ref) {
     capturePaths: ref.watch(captureOutputPathsProvider),
     originalPaths: ref.watch(originalPhotoPathsProvider),
     fileStore: ref.watch(privateFileStoreProvider),
+    stagingPaths: ref.watch(importStagingPathsProvider),
+    pendingStore: ref.watch(importPendingStoreProvider),
+    committer: ref.watch(importFileCommitterProvider),
   );
 });
 

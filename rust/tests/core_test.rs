@@ -621,6 +621,8 @@ fn sha_mismatch_fails_extraction_and_removes_written_files() {
     assert!(error.contains("SHA-256 mismatch"), "{error}");
     assert!(!rendered_dest.exists());
     assert!(!original_dest.exists());
+    assert!(!rendered_dest.with_file_name("rendered.jpg.tmp").exists());
+    assert!(!original_dest.with_file_name("original.jpg.tmp").exists());
 }
 
 #[test]
@@ -661,4 +663,139 @@ fn duplicate_photo_numbers_are_rejected() {
 
     let error = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap_err();
     assert!(error.contains("duplicate photo number"), "{error}");
+}
+
+/// Builds a small valid archive with one photo plus original on disk.
+fn build_restorable_zip(directory: &tempfile::TempDir) -> std::path::PathBuf {
+    let rendered = directory.path().join("rendered-source.jpg");
+    let original = directory.path().join("original-source.jpg");
+    fs::write(&rendered, b"watermarked-bytes").unwrap();
+    fs::write(&original, b"original-bytes").unwrap();
+    let original_sha = sha256_file(original.to_string_lossy().into_owned()).unwrap();
+    let archive_path = directory.path().join("project.zip");
+    export_project(ExportProjectRequest {
+        project_id: "project-1".to_string(),
+        project_name: "东区厂房改造".to_string(),
+        output_zip_path: archive_path.to_string_lossy().into_owned(),
+        include_originals: true,
+        watermark: sample_watermark(),
+        photos: vec![ExportPhotoRecord {
+            photo_number: "SM-20260716-001".to_string(),
+            watermarked_path: rendered.to_string_lossy().into_owned(),
+            original_path: Some(original.to_string_lossy().into_owned()),
+            original_sha256: original_sha,
+            captured_at: "2026-07-16 09:32:18 +08:00".to_string(),
+            work_location: "A 区三层".to_string(),
+            work_content: "风管安装检查".to_string(),
+            photographer: "张工".to_string(),
+            address: None,
+            coordinates: None,
+            notes: None,
+            latitude: None,
+            longitude: None,
+            accuracy_meters: None,
+            watermark_locale_code: None,
+        }],
+    })
+    .unwrap();
+    archive_path
+}
+
+#[test]
+fn rendered_copy_failure_leaves_no_files_behind() {
+    let directory = tempdir().unwrap();
+    let archive_path = build_restorable_zip(&directory);
+    // Force the rendered write to fail: the destination's parent is an
+    // existing *file*, so create_dir_all cannot make the directory.
+    let blocker = directory.path().join("blocker");
+    fs::write(&blocker, b"file").unwrap();
+    let rendered_dest = blocker.join("rendered.jpg");
+    let original_dest = directory.path().join("out-original.jpg");
+
+    let error = extract_archive_photo(ExtractArchivePhotoRequest {
+        zip_path: archive_path.to_string_lossy().into_owned(),
+        photo_number: "SM-20260716-001".to_string(),
+        rendered_destination: rendered_dest.to_string_lossy().into_owned(),
+        original_destination: Some(original_dest.to_string_lossy().into_owned()),
+    })
+    .unwrap_err();
+
+    assert!(error.starts_with("io:"), "{error}");
+    assert!(!rendered_dest.exists());
+    assert!(!blocker.join("rendered.jpg.tmp").exists());
+    assert!(!original_dest.exists());
+    assert!(!directory.path().join("out-original.jpg.tmp").exists());
+}
+
+#[test]
+fn original_copy_failure_removes_the_staged_rendered_tmp() {
+    let directory = tempdir().unwrap();
+    let archive_path = build_restorable_zip(&directory);
+    let rendered_dest = directory.path().join("rendered.jpg");
+    // The original's parent is an existing file, so its extraction fails
+    // *after* the rendered tmp was already written.
+    let blocker = directory.path().join("blocker");
+    fs::write(&blocker, b"file").unwrap();
+    let original_dest = blocker.join("original.jpg");
+
+    let error = extract_archive_photo(ExtractArchivePhotoRequest {
+        zip_path: archive_path.to_string_lossy().into_owned(),
+        photo_number: "SM-20260716-001".to_string(),
+        rendered_destination: rendered_dest.to_string_lossy().into_owned(),
+        original_destination: Some(original_dest.to_string_lossy().into_owned()),
+    })
+    .unwrap_err();
+
+    assert!(error.starts_with("io:"), "{error}");
+    // Neither the final files nor their .tmp staging files may remain.
+    assert!(!rendered_dest.exists());
+    assert!(!directory.path().join("rendered.jpg.tmp").exists());
+    assert!(!original_dest.exists());
+    assert!(!blocker.join("original.jpg.tmp").exists());
+}
+
+#[test]
+fn oversized_manifest_is_rejected() {
+    let directory = tempdir().unwrap();
+    let archive_path = directory.path().join("big-manifest.zip");
+    let huge = " ".repeat(4 * 1024 * 1024 + 16);
+    write_zip(&archive_path, &[("manifest.json", huge.as_bytes())]);
+
+    let error = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap_err();
+    assert!(
+        error.contains("manifest exceeds the 4 MiB size limit"),
+        "{error}"
+    );
+}
+
+#[test]
+fn archives_with_too_many_photos_are_rejected() {
+    let directory = tempdir().unwrap();
+    let archive_path = directory.path().join("many.zip");
+    let photos: Vec<serde_json::Value> = (0..2001)
+        .map(|index| {
+            serde_json::json!({
+                "photo_number": format!("SM-{index}"),
+                "original_sha256": "a".repeat(64),
+                "captured_at": "2026-07-16 09:32:18 +08:00",
+                "work_location": "A",
+                "work_content": "B",
+                "photographer": "C"
+            })
+        })
+        .collect();
+    let manifest = serde_json::json!({
+        "schema_version": 1,
+        "app": "SiteMark",
+        "project_name": "x",
+        "includes_originals": false,
+        "photos": photos,
+    });
+    write_zip(
+        &archive_path,
+        &[("manifest.json", manifest.to_string().as_bytes())],
+    );
+
+    let error = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap_err();
+    assert!(error.contains("more than 2000 photos"), "{error}");
 }

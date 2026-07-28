@@ -3,18 +3,19 @@ import 'package:sitemark/workflow/app_startup_recovery.dart';
 
 void main() {
   test(
-    'recovers camera, resolves locations, then reconciles the processing queue',
+    'cleans interrupted imports, then recovers camera, locations, and queue',
     () async {
       final events = <String>[];
       final recovery = AppStartupRecovery(
         recoverCamera: () async => events.add('camera'),
         resolveLocations: () async => events.add('location'),
         reconcileQueue: () async => events.add('queue'),
+        cleanupInterruptedImports: () async => events.add('imports'),
       );
 
       await recovery.run();
 
-      expect(events, ['camera', 'location', 'queue']);
+      expect(events, ['imports', 'camera', 'location', 'queue']);
     },
   );
 }

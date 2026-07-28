@@ -12,7 +12,15 @@ void main() {
     addTearDown(database.close);
     final images = _ImportImagePipeline(_preview());
     final files = _RecordingFileStore();
-    final service = _service(database: database, images: images, files: files);
+    final pendingStore = _FakePendingStore();
+    final committer = _RecordingCommitter();
+    final service = _service(
+      database: database,
+      images: images,
+      files: files,
+      pendingStore: pendingStore,
+      committer: committer,
+    );
 
     final result = await service.importProject(
       zipPath: '/backups/p.zip',
@@ -48,14 +56,8 @@ void main() {
     expect(withOriginal.watermarkLocaleCode, 'en');
     expect(withOriginal.locationResolution, 'resolved');
     expect(withOriginal.originalDeletedAt, isNull);
-    expect(
-      withOriginal.originalPath,
-      '/originals/${withOriginal.id}.jpg',
-    );
-    expect(
-      withOriginal.originalSha256,
-      'a' * 64,
-    );
+    expect(withOriginal.originalPath, '/originals/${withOriginal.id}.jpg');
+    expect(withOriginal.originalSha256, 'a' * 64);
     final expectedInstant = DateTime.parse(
       '2026-07-16T09:32:18+08:00',
     ).millisecondsSinceEpoch;
@@ -69,17 +71,30 @@ void main() {
     expect(withoutOriginal.locationResolution, 'unavailable');
     expect(withoutOriginal.watermarkLocaleCode, 'zh');
 
-    // Extraction was asked to place files at the canonical locations.
+    // Extraction targeted the staging area; commit moved files into place.
     expect(images.extractRequests.length, 2);
     expect(
       images.extractRequests[0].renderedDestination,
-      '/rendered/${withOriginal.id}.jpg',
+      '/staging/rendered/${withOriginal.id}.jpg',
     );
     expect(
       images.extractRequests[0].originalDestination,
-      '/originals/${withOriginal.id}.jpg',
+      '/staging/originals/${withOriginal.id}.jpg',
     );
     expect(images.extractRequests[1].originalDestination, isNull);
+    expect(committer.moves, [
+      '/staging/rendered/${withOriginal.id}.jpg'
+      ' -> /rendered/${withOriginal.id}.jpg',
+      '/staging/originals/${withOriginal.id}.jpg'
+      ' -> /originals/${withOriginal.id}.jpg',
+      '/staging/rendered/${withoutOriginal.id}.jpg'
+      ' -> /rendered/${withoutOriginal.id}.jpg',
+    ]);
+
+    // The pending marker was written before work and cleared after commit.
+    expect(pendingStore.writes, 1);
+    expect(pendingStore.cleared, [result.projectId]);
+    expect(committer.deletedTrees, ['/staging/${result.projectId}']);
   });
 
   test('importProject rolls everything back when extraction fails', () async {
@@ -87,7 +102,13 @@ void main() {
     addTearDown(database.close);
     final images = _ImportImagePipeline(_preview(), failAtIndex: 1);
     final files = _RecordingFileStore();
-    final service = _service(database: database, images: images, files: files);
+    final pendingStore = _FakePendingStore();
+    final service = _service(
+      database: database,
+      images: images,
+      files: files,
+      pendingStore: pendingStore,
+    );
 
     await expectLater(
       service.importProject(zipPath: '/backups/p.zip', projectName: '东区厂房改造'),
@@ -96,10 +117,108 @@ void main() {
 
     expect(await database.getProjects(), isEmpty);
     expect(await database.getAllCaptures(), isEmpty);
-    // The first photo's extracted files were removed during rollback.
-    expect(files.deleted.length, 2);
-    expect(files.deleted[0], startsWith('/rendered/'));
-    expect(files.deleted[1], startsWith('/originals/'));
+    // Both staged and final paths of every photo were deleted best-effort.
+    expect(files.deleted.length, 8);
+    // The marker stays so the startup cleanup can retry stubborn files.
+    expect(pendingStore.writes, 1);
+    expect(pendingStore.cleared, isEmpty);
+    expect(pendingStore.pending.length, 1);
+  });
+
+  test('rollback stays best-effort when a delete throws', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final images = _ImportImagePipeline(_preview(), failAtIndex: 1);
+    final files = _RecordingFileStore(throwOnDeleteAt: 0);
+    final pendingStore = _FakePendingStore();
+    final service = _service(
+      database: database,
+      images: images,
+      files: files,
+      pendingStore: pendingStore,
+    );
+
+    await expectLater(
+      service.importProject(zipPath: '/backups/p.zip', projectName: '东区厂房改造'),
+      throwsA(isA<ImagePipelineException>()),
+    );
+
+    // The first delete threw, yet every later file was still attempted.
+    expect(files.attemptedDeletes.length, 8);
+    expect(files.deleted.length, 7);
+    // The database cleanup ran despite the file failure.
+    expect(await database.getProjects(), isEmpty);
+  });
+
+  test('corrupt timestamps reject the archive before any work happens', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final broken = ProjectArchivePreview(
+      schemaVersion: 2,
+      projectName: '东区厂房改造',
+      includesOriginals: false,
+      photos: [
+        ArchivePhotoPreview(
+          photoNumber: '东区厂房改造-SM-20260716-001',
+          hasOriginal: false,
+          originalSha256: 'a' * 64,
+          capturedAt: 'garbage-timestamp',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+        ),
+      ],
+    );
+    final images = _ImportImagePipeline(broken);
+    final service = _service(
+      database: database,
+      images: images,
+      files: _RecordingFileStore(),
+    );
+
+    await expectLater(
+      service.importProject(zipPath: '/backups/p.zip', projectName: '东区厂房改造'),
+      throwsA(isA<InvalidArchiveException>()),
+    );
+    // Nothing was extracted, staged, or persisted.
+    expect(images.extractRequests, isEmpty);
+    expect(await database.getProjects(), isEmpty);
+  });
+
+  test('cleanupInterruptedImports removes leftovers of a killed import', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final files = _RecordingFileStore();
+    final pendingStore = _FakePendingStore();
+    final committer = _RecordingCommitter();
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: files,
+      pendingStore: pendingStore,
+      committer: committer,
+    );
+    // Simulate an interrupted import: a project row, a staging tree, and a
+    // pending marker all left behind.
+    await database.createProject(id: 'dead-project', name: '烂尾项目');
+    pendingStore.pending.add(
+      const PendingImport(
+        projectId: 'dead-project',
+        stagingDirectory: '/staging/dead-project',
+        stagedFiles: ['/staging/dead-project/rendered/a.jpg'],
+        finalFiles: ['/rendered/a.jpg'],
+      ),
+    );
+
+    await service.cleanupInterruptedImports();
+
+    expect(await database.getProjects(), isEmpty);
+    expect(
+      files.deleted,
+      containsAll(['/staging/dead-project/rendered/a.jpg', '/rendered/a.jpg']),
+    );
+    expect(committer.deletedTrees, ['/staging/dead-project']);
+    expect(pendingStore.pending, isEmpty);
   });
 
   test('v1-style archives restore with default watermark settings', () async {
@@ -181,6 +300,8 @@ ProjectImportService _service({
   required AppDatabase database,
   required _ImportImagePipeline images,
   required _RecordingFileStore files,
+  _FakePendingStore? pendingStore,
+  _RecordingCommitter? committer,
 }) {
   return ProjectImportService(
     database: database,
@@ -188,6 +309,9 @@ ProjectImportService _service({
     capturePaths: _ImportCapturePaths(),
     originalPaths: _ImportOriginalPaths(),
     fileStore: files,
+    stagingPaths: const _FakeStagingPaths(),
+    pendingStore: pendingStore ?? _FakePendingStore(),
+    committer: committer ?? _RecordingCommitter(),
     clock: () => DateTime(2026, 7, 27, 12),
   );
 }
@@ -291,7 +415,63 @@ class _ImportOriginalPaths implements OriginalPhotoPaths {
       '/originals/$captureId.jpg';
 }
 
+class _FakeStagingPaths implements ImportStagingPaths {
+  const _FakeStagingPaths();
+
+  @override
+  Future<String> stagingDirectory(String projectId) async =>
+      '/staging/$projectId';
+
+  @override
+  Future<String> stagedRenderedPath(String projectId, String captureId) async =>
+      '/staging/rendered/$captureId.jpg';
+
+  @override
+  Future<String> stagedOriginalPath(String projectId, String captureId) async =>
+      '/staging/originals/$captureId.jpg';
+}
+
+class _FakePendingStore implements ImportPendingStore {
+  final pending = <PendingImport>[];
+  final cleared = <String>[];
+  var writes = 0;
+
+  @override
+  Future<void> writePending(PendingImport pending) async {
+    writes++;
+    this.pending.add(pending);
+  }
+
+  @override
+  Future<List<PendingImport>> listPending() async => List.of(pending);
+
+  @override
+  Future<void> clearPending(String projectId) async {
+    cleared.add(projectId);
+    pending.removeWhere((entry) => entry.projectId == projectId);
+  }
+}
+
+class _RecordingCommitter implements ImportFileCommitter {
+  final moves = <String>[];
+  final deletedTrees = <String>[];
+
+  @override
+  Future<void> moveIntoPlace(String stagedPath, String finalPath) async {
+    moves.add('$stagedPath -> $finalPath');
+  }
+
+  @override
+  Future<void> deleteTree(String path) async {
+    deletedTrees.add(path);
+  }
+}
+
 class _RecordingFileStore implements PrivateFileStore {
+  _RecordingFileStore({this.throwOnDeleteAt});
+
+  final int? throwOnDeleteAt;
+  final attemptedDeletes = <String>[];
   final deleted = <String>[];
 
   @override
@@ -299,6 +479,11 @@ class _RecordingFileStore implements PrivateFileStore {
 
   @override
   Future<void> deleteIfExists(String path) async {
+    if (throwOnDeleteAt == attemptedDeletes.length) {
+      attemptedDeletes.add(path);
+      throw StateError('simulated delete failure');
+    }
+    attemptedDeletes.add(path);
     deleted.add(path);
   }
 }

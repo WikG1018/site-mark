@@ -51,6 +51,7 @@ void main() {
             recoverCamera: _noOpRecovery,
             resolveLocations: _noOpRecovery,
             reconcileQueue: _noOpRecovery,
+            cleanupInterruptedImports: _noOpRecovery,
           ),
         ),
       );

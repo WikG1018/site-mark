@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -19,6 +23,198 @@ class ProjectImportResult {
   final int restoredOriginals;
 }
 
+/// Thrown when a backup archive is structurally valid but contains data that
+/// must not be silently rewritten — e.g. an unreadable capture timestamp.
+/// Substituting "now" for a broken capture time would falsify an evidence
+/// field, so the whole import is rejected instead.
+class InvalidArchiveException implements Exception {
+  const InvalidArchiveException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// A not-yet-committed import recorded on disk, so an import interrupted by
+/// a process kill can be cleaned up on the next launch. The marker lists
+/// every file the import may have created, staged and final alike.
+class PendingImport {
+  const PendingImport({
+    required this.projectId,
+    required this.stagingDirectory,
+    required this.stagedFiles,
+    required this.finalFiles,
+  });
+
+  final String projectId;
+  final String stagingDirectory;
+  final List<String> stagedFiles;
+  final List<String> finalFiles;
+
+  List<String> get allFiles => [...stagedFiles, ...finalFiles];
+
+  Map<String, dynamic> toJson() => {
+    'projectId': projectId,
+    'stagingDirectory': stagingDirectory,
+    'stagedFiles': stagedFiles,
+    'finalFiles': finalFiles,
+  };
+
+  factory PendingImport.fromJson(Map<String, dynamic> json) {
+    List<String> strings(String key) =>
+        (json[key] as List? ?? const []).whereType<String>().toList();
+    return PendingImport(
+      projectId: json['projectId'] as String? ?? '',
+      stagingDirectory: json['stagingDirectory'] as String? ?? '',
+      stagedFiles: strings('stagedFiles'),
+      finalFiles: strings('finalFiles'),
+    );
+  }
+}
+
+/// Persists [PendingImport] markers as JSON files under
+/// `<documents>/imports/`.
+abstract interface class ImportPendingStore {
+  Future<void> writePending(PendingImport pending);
+
+  Future<List<PendingImport>> listPending();
+
+  Future<void> clearPending(String projectId);
+}
+
+class AppImportPendingStore implements ImportPendingStore {
+  AppImportPendingStore({Future<Directory> Function()? documentsDirectory})
+    : _documentsDirectory =
+          documentsDirectory ?? getApplicationDocumentsDirectory;
+
+  final Future<Directory> Function() _documentsDirectory;
+
+  Future<Directory> _importsDirectory() async {
+    final root = await _documentsDirectory();
+    final directory = Directory(
+      '${root.path}${Platform.pathSeparator}imports',
+    );
+    await directory.create(recursive: true);
+    return directory;
+  }
+
+  @override
+  Future<void> writePending(PendingImport pending) async {
+    final directory = await _importsDirectory();
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}'
+      'pending-${pending.projectId}.json',
+    );
+    await file.writeAsString(jsonEncode(pending.toJson()));
+  }
+
+  @override
+  Future<List<PendingImport>> listPending() async {
+    final directory = await _importsDirectory();
+    final pendings = <PendingImport>[];
+    await for (final entity in directory.list()) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments.last;
+      if (!name.startsWith('pending-') || !name.endsWith('.json')) continue;
+      try {
+        final decoded = jsonDecode(await entity.readAsString());
+        if (decoded is Map<String, dynamic>) {
+          final pending = PendingImport.fromJson(decoded);
+          if (pending.projectId.isNotEmpty) pendings.add(pending);
+        }
+      } catch (_) {
+        // A corrupt marker cannot be trusted; skip it here. The leftover
+        // staging directory remains on disk and is harmless (app-private).
+      }
+    }
+    return pendings;
+  }
+
+  @override
+  Future<void> clearPending(String projectId) async {
+    final directory = await _importsDirectory();
+    final file = File(
+      '${directory.path}${Platform.pathSeparator}pending-$projectId.json',
+    );
+    if (await file.exists()) await file.delete();
+  }
+}
+
+/// Resolves the on-disk staging area for an in-flight import.
+abstract interface class ImportStagingPaths {
+  Future<String> stagingDirectory(String projectId);
+
+  Future<String> stagedRenderedPath(String projectId, String captureId);
+
+  Future<String> stagedOriginalPath(String projectId, String captureId);
+}
+
+class AppImportStagingPaths implements ImportStagingPaths {
+  AppImportStagingPaths({Future<Directory> Function()? documentsDirectory})
+    : _documentsDirectory =
+          documentsDirectory ?? getApplicationDocumentsDirectory;
+
+  final Future<Directory> Function() _documentsDirectory;
+
+  @override
+  Future<String> stagingDirectory(String projectId) async {
+    final root = await _documentsDirectory();
+    final directory = Directory(
+      '${root.path}${Platform.pathSeparator}imports'
+      '${Platform.pathSeparator}staging-$projectId',
+    );
+    await directory.create(recursive: true);
+    return directory.path;
+  }
+
+  @override
+  Future<String> stagedRenderedPath(String projectId, String captureId) async {
+    final staging = await stagingDirectory(projectId);
+    return '$staging${Platform.pathSeparator}rendered'
+        '${Platform.pathSeparator}$captureId.jpg';
+  }
+
+  @override
+  Future<String> stagedOriginalPath(String projectId, String captureId) async {
+    final staging = await stagingDirectory(projectId);
+    return '$staging${Platform.pathSeparator}originals'
+        '${Platform.pathSeparator}$captureId.jpg';
+  }
+}
+
+/// Moves staged files into their final locations at the import commit point.
+abstract interface class ImportFileCommitter {
+  Future<void> moveIntoPlace(String stagedPath, String finalPath);
+
+  Future<void> deleteTree(String path);
+}
+
+class DartImportFileCommitter implements ImportFileCommitter {
+  @override
+  Future<void> moveIntoPlace(String stagedPath, String finalPath) async {
+    final staged = File(stagedPath);
+    final parent = File(finalPath).parent;
+    if (!await parent.exists()) await parent.create(recursive: true);
+    try {
+      await staged.rename(finalPath);
+    } on FileSystemException {
+      // Rename can fail across volumes on some platforms; copy + delete is
+      // the portable fallback for the same-volume staging design anyway.
+      await staged.copy(finalPath);
+      await staged.delete();
+    }
+  }
+
+  @override
+  Future<void> deleteTree(String path) async {
+    final directory = Directory(path);
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
+  }
+}
+
 /// Restores single-project backup archives produced by
 /// `ProjectExportService.exportProject`.
 ///
@@ -27,6 +223,12 @@ class ProjectImportResult {
 /// GPS fixes; v2 archives additionally restore the project watermark
 /// template and per-photo location. Selection archives are not restorable
 /// and are rejected by the archive reader.
+///
+/// Import is crash-safe: files are extracted into a staging directory while
+/// a [PendingImport] marker records the plan on disk. Only after every photo
+/// verifies does the import commit — database rows first, then files are
+/// moved into place. [cleanupInterruptedImports] removes the leftovers of
+/// any import that never committed (e.g. the process was killed).
 class ProjectImportService {
   ProjectImportService({
     required this.database,
@@ -34,6 +236,9 @@ class ProjectImportService {
     required this.capturePaths,
     required this.originalPaths,
     required this.fileStore,
+    required this.stagingPaths,
+    required this.pendingStore,
+    required this.committer,
     Uuid? uuid,
     DateTime Function()? clock,
   }) : _uuid = uuid ?? const Uuid(),
@@ -44,6 +249,9 @@ class ProjectImportService {
   final CaptureOutputPaths capturePaths;
   final OriginalPhotoPaths originalPaths;
   final PrivateFileStore fileStore;
+  final ImportStagingPaths stagingPaths;
+  final ImportPendingStore pendingStore;
+  final ImportFileCommitter committer;
   final Uuid _uuid;
   final DateTime Function() _clock;
 
@@ -92,85 +300,185 @@ class ProjectImportService {
   /// hashes. Restored rows are `ready` with a null `publishedUri`, so the
   /// existing republish flow can re-save them to the system gallery.
   ///
-  /// On any failure everything is rolled back: extracted files are removed
-  /// and the partially-created project (with its rows) is deleted.
+  /// Throws [InvalidArchiveException] when a photo's capture timestamp does
+  /// not match the export format — restoring it with a substituted "now"
+  /// would falsify an evidence field, so the backup is rejected as a whole.
   Future<ProjectImportResult> importProject({
     required String zipPath,
     required String projectName,
     void Function(int completed, int total)? onProgress,
   }) async {
     final preview = await inspect(zipPath);
+    final capturedTimes = <DateTime>[];
+    for (final photo in preview.photos) {
+      final parsed = parseExportedTimestamp(photo.capturedAt);
+      if (parsed == null) {
+        throw InvalidArchiveException(
+          'Invalid capture timestamp for ${photo.photoNumber}',
+        );
+      }
+      capturedTimes.add(parsed);
+    }
+
     final watermark = preview.watermark;
     final projectId = _uuid.v4();
-    await database.createProject(
-      id: projectId,
-      name: projectName,
-      watermarkPosition: _validPosition(watermark?.position),
-      watermarkOpacity: _validOpacity(watermark?.opacity),
-      watermarkAccentColorArgb: watermark?.accentColorArgb,
-      watermarkFontScale: _validFontScale(watermark?.fontScale),
+    final stagingDir = await stagingPaths.stagingDirectory(projectId);
+
+    // Plan every path up front so the pending marker covers all of them.
+    final plans = <_PhotoPlan>[];
+    for (var index = 0; index < preview.photos.length; index++) {
+      final captureId = _uuid.v4();
+      plans.add(
+        _PhotoPlan(
+          captureId: captureId,
+          stagedRendered: await stagingPaths.stagedRenderedPath(
+            projectId,
+            captureId,
+          ),
+          stagedOriginal: await stagingPaths.stagedOriginalPath(
+            projectId,
+            captureId,
+          ),
+          finalRendered: await capturePaths.renderedPhotoPath(captureId),
+          finalOriginal: await originalPaths.originalPhotoPath(captureId),
+        ),
+      );
+    }
+    final pending = PendingImport(
+      projectId: projectId,
+      stagingDirectory: stagingDir,
+      stagedFiles: [
+        for (final plan in plans) ...[
+          plan.stagedRendered,
+          plan.stagedOriginal,
+        ],
+      ],
+      finalFiles: [
+        for (final plan in plans) ...[plan.finalRendered, plan.finalOriginal],
+      ],
     );
-    final extractedPaths = <String>[];
-    var restoredOriginals = 0;
+    await pendingStore.writePending(pending);
+
+    var committed = false;
     try {
-      final total = preview.photos.length;
-      for (var index = 0; index < total; index++) {
+      for (var index = 0; index < preview.photos.length; index++) {
         final photo = preview.photos[index];
-        final captureId = _uuid.v4();
-        final renderedPath = await capturePaths.renderedPhotoPath(captureId);
-        final originalPath = await originalPaths.originalPhotoPath(captureId);
-        final extracted = await images.extractArchivePhoto(
+        final plan = plans[index];
+        await images.extractArchivePhoto(
           rust.ExtractArchivePhotoRequest(
             zipPath: zipPath,
             photoNumber: photo.photoNumber,
-            renderedDestination: renderedPath,
-            originalDestination: photo.hasOriginal ? originalPath : null,
+            renderedDestination: plan.stagedRendered,
+            originalDestination: photo.hasOriginal
+                ? plan.stagedOriginal
+                : null,
           ),
         );
-        extractedPaths.add(extracted.renderedPath);
-        final restoredOriginal = extracted.originalPath;
-        if (restoredOriginal != null) {
-          extractedPaths.add(restoredOriginal);
-          restoredOriginals++;
+        onProgress?.call(index + 1, preview.photos.length);
+      }
+
+      await database.createProject(
+        id: projectId,
+        name: projectName,
+        watermarkPosition: _validPosition(watermark?.position),
+        watermarkOpacity: _validOpacity(watermark?.opacity),
+        watermarkAccentColorArgb: watermark?.accentColorArgb,
+        watermarkFontScale: _validFontScale(watermark?.fontScale),
+      );
+      try {
+        for (var index = 0; index < preview.photos.length; index++) {
+          final photo = preview.photos[index];
+          final plan = plans[index];
+          await database.insertRestoredCapture(
+            id: plan.captureId,
+            projectId: projectId,
+            photoNumber: photo.photoNumber,
+            // An archive without the original still needs an original_path:
+            // point at the canonical location and mark it cleared, the same
+            // state "clear originals" produces, so the hash stays as evidence.
+            originalPath: plan.finalOriginal,
+            originalDeletedAt: photo.hasOriginal ? null : _clock(),
+            workLocation: photo.workLocation,
+            workContent: photo.workContent,
+            photographer: photo.photographer,
+            notes: photo.notes,
+            address: photo.address,
+            latitude: photo.latitude,
+            longitude: photo.longitude,
+            accuracyMeters: photo.accuracyMeters,
+            watermarkLocaleCode: _validLocale(photo.watermarkLocaleCode),
+            originalSha256: photo.originalSha256,
+            createdAt: capturedTimes[index],
+            capturedAt: capturedTimes[index],
+          );
         }
-        final capturedAt = parseExportedTimestamp(photo.capturedAt) ?? _clock();
-        await database.insertRestoredCapture(
-          id: captureId,
-          projectId: projectId,
-          photoNumber: photo.photoNumber,
-          // An archive without the original still needs an original_path:
-          // point at the canonical location and mark it cleared, the same
-          // state "clear originals" produces, so the hash stays as evidence.
-          originalPath: restoredOriginal ?? originalPath,
-          originalDeletedAt: restoredOriginal == null ? _clock() : null,
-          workLocation: photo.workLocation,
-          workContent: photo.workContent,
-          photographer: photo.photographer,
-          notes: photo.notes,
-          address: photo.address,
-          latitude: photo.latitude,
-          longitude: photo.longitude,
-          accuracyMeters: photo.accuracyMeters,
-          watermarkLocaleCode: _validLocale(photo.watermarkLocaleCode),
-          originalSha256: photo.originalSha256,
-          createdAt: capturedAt,
-          capturedAt: capturedAt,
-        );
-        onProgress?.call(index + 1, total);
+      } catch (_) {
+        await database.deleteProjectCascade(projectId);
+        rethrow;
       }
-    } catch (_) {
-      for (final path in extractedPaths) {
-        await fileStore.deleteIfExists(path);
+
+      // Commit point: move staged files into their final locations.
+      for (var index = 0; index < plans.length; index++) {
+        final plan = plans[index];
+        await committer.moveIntoPlace(plan.stagedRendered, plan.finalRendered);
+        if (preview.photos[index].hasOriginal) {
+          await committer.moveIntoPlace(plan.stagedOriginal, plan.finalOriginal);
+        }
       }
-      await database.deleteProjectCascade(projectId);
-      rethrow;
+      committed = true;
+    } finally {
+      if (!committed) {
+        await _rollback(pending);
+      }
     }
+
+    await pendingStore.clearPending(projectId);
+    await committer.deleteTree(stagingDir);
     return ProjectImportResult(
       projectId: projectId,
       projectName: projectName.trim(),
       photoCount: preview.photos.length,
-      restoredOriginals: restoredOriginals,
+      restoredOriginals: preview.photos.where((photo) => photo.hasOriginal).length,
     );
+  }
+
+  /// Removes leftovers of imports that never committed. Runs at startup
+  /// before any recovery work so half-imported projects never surface.
+  ///
+  /// Every step is best-effort: one failed delete must not abandon the
+  /// remaining files, and the database cleanup always runs. The marker is
+  /// only cleared after everything was attempted again, so a stubborn file
+  /// is retried on the next launch instead of leaking silently.
+  Future<void> cleanupInterruptedImports() async {
+    final pendings = await pendingStore.listPending();
+    for (final pending in pendings) {
+      await _rollback(pending);
+      try {
+        await pendingStore.clearPending(pending.projectId);
+      } catch (_) {
+        // Keep the marker; the next launch retries.
+      }
+    }
+  }
+
+  /// Best-effort rollback of a [PendingImport]: deletes every known file,
+  /// the staging tree, and the database rows. Individual failures are
+  /// swallowed so one stubborn file never blocks the rest; the pending
+  /// marker stays in place for the startup cleanup to retry.
+  Future<void> _rollback(PendingImport pending) async {
+    for (final path in pending.allFiles) {
+      try {
+        await fileStore.deleteIfExists(path);
+      } catch (_) {
+        // Best-effort: keep deleting the remaining files.
+      }
+    }
+    try {
+      await committer.deleteTree(pending.stagingDirectory);
+    } catch (_) {}
+    try {
+      await database.deleteProjectCascade(pending.projectId);
+    } catch (_) {}
   }
 
   static String? _validPosition(String? value) =>
@@ -186,6 +494,22 @@ class ProjectImportService {
 
   static String _validLocale(String? value) =>
       value != null && {'zh', 'en'}.contains(value) ? value : 'zh';
+}
+
+class _PhotoPlan {
+  const _PhotoPlan({
+    required this.captureId,
+    required this.stagedRendered,
+    required this.stagedOriginal,
+    required this.finalRendered,
+    required this.finalOriginal,
+  });
+
+  final String captureId;
+  final String stagedRendered;
+  final String stagedOriginal;
+  final String finalRendered;
+  final String finalOriginal;
 }
 
 /// Parses the export timestamp format `yyyy-MM-dd HH:mm:ss ±HH:MM` back into

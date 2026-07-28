@@ -115,6 +115,9 @@ Future<void> runProjectImportFlow(BuildContext context, WidgetRef ref) async {
 /// a generic failure with the underlying message attached.
 @visibleForTesting
 String describeImportError(AppStrings strings, Object error) {
+  if (error is InvalidArchiveException) {
+    return strings.importInvalidArchive;
+  }
   if (error is ImagePipelineException) {
     if (error.message.contains('selection archive')) {
       return strings.importSelectionUnsupported;

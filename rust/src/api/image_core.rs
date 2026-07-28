@@ -1177,6 +1177,14 @@ struct ProjectManifestFile {
     photos: Vec<ManifestPhoto>,
 }
 
+/// Backup-restore extraction limits. Generous enough for real camera
+/// originals (a phone JPEG rarely exceeds 30 MiB) while still stopping a
+/// decompression bomb long before it can fill the device storage.
+const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_ARCHIVE_PHOTOS: usize = 2000;
+const MAX_ENTRY_UNCOMPRESSED_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_TOTAL_UNCOMPRESSED_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+
 fn open_zip(zip_path: &str) -> Result<zip::ZipArchive<BufReader<File>>, String> {
     let file =
         File::open(zip_path).map_err(|error| io_failure(&format!("open {zip_path}"), error))?;
@@ -1187,12 +1195,29 @@ fn open_zip(zip_path: &str) -> Result<zip::ZipArchive<BufReader<File>>, String> 
 /// Selection exports (`projects` key) are explicitly rejected.
 fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> {
     let mut archive = open_zip(zip_path)?;
-    let mut text = String::new();
-    archive
+    let mut entry = archive
         .by_name("manifest.json")
-        .map_err(|_| invalid_data("read manifest", "archive has no manifest.json"))?
+        .map_err(|_| invalid_data("read manifest", "archive has no manifest.json"))?;
+    if entry.size() > MAX_MANIFEST_BYTES {
+        return Err(invalid_data(
+            "read manifest",
+            "manifest exceeds the 4 MiB size limit",
+        ));
+    }
+    // The header size can lie; cap the stream as well.
+    let mut text = String::new();
+    entry
+        .by_ref()
+        .take(MAX_MANIFEST_BYTES + 1)
         .read_to_string(&mut text)
         .map_err(|error| io_failure("read manifest entry", error))?;
+    if text.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(invalid_data(
+            "read manifest",
+            "manifest exceeds the 4 MiB size limit",
+        ));
+    }
+    drop(entry);
     let value: serde_json::Value =
         serde_json::from_str(&text).map_err(|error| invalid_data("parse manifest", error))?;
     if value.get("projects").is_some() {
@@ -1221,6 +1246,12 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
             "archive contains no photos",
         ));
     }
+    if manifest.photos.len() > MAX_ARCHIVE_PHOTOS {
+        return Err(invalid_data(
+            "validate manifest",
+            format!("archive holds more than {MAX_ARCHIVE_PHOTOS} photos"),
+        ));
+    }
     let mut seen = std::collections::HashSet::new();
     for photo in &manifest.photos {
         safe_photo_number_component(&photo.photo_number)?;
@@ -1245,25 +1276,29 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
     Ok(manifest)
 }
 
+/// An archive entry name plus its declared uncompressed size in bytes.
+type SizedEntry = (String, u64);
+
 /// Locates the `photos/<number>.jpg` and `originals/<number>.<ext>` entries
-/// for one photo. Entry names are only ever *matched*, never used as output
-/// paths — extraction always writes to caller-chosen destinations, so a
-/// crafted archive cannot escape the app-private directory (no Zip Slip).
+/// for one photo, returning their names and declared uncompressed sizes.
+/// Entry names are only ever *matched*, never used as output paths —
+/// extraction always writes to caller-chosen destinations, so a crafted
+/// archive cannot escape the app-private directory (no Zip Slip).
 fn find_archive_entries(
     archive: &mut zip::ZipArchive<BufReader<File>>,
     photo_number: &str,
-) -> Result<(String, Option<String>), String> {
+) -> Result<(SizedEntry, Option<SizedEntry>), String> {
     let rendered_name = format!("photos/{photo_number}.jpg");
     let original_prefix = format!("originals/{photo_number}.");
-    let mut rendered: Option<String> = None;
-    let mut original: Option<String> = None;
+    let mut rendered: Option<(String, u64)> = None;
+    let mut original: Option<(String, u64)> = None;
     for index in 0..archive.len() {
         let entry = archive
             .by_index(index)
             .map_err(|error| zip_failure("read archive entry", error))?;
         let name = entry.name();
         if name == rendered_name {
-            rendered = Some(rendered_name.clone());
+            rendered = Some((rendered_name.clone(), entry.size()));
         } else if let Some(remainder) = name.strip_prefix(&original_prefix) {
             // Require a plain extension with no nested path components.
             if !remainder.is_empty()
@@ -1271,7 +1306,7 @@ fn find_archive_entries(
                     .chars()
                     .all(|character| character.is_ascii_alphanumeric())
             {
-                original = Some(name.to_string());
+                original = Some((name.to_string(), entry.size()));
             }
         }
     }
@@ -1281,7 +1316,33 @@ fn find_archive_entries(
             format!("archive is missing the watermarked photo for {photo_number}"),
         )
     })?;
+    if rendered.1 > MAX_ENTRY_UNCOMPRESSED_BYTES
+        || original
+            .as_ref()
+            .is_some_and(|entry| entry.1 > MAX_ENTRY_UNCOMPRESSED_BYTES)
+    {
+        return Err(invalid_data(
+            "validate archive",
+            format!("an entry for {photo_number} exceeds the 128 MiB size limit"),
+        ));
+    }
     Ok((rendered, original))
+}
+
+/// Copies at most `cap` bytes from `reader` to `writer`; fails when the
+/// source holds more. Used together with the header-size precheck so a
+/// forged (lying) ZIP header cannot push the extraction past the limit.
+fn copy_capped(reader: &mut impl Read, writer: &mut impl Write, cap: u64) -> Result<u64, String> {
+    let mut limited = reader.take(cap + 1);
+    let copied =
+        std::io::copy(&mut limited, writer).map_err(|error| io_failure("copy ZIP entry", error))?;
+    if copied > cap {
+        return Err(invalid_data(
+            "extract entry",
+            "ZIP entry exceeds the 128 MiB extraction limit",
+        ));
+    }
+    Ok(copied)
 }
 
 /// Extracts one archive entry to `destination`, creating parent directories.
@@ -1293,14 +1354,19 @@ fn extract_entry_to(
     let mut entry = archive
         .by_name(entry_name)
         .map_err(|error| zip_failure(&format!("open archive entry {entry_name}"), error))?;
+    if entry.size() > MAX_ENTRY_UNCOMPRESSED_BYTES {
+        return Err(invalid_data(
+            "validate archive",
+            format!("entry {entry_name} exceeds the 128 MiB size limit"),
+        ));
+    }
     let output = Path::new(destination);
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| io_failure("create import directory", error))?;
     }
     let mut file =
         File::create(output).map_err(|error| io_failure("create imported file", error))?;
-    std::io::copy(&mut entry, &mut file)
-        .map_err(|error| io_failure("write imported file", error))?;
+    copy_capped(&mut entry, &mut file, MAX_ENTRY_UNCOMPRESSED_BYTES)?;
     Ok(())
 }
 
@@ -1309,13 +1375,22 @@ fn extract_entry_to(
 pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, String> {
     let manifest = read_project_manifest(&zip_path)?;
     let mut archive = open_zip(&zip_path)?;
+    let mut total_uncompressed: u64 = 0;
     let mut photos = Vec::with_capacity(manifest.photos.len());
     for photo in &manifest.photos {
-        let (_, original_entry) = find_archive_entries(&mut archive, &photo.photo_number)?;
+        let (rendered_entry, original_entry) =
+            find_archive_entries(&mut archive, &photo.photo_number)?;
         if manifest.includes_originals && original_entry.is_none() {
             return Err(invalid_data(
                 "validate archive",
                 format!("archive is missing the original for {}", photo.photo_number),
+            ));
+        }
+        total_uncompressed += rendered_entry.1 + original_entry.as_ref().map_or(0, |entry| entry.1);
+        if total_uncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES {
+            return Err(invalid_data(
+                "validate archive",
+                "archive exceeds the 8 GiB total extraction limit",
             ));
         }
         photos.push(ArchivePhotoPreview {
@@ -1350,9 +1425,12 @@ pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, S
     })
 }
 
-/// Extracts one photo (and its original when requested) from a backup ZIP
-/// into caller-chosen destination paths. The original's SHA-256 is verified
-/// against the manifest; a mismatch removes the extracted files and fails.
+/// Extracts one photo (and its original when requested) from a backup ZIP.
+///
+/// Everything lands in `<destination>.tmp` first; only after the original's
+/// SHA-256 verifies are the files atomically renamed into place. Any failure
+/// removes every temporary file, so a failed extraction never leaves
+/// half-written files behind for the caller to clean up.
 pub fn extract_archive_photo(
     request: ExtractArchivePhotoRequest,
 ) -> Result<ExtractedArchivePhoto, String> {
@@ -1370,29 +1448,53 @@ pub fn extract_archive_photo(
         })?;
     let mut archive = open_zip(&request.zip_path)?;
     let (rendered_entry, original_entry) = find_archive_entries(&mut archive, &photo.photo_number)?;
-    extract_entry_to(&mut archive, &rendered_entry, &request.rendered_destination)?;
-    let mut extracted_original: Option<String> = None;
-    if let Some(destination) = request.original_destination.as_deref() {
-        let Some(entry_name) = original_entry else {
-            let _ = fs::remove_file(&request.rendered_destination);
-            return Err(invalid_data(
-                "validate archive",
-                format!("archive is missing the original for {}", photo.photo_number),
-            ));
-        };
-        extract_entry_to(&mut archive, &entry_name, destination)?;
-        if !verify_file(destination.to_string(), photo.original_sha256.clone())? {
-            let _ = fs::remove_file(destination);
-            let _ = fs::remove_file(&request.rendered_destination);
-            return Err(invalid_data(
-                "verify original",
-                format!("SHA-256 mismatch for {}", photo.photo_number),
-            ));
+    let rendered_tmp = format!("{}.tmp", request.rendered_destination);
+    let original_tmp = request
+        .original_destination
+        .as_ref()
+        .map(|destination| format!("{destination}.tmp"));
+
+    let extraction = (|| -> Result<(), String> {
+        extract_entry_to(&mut archive, &rendered_entry.0, &rendered_tmp)?;
+        if let Some(tmp) = original_tmp.as_ref() {
+            let Some((entry_name, _)) = original_entry.as_ref() else {
+                return Err(invalid_data(
+                    "validate archive",
+                    format!("archive is missing the original for {}", photo.photo_number),
+                ));
+            };
+            extract_entry_to(&mut archive, entry_name, tmp)?;
+            if !verify_file(tmp.clone(), photo.original_sha256.clone())? {
+                return Err(invalid_data(
+                    "verify original",
+                    format!("SHA-256 mismatch for {}", photo.photo_number),
+                ));
+            }
         }
-        extracted_original = Some(destination.to_string());
+        Ok(())
+    })();
+    if let Err(error) = extraction {
+        let _ = fs::remove_file(&rendered_tmp);
+        if let Some(tmp) = original_tmp.as_ref() {
+            let _ = fs::remove_file(tmp);
+        }
+        return Err(error);
+    }
+
+    // Commit point: same-volume renames are atomic.
+    fs::rename(&rendered_tmp, &request.rendered_destination).map_err(|error| {
+        let _ = fs::remove_file(&rendered_tmp);
+        if let Some(tmp) = original_tmp.as_ref() {
+            let _ = fs::remove_file(tmp);
+        }
+        io_failure("finalize rendered photo", error)
+    })?;
+    if let (Some(tmp), Some(destination)) = (original_tmp, request.original_destination.as_ref()) {
+        fs::rename(&tmp, destination)
+            .map_err(|error| io_failure("finalize original photo", error))?;
     }
     Ok(ExtractedArchivePhoto {
-        rendered_path: request.rendered_destination,
-        original_path: extracted_original,
+        rendered_path: request.rendered_destination.clone(),
+        original_path: request.original_destination.clone(),
     })
 }
