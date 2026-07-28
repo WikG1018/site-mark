@@ -93,8 +93,8 @@ void main() {
           ' -> /rendered/${withoutOriginal.id}.jpg',
     ]);
 
-    // The pending marker was written before work and cleared after commit.
-    expect(pendingStore.writes, 2);
+    // planned -> ownsProject -> committing, then cleared after token release.
+    expect(pendingStore.writes, 3);
     expect(pendingStore.cleared, [result.projectId]);
     expect(committer.deletedTrees, ['/staging/${result.projectId}']);
   });
@@ -383,6 +383,18 @@ void main() {
       PendingImport.fromJson(owning.toJson()).phase,
       PendingImportPhase.ownsProject,
     );
+    const committing = PendingImport(
+      projectId: 'committing-id',
+      stagingDirectory: '/staging/committing-id',
+      stagedFiles: [],
+      finalFiles: [],
+      phase: PendingImportPhase.committing,
+      operationId: 'commit-operation',
+    );
+    expect(
+      PendingImport.fromJson(committing.toJson()).phase,
+      PendingImportPhase.committing,
+    );
   });
 
   test('non-owning startup marker preserves a raced project', () async {
@@ -547,6 +559,79 @@ void main() {
       expect(pendingStore.cleared, [result.projectId]);
       expect(pendingStore.pending, isEmpty);
       expect(committer.deleteTreeAttempts, 1);
+    },
+  );
+
+  test(
+    'committing marker survives token clear failure and startup finalizes without rollback',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.customStatement('''
+        CREATE TRIGGER fail_import_token_clear
+        BEFORE UPDATE OF restore_operation_id ON projects
+        WHEN NEW.restore_operation_id IS NULL
+        BEGIN
+          SELECT RAISE(ABORT, 'simulated token clear failure');
+        END;
+      ''');
+      final files = _RecordingFileStore();
+      final pendingStore = _FakePendingStore();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: files,
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.importProject(zipPath: '/backups/p.zip', projectName: '待完成恢复'),
+        throwsA(anything),
+      );
+
+      expect(await database.getProjects(), isEmpty);
+      expect(await database.getAllProjectsInternal(), hasLength(1));
+      expect(pendingStore.pending.single.phase, PendingImportPhase.committing);
+      expect(files.attemptedDeletes, isEmpty);
+
+      await database.customStatement('DROP TRIGGER fail_import_token_clear');
+      await service.cleanupInterruptedImports();
+
+      expect((await database.getProjects()).single.name, '待完成恢复');
+      expect(pendingStore.pending, isEmpty);
+      expect(files.attemptedDeletes, isEmpty);
+    },
+  );
+
+  test(
+    'committing marker retries clear after token is already visible',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final files = _RecordingFileStore();
+      final pendingStore = _FakePendingStore()..throwOnClear = true;
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: files,
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.importProject(zipPath: '/backups/p.zip', projectName: '已恢复项目'),
+        throwsA(anything),
+      );
+
+      expect((await database.getProjects()).single.name, '已恢复项目');
+      expect(pendingStore.pending.single.phase, PendingImportPhase.committing);
+      expect(files.attemptedDeletes, isEmpty);
+
+      pendingStore.throwOnClear = false;
+      await service.cleanupInterruptedImports();
+
+      expect((await database.getProjects()).single.name, '已恢复项目');
+      expect(pendingStore.pending, isEmpty);
+      expect(files.attemptedDeletes, isEmpty);
     },
   );
 
@@ -765,6 +850,7 @@ class _FakePendingStore implements ImportPendingStore {
   final pending = <PendingImport>[];
   final cleared = <String>[];
   var writes = 0;
+  bool throwOnClear = false;
 
   @override
   Future<void> writePending(PendingImport pending) async {
@@ -778,6 +864,7 @@ class _FakePendingStore implements ImportPendingStore {
 
   @override
   Future<void> clearPending(String projectId) async {
+    if (throwOnClear) throw StateError('marker clear failed');
     cleared.add(projectId);
     pending.removeWhere((entry) => entry.projectId == projectId);
   }

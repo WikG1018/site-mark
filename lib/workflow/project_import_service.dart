@@ -52,7 +52,7 @@ abstract interface class ProjectArchiveImporter {
 /// A not-yet-committed import recorded on disk, so an import interrupted by
 /// a process kill can be cleaned up on the next launch. The marker lists
 /// every file the import may have created, staged and final alike.
-enum PendingImportPhase { planned, ownsProject }
+enum PendingImportPhase { planned, ownsProject, committing }
 
 class PendingImport {
   const PendingImport({
@@ -93,7 +93,9 @@ class PendingImport {
       stagingDirectory: json['stagingDirectory'] as String? ?? '',
       stagedFiles: strings('stagedFiles'),
       finalFiles: strings('finalFiles'),
-      phase: json['phase'] == PendingImportPhase.ownsProject.name
+      phase: json['phase'] == PendingImportPhase.committing.name
+          ? PendingImportPhase.committing
+          : json['phase'] == PendingImportPhase.ownsProject.name
           ? PendingImportPhase.ownsProject
           : PendingImportPhase.planned,
       operationId: json['operationId'] as String?,
@@ -570,24 +572,21 @@ class ProjectImportService implements ProjectArchiveImporter {
       }
     }
 
-    await pendingStore.clearPending(targetProjectId);
-    if (!retainRestoreOwnership) {
-      try {
-        await database.clearProjectRestoreOwnership(
-          projectId: targetProjectId,
-          operationId: operationId,
-        );
-      } catch (_) {
-        // The durable marker is already gone. A leftover internal ownership
-        // token cannot trigger deletion by itself and is safe to clear later.
-      }
-    }
     try {
       await committer.deleteTree(stagingDir);
     } catch (_) {
-      // The import is already committed and its crash-recovery marker has
-      // been cleared. A leftover empty staging tree is harmless and must not
-      // turn a successful restore into a user-visible failure.
+      // Final files and rows are committed. A leftover empty staging tree is
+      // harmless and must not change the durable commit protocol below.
+    }
+    if (retainRestoreOwnership) {
+      // The bundle marker was durable before this child started and the
+      // database token remains owned by that bundle.
+      await pendingStore.clearPending(targetProjectId);
+    } else {
+      final committing = pending.withPhase(PendingImportPhase.committing);
+      await pendingStore.writePending(committing);
+      pending = committing;
+      await _finalizeCommit(pending);
     }
     return ProjectImportResult(
       projectId: targetProjectId,
@@ -609,6 +608,14 @@ class ProjectImportService implements ProjectArchiveImporter {
   Future<void> cleanupInterruptedImports() async {
     final pendings = await pendingStore.listPending();
     for (final pending in pendings) {
+      if (pending.phase == PendingImportPhase.committing) {
+        try {
+          await _finalizeCommit(pending);
+        } catch (_) {
+          // Keep the committing marker and retry finalization next launch.
+        }
+        continue;
+      }
       final fullyCleaned = await _rollback(pending);
       if (fullyCleaned) {
         try {
@@ -618,6 +625,20 @@ class ProjectImportService implements ProjectArchiveImporter {
         }
       }
     }
+  }
+
+  Future<void> _finalizeCommit(PendingImport pending) async {
+    final operationId = pending.operationId;
+    final project = await database.projectById(pending.projectId);
+    if (operationId != null && operationId.isNotEmpty) {
+      await database.clearProjectRestoreOwnership(
+        projectId: pending.projectId,
+        operationId: operationId,
+      );
+    } else if (project?.restoreOperationId != null) {
+      throw StateError('Committing marker has no restore operation ID');
+    }
+    await pendingStore.clearPending(pending.projectId);
   }
 
   /// Best-effort rollback of a [PendingImport]: deletes every known file,
