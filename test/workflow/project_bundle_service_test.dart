@@ -12,6 +12,23 @@ import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 
 void main() {
+  test(
+    'production paths create export staging but only describe restore staging',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'sitemark-bundle-paths-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final paths = AppProjectBundlePaths(documentsDirectory: () async => root);
+
+      final restorePath = await paths.restoreStagingDirectory('restore-id');
+      expect(await Directory(restorePath).exists(), isFalse);
+
+      final exportPath = await paths.exportStagingDirectory('export-id');
+      expect(await Directory(exportPath).exists(), isTrue);
+    },
+  );
+
   group('ProjectBackupService', () {
     test('rejects empty and duplicate project selections', () async {
       final service = ProjectBackupService(
@@ -137,11 +154,16 @@ void main() {
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
         addTearDown(database.close);
-        final pending = _FakeBundlePendingStore();
+        final events = <String>[];
+        final pending = _FakeBundlePendingStore(
+          onWrite: () => events.add('marker'),
+        );
+        final files = _FakeBundleFiles(onEnsure: () => events.add('ensure'));
         var markerSeenBeforeExtract = false;
         final bundles = _FakeBundlePipeline(
           preview: _bundlePreview(),
           onExtract: () {
+            events.add('extract');
             markerSeenBeforeExtract = pending.items.isNotEmpty;
           },
         );
@@ -151,6 +173,7 @@ void main() {
           bundles: bundles,
           importer: importer,
           pending: pending,
+          files: files,
         );
 
         final prepared = await service.prepareRestore('/backups/bundle.zip');
@@ -169,6 +192,7 @@ void main() {
         expect(pending.writes, 1);
         expect(pending.items.single.plannedProjectIds, isEmpty);
         expect(pending.items.single.operationId, prepared.bundleId);
+        expect(events, ['marker', 'ensure', 'extract', 'extract']);
       },
     );
 
@@ -382,10 +406,12 @@ void main() {
     test('restore progress is monotonic across projects', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
+      final pending = _FakeBundlePendingStore();
       final service = _bundleService(
         database: database,
         bundles: _FakeBundlePipeline(preview: _bundlePreview()),
         importer: _FakeProjectImporter(),
+        pending: pending,
       );
       final prepared = await service.prepareRestore('/backups/bundle.zip');
       final progress = <String>[];
@@ -397,6 +423,8 @@ void main() {
       );
 
       expect(progress, ['1/2', '2/2']);
+      expect(pending.writtenPhases.last, PendingBundleRestorePhase.committing);
+      expect(await database.getProjects(), hasLength(2));
     });
 
     test(
@@ -491,6 +519,100 @@ void main() {
       },
     );
 
+    test(
+      'committing marker retries token clear without rolling projects back',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.createProject(
+          id: 'committing-project',
+          name: '提交中项目',
+          restoreOperationId: 'commit-operation',
+        );
+        await database.customStatement('''
+          CREATE TRIGGER fail_restore_token_clear
+          BEFORE UPDATE OF restore_operation_id ON projects
+          WHEN NEW.restore_operation_id IS NULL
+          BEGIN
+            SELECT RAISE(ABORT, 'simulated token clear failure');
+          END;
+        ''');
+        final pending = _FakeBundlePendingStore()
+          ..items.add(
+            const PendingBundleRestore(
+              bundleId: 'commit-bundle',
+              stagingDirectory: '/staging/commit-bundle',
+              plannedProjectIds: ['committing-project'],
+              operationId: 'commit-operation',
+              phase: PendingBundleRestorePhase.committing,
+            ),
+          );
+        final rollback = _FakeProjectRollback();
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(),
+          importer: _FakeProjectImporter(),
+          pending: pending,
+          rollback: rollback,
+        );
+
+        await service.cleanupInterruptedBundleRestores();
+
+        expect(pending.items, hasLength(1));
+        expect(await database.getProjects(), isEmpty);
+        expect(rollback.projectIds, isEmpty);
+
+        await database.customStatement('DROP TRIGGER fail_restore_token_clear');
+        await service.cleanupInterruptedBundleRestores();
+
+        expect((await database.getProjects()).map((project) => project.id), [
+          'committing-project',
+        ]);
+        expect(pending.items, isEmpty);
+        expect(rollback.projectIds, isEmpty);
+      },
+    );
+
+    test(
+      'committing marker retries marker clear after tokens are already visible',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.createProject(id: 'visible-project', name: '已提交项目');
+        final pending = _FakeBundlePendingStore(throwOnClear: true)
+          ..items.add(
+            const PendingBundleRestore(
+              bundleId: 'commit-bundle',
+              stagingDirectory: '/staging/commit-bundle',
+              plannedProjectIds: ['visible-project'],
+              operationId: 'commit-operation',
+              phase: PendingBundleRestorePhase.committing,
+            ),
+          );
+        final rollback = _FakeProjectRollback();
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(),
+          importer: _FakeProjectImporter(),
+          pending: pending,
+          rollback: rollback,
+        );
+
+        await service.cleanupInterruptedBundleRestores();
+
+        expect(await database.projectById('visible-project'), isNotNull);
+        expect(pending.items, hasLength(1));
+        expect(rollback.projectIds, isEmpty);
+
+        pending.throwOnClear = false;
+        await service.cleanupInterruptedBundleRestores();
+
+        expect(await database.projectById('visible-project'), isNotNull);
+        expect(pending.items, isEmpty);
+        expect(rollback.projectIds, isEmpty);
+      },
+    );
+
     test('deletion handoff refuses a mismatching restore token', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -568,6 +690,7 @@ void main() {
           stagingDirectory: '/staging/preparing-bundle',
           plannedProjectIds: [],
           operationId: 'preparing-bundle',
+          phase: PendingBundleRestorePhase.preparing,
         );
 
         await store.write(marker);
@@ -575,8 +698,18 @@ void main() {
         final listed = await store.list();
         expect(listed, hasLength(1));
         expect(listed.single.plannedProjectIds, isEmpty);
+        expect(listed.single.phase, PendingBundleRestorePhase.preparing);
       },
     );
+
+    test('legacy bundle markers default to rollback-safe restoring phase', () {
+      final legacy = PendingBundleRestore.fromJson(const {
+        'bundleId': 'legacy',
+        'stagingDirectory': '/staging/legacy',
+        'plannedProjectIds': <String>[],
+      });
+      expect(legacy.phase, PendingBundleRestorePhase.restoring);
+    });
 
     test(
       'rollback failure keeps the bundle marker for startup retry',
@@ -645,7 +778,7 @@ void main() {
     });
 
     test(
-      'preparation marker write failure cleans staging before extraction',
+      'preparation marker write failure creates no staging directory',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
         addTearDown(database.close);
@@ -667,9 +800,40 @@ void main() {
 
         expect(importer.imports, isEmpty);
         expect(bundles.extractRequests, isEmpty);
-        expect(files.deletedTrees, ['/imports/bundle-restore-bundle-prepare']);
+        expect(files.ensureDirectories, isEmpty);
+        expect(files.deletedTrees, isEmpty);
       },
     );
+
+    test('create-directory failure retains preparation marker', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final pending = _FakeBundlePendingStore();
+      final files = _FakeBundleFiles(failEnsure: true);
+      final bundles = _FakeBundlePipeline(preview: _bundlePreview());
+      final service = _bundleService(
+        database: database,
+        bundles: bundles,
+        importer: _FakeProjectImporter(),
+        pending: pending,
+        files: files,
+      );
+
+      await expectLater(
+        service.prepareRestore('/backups/bundle.zip'),
+        throwsA(isA<ProjectBundleRestoreException>()),
+      );
+
+      expect(files.ensureDirectories, [
+        '/imports/bundle-restore-bundle-prepare',
+      ]);
+      expect(bundles.extractRequests, isEmpty);
+      expect(pending.items, hasLength(1));
+      expect(pending.items.single.phase, PendingBundleRestorePhase.preparing);
+
+      await service.cleanupInterruptedBundleRestores();
+      expect(pending.items, isEmpty);
+    });
 
     test('concurrent submit of one prepared restore is rejected', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -979,10 +1143,20 @@ class _FakeBundlePaths implements ProjectBundlePaths {
 }
 
 class _FakeBundleFiles implements ProjectBundleFileSystem {
-  _FakeBundleFiles({this.failPath});
+  _FakeBundleFiles({this.failPath, this.onEnsure, this.failEnsure = false});
 
   String? failPath;
+  final void Function()? onEnsure;
+  final bool failEnsure;
+  final ensureDirectories = <String>[];
   final deletedTrees = <String>[];
+
+  @override
+  Future<void> ensureDirectory(String path) async {
+    ensureDirectories.add(path);
+    onEnsure?.call();
+    if (failEnsure) throw StateError('ensure failed');
+  }
 
   @override
   Future<void> deleteTree(String path) async {
@@ -995,11 +1169,14 @@ class _FakeBundlePendingStore implements BundleRestorePendingStore {
   _FakeBundlePendingStore({
     this.throwOnWrite = false,
     this.throwOnClear = false,
+    this.onWrite,
   });
 
   final bool throwOnWrite;
   bool throwOnClear;
+  final void Function()? onWrite;
   final items = <PendingBundleRestore>[];
+  final writtenPhases = <PendingBundleRestorePhase>[];
   var writes = 0;
 
   @override
@@ -1014,7 +1191,9 @@ class _FakeBundlePendingStore implements BundleRestorePendingStore {
   @override
   Future<void> write(PendingBundleRestore pending) async {
     if (throwOnWrite) throw StateError('marker write failed');
+    onWrite?.call();
     writes++;
+    writtenPhases.add(pending.phase);
     items.removeWhere((item) => item.bundleId == pending.bundleId);
     items.add(pending);
   }

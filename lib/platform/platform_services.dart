@@ -420,13 +420,15 @@ class AppProjectBundlePaths implements ProjectBundlePaths {
   }
 
   @override
-  Future<String> exportStagingDirectory(String bundleId) {
-    return _stagingDirectory('bundle-export', bundleId);
+  Future<String> exportStagingDirectory(String bundleId) async {
+    final path = await _stagingPath('bundle-export', bundleId);
+    await Directory(path).create(recursive: true);
+    return path;
   }
 
   @override
   Future<String> restoreStagingDirectory(String bundleId) {
-    return _stagingDirectory('bundle-restore', bundleId);
+    return _stagingPath('bundle-restore', bundleId);
   }
 
   @override
@@ -444,23 +446,26 @@ class AppProjectBundlePaths implements ProjectBundlePaths {
     return '${projects.path}${Platform.pathSeparator}$safeId.zip';
   }
 
-  Future<String> _stagingDirectory(String prefix, String bundleId) async {
+  Future<String> _stagingPath(String prefix, String bundleId) async {
     final safeId = bundleId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     final root = await _documentsDirectory();
-    final directory = Directory(
-      '${root.path}${Platform.pathSeparator}imports'
-      '${Platform.pathSeparator}$prefix-$safeId',
-    );
-    await directory.create(recursive: true);
-    return directory.path;
+    return ('${root.path}${Platform.pathSeparator}imports'
+        '${Platform.pathSeparator}$prefix-$safeId');
   }
 }
 
 abstract interface class ProjectBundleFileSystem {
+  Future<void> ensureDirectory(String path);
+
   Future<void> deleteTree(String path);
 }
 
 class DartProjectBundleFileSystem implements ProjectBundleFileSystem {
+  @override
+  Future<void> ensureDirectory(String path) {
+    return Directory(path).create(recursive: true);
+  }
+
   @override
   Future<void> deleteTree(String path) async {
     final directory = Directory(path);

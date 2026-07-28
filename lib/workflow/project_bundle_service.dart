@@ -165,6 +165,8 @@ class ProjectBundleRestoreException implements Exception {
   String toString() => message;
 }
 
+enum PendingBundleRestorePhase { preparing, restoring, committing }
+
 class PendingBundleRestore {
   const PendingBundleRestore({
     required this.bundleId,
@@ -173,6 +175,7 @@ class PendingBundleRestore {
     this.ownedProjectIds = const [],
     this.operationId,
     this.revision = 0,
+    this.phase = PendingBundleRestorePhase.restoring,
   });
 
   final String bundleId;
@@ -181,6 +184,7 @@ class PendingBundleRestore {
   final List<String> ownedProjectIds;
   final String? operationId;
   final int revision;
+  final PendingBundleRestorePhase phase;
 
   Map<String, dynamic> toJson() => {
     'bundleId': bundleId,
@@ -189,6 +193,7 @@ class PendingBundleRestore {
     'ownedProjectIds': ownedProjectIds,
     'operationId': operationId,
     'revision': revision,
+    'phase': phase.name,
   };
 
   factory PendingBundleRestore.fromJson(Map<String, dynamic> json) {
@@ -203,6 +208,11 @@ class PendingBundleRestore {
           .toList(growable: false),
       operationId: json['operationId'] as String?,
       revision: json['revision'] as int? ?? 0,
+      phase: json['phase'] == PendingBundleRestorePhase.preparing.name
+          ? PendingBundleRestorePhase.preparing
+          : json['phase'] == PendingBundleRestorePhase.committing.name
+          ? PendingBundleRestorePhase.committing
+          : PendingBundleRestorePhase.restoring,
     );
   }
 
@@ -215,6 +225,19 @@ class PendingBundleRestore {
       ownedProjectIds: [...ownedProjectIds, projectId],
       operationId: operationId,
       revision: revision + 1,
+      phase: phase,
+    );
+  }
+
+  PendingBundleRestore withPhase(PendingBundleRestorePhase value) {
+    return PendingBundleRestore(
+      bundleId: bundleId,
+      stagingDirectory: stagingDirectory,
+      plannedProjectIds: plannedProjectIds,
+      ownedProjectIds: ownedProjectIds,
+      operationId: operationId,
+      revision: revision + 1,
+      phase: value,
     );
   }
 }
@@ -405,11 +428,26 @@ class ProjectBundleService {
       stagingDirectory: stagingDirectory,
       plannedProjectIds: const [],
       operationId: bundleId,
+      phase: PendingBundleRestorePhase.preparing,
     );
     try {
       await pendingStore.write(preparationPending);
     } catch (error) {
-      await _cleanupPreparedBundle(preparationPending);
+      try {
+        await pendingStore.clear(preparationPending.bundleId);
+      } catch (_) {
+        // A partially committed marker is safe and points to no staging tree.
+      }
+      throw ProjectBundleRestoreException(
+        'The project bundle could not be prepared',
+        cause: error,
+      );
+    }
+    try {
+      await files.ensureDirectory(stagingDirectory);
+    } catch (error) {
+      // The marker stays durable. Startup cleanup safely handles a missing or
+      // partially created directory.
       throw ProjectBundleRestoreException(
         'The project bundle could not be prepared',
         cause: error,
@@ -515,6 +553,7 @@ class ProjectBundleService {
       ],
       operationId: prepared.bundleId!,
       revision: prepared.bundleMarkerRevision + 1,
+      phase: PendingBundleRestorePhase.restoring,
     );
     try {
       await pendingStore.write(pending);
@@ -558,24 +597,27 @@ class ProjectBundleService {
         completedBeforeItem += itemPhotos;
       }
       await files.deleteTree(pending.stagingDirectory);
-      await pendingStore.clear(pending.bundleId);
-      final operationId = pending.operationId;
-      if (operationId != null) {
-        try {
-          await database.clearProjectsRestoreOwnership(
-            projectIds: pending.plannedProjectIds,
-            operationId: operationId,
-          );
-        } catch (_) {
-          // Marker removal is the durable commit point. Leftover tokens are
-          // inert without that marker and can be cleared on a later pass.
-        }
-      }
+      final committing = pending.withPhase(
+        PendingBundleRestorePhase.committing,
+      );
+      await pendingStore.write(committing);
+      pending = committing;
+      await _finalizeCommit(pending);
       return results;
     } catch (error) {
-      await _rollbackPending(pending);
+      if (pending.phase == PendingBundleRestorePhase.committing) {
+        try {
+          await _finalizeCommit(pending);
+        } catch (_) {
+          // Keep the committing marker. Startup recovery finishes visibility.
+        }
+      } else {
+        await _rollbackPending(pending);
+      }
       throw ProjectBundleRestoreException(
-        'Project bundle restore failed; all planned projects were rolled back or queued for cleanup',
+        pending.phase == PendingBundleRestorePhase.committing
+            ? 'Project bundle restore completed; final visibility is queued for startup recovery'
+            : 'Project bundle restore failed; all planned projects were rolled back or queued for cleanup',
         cause: error,
       );
     }
@@ -595,8 +637,34 @@ class ProjectBundleService {
   Future<void> cleanupInterruptedBundleRestores() async {
     final pendings = await pendingStore.list();
     for (final pending in pendings) {
-      await _rollbackPending(pending);
+      if (pending.phase == PendingBundleRestorePhase.committing) {
+        try {
+          await _finalizeCommit(pending);
+        } catch (_) {
+          // Keep the marker and retry on the next startup.
+        }
+      } else {
+        await _rollbackPending(pending);
+      }
     }
+  }
+
+  Future<void> _finalizeCommit(PendingBundleRestore pending) async {
+    final operationId = pending.operationId;
+    if (operationId != null && operationId.isNotEmpty) {
+      await database.clearProjectsRestoreOwnership(
+        projectIds: pending.plannedProjectIds,
+        operationId: operationId,
+      );
+    } else {
+      for (final projectId in pending.plannedProjectIds) {
+        final project = await database.projectById(projectId);
+        if (project?.restoreOperationId != null) {
+          throw StateError('Committing marker has no restore operation ID');
+        }
+      }
+    }
+    await pendingStore.clear(pending.bundleId);
   }
 
   Future<bool> _cleanupPreparedBundle(PendingBundleRestore pending) async {
