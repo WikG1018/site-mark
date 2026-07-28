@@ -236,6 +236,66 @@ void main() {
     expect(find.text('不是有效的 SiteMark 备份'), findsOneWidget);
     expect(find.textContaining('raw internal'), findsNothing);
   });
+
+  testWidgets('picker failures show friendly copy and re-enable restore', (
+    tester,
+  ) async {
+    var pickerCalls = 0;
+    await pumpScreen(
+      tester,
+      dependencies: ProjectRestoreFlowDependencies(
+        pickZip: () async {
+          pickerCalls++;
+          throw StateError('raw picker platform failure');
+        },
+        prepareRestore: (_) async => _prepared(),
+        restorePrepared:
+            ({required prepared, required projectNames, onProgress}) async =>
+                const [],
+        discardPrepared: (_) async {},
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('restore-projects')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('choose-restore-zip')));
+    await tester.pumpAndSettle();
+
+    expect(pickerCalls, 1);
+    expect(find.text('无法打开备份文件选择器，请重试'), findsOneWidget);
+    expect(find.textContaining('raw picker'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('restore-projects')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('choose-restore-zip')), findsOneWidget);
+    expect(pickerCalls, 1);
+  });
+
+  testWidgets('picker cancellation stays silent and re-enables restore', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      dependencies: ProjectRestoreFlowDependencies(
+        pickZip: () async => null,
+        prepareRestore: (_) async => _prepared(),
+        restorePrepared:
+            ({required prepared, required projectNames, onProgress}) async =>
+                const [],
+        discardPrepared: (_) async {},
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('restore-projects')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('choose-restore-zip')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsNothing);
+
+    await tester.tap(find.byKey(const Key('restore-projects')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('choose-restore-zip')), findsOneWidget);
+  });
 }
 
 PreparedProjectRestore _prepared() {

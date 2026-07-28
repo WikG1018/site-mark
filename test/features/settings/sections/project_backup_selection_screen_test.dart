@@ -95,13 +95,14 @@ void main() {
     List<String>? exportedIds;
     bool? includedOriginals;
     String? sharedPath;
+    void Function(int completed, int total)? reportProgress;
     await pumpScreen(
       tester,
       exportProjects:
           ({required projectIds, required includeOriginals, onProgress}) {
             exportedIds = projectIds;
             includedOriginals = includeOriginals;
-            onProgress?.call(1, 4);
+            reportProgress = onProgress;
             return exportCompleter.future;
           },
       shareFile: (path) async => sharedPath = path,
@@ -116,9 +117,13 @@ void main() {
 
     await tester.tap(find.byKey(const Key('include-private-originals')));
     await tester.pump();
-    expect(find.text('正在备份 1/4'), findsOneWidget);
+    expect(find.text('正在备份 0/4'), findsOneWidget);
     expect(exportedIds, hasLength(3));
     expect(includedOriginals, isTrue);
+
+    reportProgress!(1, 4);
+    await tester.pump();
+    expect(find.text('正在备份 1/4'), findsOneWidget);
 
     exportCompleter.complete(
       const ProjectBackupResult(

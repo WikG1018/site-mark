@@ -29,13 +29,16 @@ class _BackupRestoreSectionScreenState
   Future<void> _restore() async {
     if (_restoring) return;
     setState(() => _restoring = true);
-    await runProjectRestoreFlow(
-      context,
-      ref,
-      dependencies: widget.restoreDependencies,
-      lifetime: _restoreLifetime,
-    );
-    if (mounted) setState(() => _restoring = false);
+    try {
+      await runProjectRestoreFlow(
+        context,
+        ref,
+        dependencies: widget.restoreDependencies,
+        lifetime: _restoreLifetime,
+      );
+    } finally {
+      if (mounted) setState(() => _restoring = false);
+    }
   }
 
   @override

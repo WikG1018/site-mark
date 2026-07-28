@@ -92,7 +92,15 @@ Future<void> runProjectRestoreFlow(
       discardPrepared: service.discardPrepared,
     );
   }
-  final zipPath = await deps.pickZip();
+  String? zipPath;
+  try {
+    zipPath = await deps.pickZip();
+  } catch (_) {
+    if (context.mounted) {
+      _showMessage(context, strings.restorePickerFailed);
+    }
+    return;
+  }
   if (zipPath == null || !context.mounted) return;
 
   PreparedProjectRestore? prepared;

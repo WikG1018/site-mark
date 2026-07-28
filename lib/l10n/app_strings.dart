@@ -345,6 +345,9 @@ class AppStrings {
   String get backupFailedFriendly =>
       _english ? 'Could not create the backup' : '无法生成备份';
   String get chooseRestoreZip => _english ? 'Choose backup ZIP' : '选择备份 ZIP';
+  String get restorePickerFailed => _english
+      ? 'Could not open the backup file picker. Please try again.'
+      : '无法打开备份文件选择器，请重试';
   String get restorePreview => _english ? 'Restore preview' : '恢复预览';
   String get restoreName => _english ? 'Name after restore' : '恢复后的项目名称';
   String get bundleRestoreRollback => _english

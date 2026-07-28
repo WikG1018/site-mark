@@ -68,7 +68,8 @@ class _ProjectBackupSelectionScreenState
     if (includeOriginals == null || !mounted) return;
 
     setState(() => _submitting = true);
-    final progress = ValueNotifier<(int, int)>((0, _selectedIds.length));
+    final initialTotal = _selectedIds.length == 1 ? 1 : _selectedIds.length + 1;
+    final progress = ValueNotifier<(int, int)>((0, initialTotal));
     showDialog<void>(
       context: context,
       barrierDismissible: false,
