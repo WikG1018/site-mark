@@ -18,10 +18,10 @@ Future<void> runProjectImportFlow(BuildContext context, WidgetRef ref) async {
   final messenger = ScaffoldMessenger.of(context);
   final service = ref.read(projectImportServiceProvider);
 
-  final picked = await FilePicker.platform.pickFiles(
+  final picked = await FilePicker.pickFiles(
+    dialogTitle: strings.importDialogTitle,
     type: FileType.custom,
     allowedExtensions: const ['zip'],
-    withData: false,
   );
   final zipPath = picked?.files.single.path;
   if (zipPath == null || !context.mounted) return;
