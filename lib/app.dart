@@ -37,6 +37,7 @@ import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
+import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -120,6 +121,22 @@ final projectExportPathsProvider = Provider<ProjectExportPaths>(
   (ref) => AppProjectExportPaths(),
 );
 
+final originalPhotoPathsProvider = Provider<OriginalPhotoPaths>(
+  (ref) => AppOriginalPhotoPaths(),
+);
+
+final importStagingPathsProvider = Provider<ImportStagingPaths>(
+  (ref) => AppImportStagingPaths(),
+);
+
+final importPendingStoreProvider = Provider<ImportPendingStore>(
+  (ref) => AppImportPendingStore(),
+);
+
+final importFileCommitterProvider = Provider<ImportFileCommitter>(
+  (ref) => DartImportFileCommitter(),
+);
+
 final selectionExportPathsProvider = Provider<SelectionExportPaths>(
   (ref) => AppSelectionExportPaths(),
 );
@@ -197,6 +214,8 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
         .reconcilePendingLocations(),
     reconcileQueue: () =>
         ref.read(captureBackgroundSchedulerProvider).reconcilePending(),
+    cleanupInterruptedImports: () =>
+        ref.read(projectImportServiceProvider).cleanupInterruptedImports(),
   );
 });
 
@@ -221,6 +240,19 @@ final projectExportServiceProvider = Provider<ProjectExportService>((ref) {
     capturePaths: ref.watch(captureOutputPathsProvider),
     exportPaths: ref.watch(projectExportPathsProvider),
     selectionExportPaths: ref.watch(selectionExportPathsProvider),
+  );
+});
+
+final projectImportServiceProvider = Provider<ProjectImportService>((ref) {
+  return ProjectImportService(
+    database: ref.watch(databaseProvider),
+    images: ref.watch(imagePipelineProvider),
+    capturePaths: ref.watch(captureOutputPathsProvider),
+    originalPaths: ref.watch(originalPhotoPathsProvider),
+    fileStore: ref.watch(privateFileStoreProvider),
+    stagingPaths: ref.watch(importStagingPathsProvider),
+    pendingStore: ref.watch(importPendingStoreProvider),
+    committer: ref.watch(importFileCommitterProvider),
   );
 });
 

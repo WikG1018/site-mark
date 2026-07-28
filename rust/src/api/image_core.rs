@@ -61,6 +61,26 @@ pub struct ExportPhotoRecord {
     pub address: Option<String>,
     pub coordinates: Option<String>,
     pub notes: Option<String>,
+    // Backup-restore fields (manifest schema v2). Optional so v1 archives
+    // remain readable by the importer.
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
+    #[serde(default)]
+    pub accuracy_meters: Option<f64>,
+    #[serde(default)]
+    pub watermark_locale_code: Option<String>,
+}
+
+/// Project-level watermark template persisted in v2 manifests so a restored
+/// project keeps its original look instead of falling back to defaults.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportWatermarkSettings {
+    pub position: String,
+    pub opacity: f64,
+    pub accent_color_argb: u32,
+    pub font_scale: f64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -69,6 +89,7 @@ pub struct ExportProjectRequest {
     pub project_name: String,
     pub output_zip_path: String,
     pub include_originals: bool,
+    pub watermark: ExportWatermarkSettings,
     pub photos: Vec<ExportPhotoRecord>,
 }
 
@@ -100,6 +121,7 @@ struct ExportManifest<'a> {
     project_id: &'a str,
     project_name: &'a str,
     includes_originals: bool,
+    watermark: &'a ExportWatermarkSettings,
     photos: &'a [ExportPhotoRecord],
 }
 
@@ -288,12 +310,16 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         .write_all(&csv_bytes)
         .map_err(|error| io_failure("write CSV entry", error))?;
 
+    // Single-project exports are the restorable backup format: schema v2
+    // records the project watermark template and per-photo restore fields.
+    // Selection archives intentionally stay at v1 and are not restorable.
     let manifest = serde_json::to_vec_pretty(&ExportManifest {
-        schema_version: 1,
+        schema_version: 2,
         app: "SiteMark",
         project_id: &request.project_id,
         project_name: &request.project_name,
         includes_originals: request.include_originals,
+        watermark: &request.watermark,
         photos: &request.photos,
     })
     .map_err(|error| invalid_data("serialize manifest", error))?;
@@ -1050,4 +1076,425 @@ mod archive_tests {
         // ZWNBSP / BOM (U+FEFF)
         assert!(safe_photo_number_component("A\u{FEFF}B").is_err());
     }
+}
+
+// ---------------------------------------------------------------------------
+// Backup restore (import)
+// ---------------------------------------------------------------------------
+
+/// One restorable photo entry from a project backup manifest.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ArchivePhotoPreview {
+    pub photo_number: String,
+    pub has_original: bool,
+    pub original_sha256: String,
+    pub captured_at: String,
+    pub work_location: String,
+    pub work_content: String,
+    pub photographer: String,
+    pub address: Option<String>,
+    pub notes: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub accuracy_meters: Option<f64>,
+    pub watermark_locale_code: Option<String>,
+}
+
+/// Watermark template recovered from a v2 manifest.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ArchiveWatermarkSettings {
+    pub position: String,
+    pub opacity: f64,
+    pub accent_color_argb: u32,
+    pub font_scale: f64,
+}
+
+/// Validated content of a restorable single-project backup ZIP.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProjectArchivePreview {
+    pub schema_version: u32,
+    pub project_name: String,
+    pub includes_originals: bool,
+    pub watermark: Option<ArchiveWatermarkSettings>,
+    pub photos: Vec<ArchivePhotoPreview>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExtractArchivePhotoRequest {
+    pub zip_path: String,
+    pub photo_number: String,
+    pub rendered_destination: String,
+    pub original_destination: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExtractedArchivePhoto {
+    pub rendered_path: String,
+    pub original_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ManifestWatermark {
+    position: String,
+    opacity: f64,
+    accent_color_argb: u32,
+    font_scale: f64,
+}
+
+/// Tolerant view of one manifest photo entry. v1 fields that the restore
+/// flow does not need (`watermarked_path`, `original_path`, `coordinates`)
+/// are ignored; v2 restore fields default to `None` for v1 archives.
+#[derive(Deserialize)]
+struct ManifestPhoto {
+    photo_number: String,
+    original_sha256: String,
+    captured_at: String,
+    work_location: String,
+    work_content: String,
+    photographer: String,
+    #[serde(default)]
+    address: Option<String>,
+    #[serde(default)]
+    notes: Option<String>,
+    #[serde(default)]
+    latitude: Option<f64>,
+    #[serde(default)]
+    longitude: Option<f64>,
+    #[serde(default)]
+    accuracy_meters: Option<f64>,
+    #[serde(default)]
+    watermark_locale_code: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ProjectManifestFile {
+    schema_version: u32,
+    app: String,
+    project_name: String,
+    includes_originals: bool,
+    #[serde(default)]
+    watermark: Option<ManifestWatermark>,
+    photos: Vec<ManifestPhoto>,
+}
+
+/// Backup-restore extraction limits. Generous enough for real camera
+/// originals (a phone JPEG rarely exceeds 30 MiB) while still stopping a
+/// decompression bomb long before it can fill the device storage.
+const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_ARCHIVE_PHOTOS: usize = 2000;
+const MAX_ENTRY_UNCOMPRESSED_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_TOTAL_UNCOMPRESSED_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+
+fn open_zip(zip_path: &str) -> Result<zip::ZipArchive<BufReader<File>>, String> {
+    let file =
+        File::open(zip_path).map_err(|error| io_failure(&format!("open {zip_path}"), error))?;
+    zip::ZipArchive::new(BufReader::new(file)).map_err(|error| zip_failure("open archive", error))
+}
+
+/// Reads and validates the manifest of a single-project backup archive.
+/// Selection exports (`projects` key) are explicitly rejected.
+fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> {
+    let mut archive = open_zip(zip_path)?;
+    let mut entry = archive
+        .by_name("manifest.json")
+        .map_err(|_| invalid_data("read manifest", "archive has no manifest.json"))?;
+    if entry.size() > MAX_MANIFEST_BYTES {
+        return Err(invalid_data(
+            "read manifest",
+            "manifest exceeds the 4 MiB size limit",
+        ));
+    }
+    // The header size can lie; cap the stream as well.
+    let mut text = String::new();
+    entry
+        .by_ref()
+        .take(MAX_MANIFEST_BYTES + 1)
+        .read_to_string(&mut text)
+        .map_err(|error| io_failure("read manifest entry", error))?;
+    if text.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(invalid_data(
+            "read manifest",
+            "manifest exceeds the 4 MiB size limit",
+        ));
+    }
+    drop(entry);
+    let value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| invalid_data("parse manifest", error))?;
+    if value.get("projects").is_some() {
+        return Err(invalid_data(
+            "parse manifest",
+            "selection archive: multi-project selection exports cannot be restored",
+        ));
+    }
+    let manifest: ProjectManifestFile =
+        serde_json::from_value(value).map_err(|error| invalid_data("parse manifest", error))?;
+    if manifest.app != "SiteMark" {
+        return Err(invalid_data("validate manifest", "not a SiteMark archive"));
+    }
+    if !(1..=2).contains(&manifest.schema_version) {
+        return Err(invalid_data(
+            "validate manifest",
+            format!("unsupported schema version {}", manifest.schema_version),
+        ));
+    }
+    if manifest.project_name.trim().is_empty() {
+        return Err(invalid_data("validate manifest", "project name is empty"));
+    }
+    if manifest.photos.is_empty() {
+        return Err(invalid_data(
+            "validate manifest",
+            "archive contains no photos",
+        ));
+    }
+    if manifest.photos.len() > MAX_ARCHIVE_PHOTOS {
+        return Err(invalid_data(
+            "validate manifest",
+            format!("archive holds more than {MAX_ARCHIVE_PHOTOS} photos"),
+        ));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for photo in &manifest.photos {
+        safe_photo_number_component(&photo.photo_number)?;
+        if !seen.insert(photo.photo_number.as_str()) {
+            return Err(invalid_data(
+                "validate manifest",
+                format!("duplicate photo number {}", photo.photo_number),
+            ));
+        }
+        if photo.original_sha256.len() != 64
+            || !photo
+                .original_sha256
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
+        {
+            return Err(invalid_data(
+                "validate manifest",
+                format!("invalid SHA-256 digest for {}", photo.photo_number),
+            ));
+        }
+    }
+    Ok(manifest)
+}
+
+/// An archive entry name plus its declared uncompressed size in bytes.
+type SizedEntry = (String, u64);
+
+/// Locates the `photos/<number>.jpg` and `originals/<number>.<ext>` entries
+/// for one photo, returning their names and declared uncompressed sizes.
+/// Entry names are only ever *matched*, never used as output paths —
+/// extraction always writes to caller-chosen destinations, so a crafted
+/// archive cannot escape the app-private directory (no Zip Slip).
+fn find_archive_entries(
+    archive: &mut zip::ZipArchive<BufReader<File>>,
+    photo_number: &str,
+) -> Result<(SizedEntry, Option<SizedEntry>), String> {
+    let rendered_name = format!("photos/{photo_number}.jpg");
+    let original_prefix = format!("originals/{photo_number}.");
+    let mut rendered: Option<(String, u64)> = None;
+    let mut original: Option<(String, u64)> = None;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| zip_failure("read archive entry", error))?;
+        let name = entry.name();
+        if name == rendered_name {
+            rendered = Some((rendered_name.clone(), entry.size()));
+        } else if let Some(remainder) = name.strip_prefix(&original_prefix) {
+            // Require a plain extension with no nested path components.
+            if !remainder.is_empty()
+                && remainder
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric())
+            {
+                original = Some((name.to_string(), entry.size()));
+            }
+        }
+    }
+    let rendered = rendered.ok_or_else(|| {
+        invalid_data(
+            "validate archive",
+            format!("archive is missing the watermarked photo for {photo_number}"),
+        )
+    })?;
+    if rendered.1 > MAX_ENTRY_UNCOMPRESSED_BYTES
+        || original
+            .as_ref()
+            .is_some_and(|entry| entry.1 > MAX_ENTRY_UNCOMPRESSED_BYTES)
+    {
+        return Err(invalid_data(
+            "validate archive",
+            format!("an entry for {photo_number} exceeds the 128 MiB size limit"),
+        ));
+    }
+    Ok((rendered, original))
+}
+
+/// Copies at most `cap` bytes from `reader` to `writer`; fails when the
+/// source holds more. Used together with the header-size precheck so a
+/// forged (lying) ZIP header cannot push the extraction past the limit.
+fn copy_capped(reader: &mut impl Read, writer: &mut impl Write, cap: u64) -> Result<u64, String> {
+    let mut limited = reader.take(cap + 1);
+    let copied =
+        std::io::copy(&mut limited, writer).map_err(|error| io_failure("copy ZIP entry", error))?;
+    if copied > cap {
+        return Err(invalid_data(
+            "extract entry",
+            "ZIP entry exceeds the 128 MiB extraction limit",
+        ));
+    }
+    Ok(copied)
+}
+
+/// Extracts one archive entry to `destination`, creating parent directories.
+fn extract_entry_to(
+    archive: &mut zip::ZipArchive<BufReader<File>>,
+    entry_name: &str,
+    destination: &str,
+) -> Result<(), String> {
+    let mut entry = archive
+        .by_name(entry_name)
+        .map_err(|error| zip_failure(&format!("open archive entry {entry_name}"), error))?;
+    if entry.size() > MAX_ENTRY_UNCOMPRESSED_BYTES {
+        return Err(invalid_data(
+            "validate archive",
+            format!("entry {entry_name} exceeds the 128 MiB size limit"),
+        ));
+    }
+    let output = Path::new(destination);
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| io_failure("create import directory", error))?;
+    }
+    let mut file =
+        File::create(output).map_err(|error| io_failure("create imported file", error))?;
+    copy_capped(&mut entry, &mut file, MAX_ENTRY_UNCOMPRESSED_BYTES)?;
+    Ok(())
+}
+
+/// Validates a backup ZIP and returns its restorable content. Only
+/// single-project archives (schema v1/v2) are restorable.
+pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, String> {
+    let manifest = read_project_manifest(&zip_path)?;
+    let mut archive = open_zip(&zip_path)?;
+    let mut total_uncompressed: u64 = 0;
+    let mut photos = Vec::with_capacity(manifest.photos.len());
+    for photo in &manifest.photos {
+        let (rendered_entry, original_entry) =
+            find_archive_entries(&mut archive, &photo.photo_number)?;
+        if manifest.includes_originals && original_entry.is_none() {
+            return Err(invalid_data(
+                "validate archive",
+                format!("archive is missing the original for {}", photo.photo_number),
+            ));
+        }
+        total_uncompressed += rendered_entry.1 + original_entry.as_ref().map_or(0, |entry| entry.1);
+        if total_uncompressed > MAX_TOTAL_UNCOMPRESSED_BYTES {
+            return Err(invalid_data(
+                "validate archive",
+                "archive exceeds the 8 GiB total extraction limit",
+            ));
+        }
+        photos.push(ArchivePhotoPreview {
+            photo_number: photo.photo_number.clone(),
+            has_original: original_entry.is_some(),
+            original_sha256: photo.original_sha256.clone(),
+            captured_at: photo.captured_at.clone(),
+            work_location: photo.work_location.clone(),
+            work_content: photo.work_content.clone(),
+            photographer: photo.photographer.clone(),
+            address: photo.address.clone(),
+            notes: photo.notes.clone(),
+            latitude: photo.latitude,
+            longitude: photo.longitude,
+            accuracy_meters: photo.accuracy_meters,
+            watermark_locale_code: photo.watermark_locale_code.clone(),
+        });
+    }
+    Ok(ProjectArchivePreview {
+        schema_version: manifest.schema_version,
+        project_name: manifest.project_name,
+        includes_originals: manifest.includes_originals,
+        watermark: manifest
+            .watermark
+            .map(|watermark| ArchiveWatermarkSettings {
+                position: watermark.position,
+                opacity: watermark.opacity,
+                accent_color_argb: watermark.accent_color_argb,
+                font_scale: watermark.font_scale,
+            }),
+        photos,
+    })
+}
+
+/// Extracts one photo (and its original when requested) from a backup ZIP.
+///
+/// Everything lands in `<destination>.tmp` first; only after the original's
+/// SHA-256 verifies are the files atomically renamed into place. Any failure
+/// removes every temporary file, so a failed extraction never leaves
+/// half-written files behind for the caller to clean up.
+pub fn extract_archive_photo(
+    request: ExtractArchivePhotoRequest,
+) -> Result<ExtractedArchivePhoto, String> {
+    safe_photo_number_component(&request.photo_number)?;
+    let manifest = read_project_manifest(&request.zip_path)?;
+    let photo = manifest
+        .photos
+        .iter()
+        .find(|candidate| candidate.photo_number == request.photo_number)
+        .ok_or_else(|| {
+            invalid_data(
+                "validate archive",
+                format!("manifest has no entry for {}", request.photo_number),
+            )
+        })?;
+    let mut archive = open_zip(&request.zip_path)?;
+    let (rendered_entry, original_entry) = find_archive_entries(&mut archive, &photo.photo_number)?;
+    let rendered_tmp = format!("{}.tmp", request.rendered_destination);
+    let original_tmp = request
+        .original_destination
+        .as_ref()
+        .map(|destination| format!("{destination}.tmp"));
+
+    let extraction = (|| -> Result<(), String> {
+        extract_entry_to(&mut archive, &rendered_entry.0, &rendered_tmp)?;
+        if let Some(tmp) = original_tmp.as_ref() {
+            let Some((entry_name, _)) = original_entry.as_ref() else {
+                return Err(invalid_data(
+                    "validate archive",
+                    format!("archive is missing the original for {}", photo.photo_number),
+                ));
+            };
+            extract_entry_to(&mut archive, entry_name, tmp)?;
+            if !verify_file(tmp.clone(), photo.original_sha256.clone())? {
+                return Err(invalid_data(
+                    "verify original",
+                    format!("SHA-256 mismatch for {}", photo.photo_number),
+                ));
+            }
+        }
+        Ok(())
+    })();
+    if let Err(error) = extraction {
+        let _ = fs::remove_file(&rendered_tmp);
+        if let Some(tmp) = original_tmp.as_ref() {
+            let _ = fs::remove_file(tmp);
+        }
+        return Err(error);
+    }
+
+    // Commit point: same-volume renames are atomic.
+    fs::rename(&rendered_tmp, &request.rendered_destination).map_err(|error| {
+        let _ = fs::remove_file(&rendered_tmp);
+        if let Some(tmp) = original_tmp.as_ref() {
+            let _ = fs::remove_file(tmp);
+        }
+        io_failure("finalize rendered photo", error)
+    })?;
+    if let (Some(tmp), Some(destination)) = (original_tmp, request.original_destination.as_ref()) {
+        fs::rename(&tmp, destination)
+            .map_err(|error| io_failure("finalize original photo", error))?;
+    }
+    Ok(ExtractedArchivePhoto {
+        rendered_path: request.rendered_destination.clone(),
+        original_path: request.original_destination.clone(),
+    })
 }

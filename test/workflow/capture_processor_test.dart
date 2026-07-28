@@ -562,6 +562,16 @@ class _ProcessorImagePipeline implements ImagePipeline {
   Map<String, String> sha256ByPath = const {};
 
   @override
+  Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExtractedArchivePhoto> extractArchivePhoto(
+    ExtractArchivePhotoRequest request,
+  ) =>
+      throw UnimplementedError();
+
+  @override
   Future<ExportProjectResult> export(ExportProjectRequest request) =>
       throw UnimplementedError();
 

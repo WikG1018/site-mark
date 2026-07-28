@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1164762658;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 493305756;
 
 // Section: executor
 
@@ -114,6 +114,40 @@ fn wire__crate__api__image_core__export_selection_impl(
         },
     )
 }
+fn wire__crate__api__image_core__extract_archive_photo_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "extract_archive_photo",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request =
+                <crate::api::image_core::ExtractArchivePhotoRequest>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::image_core::extract_archive_photo(api_request)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__simple__greet_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -172,6 +206,39 @@ fn wire__crate__api__simple__init_app_impl(
                     let output_ok = Result::<_, ()>::Ok({
                         crate::api::simple::init_app();
                     })?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__image_core__read_project_archive_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "read_project_archive",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_zip_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::image_core::read_project_archive(api_zip_path)?;
                     Ok(output_ok)
                 })())
             }
@@ -291,6 +358,56 @@ impl SseDecode for String {
     }
 }
 
+impl SseDecode for crate::api::image_core::ArchivePhotoPreview {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_photoNumber = <String>::sse_decode(deserializer);
+        let mut var_hasOriginal = <bool>::sse_decode(deserializer);
+        let mut var_originalSha256 = <String>::sse_decode(deserializer);
+        let mut var_capturedAt = <String>::sse_decode(deserializer);
+        let mut var_workLocation = <String>::sse_decode(deserializer);
+        let mut var_workContent = <String>::sse_decode(deserializer);
+        let mut var_photographer = <String>::sse_decode(deserializer);
+        let mut var_address = <Option<String>>::sse_decode(deserializer);
+        let mut var_notes = <Option<String>>::sse_decode(deserializer);
+        let mut var_latitude = <Option<f64>>::sse_decode(deserializer);
+        let mut var_longitude = <Option<f64>>::sse_decode(deserializer);
+        let mut var_accuracyMeters = <Option<f64>>::sse_decode(deserializer);
+        let mut var_watermarkLocaleCode = <Option<String>>::sse_decode(deserializer);
+        return crate::api::image_core::ArchivePhotoPreview {
+            photo_number: var_photoNumber,
+            has_original: var_hasOriginal,
+            original_sha256: var_originalSha256,
+            captured_at: var_capturedAt,
+            work_location: var_workLocation,
+            work_content: var_workContent,
+            photographer: var_photographer,
+            address: var_address,
+            notes: var_notes,
+            latitude: var_latitude,
+            longitude: var_longitude,
+            accuracy_meters: var_accuracyMeters,
+            watermark_locale_code: var_watermarkLocaleCode,
+        };
+    }
+}
+
+impl SseDecode for crate::api::image_core::ArchiveWatermarkSettings {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_position = <String>::sse_decode(deserializer);
+        let mut var_opacity = <f64>::sse_decode(deserializer);
+        let mut var_accentColorArgb = <u32>::sse_decode(deserializer);
+        let mut var_fontScale = <f64>::sse_decode(deserializer);
+        return crate::api::image_core::ArchiveWatermarkSettings {
+            position: var_position,
+            opacity: var_opacity,
+            accent_color_argb: var_accentColorArgb,
+            font_scale: var_fontScale,
+        };
+    }
+}
+
 impl SseDecode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -312,6 +429,10 @@ impl SseDecode for crate::api::image_core::ExportPhotoRecord {
         let mut var_address = <Option<String>>::sse_decode(deserializer);
         let mut var_coordinates = <Option<String>>::sse_decode(deserializer);
         let mut var_notes = <Option<String>>::sse_decode(deserializer);
+        let mut var_latitude = <Option<f64>>::sse_decode(deserializer);
+        let mut var_longitude = <Option<f64>>::sse_decode(deserializer);
+        let mut var_accuracyMeters = <Option<f64>>::sse_decode(deserializer);
+        let mut var_watermarkLocaleCode = <Option<String>>::sse_decode(deserializer);
         return crate::api::image_core::ExportPhotoRecord {
             photo_number: var_photoNumber,
             watermarked_path: var_watermarkedPath,
@@ -324,6 +445,10 @@ impl SseDecode for crate::api::image_core::ExportPhotoRecord {
             address: var_address,
             coordinates: var_coordinates,
             notes: var_notes,
+            latitude: var_latitude,
+            longitude: var_longitude,
+            accuracy_meters: var_accuracyMeters,
+            watermark_locale_code: var_watermarkLocaleCode,
         };
     }
 }
@@ -335,6 +460,8 @@ impl SseDecode for crate::api::image_core::ExportProjectRequest {
         let mut var_projectName = <String>::sse_decode(deserializer);
         let mut var_outputZipPath = <String>::sse_decode(deserializer);
         let mut var_includeOriginals = <bool>::sse_decode(deserializer);
+        let mut var_watermark =
+            <crate::api::image_core::ExportWatermarkSettings>::sse_decode(deserializer);
         let mut var_photos =
             <Vec<crate::api::image_core::ExportPhotoRecord>>::sse_decode(deserializer);
         return crate::api::image_core::ExportProjectRequest {
@@ -342,6 +469,7 @@ impl SseDecode for crate::api::image_core::ExportProjectRequest {
             project_name: var_projectName,
             output_zip_path: var_outputZipPath,
             include_originals: var_includeOriginals,
+            watermark: var_watermark,
             photos: var_photos,
         };
     }
@@ -391,6 +519,50 @@ impl SseDecode for crate::api::image_core::ExportSelectionRequest {
     }
 }
 
+impl SseDecode for crate::api::image_core::ExportWatermarkSettings {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_position = <String>::sse_decode(deserializer);
+        let mut var_opacity = <f64>::sse_decode(deserializer);
+        let mut var_accentColorArgb = <u32>::sse_decode(deserializer);
+        let mut var_fontScale = <f64>::sse_decode(deserializer);
+        return crate::api::image_core::ExportWatermarkSettings {
+            position: var_position,
+            opacity: var_opacity,
+            accent_color_argb: var_accentColorArgb,
+            font_scale: var_fontScale,
+        };
+    }
+}
+
+impl SseDecode for crate::api::image_core::ExtractArchivePhotoRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_zipPath = <String>::sse_decode(deserializer);
+        let mut var_photoNumber = <String>::sse_decode(deserializer);
+        let mut var_renderedDestination = <String>::sse_decode(deserializer);
+        let mut var_originalDestination = <Option<String>>::sse_decode(deserializer);
+        return crate::api::image_core::ExtractArchivePhotoRequest {
+            zip_path: var_zipPath,
+            photo_number: var_photoNumber,
+            rendered_destination: var_renderedDestination,
+            original_destination: var_originalDestination,
+        };
+    }
+}
+
+impl SseDecode for crate::api::image_core::ExtractedArchivePhoto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_renderedPath = <String>::sse_decode(deserializer);
+        let mut var_originalPath = <Option<String>>::sse_decode(deserializer);
+        return crate::api::image_core::ExtractedArchivePhoto {
+            rendered_path: var_renderedPath,
+            original_path: var_originalPath,
+        };
+    }
+}
+
 impl SseDecode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -402,6 +574,20 @@ impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for Vec<crate::api::image_core::ArchivePhotoPreview> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::image_core::ArchivePhotoPreview>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
     }
 }
 
@@ -451,6 +637,50 @@ impl SseDecode for Option<String> {
         } else {
             return None;
         }
+    }
+}
+
+impl SseDecode for Option<crate::api::image_core::ArchiveWatermarkSettings> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(
+                <crate::api::image_core::ArchiveWatermarkSettings>::sse_decode(deserializer),
+            );
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<f64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for crate::api::image_core::ProjectArchivePreview {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_schemaVersion = <u32>::sse_decode(deserializer);
+        let mut var_projectName = <String>::sse_decode(deserializer);
+        let mut var_includesOriginals = <bool>::sse_decode(deserializer);
+        let mut var_watermark =
+            <Option<crate::api::image_core::ArchiveWatermarkSettings>>::sse_decode(deserializer);
+        let mut var_photos =
+            <Vec<crate::api::image_core::ArchivePhotoPreview>>::sse_decode(deserializer);
+        return crate::api::image_core::ProjectArchivePreview {
+            schema_version: var_schemaVersion,
+            project_name: var_projectName,
+            includes_originals: var_includesOriginals,
+            watermark: var_watermark,
+            photos: var_photos,
+        };
     }
 }
 
@@ -553,10 +783,22 @@ fn pde_ffi_dispatcher_primary_impl(
     match func_id {
         1 => wire__crate__api__image_core__export_project_impl(port, ptr, rust_vec_len, data_len),
         2 => wire__crate__api__image_core__export_selection_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__image_core__render_photo_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__image_core__sha256_file_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__image_core__verify_file_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__image_core__extract_archive_photo_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        5 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__image_core__read_project_archive_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        7 => wire__crate__api__image_core__render_photo_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__image_core__sha256_file_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__image_core__verify_file_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -569,13 +811,68 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        3 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ArchivePhotoPreview {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.photo_number.into_into_dart().into_dart(),
+            self.has_original.into_into_dart().into_dart(),
+            self.original_sha256.into_into_dart().into_dart(),
+            self.captured_at.into_into_dart().into_dart(),
+            self.work_location.into_into_dart().into_dart(),
+            self.work_content.into_into_dart().into_dart(),
+            self.photographer.into_into_dart().into_dart(),
+            self.address.into_into_dart().into_dart(),
+            self.notes.into_into_dart().into_dart(),
+            self.latitude.into_into_dart().into_dart(),
+            self.longitude.into_into_dart().into_dart(),
+            self.accuracy_meters.into_into_dart().into_dart(),
+            self.watermark_locale_code.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ArchivePhotoPreview
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ArchivePhotoPreview>
+    for crate::api::image_core::ArchivePhotoPreview
+{
+    fn into_into_dart(self) -> crate::api::image_core::ArchivePhotoPreview {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ArchiveWatermarkSettings {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.position.into_into_dart().into_dart(),
+            self.opacity.into_into_dart().into_dart(),
+            self.accent_color_argb.into_into_dart().into_dart(),
+            self.font_scale.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ArchiveWatermarkSettings
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ArchiveWatermarkSettings>
+    for crate::api::image_core::ArchiveWatermarkSettings
+{
+    fn into_into_dart(self) -> crate::api::image_core::ArchiveWatermarkSettings {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportPhotoRecord {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -591,6 +888,10 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportPhotoRecord
             self.address.into_into_dart().into_dart(),
             self.coordinates.into_into_dart().into_dart(),
             self.notes.into_into_dart().into_dart(),
+            self.latitude.into_into_dart().into_dart(),
+            self.longitude.into_into_dart().into_dart(),
+            self.accuracy_meters.into_into_dart().into_dart(),
+            self.watermark_locale_code.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -614,6 +915,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportProjectRequ
             self.project_name.into_into_dart().into_dart(),
             self.output_zip_path.into_into_dart().into_dart(),
             self.include_originals.into_into_dart().into_dart(),
+            self.watermark.into_into_dart().into_dart(),
             self.photos.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -693,6 +995,97 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExportSelectionRe
     for crate::api::image_core::ExportSelectionRequest
 {
     fn into_into_dart(self) -> crate::api::image_core::ExportSelectionRequest {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportWatermarkSettings {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.position.into_into_dart().into_dart(),
+            self.opacity.into_into_dart().into_dart(),
+            self.accent_color_argb.into_into_dart().into_dart(),
+            self.font_scale.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ExportWatermarkSettings
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExportWatermarkSettings>
+    for crate::api::image_core::ExportWatermarkSettings
+{
+    fn into_into_dart(self) -> crate::api::image_core::ExportWatermarkSettings {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExtractArchivePhotoRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.zip_path.into_into_dart().into_dart(),
+            self.photo_number.into_into_dart().into_dart(),
+            self.rendered_destination.into_into_dart().into_dart(),
+            self.original_destination.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ExtractArchivePhotoRequest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExtractArchivePhotoRequest>
+    for crate::api::image_core::ExtractArchivePhotoRequest
+{
+    fn into_into_dart(self) -> crate::api::image_core::ExtractArchivePhotoRequest {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExtractedArchivePhoto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.rendered_path.into_into_dart().into_dart(),
+            self.original_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ExtractedArchivePhoto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExtractedArchivePhoto>
+    for crate::api::image_core::ExtractedArchivePhoto
+{
+    fn into_into_dart(self) -> crate::api::image_core::ExtractedArchivePhoto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ProjectArchivePreview {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.schema_version.into_into_dart().into_dart(),
+            self.project_name.into_into_dart().into_dart(),
+            self.includes_originals.into_into_dart().into_dart(),
+            self.watermark.into_into_dart().into_dart(),
+            self.photos.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ProjectArchivePreview
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ProjectArchivePreview>
+    for crate::api::image_core::ProjectArchivePreview
+{
+    fn into_into_dart(self) -> crate::api::image_core::ProjectArchivePreview {
         self
     }
 }
@@ -783,6 +1176,35 @@ impl SseEncode for String {
     }
 }
 
+impl SseEncode for crate::api::image_core::ArchivePhotoPreview {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.photo_number, serializer);
+        <bool>::sse_encode(self.has_original, serializer);
+        <String>::sse_encode(self.original_sha256, serializer);
+        <String>::sse_encode(self.captured_at, serializer);
+        <String>::sse_encode(self.work_location, serializer);
+        <String>::sse_encode(self.work_content, serializer);
+        <String>::sse_encode(self.photographer, serializer);
+        <Option<String>>::sse_encode(self.address, serializer);
+        <Option<String>>::sse_encode(self.notes, serializer);
+        <Option<f64>>::sse_encode(self.latitude, serializer);
+        <Option<f64>>::sse_encode(self.longitude, serializer);
+        <Option<f64>>::sse_encode(self.accuracy_meters, serializer);
+        <Option<String>>::sse_encode(self.watermark_locale_code, serializer);
+    }
+}
+
+impl SseEncode for crate::api::image_core::ArchiveWatermarkSettings {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.position, serializer);
+        <f64>::sse_encode(self.opacity, serializer);
+        <u32>::sse_encode(self.accent_color_argb, serializer);
+        <f64>::sse_encode(self.font_scale, serializer);
+    }
+}
+
 impl SseEncode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -804,6 +1226,10 @@ impl SseEncode for crate::api::image_core::ExportPhotoRecord {
         <Option<String>>::sse_encode(self.address, serializer);
         <Option<String>>::sse_encode(self.coordinates, serializer);
         <Option<String>>::sse_encode(self.notes, serializer);
+        <Option<f64>>::sse_encode(self.latitude, serializer);
+        <Option<f64>>::sse_encode(self.longitude, serializer);
+        <Option<f64>>::sse_encode(self.accuracy_meters, serializer);
+        <Option<String>>::sse_encode(self.watermark_locale_code, serializer);
     }
 }
 
@@ -814,6 +1240,7 @@ impl SseEncode for crate::api::image_core::ExportProjectRequest {
         <String>::sse_encode(self.project_name, serializer);
         <String>::sse_encode(self.output_zip_path, serializer);
         <bool>::sse_encode(self.include_originals, serializer);
+        <crate::api::image_core::ExportWatermarkSettings>::sse_encode(self.watermark, serializer);
         <Vec<crate::api::image_core::ExportPhotoRecord>>::sse_encode(self.photos, serializer);
     }
 }
@@ -848,6 +1275,34 @@ impl SseEncode for crate::api::image_core::ExportSelectionRequest {
     }
 }
 
+impl SseEncode for crate::api::image_core::ExportWatermarkSettings {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.position, serializer);
+        <f64>::sse_encode(self.opacity, serializer);
+        <u32>::sse_encode(self.accent_color_argb, serializer);
+        <f64>::sse_encode(self.font_scale, serializer);
+    }
+}
+
+impl SseEncode for crate::api::image_core::ExtractArchivePhotoRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.zip_path, serializer);
+        <String>::sse_encode(self.photo_number, serializer);
+        <String>::sse_encode(self.rendered_destination, serializer);
+        <Option<String>>::sse_encode(self.original_destination, serializer);
+    }
+}
+
+impl SseEncode for crate::api::image_core::ExtractedArchivePhoto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.rendered_path, serializer);
+        <Option<String>>::sse_encode(self.original_path, serializer);
+    }
+}
+
 impl SseEncode for f64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -859,6 +1314,16 @@ impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for Vec<crate::api::image_core::ArchivePhotoPreview> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::image_core::ArchivePhotoPreview>::sse_encode(item, serializer);
+        }
     }
 }
 
@@ -899,6 +1364,40 @@ impl SseEncode for Option<String> {
         if let Some(value) = self {
             <String>::sse_encode(value, serializer);
         }
+    }
+}
+
+impl SseEncode for Option<crate::api::image_core::ArchiveWatermarkSettings> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::image_core::ArchiveWatermarkSettings>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <f64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for crate::api::image_core::ProjectArchivePreview {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.schema_version, serializer);
+        <String>::sse_encode(self.project_name, serializer);
+        <bool>::sse_encode(self.includes_originals, serializer);
+        <Option<crate::api::image_core::ArchiveWatermarkSettings>>::sse_encode(
+            self.watermark,
+            serializer,
+        );
+        <Vec<crate::api::image_core::ArchivePhotoPreview>>::sse_encode(self.photos, serializer);
     }
 }
 

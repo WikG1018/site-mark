@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/features/projects/project_import_flow.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 
@@ -97,6 +98,12 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                 icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
               )
             else ...[
+              IconButton(
+                key: const Key('import-project'),
+                onPressed: () => runProjectImportFlow(context, ref),
+                tooltip: strings.importProject,
+                icon: const Icon(Icons.file_upload_outlined),
+              ),
               IconButton(
                 key: const Key('search-projects'),
                 onPressed: _startSearch,

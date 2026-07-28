@@ -30,7 +30,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
-  testWidgets('production startup runs camera, location, and queue recovery', (
+  testWidgets('production startup cleans imports then runs camera recovery', (
     tester,
   ) async {
     final events = <String>[];
@@ -38,6 +38,7 @@ void main() {
       recoverCamera: () async => events.add('camera'),
       resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
+      cleanupInterruptedImports: () async => events.add('imports'),
     );
 
     await tester.pumpWidget(
@@ -51,7 +52,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(events, ['camera', 'location', 'queue']);
+    expect(events, ['imports', 'camera', 'location', 'queue']);
     await disposeApp(tester);
   });
 
@@ -896,6 +897,16 @@ class _WidgetTestPlatformServices implements PlatformServices {
 }
 
 class _WidgetTestImagePipeline implements ImagePipeline {
+  @override
+  Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExtractedArchivePhoto> extractArchivePhoto(
+    ExtractArchivePhotoRequest request,
+  ) =>
+      throw UnimplementedError();
+
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async {
     return ExportProjectResult(

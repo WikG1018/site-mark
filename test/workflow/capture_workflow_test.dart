@@ -470,6 +470,16 @@ class _FakeImagePipeline implements ImagePipeline {
   RenderPhotoRequest? lastRenderRequest;
 
   @override
+  Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExtractedArchivePhoto> extractArchivePhoto(
+    ExtractArchivePhotoRequest request,
+  ) =>
+      throw UnimplementedError();
+
+  @override
   Future<ExportProjectResult> export(ExportProjectRequest request) =>
       throw UnimplementedError();
 
