@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -270,6 +271,16 @@ void main() {
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
         addTearDown(database.close);
+        await database.createProject(
+          id: 'new-p1',
+          name: '恢复东区',
+          restoreOperationId: 'bundle-operation',
+        );
+        await database.createProject(
+          id: 'new-p2',
+          name: '恢复西区',
+          restoreOperationId: 'bundle-operation',
+        );
         final pending = _FakeBundlePendingStore()
           ..items.add(
             const PendingBundleRestore(
@@ -277,6 +288,7 @@ void main() {
               stagingDirectory: '/staging/b1',
               plannedProjectIds: ['new-p1', 'new-p2'],
               ownedProjectIds: ['new-p1', 'new-p2'],
+              operationId: 'bundle-operation',
             ),
           );
         final rollback = _FakeProjectRollback();
@@ -299,10 +311,130 @@ void main() {
     );
 
     test(
+      'database token finds completed children even before owned list rewrite',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.createProject(
+          id: 'new-p1',
+          name: '恢复东区',
+          restoreOperationId: 'bundle-operation',
+        );
+        await database.createProject(
+          id: 'new-p2',
+          name: '恢复西区',
+          restoreOperationId: 'bundle-operation',
+        );
+        final pending = _FakeBundlePendingStore()
+          ..items.add(
+            const PendingBundleRestore(
+              bundleId: 'b-gap',
+              stagingDirectory: '/staging/b-gap',
+              plannedProjectIds: ['new-p1', 'new-p2'],
+              operationId: 'bundle-operation',
+            ),
+          );
+        final deletions = ProjectDeletionService(
+          database: database,
+          capturePaths: _DeletionCapturePaths(),
+          files: _DeletionFiles(),
+          pendingStore: _DeletionPendingStore(),
+        );
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(),
+          importer: _FakeProjectImporter(),
+          pending: pending,
+          rollback: ProjectDeletionBundleRollback(
+            database: database,
+            deletions: deletions,
+          ),
+        );
+
+        await service.cleanupInterruptedBundleRestores();
+
+        expect(await database.getProjects(), isEmpty);
+        expect(pending.items, isEmpty);
+      },
+    );
+
+    test('deletion handoff refuses a mismatching restore token', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(
+        id: 'protected-project',
+        name: '保留项目',
+        restoreOperationId: 'other-operation',
+      );
+      final deletionFiles = _DeletionFiles();
+      final rollback = ProjectDeletionBundleRollback(
+        database: database,
+        deletions: ProjectDeletionService(
+          database: database,
+          capturePaths: _DeletionCapturePaths(),
+          files: deletionFiles,
+          pendingStore: _DeletionPendingStore(),
+        ),
+      );
+
+      await rollback.handoff('protected-project', 'bundle-operation');
+
+      expect(await database.projectById('protected-project'), isNotNull);
+      expect(deletionFiles.deleted, isEmpty);
+    });
+
+    test(
+      'bundle marker rewrite failure leaves the last valid generation readable',
+      () async {
+        final root = await Directory.systemTemp.createTemp(
+          'sitemark-bundle-marker-',
+        );
+        addTearDown(() => root.delete(recursive: true));
+        final store = AppBundleRestorePendingStore(
+          documentsDirectory: () async => root,
+        );
+        const planned = PendingBundleRestore(
+          bundleId: 'atomic-bundle',
+          stagingDirectory: '/staging/atomic-bundle',
+          plannedProjectIds: ['p1'],
+          operationId: 'atomic-operation',
+        );
+        await store.write(planned);
+
+        final failedStore = AppBundleRestorePendingStore(
+          documentsDirectory: () async => root,
+          writer: _FailBeforeCommitMarkerWriter(),
+        );
+        await expectLater(
+          failedStore.write(planned.withOwnedProject('p1')),
+          throwsStateError,
+        );
+
+        var listed = await store.list();
+        expect(listed, hasLength(1));
+        expect(listed.single.ownedProjectIds, isEmpty);
+        await store.write(planned.withOwnedProject('p1'));
+        listed = await store.list();
+        expect(listed.single.ownedProjectIds, ['p1']);
+        expect(listed.single.revision, 1);
+      },
+    );
+
+    test(
       'rollback failure keeps the bundle marker for startup retry',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
         addTearDown(database.close);
+        await database.createProject(
+          id: 'new-p1',
+          name: '恢复东区',
+          restoreOperationId: 'bundle-operation',
+        );
+        await database.createProject(
+          id: 'new-p2',
+          name: '恢复西区',
+          restoreOperationId: 'bundle-operation',
+        );
         final pending = _FakeBundlePendingStore()
           ..items.add(
             const PendingBundleRestore(
@@ -310,6 +442,7 @@ void main() {
               stagingDirectory: '/staging/b1',
               plannedProjectIds: ['new-p1', 'new-p2'],
               ownedProjectIds: ['new-p1', 'new-p2'],
+              operationId: 'bundle-operation',
             ),
           );
         final rollback = _FakeProjectRollback(failProjectId: 'new-p1');
@@ -537,7 +670,10 @@ ProjectBundleService _bundleService({
   _FakeBundleFiles? files,
 }) {
   final store = pending ?? _FakeBundlePendingStore();
-  if (importer is _FakeProjectImporter) importer.pendingStore = store;
+  if (importer is _FakeProjectImporter) {
+    importer.pendingStore = store;
+    importer.database = database;
+  }
   var nextTarget = 0;
   return ProjectBundleService(
     database: database,
@@ -720,7 +856,7 @@ class _FakeProjectRollback implements ProjectBundleRollback {
   final projectIds = <String>[];
 
   @override
-  Future<void> handoff(String projectId) async {
+  Future<void> handoff(String projectId, String operationId) async {
     projectIds.add(projectId);
     if (projectId == failProjectId) throw StateError('rollback failed');
   }
@@ -734,6 +870,7 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
   final inspected = <String>[];
   final imports = <String>[];
   _FakeBundlePendingStore? pendingStore;
+  AppDatabase? database;
   bool markerSeenBeforeFirstImport = false;
 
   @override
@@ -748,6 +885,8 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
     required String zipPath,
     required String projectName,
     String? projectId,
+    String? restoreOperationId,
+    bool retainRestoreOwnership = false,
     void Function(int completed, int total)? onProgress,
   }) async {
     if (imports.isEmpty) {
@@ -758,6 +897,11 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
     if (zipPath.endsWith(failSource ?? '\u0000')) {
       throw StateError('item import failed');
     }
+    await database?.createProject(
+      id: projectId!,
+      name: projectName,
+      restoreOperationId: restoreOperationId,
+    );
     onProgress?.call(1, 1);
     return ProjectImportResult(
       projectId: projectId!,
@@ -783,9 +927,15 @@ class _DatabaseProjectImporter implements ProjectArchiveImporter {
     required String zipPath,
     required String projectName,
     String? projectId,
+    String? restoreOperationId,
+    bool retainRestoreOwnership = false,
     void Function(int completed, int total)? onProgress,
   }) async {
-    await database.createProject(id: projectId!, name: projectName);
+    await database.createProject(
+      id: projectId!,
+      name: projectName,
+      restoreOperationId: restoreOperationId,
+    );
     await database.createPendingCapture(
       id: '$projectId-capture',
       projectId: projectId,
@@ -822,6 +972,14 @@ class _DeletionFiles implements PrivateFileStore {
 
   @override
   Future<bool> exists(String path) async => true;
+}
+
+class _FailBeforeCommitMarkerWriter implements AtomicMarkerWriter {
+  @override
+  Future<void> write(File target, String contents) async {
+    await File('${target.path}.tmp-power-loss').writeAsString('{', flush: true);
+    throw StateError('simulated power loss before atomic rename');
+  }
 }
 
 class _DeletionPendingStore implements ProjectDeletionPendingStore {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -300,7 +302,11 @@ void main() {
       );
       // Simulate an interrupted import: a project row, a staging tree, and a
       // pending marker all left behind.
-      await database.createProject(id: 'dead-project', name: '烂尾项目');
+      await database.createProject(
+        id: 'dead-project',
+        name: '烂尾项目',
+        restoreOperationId: 'restore-dead-project',
+      );
       pendingStore.pending.add(
         const PendingImport(
           projectId: 'dead-project',
@@ -308,6 +314,7 @@ void main() {
           stagedFiles: ['/staging/dead-project/rendered/a.jpg'],
           finalFiles: ['/rendered/a.jpg'],
           phase: PendingImportPhase.ownsProject,
+          operationId: 'restore-dead-project',
         ),
       );
 
@@ -408,6 +415,113 @@ void main() {
     expect(committer.deletedTrees, isEmpty);
     expect(pendingStore.pending, hasLength(1));
   });
+
+  test(
+    'planned marker with matching database token deletes interrupted restore',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(
+        id: 'planned-owned',
+        name: '中断恢复',
+        restoreOperationId: 'operation-owned',
+      );
+      final pendingStore = _FakePendingStore()
+        ..pending.add(
+          const PendingImport(
+            projectId: 'planned-owned',
+            stagingDirectory: '/staging/planned-owned',
+            stagedFiles: [],
+            finalFiles: [],
+            operationId: 'operation-owned',
+          ),
+        );
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: _RecordingFileStore(),
+        pendingStore: pendingStore,
+      );
+
+      await service.cleanupInterruptedImports();
+
+      expect(await database.projectById('planned-owned'), isNull);
+      expect(pendingStore.pending, isEmpty);
+    },
+  );
+
+  test('mismatching database token never authorizes cleanup', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(
+      id: 'mismatch',
+      name: '其他恢复',
+      restoreOperationId: 'different-operation',
+    );
+    final pendingStore = _FakePendingStore()
+      ..pending.add(
+        const PendingImport(
+          projectId: 'mismatch',
+          stagingDirectory: '/staging/mismatch',
+          stagedFiles: ['/staging/mismatch/a.jpg'],
+          finalFiles: ['/rendered/a.jpg'],
+          operationId: 'marker-operation',
+        ),
+      );
+    final files = _RecordingFileStore();
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: files,
+      pendingStore: pendingStore,
+    );
+
+    await service.cleanupInterruptedImports();
+
+    expect(await database.projectById('mismatch'), isNotNull);
+    expect(files.attemptedDeletes, isEmpty);
+    expect(pendingStore.pending, hasLength(1));
+  });
+
+  test(
+    'immutable marker generations survive a failed rewrite without corrupting the last state',
+    () async {
+      final root = await Directory.systemTemp.createTemp('sitemark-marker-');
+      addTearDown(() => root.delete(recursive: true));
+      final store = AppImportPendingStore(documentsDirectory: () async => root);
+      const planned = PendingImport(
+        projectId: 'atomic-project',
+        stagingDirectory: '/staging/atomic-project',
+        stagedFiles: [],
+        finalFiles: [],
+        operationId: 'atomic-operation',
+      );
+      await store.writePending(planned);
+
+      final failedStore = AppImportPendingStore(
+        documentsDirectory: () async => root,
+        writer: _FailBeforeCommitMarkerWriter(),
+      );
+      await expectLater(
+        failedStore.writePending(
+          planned.withPhase(PendingImportPhase.ownsProject),
+        ),
+        throwsStateError,
+      );
+
+      var listed = await store.listPending();
+      expect(listed, hasLength(1));
+      expect(listed.single.phase, PendingImportPhase.planned);
+      expect(listed.single.operationId, 'atomic-operation');
+
+      final owned = planned.withPhase(PendingImportPhase.ownsProject);
+      await store.writePending(owned);
+      listed = await store.listPending();
+      expect(listed, hasLength(1));
+      expect(listed.single.phase, PendingImportPhase.ownsProject);
+      expect(listed.single.revision, 1);
+    },
+  );
 
   test(
     'successful import ignores a staging-directory cleanup failure',
@@ -706,5 +820,13 @@ class _RecordingFileStore implements PrivateFileStore {
     }
     attemptedDeletes.add(path);
     deleted.add(path);
+  }
+}
+
+class _FailBeforeCommitMarkerWriter implements AtomicMarkerWriter {
+  @override
+  Future<void> write(File target, String contents) async {
+    await File('${target.path}.tmp-power-loss').writeAsString('{', flush: true);
+    throw StateError('simulated power loss before atomic rename');
   }
 }

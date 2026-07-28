@@ -420,9 +420,7 @@ QueryExecutor openMigratedPerfV5Fixture() {
     );
   ''');
   // The perf branch's v5 migration created these indexes.
-  db.execute(
-    'CREATE INDEX capture_records_status_idx ON captures (status)',
-  );
+  db.execute('CREATE INDEX capture_records_status_idx ON captures (status)');
   db.execute(
     'CREATE INDEX capture_records_sort_idx '
     'ON captures (COALESCE(captured_at, created_at) DESC)',
@@ -595,30 +593,29 @@ void main() {
     },
   );
 
-  test(
-    'v4 to v6 migration creates capture performance indexes',
-    () async {
-      final database = AppDatabase.forTesting(openMigratedV4Fixture());
-      addTearDown(database.close);
+  test('v4 to v6 migration creates capture performance indexes', () async {
+    final database = AppDatabase.forTesting(openMigratedV4Fixture());
+    addTearDown(database.close);
 
-      // Force the migration to run by reading a row.
-      await database.getAppSettings();
+    // Force the migration to run by reading a row.
+    await database.getAppSettings();
 
-      final indexes = await database.customSelect(
-        "SELECT name FROM sqlite_master "
-        "WHERE type = 'index' AND name LIKE 'capture_records_%_idx'",
-      ).get();
-      final indexNames = indexes.map((row) => row.read<String>('name')).toSet();
-      expect(
-        indexNames,
-        containsAll(const <String>{
-          'capture_records_status_idx',
-          'capture_records_sort_idx',
-          'capture_records_project_sort_idx',
-        }),
-      );
-    },
-  );
+    final indexes = await database
+        .customSelect(
+          "SELECT name FROM sqlite_master "
+          "WHERE type = 'index' AND name LIKE 'capture_records_%_idx'",
+        )
+        .get();
+    final indexNames = indexes.map((row) => row.read<String>('name')).toSet();
+    expect(
+      indexNames,
+      containsAll(const <String>{
+        'capture_records_status_idx',
+        'capture_records_sort_idx',
+        'capture_records_project_sort_idx',
+      }),
+    );
+  });
 
   test(
     'perf-branch v5 to v6 migration adds missing dynamic-color columns',
@@ -654,10 +651,12 @@ void main() {
       expect(updated.completionNotificationsEnabled, isTrue);
 
       // Indexes are still present (idempotent re-creation).
-      final indexes = await database.customSelect(
-        "SELECT name FROM sqlite_master "
-        "WHERE type = 'index' AND name LIKE 'capture_records_%_idx'",
-      ).get();
+      final indexes = await database
+          .customSelect(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'index' AND name LIKE 'capture_records_%_idx'",
+          )
+          .get();
       final indexNames = indexes.map((row) => row.read<String>('name')).toSet();
       expect(
         indexNames,
@@ -811,4 +810,116 @@ void main() {
     );
     expect(updated.appSeedColorArgb, 0xff1565c0);
   });
+
+  test(
+    'v7 to v8 migration adds nullable restore ownership without claiming existing projects',
+    () async {
+      final db = sqlite3.openInMemory();
+      db.execute('''
+        CREATE TABLE projects (
+          id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+          watermark_opacity REAL NOT NULL DEFAULT 0.78,
+          watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+          watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (id)
+        );
+      ''');
+      db.execute('''
+        CREATE TABLE app_settings (
+          id TEXT NOT NULL,
+          theme_mode TEXT NOT NULL DEFAULT 'system',
+          locale_code TEXT,
+          default_watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+          default_watermark_opacity REAL NOT NULL DEFAULT 0.78,
+          default_watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+          default_watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+          location_permission_prompt_dismissed INTEGER NOT NULL DEFAULT 0,
+          use_dynamic_color INTEGER NOT NULL DEFAULT 0,
+          completion_notifications_enabled INTEGER NOT NULL DEFAULT 0,
+          app_seed_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (id)
+        );
+      ''');
+      db.execute('''
+        CREATE TABLE captures (
+          id TEXT NOT NULL,
+          project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+          photo_number TEXT,
+          work_location TEXT NOT NULL,
+          work_content TEXT NOT NULL,
+          photographer TEXT NOT NULL,
+          notes TEXT,
+          original_path TEXT NOT NULL,
+          published_uri TEXT,
+          original_sha256 TEXT,
+          status TEXT NOT NULL,
+          failure_reason TEXT,
+          created_at INTEGER NOT NULL,
+          captured_at INTEGER,
+          latitude REAL,
+          longitude REAL,
+          accuracy_meters REAL,
+          address TEXT,
+          location_outcome TEXT,
+          processing_attempts INTEGER NOT NULL DEFAULT 0,
+          watermark_locale_code TEXT NOT NULL DEFAULT 'zh',
+          location_resolution TEXT NOT NULL DEFAULT 'resolved',
+          original_deleted_at INTEGER,
+          PRIMARY KEY (id)
+        );
+      ''');
+      db.execute(
+        "INSERT INTO projects (id, name, created_at, updated_at) "
+        "VALUES ('existing', '既有项目', 0, 0);",
+      );
+      db.execute(
+        "INSERT INTO app_settings (id, updated_at) VALUES ('global', 0);",
+      );
+      db.execute('PRAGMA user_version = 7;');
+
+      final database = AppDatabase.forTesting(
+        NativeDatabase.opened(db, closeUnderlyingOnClose: true),
+      );
+      addTearDown(database.close);
+
+      final existing = await database.projectById('existing');
+      expect(existing?.restoreOperationId, isNull);
+
+      final restored = await database.createProject(
+        id: 'restored',
+        name: '恢复项目',
+        restoreOperationId: 'operation-1',
+      );
+      expect(restored.restoreOperationId, 'operation-1');
+      expect(
+        await database.projectHasRestoreOwnership(
+          projectId: 'restored',
+          operationId: 'operation-1',
+        ),
+        isTrue,
+      );
+      await database.clearProjectRestoreOwnership(
+        projectId: 'restored',
+        operationId: 'other-operation',
+      );
+      expect(
+        (await database.projectById('restored'))?.restoreOperationId,
+        'operation-1',
+      );
+      await database.clearProjectRestoreOwnership(
+        projectId: 'restored',
+        operationId: 'operation-1',
+      );
+      expect(
+        (await database.projectById('restored'))?.restoreOperationId,
+        isNull,
+      );
+    },
+  );
 }

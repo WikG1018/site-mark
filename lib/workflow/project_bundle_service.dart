@@ -169,18 +169,24 @@ class PendingBundleRestore {
     required this.stagingDirectory,
     required this.plannedProjectIds,
     this.ownedProjectIds = const [],
+    this.operationId,
+    this.revision = 0,
   });
 
   final String bundleId;
   final String stagingDirectory;
   final List<String> plannedProjectIds;
   final List<String> ownedProjectIds;
+  final String? operationId;
+  final int revision;
 
   Map<String, dynamic> toJson() => {
     'bundleId': bundleId,
     'stagingDirectory': stagingDirectory,
     'plannedProjectIds': plannedProjectIds,
     'ownedProjectIds': ownedProjectIds,
+    'operationId': operationId,
+    'revision': revision,
   };
 
   factory PendingBundleRestore.fromJson(Map<String, dynamic> json) {
@@ -193,6 +199,8 @@ class PendingBundleRestore {
       ownedProjectIds: (json['ownedProjectIds'] as List? ?? const [])
           .whereType<String>()
           .toList(growable: false),
+      operationId: json['operationId'] as String?,
+      revision: json['revision'] as int? ?? 0,
     );
   }
 
@@ -203,6 +211,8 @@ class PendingBundleRestore {
       stagingDirectory: stagingDirectory,
       plannedProjectIds: plannedProjectIds,
       ownedProjectIds: [...ownedProjectIds, projectId],
+      operationId: operationId,
+      revision: revision + 1,
     );
   }
 }
@@ -218,23 +228,24 @@ abstract interface class BundleRestorePendingStore {
 class AppBundleRestorePendingStore implements BundleRestorePendingStore {
   AppBundleRestorePendingStore({
     Future<Directory> Function()? documentsDirectory,
+    AtomicMarkerWriter? writer,
   }) : _documentsDirectory =
-           documentsDirectory ?? getApplicationDocumentsDirectory;
+           documentsDirectory ?? getApplicationDocumentsDirectory,
+       _writer = writer ?? DartAtomicMarkerWriter();
 
   final Future<Directory> Function() _documentsDirectory;
+  final AtomicMarkerWriter _writer;
 
   @override
   Future<void> write(PendingBundleRestore pending) async {
-    final marker = await _marker(pending.bundleId);
-    final temporary = File('${marker.path}.tmp');
-    await temporary.writeAsString(jsonEncode(pending.toJson()), flush: true);
-    await temporary.rename(marker.path);
+    final marker = await _marker(pending.bundleId, pending.revision);
+    await _writer.write(marker, jsonEncode(pending.toJson()));
   }
 
   @override
   Future<List<PendingBundleRestore>> list() async {
     final directory = await _directory();
-    final pending = <PendingBundleRestore>[];
+    final latest = <String, PendingBundleRestore>{};
     await for (final entity in directory.list()) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
@@ -248,20 +259,38 @@ class AppBundleRestorePendingStore implements BundleRestorePendingStore {
           if (item.bundleId.isNotEmpty &&
               item.stagingDirectory.isNotEmpty &&
               item.plannedProjectIds.isNotEmpty) {
-            pending.add(item);
+            final current = latest[item.bundleId];
+            if (current == null || item.revision > current.revision) {
+              latest[item.bundleId] = item;
+            }
           }
         }
       } catch (_) {
         // A malformed marker is not safe input for destructive cleanup.
       }
     }
-    return pending;
+    return latest.values.toList(growable: false);
   }
 
   @override
   Future<void> clear(String bundleId) async {
-    final marker = await _marker(bundleId);
-    if (await marker.exists()) await marker.delete();
+    final directory = await _directory();
+    await for (final entity in directory.list()) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments.last;
+      if (!name.startsWith('bundle-pending-') || !name.endsWith('.json')) {
+        continue;
+      }
+      try {
+        final decoded = jsonDecode(await entity.readAsString());
+        if (decoded is Map<String, dynamic> &&
+            PendingBundleRestore.fromJson(decoded).bundleId == bundleId) {
+          await entity.delete();
+        }
+      } catch (_) {
+        // A corrupt legacy marker cannot prove its bundle identity.
+      }
+    }
   }
 
   Future<Directory> _directory() async {
@@ -274,18 +303,18 @@ class AppBundleRestorePendingStore implements BundleRestorePendingStore {
     return directory;
   }
 
-  Future<File> _marker(String bundleId) async {
+  Future<File> _marker(String bundleId, int revision) async {
     final safeId = bundleId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     final directory = await _directory();
     return File(
       '${directory.path}${Platform.pathSeparator}'
-      'bundle-pending-$safeId.json',
+      'bundle-pending-$safeId-r$revision.json',
     );
   }
 }
 
 abstract interface class ProjectBundleRollback {
-  Future<void> handoff(String projectId);
+  Future<void> handoff(String projectId, String operationId);
 }
 
 class ProjectDeletionBundleRollback implements ProjectBundleRollback {
@@ -298,11 +327,15 @@ class ProjectDeletionBundleRollback implements ProjectBundleRollback {
   final ProjectDeletionService deletions;
 
   @override
-  Future<void> handoff(String projectId) async {
-    if (await database.projectById(projectId) != null) {
+  Future<void> handoff(String projectId, String operationId) async {
+    if (await database.projectHasRestoreOwnership(
+      projectId: projectId,
+      operationId: operationId,
+    )) {
       await deletions.deleteProject(projectId);
       return;
     }
+    if (await database.projectById(projectId) != null) return;
     // A previous attempt may already have handed private paths to the durable
     // deletion marker. Retry those markers without replacing them with an
     // empty marker for an already-absent database row.
@@ -469,6 +502,7 @@ class ProjectBundleService {
       plannedProjectIds: [
         for (final item in prepared.items) item.targetProjectId,
       ],
+      operationId: prepared.bundleId!,
     );
     try {
       await pendingStore.write(pending);
@@ -497,6 +531,8 @@ class ProjectBundleService {
           zipPath: item.archivePath,
           projectName: names[item.sourceProjectId]!,
           projectId: item.targetProjectId,
+          restoreOperationId: pending.operationId,
+          retainRestoreOwnership: true,
           onProgress: (completed, _) {
             final next = (completedBeforeItem + completed).clamp(
               lastReported,
@@ -515,6 +551,20 @@ class ProjectBundleService {
       }
       await files.deleteTree(pending.stagingDirectory);
       await pendingStore.clear(pending.bundleId);
+      final operationId = pending.operationId;
+      if (operationId != null) {
+        for (final projectId in pending.plannedProjectIds) {
+          try {
+            await database.clearProjectRestoreOwnership(
+              projectId: projectId,
+              operationId: operationId,
+            );
+          } catch (_) {
+            // Marker removal is the durable commit point. A leftover token is
+            // inert without that marker and can be cleared on a later pass.
+          }
+        }
+      }
       return results;
     } catch (error) {
       await _rollbackPending(pending);
@@ -584,21 +634,21 @@ class ProjectBundleService {
     var safelyHandedOff = true;
     var hasAmbiguousOwnership = false;
     final plannedIds = pending.plannedProjectIds.toSet();
-    final ownedIds = pending.ownedProjectIds.where(plannedIds.contains).toSet();
-    for (final projectId in ownedIds) {
-      try {
-        await rollback.handoff(projectId);
-      } catch (_) {
-        safelyHandedOff = false;
-      }
-    }
-    for (final projectId in plannedIds.difference(ownedIds)) {
-      if (await database.projectById(projectId) != null) {
-        // A project exists, but the bundle marker never durably recorded that
-        // this restore owns it. Preserve both data and marker for a later,
-        // explicit resolution instead of risking an unrelated project.
+    final operationId = pending.operationId;
+    for (final projectId in plannedIds) {
+      final project = await database.projectById(projectId);
+      if (project == null) continue;
+      if (operationId == null ||
+          operationId.isEmpty ||
+          project.restoreOperationId != operationId) {
         safelyHandedOff = false;
         hasAmbiguousOwnership = true;
+        continue;
+      }
+      try {
+        await rollback.handoff(projectId, operationId);
+      } catch (_) {
+        safelyHandedOff = false;
       }
     }
     if (!hasAmbiguousOwnership) {
