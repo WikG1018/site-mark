@@ -100,6 +100,51 @@ pub struct ExportProjectResult {
     pub photo_count: u32,
 }
 
+/// A multi-project backup contains at most one hundred already-exported
+/// project ZIPs. The outer archive never unpacks these ZIPs; it merely stores
+/// and integrity-checks them for later restore orchestration in Dart.
+pub const MAX_BUNDLE_PROJECTS: usize = 100;
+pub const MAX_BUNDLE_ENTRY_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+pub const MAX_BUNDLE_TOTAL_BYTES: u64 = 16 * 1024 * 1024 * 1024;
+
+const PROJECT_BUNDLE_KIND: &str = "sitemark-project-bundle";
+const PROJECT_BUNDLE_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProjectBundleSource {
+    pub project_id: String,
+    pub project_name: String,
+    pub archive_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportProjectBundleRequest {
+    pub output_zip_path: String,
+    pub projects: Vec<ProjectBundleSource>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProjectBundleEntryPreview {
+    pub project_id: String,
+    pub project_name: String,
+    pub archive_path: String,
+    pub archive_sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProjectBundlePreview {
+    pub schema_version: u32,
+    pub created_at: String,
+    pub projects: Vec<ProjectBundleEntryPreview>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExtractProjectBundleEntryRequest {
+    pub zip_path: String,
+    pub archive_path: String,
+    pub output_path: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExportSelectionProject {
     pub project_id: String,
@@ -469,6 +514,120 @@ pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProject
         output_zip_path: request.output_zip_path.clone(),
         archive_sha256: sha256_file(request.output_zip_path)?,
         photo_count: total_photos as u32,
+    })
+}
+
+/// Writes a restorable outer bundle from complete, single-project ZIPs.
+/// Inner archives are deliberately stored rather than recompressed: this
+/// keeps export CPU predictable and makes the outer entry hash a direct hash
+/// of the original project archive bytes.
+pub fn export_project_bundle(
+    request: ExportProjectBundleRequest,
+) -> Result<ExportProjectResult, String> {
+    if request.projects.is_empty() {
+        return Err(invalid_data(
+            "validate project bundle",
+            "project list is empty",
+        ));
+    }
+    if request.projects.len() > MAX_BUNDLE_PROJECTS {
+        return Err(invalid_data(
+            "validate project bundle",
+            format!("bundle has more than {MAX_BUNDLE_PROJECTS} projects"),
+        ));
+    }
+
+    let mut seen_ids = std::collections::HashSet::new();
+    let mut entries = Vec::with_capacity(request.projects.len());
+    let mut total_source_bytes = 0u64;
+    for project in &request.projects {
+        let project_id = safe_archive_component(&project.project_id)?;
+        if project.project_name.trim().is_empty() {
+            return Err(invalid_data(
+                "validate project bundle",
+                "project name is required",
+            ));
+        }
+        if !seen_ids.insert(project_id) {
+            return Err(invalid_data(
+                "validate project bundle",
+                format!("duplicate project ID {project_id}"),
+            ));
+        }
+        let archive_path = format!("projects/{project_id}.zip");
+        let source_size = fs::metadata(&project.archive_path)
+            .map_err(|error| io_failure(&format!("inspect {}", project.archive_path), error))?
+            .len();
+        if source_size > MAX_BUNDLE_ENTRY_BYTES {
+            return Err(invalid_data(
+                "validate project bundle",
+                format!("{} exceeds the 8 GiB entry limit", project.archive_path),
+            ));
+        }
+        total_source_bytes = total_source_bytes
+            .checked_add(source_size)
+            .ok_or_else(|| invalid_data("validate project bundle", "bundle total size overflow"))?;
+        if total_source_bytes > MAX_BUNDLE_TOTAL_BYTES {
+            return Err(invalid_data(
+                "validate project bundle",
+                "bundle exceeds the 16 GiB total size limit",
+            ));
+        }
+        entries.push(ProjectBundleManifestEntry {
+            project_id: project.project_id.clone(),
+            project_name: project.project_name.clone(),
+            archive_path,
+            archive_sha256: sha256_file(project.archive_path.clone())?,
+        });
+    }
+
+    let manifest = serde_json::to_vec_pretty(&ProjectBundleManifest {
+        app: "SiteMark".to_string(),
+        kind: PROJECT_BUNDLE_KIND.to_string(),
+        schema_version: PROJECT_BUNDLE_SCHEMA_VERSION,
+        created_at: unix_time_millis(),
+        projects: entries.clone(),
+    })
+    .map_err(|error| invalid_data("serialize bundle manifest", error))?;
+    if manifest.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(invalid_data(
+            "serialize bundle manifest",
+            "manifest exceeds the 4 MiB size limit",
+        ));
+    }
+
+    let output = Path::new(&request.output_zip_path);
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent).map_err(|error| io_failure("create bundle directory", error))?;
+    }
+    let file = File::create(output).map_err(|error| io_failure("create bundle ZIP", error))?;
+    let mut archive = ZipWriter::new(BufWriter::new(file));
+    let manifest_options =
+        SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    let project_options =
+        SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    archive
+        .start_file("bundle.json", manifest_options)
+        .map_err(|error| zip_failure("start bundle manifest", error))?;
+    archive
+        .write_all(&manifest)
+        .map_err(|error| io_failure("write bundle manifest", error))?;
+    for (project, entry) in request.projects.iter().zip(entries.iter()) {
+        add_file_to_zip(
+            &mut archive,
+            &project.archive_path,
+            &entry.archive_path,
+            project_options,
+        )?;
+    }
+    archive
+        .finish()
+        .map_err(|error| zip_failure("finish bundle ZIP", error))?;
+
+    Ok(ExportProjectResult {
+        output_zip_path: request.output_zip_path.clone(),
+        archive_sha256: sha256_file(request.output_zip_path)?,
+        photo_count: entries.len() as u32,
     })
 }
 
@@ -1177,6 +1336,23 @@ struct ProjectManifestFile {
     photos: Vec<ManifestPhoto>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ProjectBundleManifestEntry {
+    project_id: String,
+    project_name: String,
+    archive_path: String,
+    archive_sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ProjectBundleManifest {
+    app: String,
+    kind: String,
+    schema_version: u32,
+    created_at: String,
+    projects: Vec<ProjectBundleManifestEntry>,
+}
+
 /// Backup-restore extraction limits. Generous enough for real camera
 /// originals (a phone JPEG rarely exceeds 30 MiB) while still stopping a
 /// decompression bomb long before it can fill the device storage.
@@ -1189,6 +1365,354 @@ fn open_zip(zip_path: &str) -> Result<zip::ZipArchive<BufReader<File>>, String> 
     let file =
         File::open(zip_path).map_err(|error| io_failure(&format!("open {zip_path}"), error))?;
     zip::ZipArchive::new(BufReader::new(file)).map_err(|error| zip_failure("open archive", error))
+}
+
+fn unix_time_millis() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .to_string()
+}
+
+fn is_valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn expected_bundle_archive_path(project_id: &str) -> Result<String, String> {
+    Ok(format!(
+        "projects/{}.zip",
+        safe_archive_component(project_id)?
+    ))
+}
+
+fn read_project_bundle_manifest(zip_path: &str) -> Result<(ProjectBundleManifest, u64), String> {
+    let mut archive = open_zip(zip_path)?;
+    let mut entry = archive
+        .by_name("bundle.json")
+        .map_err(|_| invalid_data("read bundle manifest", "archive has no bundle.json"))?;
+    if entry.size() > MAX_MANIFEST_BYTES {
+        return Err(invalid_data(
+            "read bundle manifest",
+            "manifest exceeds the 4 MiB size limit",
+        ));
+    }
+    let mut text = String::new();
+    entry
+        .by_ref()
+        .take(MAX_MANIFEST_BYTES + 1)
+        .read_to_string(&mut text)
+        .map_err(|error| io_failure("read bundle manifest", error))?;
+    if text.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err(invalid_data(
+            "read bundle manifest",
+            "manifest exceeds the 4 MiB size limit",
+        ));
+    }
+    let manifest: ProjectBundleManifest = serde_json::from_str(&text)
+        .map_err(|error| invalid_data("parse bundle manifest", error))?;
+    if manifest.app != "SiteMark" || manifest.kind != PROJECT_BUNDLE_KIND {
+        return Err(invalid_data(
+            "validate bundle manifest",
+            "not a SiteMark project bundle",
+        ));
+    }
+    if manifest.schema_version != PROJECT_BUNDLE_SCHEMA_VERSION {
+        return Err(invalid_data(
+            "validate bundle manifest",
+            format!("unsupported schema version {}", manifest.schema_version),
+        ));
+    }
+    if manifest.created_at.trim().is_empty() {
+        return Err(invalid_data(
+            "validate bundle manifest",
+            "created_at is empty",
+        ));
+    }
+    if manifest.projects.is_empty() {
+        return Err(invalid_data(
+            "validate bundle manifest",
+            "project list is empty",
+        ));
+    }
+    if manifest.projects.len() > MAX_BUNDLE_PROJECTS {
+        return Err(invalid_data(
+            "validate bundle manifest",
+            format!("bundle has more than {MAX_BUNDLE_PROJECTS} projects"),
+        ));
+    }
+
+    let mut project_ids = std::collections::HashSet::new();
+    let mut archive_paths = std::collections::HashSet::new();
+    for project in &manifest.projects {
+        let expected_path = expected_bundle_archive_path(&project.project_id)?;
+        if project.project_name.trim().is_empty() {
+            return Err(invalid_data(
+                "validate bundle manifest",
+                "project name is empty",
+            ));
+        }
+        if project.archive_path != expected_path {
+            return Err(invalid_data(
+                "validate bundle manifest",
+                format!("unsafe archive path {}", project.archive_path),
+            ));
+        }
+        if !project_ids.insert(project.project_id.as_str()) {
+            return Err(invalid_data(
+                "validate bundle manifest",
+                format!("duplicate project ID {}", project.project_id),
+            ));
+        }
+        if !archive_paths.insert(project.archive_path.as_str()) {
+            return Err(invalid_data(
+                "validate bundle manifest",
+                format!("duplicate archive path {}", project.archive_path),
+            ));
+        }
+        if !is_valid_sha256(&project.archive_sha256) {
+            return Err(invalid_data(
+                "validate bundle manifest",
+                format!("invalid SHA-256 digest for {}", project.project_id),
+            ));
+        }
+    }
+    Ok((manifest, text.len() as u64))
+}
+
+fn hash_bundle_entry(
+    archive: &mut zip::ZipArchive<BufReader<File>>,
+    archive_path: &str,
+    total_remaining: u64,
+) -> Result<(String, u64), String> {
+    let mut entry = archive
+        .by_name(archive_path)
+        .map_err(|error| zip_failure(&format!("open bundle entry {archive_path}"), error))?;
+    if entry.size() > MAX_BUNDLE_ENTRY_BYTES {
+        return Err(invalid_data(
+            "validate bundle",
+            format!("entry {archive_path} exceeds the 8 GiB size limit"),
+        ));
+    }
+    let cap = MAX_BUNDLE_ENTRY_BYTES.min(total_remaining);
+    let mut limited = entry.by_ref().take(cap.saturating_add(1));
+    let mut hasher = Sha256::new();
+    let mut bytes_read = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = limited
+            .read(&mut buffer)
+            .map_err(|error| io_failure(&format!("read bundle entry {archive_path}"), error))?;
+        if count == 0 {
+            break;
+        }
+        bytes_read += count as u64;
+        hasher.update(&buffer[..count]);
+    }
+    if bytes_read > MAX_BUNDLE_ENTRY_BYTES {
+        return Err(invalid_data(
+            "validate bundle",
+            format!("entry {archive_path} exceeds the 8 GiB size limit"),
+        ));
+    }
+    if bytes_read > total_remaining {
+        return Err(invalid_data(
+            "validate bundle",
+            "bundle exceeds the 16 GiB total size limit",
+        ));
+    }
+    Ok((hex::encode(hasher.finalize()), bytes_read))
+}
+
+/// Re-reads every outer entry, validates the fixed entry set and checks each
+/// inner project ZIP hash. This is deliberately shared by preview and
+/// extraction so extraction cannot trust an earlier, stale preview.
+fn validate_project_bundle(zip_path: &str) -> Result<ProjectBundlePreview, String> {
+    let (manifest, manifest_bytes) = read_project_bundle_manifest(zip_path)?;
+    let expected_entries: std::collections::HashSet<&str> = manifest
+        .projects
+        .iter()
+        .map(|project| project.archive_path.as_str())
+        .collect();
+    let mut archive = open_zip(zip_path)?;
+    let mut seen_entries = std::collections::HashSet::new();
+    let mut declared_total = 0u64;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| zip_failure("read bundle entry", error))?;
+        let name = entry.name().to_string();
+        if name != "bundle.json" && !expected_entries.contains(name.as_str()) {
+            return Err(invalid_data(
+                "validate bundle",
+                format!("unexpected archive entry {name}"),
+            ));
+        }
+        if !seen_entries.insert(name.clone()) {
+            return Err(invalid_data(
+                "validate bundle",
+                format!("duplicate archive entry {name}"),
+            ));
+        }
+        if entry.size() > MAX_BUNDLE_ENTRY_BYTES {
+            return Err(invalid_data(
+                "validate bundle",
+                format!("entry {name} exceeds the 8 GiB size limit"),
+            ));
+        }
+        declared_total = declared_total
+            .checked_add(entry.size())
+            .ok_or_else(|| invalid_data("validate bundle", "bundle total size overflow"))?;
+        if declared_total > MAX_BUNDLE_TOTAL_BYTES {
+            return Err(invalid_data(
+                "validate bundle",
+                "bundle exceeds the 16 GiB total size limit",
+            ));
+        }
+        if name != "bundle.json" && entry.compression() != CompressionMethod::Stored {
+            return Err(invalid_data(
+                "validate bundle",
+                format!("project archive {name} must be stored without recompression"),
+            ));
+        }
+    }
+    if seen_entries.len() != expected_entries.len() + 1 || !seen_entries.contains("bundle.json") {
+        return Err(invalid_data(
+            "validate bundle",
+            "bundle entry set does not match its manifest",
+        ));
+    }
+    for path in &expected_entries {
+        if !seen_entries.contains(*path) {
+            return Err(invalid_data(
+                "validate bundle",
+                format!("bundle is missing {path}"),
+            ));
+        }
+    }
+
+    let mut actual_total = manifest_bytes;
+    let mut projects = Vec::with_capacity(manifest.projects.len());
+    for project in manifest.projects {
+        let remaining = MAX_BUNDLE_TOTAL_BYTES
+            .checked_sub(actual_total)
+            .ok_or_else(|| {
+                invalid_data(
+                    "validate bundle",
+                    "bundle exceeds the 16 GiB total size limit",
+                )
+            })?;
+        let (actual_sha256, bytes_read) =
+            hash_bundle_entry(&mut archive, &project.archive_path, remaining)?;
+        actual_total += bytes_read;
+        if !actual_sha256.eq_ignore_ascii_case(&project.archive_sha256) {
+            return Err(invalid_data(
+                "validate bundle",
+                format!("SHA-256 mismatch for {}", project.archive_path),
+            ));
+        }
+        projects.push(ProjectBundleEntryPreview {
+            project_id: project.project_id,
+            project_name: project.project_name,
+            archive_path: project.archive_path,
+            archive_sha256: project.archive_sha256,
+        });
+    }
+    Ok(ProjectBundlePreview {
+        schema_version: PROJECT_BUNDLE_SCHEMA_VERSION,
+        created_at: manifest.created_at,
+        projects,
+    })
+}
+
+/// Reads a multi-project bundle only after validating its manifest, exact
+/// outer entry set, size limits, and every inner project ZIP hash.
+pub fn read_project_bundle(zip_path: String) -> Result<ProjectBundlePreview, String> {
+    validate_project_bundle(&zip_path)
+}
+
+fn copy_bundle_entry_to(
+    archive: &mut zip::ZipArchive<BufReader<File>>,
+    archive_path: &str,
+    destination: &Path,
+) -> Result<(), String> {
+    let mut entry = archive
+        .by_name(archive_path)
+        .map_err(|error| zip_failure(&format!("open bundle entry {archive_path}"), error))?;
+    if entry.size() > MAX_BUNDLE_ENTRY_BYTES {
+        return Err(invalid_data(
+            "extract bundle entry",
+            format!("entry {archive_path} exceeds the 8 GiB size limit"),
+        ));
+    }
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| io_failure("create bundle extraction directory", error))?;
+    }
+    let mut output = File::create(destination)
+        .map_err(|error| io_failure("create extracted project archive", error))?;
+    let mut limited = entry.by_ref().take(MAX_BUNDLE_ENTRY_BYTES + 1);
+    let copied = std::io::copy(&mut limited, &mut output)
+        .map_err(|error| io_failure("copy extracted project archive", error))?;
+    if copied > MAX_BUNDLE_ENTRY_BYTES {
+        return Err(invalid_data(
+            "extract bundle entry",
+            format!("entry {archive_path} exceeds the 8 GiB extraction limit"),
+        ));
+    }
+    Ok(())
+}
+
+/// Extracts one validated inner project ZIP into a caller-selected staging
+/// location. The destination must not already exist, and all bytes are first
+/// written to `<destination>.tmp`; only a final hash match permits rename.
+pub fn extract_project_bundle_entry(
+    request: ExtractProjectBundleEntryRequest,
+) -> Result<(), String> {
+    if request.output_path.trim().is_empty() {
+        return Err(invalid_data("extract bundle entry", "output path is empty"));
+    }
+    let preview = validate_project_bundle(&request.zip_path)?;
+    let expected = preview
+        .projects
+        .iter()
+        .find(|project| project.archive_path == request.archive_path)
+        .ok_or_else(|| {
+            invalid_data(
+                "extract bundle entry",
+                format!("bundle has no entry {}", request.archive_path),
+            )
+        })?;
+    let output = PathBuf::from(&request.output_path);
+    let temporary = PathBuf::from(format!("{}.tmp", request.output_path));
+    if output.exists() || temporary.exists() {
+        return Err(invalid_data(
+            "extract bundle entry",
+            "destination or temporary path already exists",
+        ));
+    }
+
+    let extraction = (|| -> Result<(), String> {
+        let mut archive = open_zip(&request.zip_path)?;
+        copy_bundle_entry_to(&mut archive, &request.archive_path, &temporary)?;
+        if !verify_file(
+            temporary.to_string_lossy().into_owned(),
+            expected.archive_sha256.clone(),
+        )? {
+            return Err(invalid_data(
+                "extract bundle entry",
+                format!("SHA-256 mismatch for {}", request.archive_path),
+            ));
+        }
+        fs::rename(&temporary, &output)
+            .map_err(|error| io_failure("finalize extracted project archive", error))?;
+        Ok(())
+    })();
+    if let Err(error) = extraction {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// Reads and validates the manifest of a single-project backup archive.

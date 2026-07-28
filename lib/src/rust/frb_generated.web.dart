@@ -39,6 +39,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExportProjectBundleRequest
+  dco_decode_box_autoadd_export_project_bundle_request(dynamic raw);
+
+  @protected
   ExportProjectRequest dco_decode_box_autoadd_export_project_request(
     dynamic raw,
   );
@@ -53,6 +57,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   dco_decode_box_autoadd_extract_archive_photo_request(dynamic raw);
 
   @protected
+  ExtractProjectBundleEntryRequest
+  dco_decode_box_autoadd_extract_project_bundle_entry_request(dynamic raw);
+
+  @protected
   double dco_decode_box_autoadd_f_64(dynamic raw);
 
   @protected
@@ -60,6 +68,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ExportPhotoRecord dco_decode_export_photo_record(dynamic raw);
+
+  @protected
+  ExportProjectBundleRequest dco_decode_export_project_bundle_request(
+    dynamic raw,
+  );
 
   @protected
   ExportProjectRequest dco_decode_export_project_request(dynamic raw);
@@ -80,6 +93,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ExtractArchivePhotoRequest dco_decode_extract_archive_photo_request(
     dynamic raw,
   );
+
+  @protected
+  ExtractProjectBundleEntryRequest
+  dco_decode_extract_project_bundle_entry_request(dynamic raw);
 
   @protected
   ExtractedArchivePhoto dco_decode_extracted_archive_photo(dynamic raw);
@@ -105,6 +122,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<ProjectBundleEntryPreview> dco_decode_list_project_bundle_entry_preview(
+    dynamic raw,
+  );
+
+  @protected
+  List<ProjectBundleSource> dco_decode_list_project_bundle_source(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
@@ -116,6 +141,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ProjectArchivePreview dco_decode_project_archive_preview(dynamic raw);
+
+  @protected
+  ProjectBundleEntryPreview dco_decode_project_bundle_entry_preview(
+    dynamic raw,
+  );
+
+  @protected
+  ProjectBundlePreview dco_decode_project_bundle_preview(dynamic raw);
+
+  @protected
+  ProjectBundleSource dco_decode_project_bundle_source(dynamic raw);
 
   @protected
   RenderPhotoRequest dco_decode_render_photo_request(dynamic raw);
@@ -157,6 +193,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExportProjectBundleRequest
+  sse_decode_box_autoadd_export_project_bundle_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ExportProjectRequest sse_decode_box_autoadd_export_project_request(
     SseDeserializer deserializer,
   );
@@ -173,6 +215,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExtractProjectBundleEntryRequest
+  sse_decode_box_autoadd_extract_project_bundle_entry_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
 
   @protected
@@ -182,6 +230,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ExportPhotoRecord sse_decode_export_photo_record(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ExportProjectBundleRequest sse_decode_export_project_bundle_request(
     SseDeserializer deserializer,
   );
 
@@ -216,6 +269,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExtractProjectBundleEntryRequest
+  sse_decode_extract_project_bundle_entry_request(SseDeserializer deserializer);
+
+  @protected
   ExtractedArchivePhoto sse_decode_extracted_archive_photo(
     SseDeserializer deserializer,
   );
@@ -245,6 +302,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<ProjectBundleEntryPreview> sse_decode_list_project_bundle_entry_preview(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ProjectBundleSource> sse_decode_list_project_bundle_source(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
@@ -258,6 +325,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ProjectArchivePreview sse_decode_project_archive_preview(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ProjectBundleEntryPreview sse_decode_project_bundle_entry_preview(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ProjectBundlePreview sse_decode_project_bundle_preview(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ProjectBundleSource sse_decode_project_bundle_source(
     SseDeserializer deserializer,
   );
 
@@ -308,6 +390,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_export_project_bundle_request(
+    ExportProjectBundleRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_export_project_request(
     ExportProjectRequest self,
     SseSerializer serializer,
@@ -326,6 +414,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_extract_project_bundle_entry_request(
+    ExtractProjectBundleEntryRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
 
   @protected
@@ -337,6 +431,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_export_photo_record(
     ExportPhotoRecord self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_export_project_bundle_request(
+    ExportProjectBundleRequest self,
     SseSerializer serializer,
   );
 
@@ -377,6 +477,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_extract_project_bundle_entry_request(
+    ExtractProjectBundleEntryRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_extracted_archive_photo(
     ExtractedArchivePhoto self,
     SseSerializer serializer,
@@ -413,6 +519,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_project_bundle_entry_preview(
+    List<ProjectBundleEntryPreview> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_project_bundle_source(
+    List<ProjectBundleSource> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
@@ -427,6 +545,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_project_archive_preview(
     ProjectArchivePreview self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_project_bundle_entry_preview(
+    ProjectBundleEntryPreview self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_project_bundle_preview(
+    ProjectBundlePreview self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_project_bundle_source(
+    ProjectBundleSource self,
     SseSerializer serializer,
   );
 

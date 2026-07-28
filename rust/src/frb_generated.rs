@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 493305756;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1907292496;
 
 // Section: executor
 
@@ -74,6 +74,40 @@ fn wire__crate__api__image_core__export_project_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::image_core::export_project(api_request)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__image_core__export_project_bundle_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "export_project_bundle",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request =
+                <crate::api::image_core::ExportProjectBundleRequest>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::image_core::export_project_bundle(api_request)?;
                     Ok(output_ok)
                 })())
             }
@@ -142,6 +176,43 @@ fn wire__crate__api__image_core__extract_archive_photo_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::image_core::extract_archive_photo(api_request)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__image_core__extract_project_bundle_entry_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "extract_project_bundle_entry",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request =
+                <crate::api::image_core::ExtractProjectBundleEntryRequest>::sse_decode(
+                    &mut deserializer,
+                );
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok =
+                        crate::api::image_core::extract_project_bundle_entry(api_request)?;
                     Ok(output_ok)
                 })())
             }
@@ -239,6 +310,39 @@ fn wire__crate__api__image_core__read_project_archive_impl(
             move |context| {
                 transform_result_sse::<_, String>((move || {
                     let output_ok = crate::api::image_core::read_project_archive(api_zip_path)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__image_core__read_project_bundle_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "read_project_bundle",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_zip_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::image_core::read_project_bundle(api_zip_path)?;
                     Ok(output_ok)
                 })())
             }
@@ -453,6 +557,19 @@ impl SseDecode for crate::api::image_core::ExportPhotoRecord {
     }
 }
 
+impl SseDecode for crate::api::image_core::ExportProjectBundleRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_outputZipPath = <String>::sse_decode(deserializer);
+        let mut var_projects =
+            <Vec<crate::api::image_core::ProjectBundleSource>>::sse_decode(deserializer);
+        return crate::api::image_core::ExportProjectBundleRequest {
+            output_zip_path: var_outputZipPath,
+            projects: var_projects,
+        };
+    }
+}
+
 impl SseDecode for crate::api::image_core::ExportProjectRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -551,6 +668,20 @@ impl SseDecode for crate::api::image_core::ExtractArchivePhotoRequest {
     }
 }
 
+impl SseDecode for crate::api::image_core::ExtractProjectBundleEntryRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_zipPath = <String>::sse_decode(deserializer);
+        let mut var_archivePath = <String>::sse_decode(deserializer);
+        let mut var_outputPath = <String>::sse_decode(deserializer);
+        return crate::api::image_core::ExtractProjectBundleEntryRequest {
+            zip_path: var_zipPath,
+            archive_path: var_archivePath,
+            output_path: var_outputPath,
+        };
+    }
+}
+
 impl SseDecode for crate::api::image_core::ExtractedArchivePhoto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -629,6 +760,34 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for Vec<crate::api::image_core::ProjectBundleEntryPreview> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(
+                <crate::api::image_core::ProjectBundleEntryPreview>::sse_decode(deserializer),
+            );
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::image_core::ProjectBundleSource> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::image_core::ProjectBundleSource>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -680,6 +839,51 @@ impl SseDecode for crate::api::image_core::ProjectArchivePreview {
             includes_originals: var_includesOriginals,
             watermark: var_watermark,
             photos: var_photos,
+        };
+    }
+}
+
+impl SseDecode for crate::api::image_core::ProjectBundleEntryPreview {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_projectId = <String>::sse_decode(deserializer);
+        let mut var_projectName = <String>::sse_decode(deserializer);
+        let mut var_archivePath = <String>::sse_decode(deserializer);
+        let mut var_archiveSha256 = <String>::sse_decode(deserializer);
+        return crate::api::image_core::ProjectBundleEntryPreview {
+            project_id: var_projectId,
+            project_name: var_projectName,
+            archive_path: var_archivePath,
+            archive_sha256: var_archiveSha256,
+        };
+    }
+}
+
+impl SseDecode for crate::api::image_core::ProjectBundlePreview {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_schemaVersion = <u32>::sse_decode(deserializer);
+        let mut var_createdAt = <String>::sse_decode(deserializer);
+        let mut var_projects =
+            <Vec<crate::api::image_core::ProjectBundleEntryPreview>>::sse_decode(deserializer);
+        return crate::api::image_core::ProjectBundlePreview {
+            schema_version: var_schemaVersion,
+            created_at: var_createdAt,
+            projects: var_projects,
+        };
+    }
+}
+
+impl SseDecode for crate::api::image_core::ProjectBundleSource {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_projectId = <String>::sse_decode(deserializer);
+        let mut var_projectName = <String>::sse_decode(deserializer);
+        let mut var_archivePath = <String>::sse_decode(deserializer);
+        return crate::api::image_core::ProjectBundleSource {
+            project_id: var_projectId,
+            project_name: var_projectName,
+            archive_path: var_archivePath,
         };
     }
 }
@@ -782,23 +986,41 @@ fn pde_ffi_dispatcher_primary_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__api__image_core__export_project_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__image_core__export_selection_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__image_core__extract_archive_photo_impl(
+        2 => wire__crate__api__image_core__export_project_bundle_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        5 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__image_core__read_project_archive_impl(
+        3 => wire__crate__api__image_core__export_selection_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__image_core__extract_archive_photo_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        7 => wire__crate__api__image_core__render_photo_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__image_core__sha256_file_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__image_core__verify_file_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__image_core__extract_project_bundle_entry_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        7 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__image_core__read_project_archive_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        9 => wire__crate__api__image_core__read_project_bundle_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        10 => wire__crate__api__image_core__render_photo_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__image_core__sha256_file_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__image_core__verify_file_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -811,7 +1033,7 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        4 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -904,6 +1126,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExportPhotoRecord
     for crate::api::image_core::ExportPhotoRecord
 {
     fn into_into_dart(self) -> crate::api::image_core::ExportPhotoRecord {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportProjectBundleRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.output_zip_path.into_into_dart().into_dart(),
+            self.projects.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ExportProjectBundleRequest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExportProjectBundleRequest>
+    for crate::api::image_core::ExportProjectBundleRequest
+{
+    fn into_into_dart(self) -> crate::api::image_core::ExportProjectBundleRequest {
         self
     }
 }
@@ -1045,6 +1288,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExtractArchivePho
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExtractProjectBundleEntryRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.zip_path.into_into_dart().into_dart(),
+            self.archive_path.into_into_dart().into_dart(),
+            self.output_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ExtractProjectBundleEntryRequest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExtractProjectBundleEntryRequest>
+    for crate::api::image_core::ExtractProjectBundleEntryRequest
+{
+    fn into_into_dart(self) -> crate::api::image_core::ExtractProjectBundleEntryRequest {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExtractedArchivePhoto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1086,6 +1351,73 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ProjectArchivePre
     for crate::api::image_core::ProjectArchivePreview
 {
     fn into_into_dart(self) -> crate::api::image_core::ProjectArchivePreview {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ProjectBundleEntryPreview {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.project_id.into_into_dart().into_dart(),
+            self.project_name.into_into_dart().into_dart(),
+            self.archive_path.into_into_dart().into_dart(),
+            self.archive_sha256.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ProjectBundleEntryPreview
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ProjectBundleEntryPreview>
+    for crate::api::image_core::ProjectBundleEntryPreview
+{
+    fn into_into_dart(self) -> crate::api::image_core::ProjectBundleEntryPreview {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ProjectBundlePreview {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.schema_version.into_into_dart().into_dart(),
+            self.created_at.into_into_dart().into_dart(),
+            self.projects.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ProjectBundlePreview
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ProjectBundlePreview>
+    for crate::api::image_core::ProjectBundlePreview
+{
+    fn into_into_dart(self) -> crate::api::image_core::ProjectBundlePreview {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ProjectBundleSource {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.project_id.into_into_dart().into_dart(),
+            self.project_name.into_into_dart().into_dart(),
+            self.archive_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ProjectBundleSource
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ProjectBundleSource>
+    for crate::api::image_core::ProjectBundleSource
+{
+    fn into_into_dart(self) -> crate::api::image_core::ProjectBundleSource {
         self
     }
 }
@@ -1233,6 +1565,14 @@ impl SseEncode for crate::api::image_core::ExportPhotoRecord {
     }
 }
 
+impl SseEncode for crate::api::image_core::ExportProjectBundleRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.output_zip_path, serializer);
+        <Vec<crate::api::image_core::ProjectBundleSource>>::sse_encode(self.projects, serializer);
+    }
+}
+
 impl SseEncode for crate::api::image_core::ExportProjectRequest {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1292,6 +1632,15 @@ impl SseEncode for crate::api::image_core::ExtractArchivePhotoRequest {
         <String>::sse_encode(self.photo_number, serializer);
         <String>::sse_encode(self.rendered_destination, serializer);
         <Option<String>>::sse_encode(self.original_destination, serializer);
+    }
+}
+
+impl SseEncode for crate::api::image_core::ExtractProjectBundleEntryRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.zip_path, serializer);
+        <String>::sse_encode(self.archive_path, serializer);
+        <String>::sse_encode(self.output_path, serializer);
     }
 }
 
@@ -1357,6 +1706,26 @@ impl SseEncode for Vec<u8> {
     }
 }
 
+impl SseEncode for Vec<crate::api::image_core::ProjectBundleEntryPreview> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::image_core::ProjectBundleEntryPreview>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::image_core::ProjectBundleSource> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::image_core::ProjectBundleSource>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1398,6 +1767,37 @@ impl SseEncode for crate::api::image_core::ProjectArchivePreview {
             serializer,
         );
         <Vec<crate::api::image_core::ArchivePhotoPreview>>::sse_encode(self.photos, serializer);
+    }
+}
+
+impl SseEncode for crate::api::image_core::ProjectBundleEntryPreview {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.project_id, serializer);
+        <String>::sse_encode(self.project_name, serializer);
+        <String>::sse_encode(self.archive_path, serializer);
+        <String>::sse_encode(self.archive_sha256, serializer);
+    }
+}
+
+impl SseEncode for crate::api::image_core::ProjectBundlePreview {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.schema_version, serializer);
+        <String>::sse_encode(self.created_at, serializer);
+        <Vec<crate::api::image_core::ProjectBundleEntryPreview>>::sse_encode(
+            self.projects,
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::image_core::ProjectBundleSource {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.project_id, serializer);
+        <String>::sse_encode(self.project_name, serializer);
+        <String>::sse_encode(self.archive_path, serializer);
     }
 }
 

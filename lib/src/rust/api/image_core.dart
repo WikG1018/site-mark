@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `compute_rendered_lines`, `draw_watermark_card`, `extract_entry_to`, `find_archive_entries`, `image_failure`, `invalid_data`, `io_failure`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `open_zip`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `tokenize`, `validate_render_request`, `wrap_text`, `zip_failure`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestPhoto`, `ManifestWatermark`, `ProjectManifestFile`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `open_zip`, `read_project_bundle_manifest`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `tokenize`, `unix_time_millis`, `validate_project_bundle`, `validate_render_request`, `wrap_text`, `zip_failure`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestPhoto`, `ManifestWatermark`, `ProjectBundleManifestEntry`, `ProjectBundleManifest`, `ProjectManifestFile`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<String> sha256File({required String path}) =>
     RustLib.instance.api.crateApiImageCoreSha256File(path: path);
@@ -32,14 +32,40 @@ Future<ExportProjectResult> exportSelection({
   required ExportSelectionRequest request,
 }) => RustLib.instance.api.crateApiImageCoreExportSelection(request: request);
 
+/// Writes a restorable outer bundle from complete, single-project ZIPs.
+/// Inner archives are deliberately stored rather than recompressed: this
+/// keeps export CPU predictable and makes the outer entry hash a direct hash
+/// of the original project archive bytes.
+Future<ExportProjectResult> exportProjectBundle({
+  required ExportProjectBundleRequest request,
+}) =>
+    RustLib.instance.api.crateApiImageCoreExportProjectBundle(request: request);
+
+/// Reads a multi-project bundle only after validating its manifest, exact
+/// outer entry set, size limits, and every inner project ZIP hash.
+Future<ProjectBundlePreview> readProjectBundle({required String zipPath}) =>
+    RustLib.instance.api.crateApiImageCoreReadProjectBundle(zipPath: zipPath);
+
+/// Extracts one validated inner project ZIP into a caller-selected staging
+/// location. The destination must not already exist, and all bytes are first
+/// written to `<destination>.tmp`; only a final hash match permits rename.
+Future<void> extractProjectBundleEntry({
+  required ExtractProjectBundleEntryRequest request,
+}) => RustLib.instance.api.crateApiImageCoreExtractProjectBundleEntry(
+  request: request,
+);
+
 /// Validates a backup ZIP and returns its restorable content. Only
 /// single-project archives (schema v1/v2) are restorable.
 Future<ProjectArchivePreview> readProjectArchive({required String zipPath}) =>
     RustLib.instance.api.crateApiImageCoreReadProjectArchive(zipPath: zipPath);
 
-/// Extracts one photo (and its original when requested) from a backup ZIP
-/// into caller-chosen destination paths. The original's SHA-256 is verified
-/// against the manifest; a mismatch removes the extracted files and fails.
+/// Extracts one photo (and its original when requested) from a backup ZIP.
+///
+/// Everything lands in `<destination>.tmp` first; only after the original's
+/// SHA-256 verifies are the files atomically renamed into place. Any failure
+/// removes every temporary file, so a failed extraction never leaves
+/// half-written files behind for the caller to clean up.
 Future<ExtractedArchivePhoto> extractArchivePhoto({
   required ExtractArchivePhotoRequest request,
 }) =>
@@ -220,6 +246,27 @@ class ExportPhotoRecord {
           watermarkLocaleCode == other.watermarkLocaleCode;
 }
 
+class ExportProjectBundleRequest {
+  final String outputZipPath;
+  final List<ProjectBundleSource> projects;
+
+  const ExportProjectBundleRequest({
+    required this.outputZipPath,
+    required this.projects,
+  });
+
+  @override
+  int get hashCode => outputZipPath.hashCode ^ projects.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportProjectBundleRequest &&
+          runtimeType == other.runtimeType &&
+          outputZipPath == other.outputZipPath &&
+          projects == other.projects;
+}
+
 class ExportProjectRequest {
   final String projectId;
   final String projectName;
@@ -398,6 +445,31 @@ class ExtractArchivePhotoRequest {
           originalDestination == other.originalDestination;
 }
 
+class ExtractProjectBundleEntryRequest {
+  final String zipPath;
+  final String archivePath;
+  final String outputPath;
+
+  const ExtractProjectBundleEntryRequest({
+    required this.zipPath,
+    required this.archivePath,
+    required this.outputPath,
+  });
+
+  @override
+  int get hashCode =>
+      zipPath.hashCode ^ archivePath.hashCode ^ outputPath.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExtractProjectBundleEntryRequest &&
+          runtimeType == other.runtimeType &&
+          zipPath == other.zipPath &&
+          archivePath == other.archivePath &&
+          outputPath == other.outputPath;
+}
+
 class ExtractedArchivePhoto {
   final String renderedPath;
   final String? originalPath;
@@ -450,6 +522,87 @@ class ProjectArchivePreview {
           includesOriginals == other.includesOriginals &&
           watermark == other.watermark &&
           photos == other.photos;
+}
+
+class ProjectBundleEntryPreview {
+  final String projectId;
+  final String projectName;
+  final String archivePath;
+  final String archiveSha256;
+
+  const ProjectBundleEntryPreview({
+    required this.projectId,
+    required this.projectName,
+    required this.archivePath,
+    required this.archiveSha256,
+  });
+
+  @override
+  int get hashCode =>
+      projectId.hashCode ^
+      projectName.hashCode ^
+      archivePath.hashCode ^
+      archiveSha256.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProjectBundleEntryPreview &&
+          runtimeType == other.runtimeType &&
+          projectId == other.projectId &&
+          projectName == other.projectName &&
+          archivePath == other.archivePath &&
+          archiveSha256 == other.archiveSha256;
+}
+
+class ProjectBundlePreview {
+  final int schemaVersion;
+  final String createdAt;
+  final List<ProjectBundleEntryPreview> projects;
+
+  const ProjectBundlePreview({
+    required this.schemaVersion,
+    required this.createdAt,
+    required this.projects,
+  });
+
+  @override
+  int get hashCode =>
+      schemaVersion.hashCode ^ createdAt.hashCode ^ projects.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProjectBundlePreview &&
+          runtimeType == other.runtimeType &&
+          schemaVersion == other.schemaVersion &&
+          createdAt == other.createdAt &&
+          projects == other.projects;
+}
+
+class ProjectBundleSource {
+  final String projectId;
+  final String projectName;
+  final String archivePath;
+
+  const ProjectBundleSource({
+    required this.projectId,
+    required this.projectName,
+    required this.archivePath,
+  });
+
+  @override
+  int get hashCode =>
+      projectId.hashCode ^ projectName.hashCode ^ archivePath.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ProjectBundleSource &&
+          runtimeType == other.runtimeType &&
+          projectId == other.projectId &&
+          projectName == other.projectName &&
+          archivePath == other.archivePath;
 }
 
 class RenderPhotoRequest {

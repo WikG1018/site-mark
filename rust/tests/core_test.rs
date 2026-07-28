@@ -3,10 +3,13 @@ use std::io::{Read, Write};
 
 use image::{ImageBuffer, Rgb};
 use sitemark_core::api::image_core::{
-    export_project, export_selection, extract_archive_photo, read_project_archive, render_photo,
-    sha256_file, ExportPhotoRecord, ExportProjectRequest, ExportSelectionProject,
-    ExportSelectionRequest, ExportWatermarkSettings, ExtractArchivePhotoRequest,
-    RenderPhotoRequest, WatermarkPosition,
+    export_project, export_project_bundle, export_selection, extract_archive_photo,
+    extract_project_bundle_entry, read_project_archive, read_project_bundle, render_photo,
+    sha256_file, ExportPhotoRecord, ExportProjectBundleRequest, ExportProjectRequest,
+    ExportSelectionProject, ExportSelectionRequest, ExportWatermarkSettings,
+    ExtractArchivePhotoRequest, ExtractProjectBundleEntryRequest, ProjectBundleSource,
+    RenderPhotoRequest, WatermarkPosition, MAX_BUNDLE_ENTRY_BYTES, MAX_BUNDLE_PROJECTS,
+    MAX_BUNDLE_TOTAL_BYTES,
 };
 use tempfile::tempdir;
 use zip::{ZipArchive, ZipWriter};
@@ -31,6 +34,311 @@ fn write_zip(path: &std::path::Path, entries: &[(&str, &[u8])]) {
         writer.write_all(bytes).unwrap();
     }
     writer.finish().unwrap();
+}
+
+/// Writes a deliberately crafted outer bundle. The bundle reader must reject
+/// malformed manifests before it ever trusts an inner archive path.
+fn write_bundle_zip(
+    path: &std::path::Path,
+    manifest: serde_json::Value,
+    entries: &[(&str, &[u8])],
+) {
+    let manifest_text = manifest.to_string();
+    let file = fs::File::create(path).unwrap();
+    let mut writer = ZipWriter::new(file);
+    writer
+        .start_file("bundle.json", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    writer.write_all(manifest_text.as_bytes()).unwrap();
+    let stored =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for (name, bytes) in entries {
+        writer.start_file(*name, stored).unwrap();
+        writer.write_all(bytes).unwrap();
+    }
+    writer.finish().unwrap();
+}
+
+/// Crafts ZIP64 central-directory sizes without allocating giant test files.
+/// The reader must reject the declared limits before it ever attempts to
+/// stream a project entry, so one-byte payloads safely exercise 8/16 GiB
+/// boundary checks.
+fn write_bundle_with_declared_sizes(
+    path: &std::path::Path,
+    manifest: serde_json::Value,
+    entries: &[(&str, &[u8], u64)],
+) {
+    let manifest_text = manifest.to_string();
+    let file = fs::File::create(path).unwrap();
+    let mut writer = ZipWriter::new(file);
+    writer
+        .start_file("bundle.json", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    writer.write_all(manifest_text.as_bytes()).unwrap();
+    let stored = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .large_file(true);
+    for (name, bytes, _) in entries {
+        writer.start_file(*name, stored).unwrap();
+        writer.write_all(bytes).unwrap();
+    }
+    writer.finish().unwrap();
+
+    let mut raw = fs::read(path).unwrap();
+    for (name, _, declared_size) in entries {
+        let mut found = false;
+        for index in 0..raw.len().saturating_sub(46) {
+            if raw[index..].starts_with(b"PK\x01\x02") {
+                let name_len = u16::from_le_bytes([raw[index + 28], raw[index + 29]]) as usize;
+                let extra_len = u16::from_le_bytes([raw[index + 30], raw[index + 31]]) as usize;
+                let name_start = index + 46;
+                let extra_start = name_start + name_len;
+                if raw[name_start..name_start + name_len] != *name.as_bytes() {
+                    continue;
+                }
+                assert!(extra_len >= 20, "ZIP64 extra block is required");
+                assert_eq!(&raw[extra_start..extra_start + 4], &[1, 0, 16, 0]);
+                raw[extra_start + 4..extra_start + 12]
+                    .copy_from_slice(&declared_size.to_le_bytes());
+                raw[extra_start + 12..extra_start + 20]
+                    .copy_from_slice(&declared_size.to_le_bytes());
+                found = true;
+                break;
+            }
+        }
+        assert!(found, "missing central ZIP64 entry for {name}");
+    }
+    fs::write(path, raw).unwrap();
+}
+
+fn bundle_manifest(projects: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({
+        "app": "SiteMark",
+        "kind": "sitemark-project-bundle",
+        "schema_version": 1,
+        "created_at": "1720000000000",
+        "projects": projects,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Multi-project restorable bundles
+// ---------------------------------------------------------------------------
+
+#[test]
+fn project_bundle_round_trip_and_hash_validation() {
+    let directory = tempdir().unwrap();
+    let project_zip = directory.path().join("project-1.zip");
+    write_zip(&project_zip, &[("manifest.json", b"project archive")]);
+    let bundle_path = directory.path().join("bundle.zip");
+
+    let result = export_project_bundle(ExportProjectBundleRequest {
+        output_zip_path: bundle_path.to_string_lossy().into_owned(),
+        projects: vec![ProjectBundleSource {
+            project_id: "project-1".to_string(),
+            project_name: "东区".to_string(),
+            archive_path: project_zip.to_string_lossy().into_owned(),
+        }],
+    })
+    .unwrap();
+
+    let preview = read_project_bundle(bundle_path.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.projects.len(), 1);
+    assert_eq!(preview.projects[0].project_id, "project-1");
+    assert_eq!(preview.projects[0].project_name, "东区");
+    assert_eq!(
+        preview.projects[0].archive_sha256,
+        sha256_file(project_zip.to_string_lossy().into_owned()).unwrap()
+    );
+    assert_eq!(result.archive_sha256.len(), 64);
+}
+
+#[test]
+fn project_bundle_extraction_uses_a_temporary_file_and_rejects_overwrite() {
+    let directory = tempdir().unwrap();
+    let project_zip = directory.path().join("project-1.zip");
+    write_zip(&project_zip, &[("manifest.json", b"project archive")]);
+    let bundle_path = directory.path().join("bundle.zip");
+    export_project_bundle(ExportProjectBundleRequest {
+        output_zip_path: bundle_path.to_string_lossy().into_owned(),
+        projects: vec![ProjectBundleSource {
+            project_id: "project-1".to_string(),
+            project_name: "东区".to_string(),
+            archive_path: project_zip.to_string_lossy().into_owned(),
+        }],
+    })
+    .unwrap();
+    let destination = directory.path().join("staging/project-1.zip");
+
+    extract_project_bundle_entry(ExtractProjectBundleEntryRequest {
+        zip_path: bundle_path.to_string_lossy().into_owned(),
+        archive_path: "projects/project-1.zip".to_string(),
+        output_path: destination.to_string_lossy().into_owned(),
+    })
+    .unwrap();
+    assert_eq!(
+        fs::read(&destination).unwrap(),
+        fs::read(&project_zip).unwrap()
+    );
+    assert!(!destination.with_file_name("project-1.zip.tmp").exists());
+
+    let overwrite_error = extract_project_bundle_entry(ExtractProjectBundleEntryRequest {
+        zip_path: bundle_path.to_string_lossy().into_owned(),
+        archive_path: "projects/project-1.zip".to_string(),
+        output_path: destination.to_string_lossy().into_owned(),
+    })
+    .unwrap_err();
+    assert!(
+        overwrite_error.contains("already exists"),
+        "{overwrite_error}"
+    );
+}
+
+#[test]
+fn project_bundle_rejects_traversal_and_duplicate_project_ids() {
+    let directory = tempdir().unwrap();
+    let traversal = directory.path().join("traversal.zip");
+    write_bundle_zip(
+        &traversal,
+        bundle_manifest(serde_json::json!([{
+            "project_id": "project-1",
+            "project_name": "东区",
+            "archive_path": "../escape.zip",
+            "archive_sha256": "a".repeat(64),
+        }])),
+        &[("../escape.zip", b"evil")],
+    );
+    let traversal_error =
+        read_project_bundle(traversal.to_string_lossy().into_owned()).unwrap_err();
+    assert!(
+        traversal_error.contains("archive path"),
+        "{traversal_error}"
+    );
+
+    let duplicate = directory.path().join("duplicate.zip");
+    write_bundle_zip(
+        &duplicate,
+        bundle_manifest(serde_json::json!([
+            {
+                "project_id": "project-1",
+                "project_name": "东区",
+                "archive_path": "projects/project-1.zip",
+                "archive_sha256": "a".repeat(64),
+            },
+            {
+                "project_id": "project-1",
+                "project_name": "西区",
+                "archive_path": "projects/project-1.zip",
+                "archive_sha256": "b".repeat(64),
+            }
+        ])),
+        &[],
+    );
+    let duplicate_error =
+        read_project_bundle(duplicate.to_string_lossy().into_owned()).unwrap_err();
+    assert!(
+        duplicate_error.contains("duplicate project ID"),
+        "{duplicate_error}"
+    );
+}
+
+#[test]
+fn project_bundle_rejects_more_than_one_hundred_projects_and_hash_mismatches() {
+    let directory = tempdir().unwrap();
+    let too_many = directory.path().join("too-many.zip");
+    let projects: Vec<serde_json::Value> = (0..=MAX_BUNDLE_PROJECTS)
+        .map(|index| {
+            serde_json::json!({
+                "project_id": format!("project-{index}"),
+                "project_name": format!("项目 {index}"),
+                "archive_path": format!("projects/project-{index}.zip"),
+                "archive_sha256": "a".repeat(64),
+            })
+        })
+        .collect();
+    write_bundle_zip(
+        &too_many,
+        bundle_manifest(serde_json::Value::Array(projects)),
+        &[],
+    );
+    let too_many_error = read_project_bundle(too_many.to_string_lossy().into_owned()).unwrap_err();
+    assert!(too_many_error.contains("more than 100"), "{too_many_error}");
+
+    let mismatch = directory.path().join("mismatch.zip");
+    write_bundle_zip(
+        &mismatch,
+        bundle_manifest(serde_json::json!([{
+            "project_id": "project-1",
+            "project_name": "东区",
+            "archive_path": "projects/project-1.zip",
+            "archive_sha256": "a".repeat(64),
+        }])),
+        &[("projects/project-1.zip", b"not the declared hash")],
+    );
+    let mismatch_error = read_project_bundle(mismatch.to_string_lossy().into_owned()).unwrap_err();
+    assert!(
+        mismatch_error.contains("SHA-256 mismatch"),
+        "{mismatch_error}"
+    );
+}
+
+#[test]
+fn project_bundle_rejects_selection_archives_and_exposes_explicit_size_limits() {
+    let directory = tempdir().unwrap();
+    let selection = directory.path().join("selection.zip");
+    write_zip(
+        &selection,
+        &[(
+            "manifest.json",
+            br#"{\"app\":\"SiteMark\",\"projects\":[]}"#,
+        )],
+    );
+
+    let error = read_project_bundle(selection.to_string_lossy().into_owned()).unwrap_err();
+    assert!(error.contains("bundle"), "{error}");
+    assert_eq!(MAX_BUNDLE_ENTRY_BYTES, 8 * 1024 * 1024 * 1024);
+    assert_eq!(MAX_BUNDLE_TOTAL_BYTES, 16 * 1024 * 1024 * 1024);
+}
+
+#[test]
+fn project_bundle_rejects_declared_entry_and_total_size_limits() {
+    let directory = tempdir().unwrap();
+    let entry_limit = directory.path().join("entry-limit.zip");
+    write_bundle_with_declared_sizes(
+        &entry_limit,
+        bundle_manifest(serde_json::json!([{
+            "project_id": "project-1",
+            "project_name": "东区",
+            "archive_path": "projects/project-1.zip",
+            "archive_sha256": "a".repeat(64),
+        }])),
+        &[("projects/project-1.zip", b"x", MAX_BUNDLE_ENTRY_BYTES + 1)],
+    );
+    let entry_error = read_project_bundle(entry_limit.to_string_lossy().into_owned()).unwrap_err();
+    assert!(entry_error.contains("8 GiB"), "{entry_error}");
+
+    let total_limit = directory.path().join("total-limit.zip");
+    let projects: Vec<serde_json::Value> = (1..=3)
+        .map(|index| {
+            serde_json::json!({
+                "project_id": format!("project-{index}"),
+                "project_name": format!("项目 {index}"),
+                "archive_path": format!("projects/project-{index}.zip"),
+                "archive_sha256": "a".repeat(64),
+            })
+        })
+        .collect();
+    write_bundle_with_declared_sizes(
+        &total_limit,
+        bundle_manifest(serde_json::Value::Array(projects)),
+        &[
+            ("projects/project-1.zip", b"x", 6 * 1024 * 1024 * 1024),
+            ("projects/project-2.zip", b"y", 6 * 1024 * 1024 * 1024),
+            ("projects/project-3.zip", b"z", 6 * 1024 * 1024 * 1024),
+        ],
+    );
+    let total_error = read_project_bundle(total_limit.to_string_lossy().into_owned()).unwrap_err();
+    assert!(total_error.contains("16 GiB"), "{total_error}");
 }
 
 #[test]
