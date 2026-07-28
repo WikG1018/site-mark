@@ -92,9 +92,7 @@ class AppImportPendingStore implements ImportPendingStore {
 
   Future<Directory> _importsDirectory() async {
     final root = await _documentsDirectory();
-    final directory = Directory(
-      '${root.path}${Platform.pathSeparator}imports',
-    );
+    final directory = Directory('${root.path}${Platform.pathSeparator}imports');
     await directory.create(recursive: true);
     return directory;
   }
@@ -348,10 +346,7 @@ class ProjectImportService {
       projectId: projectId,
       stagingDirectory: stagingDir,
       stagedFiles: [
-        for (final plan in plans) ...[
-          plan.stagedRendered,
-          plan.stagedOriginal,
-        ],
+        for (final plan in plans) ...[plan.stagedRendered, plan.stagedOriginal],
       ],
       finalFiles: [
         for (final plan in plans) ...[plan.finalRendered, plan.finalOriginal],
@@ -369,9 +364,7 @@ class ProjectImportService {
             zipPath: zipPath,
             photoNumber: photo.photoNumber,
             renderedDestination: plan.stagedRendered,
-            originalDestination: photo.hasOriginal
-                ? plan.stagedOriginal
-                : null,
+            originalDestination: photo.hasOriginal ? plan.stagedOriginal : null,
           ),
         );
         onProgress?.call(index + 1, preview.photos.length);
@@ -422,7 +415,10 @@ class ProjectImportService {
         final plan = plans[index];
         await committer.moveIntoPlace(plan.stagedRendered, plan.finalRendered);
         if (preview.photos[index].hasOriginal) {
-          await committer.moveIntoPlace(plan.stagedOriginal, plan.finalOriginal);
+          await committer.moveIntoPlace(
+            plan.stagedOriginal,
+            plan.finalOriginal,
+          );
         }
       }
       committed = true;
@@ -433,12 +429,20 @@ class ProjectImportService {
     }
 
     await pendingStore.clearPending(projectId);
-    await committer.deleteTree(stagingDir);
+    try {
+      await committer.deleteTree(stagingDir);
+    } catch (_) {
+      // The import is already committed and its crash-recovery marker has
+      // been cleared. A leftover empty staging tree is harmless and must not
+      // turn a successful restore into a user-visible failure.
+    }
     return ProjectImportResult(
       projectId: projectId,
       projectName: projectName.trim(),
       photoCount: preview.photos.length,
-      restoredOriginals: preview.photos.where((photo) => photo.hasOriginal).length,
+      restoredOriginals: preview.photos
+          .where((photo) => photo.hasOriginal)
+          .length,
     );
   }
 
@@ -452,11 +456,13 @@ class ProjectImportService {
   Future<void> cleanupInterruptedImports() async {
     final pendings = await pendingStore.listPending();
     for (final pending in pendings) {
-      await _rollback(pending);
-      try {
-        await pendingStore.clearPending(pending.projectId);
-      } catch (_) {
-        // Keep the marker; the next launch retries.
+      final fullyCleaned = await _rollback(pending);
+      if (fullyCleaned) {
+        try {
+          await pendingStore.clearPending(pending.projectId);
+        } catch (_) {
+          // Keep the marker; the next launch retries.
+        }
       }
     }
   }
@@ -465,20 +471,27 @@ class ProjectImportService {
   /// the staging tree, and the database rows. Individual failures are
   /// swallowed so one stubborn file never blocks the rest; the pending
   /// marker stays in place for the startup cleanup to retry.
-  Future<void> _rollback(PendingImport pending) async {
+  Future<bool> _rollback(PendingImport pending) async {
+    var fullyCleaned = true;
     for (final path in pending.allFiles) {
       try {
         await fileStore.deleteIfExists(path);
       } catch (_) {
         // Best-effort: keep deleting the remaining files.
+        fullyCleaned = false;
       }
     }
     try {
       await committer.deleteTree(pending.stagingDirectory);
-    } catch (_) {}
+    } catch (_) {
+      fullyCleaned = false;
+    }
     try {
       await database.deleteProjectCascade(pending.projectId);
-    } catch (_) {}
+    } catch (_) {
+      fullyCleaned = false;
+    }
+    return fullyCleaned;
   }
 
   static String? _validPosition(String? value) =>

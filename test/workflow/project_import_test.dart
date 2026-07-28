@@ -84,11 +84,11 @@ void main() {
     expect(images.extractRequests[1].originalDestination, isNull);
     expect(committer.moves, [
       '/staging/rendered/${withOriginal.id}.jpg'
-      ' -> /rendered/${withOriginal.id}.jpg',
+          ' -> /rendered/${withOriginal.id}.jpg',
       '/staging/originals/${withOriginal.id}.jpg'
-      ' -> /originals/${withOriginal.id}.jpg',
+          ' -> /originals/${withOriginal.id}.jpg',
       '/staging/rendered/${withoutOriginal.id}.jpg'
-      ' -> /rendered/${withoutOriginal.id}.jpg',
+          ' -> /rendered/${withoutOriginal.id}.jpg',
     ]);
 
     // The pending marker was written before work and cleared after commit.
@@ -150,76 +150,142 @@ void main() {
     expect(await database.getProjects(), isEmpty);
   });
 
-  test('corrupt timestamps reject the archive before any work happens', () async {
-    final database = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    final broken = ProjectArchivePreview(
-      schemaVersion: 2,
-      projectName: '东区厂房改造',
-      includesOriginals: false,
-      photos: [
-        ArchivePhotoPreview(
-          photoNumber: '东区厂房改造-SM-20260716-001',
-          hasOriginal: false,
-          originalSha256: 'a' * 64,
-          capturedAt: 'garbage-timestamp',
-          workLocation: 'A 区三层',
-          workContent: '风管安装检查',
-          photographer: '张工',
+  test(
+    'corrupt timestamps reject the archive before any work happens',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final broken = ProjectArchivePreview(
+        schemaVersion: 2,
+        projectName: '东区厂房改造',
+        includesOriginals: false,
+        photos: [
+          ArchivePhotoPreview(
+            photoNumber: '东区厂房改造-SM-20260716-001',
+            hasOriginal: false,
+            originalSha256: 'a' * 64,
+            capturedAt: 'garbage-timestamp',
+            workLocation: 'A 区三层',
+            workContent: '风管安装检查',
+            photographer: '张工',
+          ),
+        ],
+      );
+      final images = _ImportImagePipeline(broken);
+      final service = _service(
+        database: database,
+        images: images,
+        files: _RecordingFileStore(),
+      );
+
+      await expectLater(
+        service.importProject(zipPath: '/backups/p.zip', projectName: '东区厂房改造'),
+        throwsA(isA<InvalidArchiveException>()),
+      );
+      // Nothing was extracted, staged, or persisted.
+      expect(images.extractRequests, isEmpty);
+      expect(await database.getProjects(), isEmpty);
+    },
+  );
+
+  test(
+    'cleanupInterruptedImports removes leftovers of a killed import',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final files = _RecordingFileStore();
+      final pendingStore = _FakePendingStore();
+      final committer = _RecordingCommitter();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: files,
+        pendingStore: pendingStore,
+        committer: committer,
+      );
+      // Simulate an interrupted import: a project row, a staging tree, and a
+      // pending marker all left behind.
+      await database.createProject(id: 'dead-project', name: '烂尾项目');
+      pendingStore.pending.add(
+        const PendingImport(
+          projectId: 'dead-project',
+          stagingDirectory: '/staging/dead-project',
+          stagedFiles: ['/staging/dead-project/rendered/a.jpg'],
+          finalFiles: ['/rendered/a.jpg'],
         ),
-      ],
-    );
-    final images = _ImportImagePipeline(broken);
-    final service = _service(
-      database: database,
-      images: images,
-      files: _RecordingFileStore(),
-    );
+      );
 
-    await expectLater(
-      service.importProject(zipPath: '/backups/p.zip', projectName: '东区厂房改造'),
-      throwsA(isA<InvalidArchiveException>()),
-    );
-    // Nothing was extracted, staged, or persisted.
-    expect(images.extractRequests, isEmpty);
-    expect(await database.getProjects(), isEmpty);
-  });
+      await service.cleanupInterruptedImports();
 
-  test('cleanupInterruptedImports removes leftovers of a killed import', () async {
-    final database = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    final files = _RecordingFileStore();
-    final pendingStore = _FakePendingStore();
-    final committer = _RecordingCommitter();
-    final service = _service(
-      database: database,
-      images: _ImportImagePipeline(_preview()),
-      files: files,
-      pendingStore: pendingStore,
-      committer: committer,
-    );
-    // Simulate an interrupted import: a project row, a staging tree, and a
-    // pending marker all left behind.
-    await database.createProject(id: 'dead-project', name: '烂尾项目');
-    pendingStore.pending.add(
-      const PendingImport(
-        projectId: 'dead-project',
-        stagingDirectory: '/staging/dead-project',
-        stagedFiles: ['/staging/dead-project/rendered/a.jpg'],
-        finalFiles: ['/rendered/a.jpg'],
-      ),
-    );
+      expect(await database.getProjects(), isEmpty);
+      expect(
+        files.deleted,
+        containsAll([
+          '/staging/dead-project/rendered/a.jpg',
+          '/rendered/a.jpg',
+        ]),
+      );
+      expect(committer.deletedTrees, ['/staging/dead-project']);
+      expect(pendingStore.pending, isEmpty);
+    },
+  );
 
-    await service.cleanupInterruptedImports();
+  test(
+    'cleanupInterruptedImports keeps the marker when cleanup is incomplete',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final files = _RecordingFileStore(throwOnDeleteAt: 0);
+      final pendingStore = _FakePendingStore();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: files,
+        pendingStore: pendingStore,
+      );
+      pendingStore.pending.add(
+        const PendingImport(
+          projectId: 'dead-project',
+          stagingDirectory: '/staging/dead-project',
+          stagedFiles: ['/staging/dead-project/rendered/a.jpg'],
+          finalFiles: ['/rendered/a.jpg'],
+        ),
+      );
 
-    expect(await database.getProjects(), isEmpty);
-    expect(
-      files.deleted,
-      containsAll(['/staging/dead-project/rendered/a.jpg', '/rendered/a.jpg']),
-    );
-    expect(committer.deletedTrees, ['/staging/dead-project']);
-    expect(pendingStore.pending, isEmpty);
-  });
+      await service.cleanupInterruptedImports();
+
+      expect(files.attemptedDeletes.length, 2);
+      expect(pendingStore.cleared, isEmpty);
+      expect(pendingStore.pending, hasLength(1));
+    },
+  );
+
+  test(
+    'successful import ignores a staging-directory cleanup failure',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final pendingStore = _FakePendingStore();
+      final committer = _RecordingCommitter(throwOnDeleteTree: true);
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: _RecordingFileStore(),
+        pendingStore: pendingStore,
+        committer: committer,
+      );
+
+      final result = await service.importProject(
+        zipPath: '/backups/p.zip',
+        projectName: '东区厂房改造',
+      );
+
+      expect(await database.projectById(result.projectId), isNotNull);
+      expect(pendingStore.cleared, [result.projectId]);
+      expect(pendingStore.pending, isEmpty);
+      expect(committer.deleteTreeAttempts, 1);
+    },
+  );
 
   test('v1-style archives restore with default watermark settings', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -256,7 +322,9 @@ void main() {
     expect(project.watermarkOpacity, 0.78);
     expect(project.watermarkAccentColorArgb, 0xff37c58b);
     expect(project.watermarkFontScale, 1.0);
-    final capture = (await database.capturesForProject(result.projectId)).single;
+    final capture = (await database.capturesForProject(
+      result.projectId,
+    )).single;
     expect(capture.watermarkLocaleCode, 'zh');
     expect(capture.latitude, isNull);
     expect(capture.originalDeletedAt, isNotNull);
@@ -277,10 +345,7 @@ void main() {
     expect(await service.suggestAvailableName('东区厂房改造'), '东区厂房改造（导入）');
 
     await database.createProject(id: 'p2', name: '东区厂房改造（导入）');
-    expect(
-      await service.suggestAvailableName('东区厂房改造'),
-      '东区厂房改造（导入 2）',
-    );
+    expect(await service.suggestAvailableName('东区厂房改造'), '东区厂房改造（导入 2）');
   });
 
   test('parseExportedTimestamp honors the recorded offset', () {
@@ -390,9 +455,7 @@ class _ImportImagePipeline implements ImagePipeline {
       throw UnimplementedError();
 
   @override
-  Future<ExportProjectResult> exportSelection(
-    ExportSelectionRequest request,
-  ) =>
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
       throw UnimplementedError();
 
   @override
@@ -453,8 +516,12 @@ class _FakePendingStore implements ImportPendingStore {
 }
 
 class _RecordingCommitter implements ImportFileCommitter {
+  _RecordingCommitter({this.throwOnDeleteTree = false});
+
+  final bool throwOnDeleteTree;
   final moves = <String>[];
   final deletedTrees = <String>[];
+  var deleteTreeAttempts = 0;
 
   @override
   Future<void> moveIntoPlace(String stagedPath, String finalPath) async {
@@ -463,6 +530,10 @@ class _RecordingCommitter implements ImportFileCommitter {
 
   @override
   Future<void> deleteTree(String path) async {
+    deleteTreeAttempts++;
+    if (throwOnDeleteTree) {
+      throw StateError('simulated staging cleanup failure');
+    }
     deletedTrees.add(path);
   }
 }
