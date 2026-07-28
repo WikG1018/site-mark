@@ -166,8 +166,9 @@ void main() {
       await disposeApp(tester);
     });
 
-    testWidgets('inactive does not pause, release, or resume (I1 fix)',
-        (tester) async {
+    testWidgets('inactive does not pause, release, or resume (I1 fix)', (
+      tester,
+    ) async {
       await pumpApp(tester);
       controller.reset();
 
@@ -179,8 +180,9 @@ void main() {
       await disposeApp(tester);
     });
 
-    testWidgets('didHaveMemoryPressure releases but does not pause (C1 fix)',
-        (tester) async {
+    testWidgets('didHaveMemoryPressure releases but does not pause (C1 fix)', (
+      tester,
+    ) async {
       await pumpApp(tester);
       controller.reset();
 
@@ -251,8 +253,7 @@ class _FakeCompletionNotificationService
     required String projectId,
     required String captureId,
     required String photoNumber,
-  }) =>
-      Future.value();
+  }) => Future.value();
 
   @override
   Future<void> setEnabled(bool enabled) => Future.value();

@@ -577,8 +577,7 @@ class _ProcessorImagePipeline implements ImagePipeline {
   @override
   Future<ExtractedArchivePhoto> extractArchivePhoto(
     ExtractArchivePhotoRequest request,
-  ) =>
-      throw UnimplementedError();
+  ) => throw UnimplementedError();
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) =>

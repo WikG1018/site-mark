@@ -692,7 +692,9 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
             (settings?.useDynamicColor ?? false) &&
             lightDynamic != null &&
             darkDynamic != null;
-        final seedColor = Color(settings?.appSeedColorArgb ?? kDefaultSeedColorArgb);
+        final seedColor = Color(
+          settings?.appSeedColorArgb ?? kDefaultSeedColorArgb,
+        );
         final lightScheme = useDynamicColor
             ? lightDynamic
             : ColorScheme.fromSeed(
