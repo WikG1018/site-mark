@@ -497,11 +497,15 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     );
     if (!mounted || result == null) return;
     context.go('/');
-    if (result.cleanupPending) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(strings.projectDeletedCleanupPending)),
-      );
-    }
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          result.cleanupPending
+              ? strings.projectDeletedCleanupPending
+              : strings.projectDeleted,
+        ),
+      ),
+    );
   }
 }
 

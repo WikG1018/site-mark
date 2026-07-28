@@ -67,9 +67,12 @@ class AppStrings {
   String get deleteProjectPreviewFailed => _english
       ? 'Could not load deletion details. Please try again.'
       : '无法读取删除信息，请稍后重试';
+  String get projectDeleted => _english
+      ? 'Project deleted. Photos in the system gallery and exported backups were retained.'
+      : '项目已删除，系统相册中的照片和已导出备份已保留';
   String get projectDeletedCleanupPending => _english
-      ? 'Project deleted. Remaining private files will be cleaned up the next time the app starts.'
-      : '项目已删除，残留私有文件将在下次启动继续清理';
+      ? 'Project deleted. Photos in the system gallery and exported backups were retained. Remaining private files will be cleaned up the next time the app starts.'
+      : '项目已删除，系统相册中的照片和已导出备份已保留；残留私有文件将在下次启动继续清理';
   String get descriptionOptional =>
       _english ? 'Description (optional)' : '项目说明（选填）';
   String get save => _english ? 'Save' : '保存';

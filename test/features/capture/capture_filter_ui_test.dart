@@ -971,7 +971,7 @@ void main() {
   });
 
   testWidgets(
-    'delete preview retains gallery and backups then returns to root once',
+    'clean delete shows one English retained-assets notice after routing home',
     (tester) async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -993,6 +993,7 @@ void main() {
           database,
           'project-1',
           deletionService: service,
+          locale: const Locale('en'),
           withRouter: true,
         ),
       );
@@ -1005,9 +1006,9 @@ void main() {
       expect(find.textContaining('东区项目'), findsWidgets);
       expect(find.textContaining('12'), findsOneWidget);
       expect(find.textContaining('7'), findsOneWidget);
-      expect(find.textContaining('系统相册'), findsOneWidget);
-      expect(find.textContaining('已导出备份'), findsOneWidget);
-      expect(find.textContaining('同时删除'), findsNothing);
+      expect(find.textContaining('system gallery'), findsOneWidget);
+      expect(find.textContaining('exported backups'), findsOneWidget);
+      expect(find.textContaining('also delete'), findsNothing);
       expect(find.byType(Checkbox), findsNothing);
 
       await tester.tap(find.byKey(const Key('confirm-delete-project')));
@@ -1018,6 +1019,15 @@ void main() {
 
       expect(service.deleteCalls, 1);
       expect(find.byKey(const Key('project-list-root')), findsOneWidget);
+      expect(
+        find.text(
+          'Project deleted. Photos in the system gallery and exported '
+          'backups were retained.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.textContaining('next time the app starts'), findsNothing);
       await unmountTree(tester);
     },
   );
@@ -1056,6 +1066,8 @@ void main() {
 
     expect(find.byKey(const Key('project-list-root')), findsOneWidget);
     expect(find.textContaining('下次启动继续清理'), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.textContaining('系统相册'), findsOneWidget);
     await unmountTree(tester);
   });
 
