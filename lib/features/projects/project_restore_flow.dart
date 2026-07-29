@@ -163,6 +163,9 @@ Future<void> runProjectRestoreFlow(
       discardGuard.markSuccessful();
     } catch (error) {
       failure = error;
+      if (_restoreDataWasCommitted(error)) {
+        discardGuard.markSuccessful();
+      }
     }
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pop();
@@ -217,6 +220,8 @@ String describeProjectRestoreError(
         strings.backupRestoreNameConflict,
       ProjectBundleRestoreFailure.insufficientStorage =>
         strings.backupStorageInsufficient,
+      ProjectBundleRestoreFailure.finalizationPending =>
+        strings.restoreFinalizationPending,
       ProjectBundleRestoreFailure.rolledBack => strings.restoreFailedRollback,
       ProjectBundleRestoreFailure.general => strings.restoreFailedGeneral,
     };
@@ -233,6 +238,10 @@ String describeProjectRestoreError(
   }
   return strings.restoreFailedGeneral;
 }
+
+bool _restoreDataWasCommitted(Object error) =>
+    error is ProjectBundleRestoreException &&
+    error.failure == ProjectBundleRestoreFailure.finalizationPending;
 
 Map<String, String> _suggestRestoreNames(
   PreparedProjectRestore prepared,

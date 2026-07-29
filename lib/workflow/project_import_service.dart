@@ -36,6 +36,23 @@ class InvalidArchiveException implements Exception {
   String toString() => message;
 }
 
+/// The project rows and files are committed, but the final visibility marker
+/// could not be cleared. Startup recovery will retry publication without
+/// rolling back or importing the project again.
+class ProjectImportFinalizationPendingException implements Exception {
+  const ProjectImportFinalizationPendingException({
+    required this.projectId,
+    required this.cause,
+  });
+
+  final String projectId;
+  final Object cause;
+
+  @override
+  String toString() =>
+      'Project import finalization is pending for $projectId: $cause';
+}
+
 abstract interface class ProjectArchiveImporter {
   Future<rust.ProjectArchivePreview> inspect(String zipPath);
 
@@ -586,7 +603,17 @@ class ProjectImportService implements ProjectArchiveImporter {
       final committing = pending.withPhase(PendingImportPhase.committing);
       await pendingStore.writePending(committing);
       pending = committing;
-      await _finalizeCommit(pending);
+      try {
+        await _finalizeCommit(pending);
+      } catch (error, stackTrace) {
+        Error.throwWithStackTrace(
+          ProjectImportFinalizationPendingException(
+            projectId: targetProjectId,
+            cause: error,
+          ),
+          stackTrace,
+        );
+      }
     }
     return ProjectImportResult(
       projectId: targetProjectId,

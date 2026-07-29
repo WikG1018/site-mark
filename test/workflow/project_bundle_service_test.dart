@@ -550,6 +550,123 @@ void main() {
       },
     );
 
+    test(
+      'single import finalization pending is not reported as rolled back',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final rollback = _FakeProjectRollback();
+        final importer = _FakeProjectImporter(
+          failSource: 'single.zip',
+          importFailure: const ProjectImportFinalizationPendingException(
+            projectId: 'target-1',
+            cause: 'token clear failed',
+          ),
+        );
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(
+            readFailure: const ImagePipelineException(
+              ImagePipelineFailureKind.invalidData,
+              'not bundle',
+            ),
+          ),
+          importer: importer,
+          rollback: rollback,
+        );
+        final prepared = await service.prepareRestore('/backups/single.zip');
+
+        await expectLater(
+          service.restorePrepared(
+            prepared: prepared,
+            projectNames: const {'single': '待完成恢复'},
+          ),
+          throwsA(
+            isA<ProjectBundleRestoreException>().having(
+              (error) => error.failure,
+              'failure',
+              ProjectBundleRestoreFailure.finalizationPending,
+            ),
+          ),
+        );
+
+        expect(rollback.projectIds, isEmpty);
+      },
+    );
+
+    test(
+      'standalone committed import waits for startup finalization without rollback',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.customStatement('''
+          CREATE TRIGGER fail_import_token_clear
+          BEFORE UPDATE OF restore_operation_id ON projects
+          WHEN NEW.restore_operation_id IS NULL
+          BEGIN
+            SELECT RAISE(ABORT, 'simulated token clear failure');
+          END;
+        ''');
+        final importPending = _IntegrationImportPendingStore();
+        final committer = _IntegrationImportCommitter();
+        final importer = ProjectImportService(
+          database: database,
+          images: _IntegrationImportPipeline(_archivePreview('源项目')),
+          capturePaths: _IntegrationCapturePaths(),
+          originalPaths: _IntegrationOriginalPaths(),
+          fileStore: _IntegrationPrivateFiles(),
+          stagingPaths: _IntegrationStagingPaths(),
+          pendingStore: importPending,
+          committer: committer,
+        );
+        final rollback = _FakeProjectRollback();
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(),
+          importer: importer,
+          rollback: rollback,
+        );
+        final prepared = PreparedProjectRestore(
+          sourceZipPath: '/backups/single.zip',
+          items: [
+            PreparedProjectRestoreItem(
+              sourceProjectId: 'source',
+              targetProjectId: 'integration-target',
+              archivePath: '/backups/single.zip',
+              preview: _archivePreview('源项目'),
+            ),
+          ],
+        );
+
+        await expectLater(
+          service.restorePrepared(
+            prepared: prepared,
+            projectNames: const {'source': '待完成恢复'},
+          ),
+          throwsA(
+            isA<ProjectBundleRestoreException>().having(
+              (error) => error.failure,
+              'failure',
+              ProjectBundleRestoreFailure.finalizationPending,
+            ),
+          ),
+        );
+
+        expect(committer.moves, hasLength(2));
+        expect(await database.getProjects(), isEmpty);
+        expect(await database.getAllProjectsInternal(), hasLength(1));
+        expect(importPending.items.single.phase, PendingImportPhase.committing);
+        expect(rollback.projectIds, isEmpty);
+
+        await database.customStatement('DROP TRIGGER fail_import_token_clear');
+        await importer.cleanupInterruptedImports();
+
+        expect((await database.getProjects()).single.name, '待完成恢复');
+        expect(importPending.items, isEmpty);
+        expect(rollback.projectIds, isEmpty);
+      },
+    );
+
     test('restore progress is monotonic across projects', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -1357,6 +1474,104 @@ class _FakeProjectRollback implements ProjectBundleRollback {
     projectIds.add(projectId);
     if (projectId == failProjectId) throw StateError('rollback failed');
   }
+}
+
+class _IntegrationImportPipeline implements ImagePipeline {
+  _IntegrationImportPipeline(this.preview);
+
+  final rust.ProjectArchivePreview preview;
+
+  @override
+  Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath) async =>
+      preview;
+
+  @override
+  Future<rust.ExtractedArchivePhoto> extractArchivePhoto(
+    rust.ExtractArchivePhotoRequest request,
+  ) async => rust.ExtractedArchivePhoto(
+    renderedPath: request.renderedDestination,
+    originalPath: request.originalDestination,
+  );
+
+  @override
+  Future<rust.ExportProjectResult> export(rust.ExportProjectRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<rust.ExportProjectResult> exportSelection(
+    rust.ExportSelectionRequest request,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> sha256(String path) => throw UnimplementedError();
+}
+
+class _IntegrationCapturePaths implements CaptureOutputPaths {
+  @override
+  Future<String> renderedPhotoPath(String captureId) async =>
+      '/rendered/$captureId.jpg';
+}
+
+class _IntegrationOriginalPaths implements OriginalPhotoPaths {
+  @override
+  Future<String> originalPhotoPath(String captureId) async =>
+      '/originals/$captureId.jpg';
+}
+
+class _IntegrationStagingPaths implements ImportStagingPaths {
+  @override
+  Future<String> stagingDirectory(String projectId) async =>
+      '/staging/$projectId';
+
+  @override
+  Future<String> stagedOriginalPath(String projectId, String captureId) async =>
+      '/staging/$projectId/originals/$captureId.jpg';
+
+  @override
+  Future<String> stagedRenderedPath(String projectId, String captureId) async =>
+      '/staging/$projectId/rendered/$captureId.jpg';
+}
+
+class _IntegrationImportPendingStore implements ImportPendingStore {
+  final items = <PendingImport>[];
+
+  @override
+  Future<void> clearPending(String projectId) async {
+    items.removeWhere((item) => item.projectId == projectId);
+  }
+
+  @override
+  Future<List<PendingImport>> listPending() async => List.of(items);
+
+  @override
+  Future<void> writePending(PendingImport pending) async {
+    items.removeWhere((item) => item.projectId == pending.projectId);
+    items.add(pending);
+  }
+}
+
+class _IntegrationImportCommitter implements ImportFileCommitter {
+  final moves = <String>[];
+
+  @override
+  Future<void> deleteTree(String path) async {}
+
+  @override
+  Future<void> moveIntoPlace(String stagedPath, String finalPath) async {
+    moves.add('$stagedPath -> $finalPath');
+  }
+}
+
+class _IntegrationPrivateFiles implements PrivateFileStore {
+  @override
+  Future<void> deleteIfExists(String path) async {}
+
+  @override
+  Future<bool> exists(String path) async => true;
 }
 
 class _FakeProjectImporter implements ProjectArchiveImporter {

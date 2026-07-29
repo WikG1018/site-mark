@@ -333,6 +333,8 @@ void main() {
       ProjectBundleRestoreFailure.selectionArchive: '照片分享 ZIP 不能用于恢复项目',
       ProjectBundleRestoreFailure.nameConflict: '项目名称与已有或所选项目冲突',
       ProjectBundleRestoreFailure.insufficientStorage: '存储空间不足，无法完成操作',
+      ProjectBundleRestoreFailure.finalizationPending:
+          '恢复数据已安全保存，将在下次启动应用时自动完成发布和显示',
       ProjectBundleRestoreFailure.rolledBack: '恢复失败，本次产生的内容已回滚',
     };
     final actual = <String>{};
@@ -351,6 +353,40 @@ void main() {
     }
     expect(actual, hasLength(expected.length));
   });
+
+  testWidgets(
+    'finalization pending keeps committed restore and shows exact message',
+    (tester) async {
+      var discardCalls = 0;
+      await pumpScreen(
+        tester,
+        dependencies: ProjectRestoreFlowDependencies(
+          pickZip: () async => '/tmp/backup.zip',
+          prepareRestore: (_) async => _prepared(),
+          restorePrepared:
+              ({required prepared, required projectNames, onProgress}) async {
+                throw const ProjectBundleRestoreException(
+                  'raw finalization failure',
+                  failure: ProjectBundleRestoreFailure.finalizationPending,
+                );
+              },
+          discardPrepared: (_) async => discardCalls++,
+        ),
+      );
+
+      await tester.tap(find.byKey(const Key('restore-projects')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('choose-restore-zip')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('restore-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('恢复数据已安全保存，将在下次启动应用时自动完成发布和显示'), findsOneWidget);
+      expect(find.textContaining('已回滚'), findsNothing);
+      expect(find.textContaining('raw finalization'), findsNothing);
+      expect(discardCalls, 0);
+    },
+  );
 
   testWidgets(
     'successful restore returns home and keeps its success snackbar',

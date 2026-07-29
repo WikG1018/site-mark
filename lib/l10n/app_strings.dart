@@ -412,6 +412,9 @@ class AppStrings {
   String get backupStorageInsufficient => _english
       ? 'Not enough storage space to complete this operation'
       : '存储空间不足，无法完成操作';
+  String get restoreFinalizationPending => _english
+      ? 'Restore data is safely saved. Publication and visibility will finish automatically the next time the app starts.'
+      : '恢复数据已安全保存，将在下次启动应用时自动完成发布和显示';
   String get restoreFailedRollback => _english
       ? 'Restore failed. Any changes from this restore were rolled back.'
       : '恢复失败，本次产生的内容已回滚';

@@ -586,7 +586,13 @@ void main() {
 
       await expectLater(
         service.importProject(zipPath: '/backups/p.zip', projectName: '待完成恢复'),
-        throwsA(anything),
+        throwsA(
+          isA<ProjectImportFinalizationPendingException>().having(
+            (error) => error.projectId,
+            'projectId',
+            isNotEmpty,
+          ),
+        ),
       );
 
       expect(await database.getProjects(), isEmpty);

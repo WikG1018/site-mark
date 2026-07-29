@@ -162,6 +162,7 @@ enum ProjectBundleRestoreFailure {
   selectionArchive,
   nameConflict,
   insufficientStorage,
+  finalizationPending,
   rolledBack,
   general,
 }
@@ -186,6 +187,9 @@ ProjectBundleRestoreFailure _classifyRestoreFailure(
   required ProjectBundleRestoreFailure fallback,
 }) {
   if (error is ProjectBundleRestoreException) return error.failure;
+  if (error is ProjectImportFinalizationPendingException) {
+    return ProjectBundleRestoreFailure.finalizationPending;
+  }
   if (error is ProjectNameConflictException) {
     return ProjectBundleRestoreFailure.nameConflict;
   }
