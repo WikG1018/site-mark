@@ -362,7 +362,7 @@ void main() {
         tester,
         dependencies: ProjectRestoreFlowDependencies(
           pickZip: () async => '/tmp/backup.zip',
-          prepareRestore: (_) async => _prepared(),
+          prepareRestore: (_) async => _prepared(bundle: true),
           restorePrepared:
               ({required prepared, required projectNames, onProgress}) async {
                 throw const ProjectBundleRestoreException(
@@ -462,39 +462,52 @@ void main() {
   );
 }
 
-PreparedProjectRestore _prepared({bool includeWatermark = true}) {
+PreparedProjectRestore _prepared({
+  bool includeWatermark = true,
+  bool bundle = false,
+}) {
+  rust.ProjectArchivePreview preview(String name) => rust.ProjectArchivePreview(
+    schemaVersion: 2,
+    projectName: name,
+    includesOriginals: true,
+    watermark: includeWatermark
+        ? const rust.ArchiveWatermarkSettings(
+            position: 'bottomLeft',
+            opacity: 0.72,
+            accentColorArgb: 0xFF009688,
+            fontScale: 1.1,
+          )
+        : null,
+    photos: [
+      rust.ArchivePhotoPreview(
+        photoNumber: '001',
+        hasOriginal: true,
+        originalSha256: 'abc',
+        capturedAt: '2026-07-28T00:00:00Z',
+        workLocation: '一层',
+        workContent: '巡检',
+        photographer: '测试',
+      ),
+    ],
+  );
   return PreparedProjectRestore(
     sourceZipPath: '/tmp/backup.zip',
+    bundleId: bundle ? 'bundle-id' : null,
+    stagingDirectory: bundle ? '/tmp/bundle-staging' : null,
     items: [
       PreparedProjectRestoreItem(
         sourceProjectId: 'source',
         targetProjectId: 'target',
         archivePath: '/tmp/backup.zip',
-        preview: rust.ProjectArchivePreview(
-          schemaVersion: 2,
-          projectName: '源项目',
-          includesOriginals: true,
-          watermark: includeWatermark
-              ? const rust.ArchiveWatermarkSettings(
-                  position: 'bottomLeft',
-                  opacity: 0.72,
-                  accentColorArgb: 0xFF009688,
-                  fontScale: 1.1,
-                )
-              : null,
-          photos: [
-            rust.ArchivePhotoPreview(
-              photoNumber: '001',
-              hasOriginal: true,
-              originalSha256: 'abc',
-              capturedAt: '2026-07-28T00:00:00Z',
-              workLocation: '一层',
-              workContent: '巡检',
-              photographer: '测试',
-            ),
-          ],
-        ),
+        preview: preview('源项目'),
       ),
+      if (bundle)
+        PreparedProjectRestoreItem(
+          sourceProjectId: 'source-2',
+          targetProjectId: 'target-2',
+          archivePath: '/tmp/bundle-staging/source-2.zip',
+          preview: preview('源项目二'),
+        ),
     ],
   );
 }

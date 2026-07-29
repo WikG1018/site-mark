@@ -725,7 +725,7 @@ class ProjectBundleService {
             : 'Project bundle restore failed; all planned projects were rolled back or queued for cleanup',
         cause: error,
         failure: pending.phase == PendingBundleRestorePhase.committing
-            ? ProjectBundleRestoreFailure.general
+            ? ProjectBundleRestoreFailure.finalizationPending
             : _classifyRestoreFailure(
                 error,
                 fallback: ProjectBundleRestoreFailure.rolledBack,

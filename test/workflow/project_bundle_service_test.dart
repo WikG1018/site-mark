@@ -838,6 +838,67 @@ void main() {
     );
 
     test(
+      'completed bundle reports finalization pending until startup publishes it',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.customStatement('''
+          CREATE TRIGGER fail_restore_token_clear
+          BEFORE UPDATE OF restore_operation_id ON projects
+          WHEN NEW.restore_operation_id IS NULL
+          BEGIN
+            SELECT RAISE(ABORT, 'simulated token clear failure');
+          END;
+        ''');
+        final pending = _FakeBundlePendingStore();
+        final files = _FakeBundleFiles();
+        final rollback = _FakeProjectRollback();
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: _FakeProjectImporter(),
+          pending: pending,
+          files: files,
+          rollback: rollback,
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        await expectLater(
+          service.restorePrepared(
+            prepared: prepared,
+            projectNames: const {'p1': '恢复东区', 'p2': '恢复西区'},
+          ),
+          throwsA(
+            isA<ProjectBundleRestoreException>().having(
+              (error) => error.failure,
+              'failure',
+              ProjectBundleRestoreFailure.finalizationPending,
+            ),
+          ),
+        );
+
+        expect(await database.getProjects(), isEmpty);
+        expect(await database.getAllProjectsInternal(), hasLength(2));
+        expect(
+          pending.items.single.phase,
+          PendingBundleRestorePhase.committing,
+        );
+        expect(files.deletedTrees, [prepared.stagingDirectory]);
+        expect(rollback.projectIds, isEmpty);
+
+        await database.customStatement('DROP TRIGGER fail_restore_token_clear');
+        await service.cleanupInterruptedBundleRestores();
+
+        expect((await database.getProjects()).map((project) => project.name), [
+          '恢复东区',
+          '恢复西区',
+        ]);
+        expect(pending.items, isEmpty);
+        expect(rollback.projectIds, isEmpty);
+      },
+    );
+
+    test(
       'committing marker retries marker clear after tokens are already visible',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
