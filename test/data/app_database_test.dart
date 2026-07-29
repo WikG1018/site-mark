@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +38,82 @@ void main() {
     expect(projects.map((project) => project.name), ['二号厂房', '一号厂房']);
   });
 
+  test('in-progress restores stay hidden until ownership clears', () async {
+    await database.createProject(id: 'normal', name: '正常项目');
+    await database.createProject(
+      id: 'restoring',
+      name: '恢复中的项目',
+      restoreOperationId: 'restore-operation',
+    );
+    final normalCapture = await database.createPendingCapture(
+      id: 'normal-capture',
+      projectId: 'normal',
+      originalPath: '/private/normal.jpg',
+      workLocation: 'A 区',
+      workContent: '正常记录',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+    );
+    await database.markCaptured(
+      captureId: normalCapture.id,
+      capturedAt: DateTime(2026, 7, 28, 9),
+    );
+    final restoringCapture = await database.createPendingCapture(
+      id: 'restoring-capture',
+      projectId: 'restoring',
+      originalPath: '/private/restoring.jpg',
+      workLocation: 'B 区',
+      workContent: '恢复记录',
+      photographer: '李工',
+      watermarkLocaleCode: 'zh',
+    );
+    await database.markCaptured(
+      captureId: restoringCapture.id,
+      capturedAt: DateTime(2026, 7, 28, 10),
+    );
+
+    final projectUpdates = StreamIterator(database.watchProjects());
+    final summaryUpdates = StreamIterator(database.watchAllCaptureSummaries());
+    addTearDown(projectUpdates.cancel);
+    addTearDown(summaryUpdates.cancel);
+    expect(await projectUpdates.moveNext(), isTrue);
+    expect(projectUpdates.current.map((project) => project.id), ['normal']);
+    expect((await database.getProjects()).map((project) => project.id), [
+      'normal',
+    ]);
+    expect(
+      (await database.getAllProjectsInternal()).map((project) => project.id),
+      containsAll(['normal', 'restoring']),
+    );
+    expect(await summaryUpdates.moveNext(), isTrue);
+    expect(summaryUpdates.current.map((summary) => summary.capture.id), [
+      'normal-capture',
+    ]);
+    expect(
+      (await database.watchCaptureSummaries(const CaptureFilter()).first).map(
+        (summary) => summary.capture.id,
+      ),
+      ['normal-capture'],
+    );
+    expect(await database.projectById('restoring'), isNotNull);
+
+    await database.clearProjectRestoreOwnership(
+      projectId: 'restoring',
+      operationId: 'restore-operation',
+    );
+
+    expect(await projectUpdates.moveNext(), isTrue);
+    expect(
+      projectUpdates.current.map((project) => project.id),
+      containsAll(['normal', 'restoring']),
+    );
+    expect(await summaryUpdates.moveNext(), isTrue);
+    expect(summaryUpdates.current.map((summary) => summary.capture.id), [
+      'restoring-capture',
+      'normal-capture',
+    ]);
+  });
+
   test('rejects normalized duplicate project names', () async {
     await database.createProject(id: 'project-a', name: 'Cloud Site');
 
@@ -64,6 +142,46 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('renameProject rejects display and safe-file-name conflicts', () async {
+    await database.createProject(id: 'a', name: '东区');
+    await database.createProject(id: 'b', name: '西区');
+    await expectLater(
+      database.renameProject(projectId: 'b', name: '  东区  '),
+      throwsA(isA<ProjectNameConflictException>()),
+    );
+    await database.createProject(id: 'c', name: 'A/B');
+    await expectLater(
+      database.renameProject(projectId: 'b', name: 'A:B'),
+      throwsA(isA<ProjectNameConflictException>()),
+    );
+  });
+
+  test('renameProject preserves existing capture evidence', () async {
+    await database.createProject(id: 'a', name: '东区');
+    final pending = await database.createPendingCapture(
+      id: 'capture-1',
+      projectId: 'a',
+      originalPath: '/private/capture-1.jpg',
+      workLocation: 'A 区',
+      workContent: '风管安装',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 9, 30),
+    );
+    await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 32),
+    );
+
+    final before = await database.capturesForProject('a');
+    final renamed = await database.renameProject(projectId: 'a', name: '东区新名称');
+    final after = await database.capturesForProject('a');
+
+    expect(renamed.name, '东区新名称');
+    expect(after.single.photoNumber, before.single.photoNumber);
+    expect(after.single.originalPath, before.single.originalPath);
   });
 
   test('persists constrained project watermark settings', () async {

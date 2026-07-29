@@ -54,6 +54,17 @@ void main() {
       '/rendered/capture-1.jpg',
     );
     expect(images.request?.photos.single.originalPath, '/private/original.jpg');
+
+    final staged = await service.exportProject(
+      projectId: 'project-1',
+      includeOriginals: false,
+      outputZipPath: '/imports/bundle/projects/project-1.zip',
+    );
+    expect(staged.outputZipPath, '/imports/bundle/projects/project-1.zip');
+    expect(
+      images.request?.outputZipPath,
+      '/imports/bundle/projects/project-1.zip',
+    );
   });
 
   test('exportSelection groups captures by project into one ZIP', () async {
@@ -175,8 +186,7 @@ class _ExportImagePipeline implements ImagePipeline {
   @override
   Future<ExtractedArchivePhoto> extractArchivePhoto(
     ExtractArchivePhotoRequest request,
-  ) =>
-      throw UnimplementedError();
+  ) => throw UnimplementedError();
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async {

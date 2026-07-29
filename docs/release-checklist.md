@@ -61,6 +61,34 @@
 - Edit a completed record and verify the same MediaStore image is replaced.
 - Export with and without originals and inspect JPEG, BOM CSV, and manifest.
 - Delete a record and verify private and published copies are removed.
+- Open Settings -> Backup & restore; verify the home screen no longer exposes
+  the old restore entry and Android Back returns to Settings as expected.
+- Back up one project with and without private originals, restore each ZIP, and
+  verify project settings, records, photo numbers, timestamps, location data,
+  hashes, and available originals.
+- Back up multiple selected projects into one bundle, restore it, and verify
+  every selected project and record is present. Confirm an ordinary
+  capture-selection/share ZIP is rejected as a restore source.
+- Inject a failure after one project in a multi-project bundle has imported;
+  verify the complete bundle rolls back. Kill the app during bundle restore,
+  reopen it, and verify startup recovery removes partial projects and temporary
+  files before another restore is allowed.
+- Verify restored photos are not automatically published to the Android system
+  gallery; use "save again" when publication is desired.
+- Rename a project and verify its display name and new captures use the new
+  name, while historic photo numbers, file paths, file names, and watermarks
+  remain unchanged. Verify a conflicting project name is rejected.
+- Delete a project containing records with private originals, rendered images,
+  and published gallery copies. Verify app database/private files are removed,
+  exported backup files and Android gallery copies remain, and there is no
+  option to delete gallery photos from project deletion.
+- Verify the location permission prompt appears only in its contextual state,
+  permission is requested only after the user explicitly taps it, an already
+  granted permission hides it, and denial still permits shooting.
+- At 360 dp width, verify backup/restore project selection, project rename and
+  delete confirmations, capture location prompt, progress, success, and error
+  states have no overflow. Verify Android Back closes dialogs/selections first
+  and does not skip a navigation level.
 
 Background start time is system-controlled; Android "Force stop" pauses
 scheduled work until the app is reopened.

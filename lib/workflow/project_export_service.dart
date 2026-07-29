@@ -3,7 +3,15 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 
-class ProjectExportService {
+abstract interface class ProjectArchiveExporter {
+  Future<ExportProjectResult> exportProject({
+    required String projectId,
+    required bool includeOriginals,
+    String? outputZipPath,
+  });
+}
+
+class ProjectExportService implements ProjectArchiveExporter {
   const ProjectExportService({
     required this.database,
     required this.images,
@@ -18,9 +26,11 @@ class ProjectExportService {
   final ProjectExportPaths exportPaths;
   final SelectionExportPaths selectionExportPaths;
 
+  @override
   Future<ExportProjectResult> exportProject({
     required String projectId,
     required bool includeOriginals,
+    String? outputZipPath,
   }) async {
     final project = await database.projectById(projectId);
     if (project == null) throw StateError('Project does not exist');
@@ -52,7 +62,8 @@ class ProjectExportService {
         ),
       );
     }
-    final outputPath = await exportPaths.projectZipPath(projectId);
+    final outputPath =
+        outputZipPath ?? await exportPaths.projectZipPath(projectId);
     return images.export(
       ExportProjectRequest(
         projectId: project.id,

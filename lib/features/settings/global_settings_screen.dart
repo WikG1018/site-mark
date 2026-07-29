@@ -17,6 +17,11 @@ class GlobalSettingsScreen extends StatelessWidget {
         strings.newProjectDefaults,
         '/settings/watermark',
       ),
+      (
+        Icons.settings_backup_restore_outlined,
+        strings.backupAndRestore,
+        '/settings/backup-restore',
+      ),
       (Icons.palette_outlined, strings.appearance, '/settings/appearance'),
       (Icons.language, strings.language, '/settings/language'),
       (Icons.storage_outlined, strings.storageMenuLabel, '/settings/storage'),
@@ -37,6 +42,9 @@ class GlobalSettingsScreen extends StatelessWidget {
           final (icon, title, route) = entries[index];
           return Card(
             child: ListTile(
+              key: route == '/settings/backup-restore'
+                  ? const Key('backup-restore-menu')
+                  : null,
               leading: Icon(icon),
               title: Text(title),
               trailing: const Icon(Icons.chevron_right),

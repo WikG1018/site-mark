@@ -6,6 +6,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_summary_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
@@ -13,6 +14,9 @@ import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/workflow/project_deletion_service.dart';
+
+enum _ProjectAction { rename, delete }
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
   const ProjectDetailScreen({
@@ -135,6 +139,47 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     onPressed: () => _exportProject(context, ref, project.id),
                     tooltip: strings.exportProject,
                     icon: const Icon(Icons.archive_outlined),
+                  ),
+                  PopupMenuButton<_ProjectAction>(
+                    key: const Key('project-actions'),
+                    tooltip: strings.projectActions,
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (action) async {
+                      switch (action) {
+                        case _ProjectAction.rename:
+                          await _renameProject(project);
+                        case _ProjectAction.delete:
+                          await _deleteProject(project);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        key: const Key('rename-project'),
+                        value: _ProjectAction.rename,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.drive_file_rename_outline),
+                          title: Text(strings.renameProject),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        key: const Key('delete-project'),
+                        value: _ProjectAction.delete,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            Icons.delete_outline,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          title: Text(
+                            strings.deleteProject,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 if (editing)
@@ -411,6 +456,267 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         SnackBar(content: Text('${strings.exportFailed}: $error')),
       );
     }
+  }
+
+  Future<void> _renameProject(Project project) async {
+    final renamed = await showDialog<Project>(
+      context: context,
+      builder: (dialogContext) => _RenameProjectDialog(
+        project: project,
+        database: ref.read(databaseProvider),
+      ),
+    );
+    if (!mounted || renamed == null) return;
+    setState(() {
+      _projectFuture = Future.value(renamed);
+    });
+  }
+
+  Future<void> _deleteProject(Project project) async {
+    final strings = AppStrings.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final service = ref.read(projectDeletionServiceProvider);
+    late final ProjectDeletionPreview preview;
+    try {
+      preview = await service.preview(project.id);
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(strings.deleteProjectPreviewFailed)),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final result = await showDialog<ProjectDeletionResult>(
+      context: context,
+      builder: (dialogContext) => _DeleteProjectDialog(
+        projectId: project.id,
+        preview: preview,
+        service: service,
+      ),
+    );
+    if (!mounted || result == null) return;
+    context.go('/');
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          result.cleanupPending
+              ? strings.projectDeletedCleanupPending
+              : strings.projectDeleted,
+        ),
+      ),
+    );
+  }
+}
+
+class _RenameProjectDialog extends StatefulWidget {
+  const _RenameProjectDialog({required this.project, required this.database});
+
+  final Project project;
+  final AppDatabase database;
+
+  @override
+  State<_RenameProjectDialog> createState() => _RenameProjectDialogState();
+}
+
+class _RenameProjectDialogState extends State<_RenameProjectDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _controller;
+  String? _nameError;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.project.name);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_saving) return;
+    setState(() => _nameError = null);
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final renamed = await widget.database.renameProject(
+        projectId: widget.project.id,
+        name: _controller.text,
+      );
+      if (mounted) Navigator.of(context).pop(renamed);
+    } on ProjectNameConflictException catch (error) {
+      if (!mounted) return;
+      final strings = AppStrings.of(context);
+      setState(() {
+        _saving = false;
+        _nameError = error.kind == ProjectNameConflictKind.displayName
+            ? strings.projectNameAlreadyExists
+            : strings.projectFileNameConflict;
+      });
+      _formKey.currentState!.validate();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _nameError = AppStrings.of(context).renameProjectFailed;
+      });
+      _formKey.currentState!.validate();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        title: Text(strings.renameProjectTitle),
+        content: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: TextFormField(
+              key: const Key('rename-project-name'),
+              controller: _controller,
+              autofocus: true,
+              maxLength: 120,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(labelText: strings.projectName),
+              onFieldSubmitted: (_) => _submit(),
+              onChanged: (_) {
+                if (_nameError != null) {
+                  setState(() => _nameError = null);
+                }
+              },
+              validator: (value) {
+                final name = value?.trim() ?? '';
+                if (name.isEmpty) return strings.projectNameRequired;
+                if (name.length > 120) return strings.projectNameTooLong;
+                return _nameError;
+              },
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.of(context).pop(),
+            child: Text(strings.cancel),
+          ),
+          FilledButton(
+            key: const Key('confirm-rename-project'),
+            onPressed: _saving ? null : _submit,
+            child: _saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(strings.save),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeleteProjectDialog extends StatefulWidget {
+  const _DeleteProjectDialog({
+    required this.projectId,
+    required this.preview,
+    required this.service,
+  });
+
+  final String projectId;
+  final ProjectDeletionPreview preview;
+  final ProjectDeletionService service;
+
+  @override
+  State<_DeleteProjectDialog> createState() => _DeleteProjectDialogState();
+}
+
+class _DeleteProjectDialogState extends State<_DeleteProjectDialog> {
+  bool _deleting = false;
+  bool _failed = false;
+
+  Future<void> _delete() async {
+    if (_deleting) return;
+    setState(() {
+      _deleting = true;
+      _failed = false;
+    });
+    try {
+      final result = await widget.service.deleteProject(widget.projectId);
+      if (mounted) Navigator.of(context).pop(result);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _deleting = false;
+        _failed = true;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return PopScope(
+      canPop: !_deleting,
+      child: AlertDialog(
+        title: Text(strings.deleteProjectTitle),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                strings.deleteProjectSummary(
+                  projectName: widget.preview.projectName,
+                  captureCount: widget.preview.captureCount,
+                  privateOriginalCount: widget.preview.privateOriginalCount,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(strings.deleteProjectRetentionNotice),
+              const SizedBox(height: 8),
+              Text(
+                strings.deleteProjectIrreversible,
+                style: TextStyle(color: colors.error),
+              ),
+              if (_failed) ...[
+                const SizedBox(height: 12),
+                Text(
+                  strings.deleteProjectFailed,
+                  style: TextStyle(color: colors.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _deleting ? null : () => Navigator.of(context).pop(),
+            child: Text(strings.cancel),
+          ),
+          FilledButton(
+            key: const Key('confirm-delete-project'),
+            style: FilledButton.styleFrom(
+              backgroundColor: colors.error,
+              foregroundColor: colors.onError,
+            ),
+            onPressed: _deleting ? null : _delete,
+            child: _deleting
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(strings.deleteProject),
+          ),
+        ],
+      ),
+    );
   }
 }
 

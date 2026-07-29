@@ -33,6 +33,46 @@ class AppStrings {
   String get projectFileNameConflict => _english
       ? 'This name conflicts with an existing project file name'
       : '项目名称生成的文件名与已有项目重复';
+  String get projectActions => _english ? 'Project actions' : '项目操作';
+  String get renameProject => _english ? 'Rename project' : '重命名项目';
+  String get deleteProject => _english ? 'Delete project' : '删除项目';
+  String get renameProjectTitle => _english ? 'Rename this project' : '重命名此项目';
+  String get renameProjectFailed => _english
+      ? 'Could not rename the project. Please try again.'
+      : '项目重命名失败，请稍后重试';
+  String get projectNameTooLong => _english
+      ? 'Project name must be 120 characters or fewer'
+      : '项目名称不能超过 120 个字符';
+  String get deleteProjectTitle => _english ? 'Delete this project?' : '删除此项目？';
+  String deleteProjectSummary({
+    required String projectName,
+    required int captureCount,
+    required int privateOriginalCount,
+  }) => _english
+      ? 'Project: $projectName\n'
+            'Capture records: $captureCount\n'
+            'Private originals retained: $privateOriginalCount'
+      : '项目：$projectName\n'
+            '拍摄记录：$captureCount 条\n'
+            '保留的私有原图：$privateOriginalCount 张';
+  String get deleteProjectRetentionNotice => _english
+      ? 'Photos already saved in the system gallery and exported backups will remain.'
+      : '系统相册中的照片和已导出备份会保留。';
+  String get deleteProjectIrreversible => _english
+      ? 'Project data and private files in this app cannot be recovered after deletion.'
+      : '删除后，应用内的项目数据和私有文件无法恢复。';
+  String get deleteProjectFailed => _english
+      ? 'Could not delete the project. Please try again.'
+      : '项目删除失败，请稍后重试';
+  String get deleteProjectPreviewFailed => _english
+      ? 'Could not load deletion details. Please try again.'
+      : '无法读取删除信息，请稍后重试';
+  String get projectDeleted => _english
+      ? 'Project deleted. Photos in the system gallery and exported backups were retained.'
+      : '项目已删除，系统相册中的照片和已导出备份已保留';
+  String get projectDeletedCleanupPending => _english
+      ? 'Project deleted. Photos in the system gallery and exported backups were retained. Remaining private files will be cleaned up the next time the app starts.'
+      : '项目已删除，系统相册中的照片和已导出备份已保留；残留私有文件将在下次启动继续清理';
   String get descriptionOptional =>
       _english ? 'Description (optional)' : '项目说明（选填）';
   String get save => _english ? 'Save' : '保存';
@@ -51,9 +91,6 @@ class AppStrings {
   String get captureWorkflowHint => _english
       ? 'Capture will invoke the system camera. Watermarks are processed in the background. You can tap capture repeatedly; return to the project detail to view records as they finish.'
       : '拍摄将调用系统相机，水印将在后台处理。可连续点击拍摄，返回项目详情即可查看处理中的记录。';
-  String get captureLocationHint => _english
-      ? 'Foreground location is requested once before capture. Capture still works if you decline.'
-      : '拍摄前仅请求一次前台位置；拒绝授权也可以继续拍摄。';
   String get ready => _english ? 'Ready' : '已完成';
   String get failed => _english ? 'Failed' : '失败';
   String get pendingCamera => _english ? 'Waiting for camera' : '等待相机';
@@ -288,26 +325,24 @@ class AppStrings {
 
   // Project backup restore (import)
   String get importProject => _english ? 'Import project backup' : '导入项目备份';
-  String get importDialogTitle =>
-      _english ? 'Import project backup' : '导入项目备份';
+  String get importDialogTitle => _english ? 'Import project backup' : '导入项目备份';
   String importPhotoCount(int count) =>
       _english ? '$count photo(s)' : '$count 张照片';
   String get importIncludesOriginals =>
       _english ? 'Includes private originals' : '包含私有原图';
   String get importNoOriginals =>
       _english ? 'Watermarked photos only' : '仅水印成片';
-  String get importWatermarkRestored =>
-      _english ? 'Project watermark settings will be restored.' : '将恢复该项目的水印设置。';
+  String get importWatermarkRestored => _english
+      ? 'Project watermark settings will be restored.'
+      : '将恢复该项目的水印设置。';
   String get importWatermarkDefault => _english
       ? 'The archive predates watermark backup; current defaults apply.'
       : '备份不含水印设置，将使用默认值。';
   String get importAction => _english ? 'Import' : '导入';
-  String importingProgress(int completed, int total) => _english
-      ? 'Importing $completed/$total…'
-      : '正在导入 $completed/$total…';
-  String importSuccess(String name, int count) => _english
-      ? 'Imported "$name" ($count photo(s))'
-      : '已导入「$name」（$count 张）';
+  String importingProgress(int completed, int total) =>
+      _english ? 'Importing $completed/$total…' : '正在导入 $completed/$total…';
+  String importSuccess(String name, int count) =>
+      _english ? 'Imported "$name" ($count photo(s))' : '已导入「$name」（$count 张）';
   String get importFailed => _english ? 'Import failed' : '导入失败';
   String get importInvalidArchive =>
       _english ? 'Not a valid SiteMark project backup' : '不是有效的 SiteMark 项目备份';
@@ -316,6 +351,88 @@ class AppStrings {
       : '多选导出包暂不支持导入，请使用单项目导出包。';
   String get importNameConflict =>
       _english ? 'A project with this name already exists' : '已存在同名项目';
+
+  // Unified backup and restore settings
+  String get backupAndRestore => _english ? 'Backup & restore' : '备份与恢复';
+  String get backupProjects => _english ? 'Back up projects' : '备份项目';
+  String get restoreProjects => _english ? 'Restore projects' : '恢复项目';
+  String get backupExplanation => _english
+      ? 'Create a SiteMark ZIP for one or more projects. Photos already saved to the system gallery remain independent.'
+      : '将一个或多个项目生成 SiteMark ZIP 备份。已保存到系统相册的照片独立保留。';
+  String get restoreExplanation => _english
+      ? 'Choose a ZIP exported by SiteMark. Regular photo-sharing ZIP files cannot be restored.'
+      : '请选择由 SiteMark 导出的备份 ZIP；普通照片分享 ZIP 无法恢复。';
+  String selectedProjectCount(int count) =>
+      _english ? '$count project(s) selected' : '已选择 $count 个项目';
+  String get continueLabel => _english ? 'Continue' : '继续';
+  String get noProjectsToBackup =>
+      _english ? 'No projects available to back up' : '暂无可备份项目';
+  String get includePrivateOriginals =>
+      _english ? 'Include private originals' : '包含私有原图';
+  String get includePrivateOriginalsConsequence => _english
+      ? 'The backup will be larger and take longer to create.'
+      : '备份文件会更大，生成时间也会更长。';
+  String get excludePrivateOriginals =>
+      _english ? 'Exclude originals' : '不包含原图';
+  String backingUpProgress(int completed, int total) =>
+      _english ? 'Backing up $completed/$total' : '正在备份 $completed/$total';
+  String get backupComplete => _english
+      ? 'Backup created. Choose where to share or save it.'
+      : '备份已生成，请选择分享或保存位置';
+  String get backupFailedFriendly =>
+      _english ? 'Could not create the backup' : '无法生成备份';
+  String get chooseRestoreZip => _english ? 'Choose backup ZIP' : '选择备份 ZIP';
+  String get restorePickerFailed => _english
+      ? 'Could not open the backup file picker. Please try again.'
+      : '无法打开备份文件选择器，请重试';
+  String get restorePreview => _english ? 'Restore preview' : '恢复预览';
+  String get restoreName => _english ? 'Name after restore' : '恢复后的项目名称';
+  String get bundleRestoreRollback => _english
+      ? 'All projects are restored together. If any item fails, this restore is rolled back completely.'
+      : '所有项目将作为一个整体恢复；任一项目失败时，本次恢复会全部回滚。';
+  String get restoreAction => _english ? 'Restore' : '恢复';
+  String restoringProgress(int completed, int total) =>
+      _english ? 'Restoring $completed/$total' : '正在恢复 $completed/$total';
+  String get restoreComplete => _english ? 'Restore complete' : '恢复完成';
+  String get backupInvalidArchive =>
+      _english ? 'Not a valid SiteMark backup' : '不是有效的 SiteMark 备份';
+  String get backupNotSiteMark =>
+      _english ? 'This is not a SiteMark backup file' : '不是 SiteMark 备份文件';
+  String get backupUnsupportedVersion =>
+      _english ? 'This backup version is not supported' : '此备份版本暂不支持';
+  String get backupCorrupted => _english
+      ? 'The backup is corrupted or its checksum does not match'
+      : '备份已损坏或校验不一致';
+  String get backupSelectionNotRestorable => _english
+      ? 'Photo sharing ZIP files cannot restore projects'
+      : '照片分享 ZIP 不能用于恢复项目';
+  String get backupRestoreNameConflict => _english
+      ? 'A project name conflicts with an existing or selected project'
+      : '项目名称与已有或所选项目冲突';
+  String get backupStorageInsufficient => _english
+      ? 'Not enough storage space to complete this operation'
+      : '存储空间不足，无法完成操作';
+  String get restoreFinalizationPending => _english
+      ? 'Restore data is safely saved. Publication and visibility will finish automatically the next time the app starts.'
+      : '恢复数据已安全保存，将在下次启动应用时自动完成发布和显示';
+  String get restoreFailedRollback => _english
+      ? 'Restore failed. Any changes from this restore were rolled back.'
+      : '恢复失败，本次产生的内容已回滚';
+  String get restoreFailedGeneral => _english
+      ? 'Could not complete the restore. Please try again.'
+      : '无法完成恢复，请重试';
+  String get restoreUsesBackupWatermark =>
+      _english ? 'Use watermark settings from this backup' : '使用备份中的水印设置';
+  String restoreWatermarkSummary(
+    String position,
+    int opacityPercent,
+    int fontPercent,
+  ) => _english
+      ? '$position · Opacity $opacityPercent% · Font $fontPercent%'
+      : '$position · 透明度 $opacityPercent% · 字体 $fontPercent%';
+  String get restoreUsesDefaultWatermark => _english
+      ? 'No watermark settings in this backup; defaults will be used'
+      : '备份未包含水印设置，将使用默认设置';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

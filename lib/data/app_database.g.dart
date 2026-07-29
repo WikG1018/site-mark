@@ -41,6 +41,17 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _restoreOperationIdMeta =
+      const VerificationMeta('restoreOperationId');
+  @override
+  late final GeneratedColumn<String> restoreOperationId =
+      GeneratedColumn<String>(
+        'restore_operation_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _watermarkPositionMeta = const VerificationMeta(
     'watermarkPosition',
   );
@@ -117,6 +128,7 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     id,
     name,
     description,
+    restoreOperationId,
     watermarkPosition,
     watermarkOpacity,
     watermarkAccentColorArgb,
@@ -155,6 +167,15 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         description.isAcceptableOrUnknown(
           data['description']!,
           _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('restore_operation_id')) {
+      context.handle(
+        _restoreOperationIdMeta,
+        restoreOperationId.isAcceptableOrUnknown(
+          data['restore_operation_id']!,
+          _restoreOperationIdMeta,
         ),
       );
     }
@@ -231,6 +252,10 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.string,
         data['${effectivePrefix}description'],
       ),
+      restoreOperationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}restore_operation_id'],
+      ),
       watermarkPosition: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}watermark_position'],
@@ -268,6 +293,12 @@ class Project extends DataClass implements Insertable<Project> {
   final String id;
   final String name;
   final String? description;
+
+  /// Internal crash-recovery ownership token for an in-flight restore.
+  ///
+  /// User-created and fully committed projects keep this null. Recovery may
+  /// delete a project only when its durable marker carries the same token.
+  final String? restoreOperationId;
   final String watermarkPosition;
   final double watermarkOpacity;
   final int watermarkAccentColorArgb;
@@ -278,6 +309,7 @@ class Project extends DataClass implements Insertable<Project> {
     required this.id,
     required this.name,
     this.description,
+    this.restoreOperationId,
     required this.watermarkPosition,
     required this.watermarkOpacity,
     required this.watermarkAccentColorArgb,
@@ -292,6 +324,9 @@ class Project extends DataClass implements Insertable<Project> {
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || description != null) {
       map['description'] = Variable<String>(description);
+    }
+    if (!nullToAbsent || restoreOperationId != null) {
+      map['restore_operation_id'] = Variable<String>(restoreOperationId);
     }
     map['watermark_position'] = Variable<String>(watermarkPosition);
     map['watermark_opacity'] = Variable<double>(watermarkOpacity);
@@ -311,6 +346,9 @@ class Project extends DataClass implements Insertable<Project> {
       description: description == null && nullToAbsent
           ? const Value.absent()
           : Value(description),
+      restoreOperationId: restoreOperationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(restoreOperationId),
       watermarkPosition: Value(watermarkPosition),
       watermarkOpacity: Value(watermarkOpacity),
       watermarkAccentColorArgb: Value(watermarkAccentColorArgb),
@@ -329,6 +367,9 @@ class Project extends DataClass implements Insertable<Project> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       description: serializer.fromJson<String?>(json['description']),
+      restoreOperationId: serializer.fromJson<String?>(
+        json['restoreOperationId'],
+      ),
       watermarkPosition: serializer.fromJson<String>(json['watermarkPosition']),
       watermarkOpacity: serializer.fromJson<double>(json['watermarkOpacity']),
       watermarkAccentColorArgb: serializer.fromJson<int>(
@@ -348,6 +389,7 @@ class Project extends DataClass implements Insertable<Project> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'description': serializer.toJson<String?>(description),
+      'restoreOperationId': serializer.toJson<String?>(restoreOperationId),
       'watermarkPosition': serializer.toJson<String>(watermarkPosition),
       'watermarkOpacity': serializer.toJson<double>(watermarkOpacity),
       'watermarkAccentColorArgb': serializer.toJson<int>(
@@ -363,6 +405,7 @@ class Project extends DataClass implements Insertable<Project> {
     String? id,
     String? name,
     Value<String?> description = const Value.absent(),
+    Value<String?> restoreOperationId = const Value.absent(),
     String? watermarkPosition,
     double? watermarkOpacity,
     int? watermarkAccentColorArgb,
@@ -373,6 +416,9 @@ class Project extends DataClass implements Insertable<Project> {
     id: id ?? this.id,
     name: name ?? this.name,
     description: description.present ? description.value : this.description,
+    restoreOperationId: restoreOperationId.present
+        ? restoreOperationId.value
+        : this.restoreOperationId,
     watermarkPosition: watermarkPosition ?? this.watermarkPosition,
     watermarkOpacity: watermarkOpacity ?? this.watermarkOpacity,
     watermarkAccentColorArgb:
@@ -388,6 +434,9 @@ class Project extends DataClass implements Insertable<Project> {
       description: data.description.present
           ? data.description.value
           : this.description,
+      restoreOperationId: data.restoreOperationId.present
+          ? data.restoreOperationId.value
+          : this.restoreOperationId,
       watermarkPosition: data.watermarkPosition.present
           ? data.watermarkPosition.value
           : this.watermarkPosition,
@@ -411,6 +460,7 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('description: $description, ')
+          ..write('restoreOperationId: $restoreOperationId, ')
           ..write('watermarkPosition: $watermarkPosition, ')
           ..write('watermarkOpacity: $watermarkOpacity, ')
           ..write('watermarkAccentColorArgb: $watermarkAccentColorArgb, ')
@@ -426,6 +476,7 @@ class Project extends DataClass implements Insertable<Project> {
     id,
     name,
     description,
+    restoreOperationId,
     watermarkPosition,
     watermarkOpacity,
     watermarkAccentColorArgb,
@@ -440,6 +491,7 @@ class Project extends DataClass implements Insertable<Project> {
           other.id == this.id &&
           other.name == this.name &&
           other.description == this.description &&
+          other.restoreOperationId == this.restoreOperationId &&
           other.watermarkPosition == this.watermarkPosition &&
           other.watermarkOpacity == this.watermarkOpacity &&
           other.watermarkAccentColorArgb == this.watermarkAccentColorArgb &&
@@ -452,6 +504,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<String> id;
   final Value<String> name;
   final Value<String?> description;
+  final Value<String?> restoreOperationId;
   final Value<String> watermarkPosition;
   final Value<double> watermarkOpacity;
   final Value<int> watermarkAccentColorArgb;
@@ -463,6 +516,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.description = const Value.absent(),
+    this.restoreOperationId = const Value.absent(),
     this.watermarkPosition = const Value.absent(),
     this.watermarkOpacity = const Value.absent(),
     this.watermarkAccentColorArgb = const Value.absent(),
@@ -475,6 +529,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     required String id,
     required String name,
     this.description = const Value.absent(),
+    this.restoreOperationId = const Value.absent(),
     this.watermarkPosition = const Value.absent(),
     this.watermarkOpacity = const Value.absent(),
     this.watermarkAccentColorArgb = const Value.absent(),
@@ -490,6 +545,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? description,
+    Expression<String>? restoreOperationId,
     Expression<String>? watermarkPosition,
     Expression<double>? watermarkOpacity,
     Expression<int>? watermarkAccentColorArgb,
@@ -502,6 +558,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (description != null) 'description': description,
+      if (restoreOperationId != null)
+        'restore_operation_id': restoreOperationId,
       if (watermarkPosition != null) 'watermark_position': watermarkPosition,
       if (watermarkOpacity != null) 'watermark_opacity': watermarkOpacity,
       if (watermarkAccentColorArgb != null)
@@ -518,6 +576,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<String>? id,
     Value<String>? name,
     Value<String?>? description,
+    Value<String?>? restoreOperationId,
     Value<String>? watermarkPosition,
     Value<double>? watermarkOpacity,
     Value<int>? watermarkAccentColorArgb,
@@ -530,6 +589,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       id: id ?? this.id,
       name: name ?? this.name,
       description: description ?? this.description,
+      restoreOperationId: restoreOperationId ?? this.restoreOperationId,
       watermarkPosition: watermarkPosition ?? this.watermarkPosition,
       watermarkOpacity: watermarkOpacity ?? this.watermarkOpacity,
       watermarkAccentColorArgb:
@@ -552,6 +612,9 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     }
     if (description.present) {
       map['description'] = Variable<String>(description.value);
+    }
+    if (restoreOperationId.present) {
+      map['restore_operation_id'] = Variable<String>(restoreOperationId.value);
     }
     if (watermarkPosition.present) {
       map['watermark_position'] = Variable<String>(watermarkPosition.value);
@@ -585,6 +648,7 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('description: $description, ')
+          ..write('restoreOperationId: $restoreOperationId, ')
           ..write('watermarkPosition: $watermarkPosition, ')
           ..write('watermarkOpacity: $watermarkOpacity, ')
           ..write('watermarkAccentColorArgb: $watermarkAccentColorArgb, ')
@@ -2082,7 +2146,7 @@ class $AppSettingsTable extends AppSettings
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0xff37c58b),
+    defaultValue: const Constant(kDefaultSeedColorArgb),
   );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
@@ -2798,6 +2862,7 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       required String id,
       required String name,
       Value<String?> description,
+      Value<String?> restoreOperationId,
       Value<String> watermarkPosition,
       Value<double> watermarkOpacity,
       Value<int> watermarkAccentColorArgb,
@@ -2811,6 +2876,7 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String?> description,
+      Value<String?> restoreOperationId,
       Value<String> watermarkPosition,
       Value<double> watermarkOpacity,
       Value<int> watermarkAccentColorArgb,
@@ -2864,6 +2930,11 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<String> get description => $composableBuilder(
     column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get restoreOperationId => $composableBuilder(
+    column: $table.restoreOperationId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2947,6 +3018,11 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get restoreOperationId => $composableBuilder(
+    column: $table.restoreOperationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get watermarkPosition => $composableBuilder(
     column: $table.watermarkPosition,
     builder: (column) => ColumnOrderings(column),
@@ -2995,6 +3071,11 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<String> get description => $composableBuilder(
     column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get restoreOperationId => $composableBuilder(
+    column: $table.restoreOperationId,
     builder: (column) => column,
   );
 
@@ -3081,6 +3162,7 @@ class $$ProjectsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> description = const Value.absent(),
+                Value<String?> restoreOperationId = const Value.absent(),
                 Value<String> watermarkPosition = const Value.absent(),
                 Value<double> watermarkOpacity = const Value.absent(),
                 Value<int> watermarkAccentColorArgb = const Value.absent(),
@@ -3092,6 +3174,7 @@ class $$ProjectsTableTableManager
                 id: id,
                 name: name,
                 description: description,
+                restoreOperationId: restoreOperationId,
                 watermarkPosition: watermarkPosition,
                 watermarkOpacity: watermarkOpacity,
                 watermarkAccentColorArgb: watermarkAccentColorArgb,
@@ -3105,6 +3188,7 @@ class $$ProjectsTableTableManager
                 required String id,
                 required String name,
                 Value<String?> description = const Value.absent(),
+                Value<String?> restoreOperationId = const Value.absent(),
                 Value<String> watermarkPosition = const Value.absent(),
                 Value<double> watermarkOpacity = const Value.absent(),
                 Value<int> watermarkAccentColorArgb = const Value.absent(),
@@ -3116,6 +3200,7 @@ class $$ProjectsTableTableManager
                 id: id,
                 name: name,
                 description: description,
+                restoreOperationId: restoreOperationId,
                 watermarkPosition: watermarkPosition,
                 watermarkOpacity: watermarkOpacity,
                 watermarkAccentColorArgb: watermarkAccentColorArgb,

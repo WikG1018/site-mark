@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -91,10 +93,105 @@ void main() {
           ' -> /rendered/${withoutOriginal.id}.jpg',
     ]);
 
-    // The pending marker was written before work and cleared after commit.
-    expect(pendingStore.writes, 1);
+    // planned -> ownsProject -> committing, then cleared after token release.
+    expect(pendingStore.writes, 3);
     expect(pendingStore.cleared, [result.projectId]);
     expect(committer.deletedTrees, ['/staging/${result.projectId}']);
+  });
+
+  test('importProject uses a caller-specified target project id', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: _RecordingFileStore(),
+    );
+
+    final result = await service.importProject(
+      zipPath: '/backups/p.zip',
+      projectName: '东区厂房改造',
+      projectId: 'preallocated-project-id',
+    );
+
+    expect(result.projectId, 'preallocated-project-id');
+    expect(await database.projectById('preallocated-project-id'), isNotNull);
+  });
+
+  test('existing caller-specified target id is never deleted', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'existing-id', name: '保留项目');
+    final files = _RecordingFileStore();
+    final images = _ImportImagePipeline(_preview());
+    final service = _service(database: database, images: images, files: files);
+
+    await expectLater(
+      service.importProject(
+        zipPath: '/backups/p.zip',
+        projectName: '新项目',
+        projectId: 'existing-id',
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect((await database.projectById('existing-id'))?.name, '保留项目');
+    expect(images.extractRequests, isEmpty);
+    expect(files.attemptedDeletes, isEmpty);
+  });
+
+  test('double-submit cannot delete the first successful restore', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final files = _RecordingFileStore();
+    final images = _ImportImagePipeline(_preview());
+    final service = _service(database: database, images: images, files: files);
+
+    await service.importProject(
+      zipPath: '/backups/p.zip',
+      projectName: '第一次恢复',
+      projectId: 'shared-target-id',
+    );
+    await expectLater(
+      service.importProject(
+        zipPath: '/backups/p.zip',
+        projectName: '第二次恢复',
+        projectId: 'shared-target-id',
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    expect((await database.projectById('shared-target-id'))?.name, '第一次恢复');
+    expect(await database.capturesForProject('shared-target-id'), hasLength(2));
+    expect(files.attemptedDeletes, isEmpty);
+  });
+
+  test('concurrent imports cannot claim the same target id', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: _RecordingFileStore(),
+    );
+
+    final first = service.importProject(
+      zipPath: '/backups/p.zip',
+      projectName: '第一次恢复',
+      projectId: 'concurrent-target-id',
+    );
+    final secondExpectation = expectLater(
+      service.importProject(
+        zipPath: '/backups/p.zip',
+        projectName: '第二次恢复',
+        projectId: 'concurrent-target-id',
+      ),
+      throwsA(isA<StateError>()),
+    );
+
+    await first;
+    await secondExpectation;
+    expect((await database.projectById('concurrent-target-id'))?.name, '第一次恢复');
   });
 
   test('importProject rolls everything back when extraction fails', () async {
@@ -119,10 +216,10 @@ void main() {
     expect(await database.getAllCaptures(), isEmpty);
     // Both staged and final paths of every photo were deleted best-effort.
     expect(files.deleted.length, 8);
-    // The marker stays so the startup cleanup can retry stubborn files.
+    // A fully cleaned pre-create failure clears its non-owning marker.
     expect(pendingStore.writes, 1);
-    expect(pendingStore.cleared, isEmpty);
-    expect(pendingStore.pending.length, 1);
+    expect(pendingStore.cleared, hasLength(1));
+    expect(pendingStore.pending, isEmpty);
   });
 
   test('rollback stays best-effort when a delete throws', () async {
@@ -205,13 +302,19 @@ void main() {
       );
       // Simulate an interrupted import: a project row, a staging tree, and a
       // pending marker all left behind.
-      await database.createProject(id: 'dead-project', name: '烂尾项目');
+      await database.createProject(
+        id: 'dead-project',
+        name: '烂尾项目',
+        restoreOperationId: 'restore-dead-project',
+      );
       pendingStore.pending.add(
         const PendingImport(
           projectId: 'dead-project',
           stagingDirectory: '/staging/dead-project',
           stagedFiles: ['/staging/dead-project/rendered/a.jpg'],
           finalFiles: ['/rendered/a.jpg'],
+          phase: PendingImportPhase.ownsProject,
+          operationId: 'restore-dead-project',
         ),
       );
 
@@ -260,6 +363,178 @@ void main() {
     },
   );
 
+  test('pending import JSON is backward-compatible and safely non-owning', () {
+    final legacy = PendingImport.fromJson(const {
+      'projectId': 'legacy-id',
+      'stagingDirectory': '/staging/legacy-id',
+      'stagedFiles': <String>[],
+      'finalFiles': <String>[],
+    });
+    expect(legacy.phase, PendingImportPhase.planned);
+
+    const owning = PendingImport(
+      projectId: 'owned-id',
+      stagingDirectory: '/staging/owned-id',
+      stagedFiles: [],
+      finalFiles: [],
+      phase: PendingImportPhase.ownsProject,
+    );
+    expect(
+      PendingImport.fromJson(owning.toJson()).phase,
+      PendingImportPhase.ownsProject,
+    );
+    const committing = PendingImport(
+      projectId: 'committing-id',
+      stagingDirectory: '/staging/committing-id',
+      stagedFiles: [],
+      finalFiles: [],
+      phase: PendingImportPhase.committing,
+      operationId: 'commit-operation',
+    );
+    expect(
+      PendingImport.fromJson(committing.toJson()).phase,
+      PendingImportPhase.committing,
+    );
+  });
+
+  test('non-owning startup marker preserves a raced project', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'raced-id', name: '其他恢复创建的项目');
+    final files = _RecordingFileStore();
+    final committer = _RecordingCommitter();
+    final pendingStore = _FakePendingStore()
+      ..pending.add(
+        const PendingImport(
+          projectId: 'raced-id',
+          stagingDirectory: '/staging/raced-id',
+          stagedFiles: ['/staging/raced-id/photo.jpg'],
+          finalFiles: ['/rendered/raced-id.jpg'],
+        ),
+      );
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: files,
+      pendingStore: pendingStore,
+      committer: committer,
+    );
+
+    await service.cleanupInterruptedImports();
+
+    expect(await database.projectById('raced-id'), isNotNull);
+    expect(files.attemptedDeletes, isEmpty);
+    expect(committer.deletedTrees, isEmpty);
+    expect(pendingStore.pending, hasLength(1));
+  });
+
+  test(
+    'planned marker with matching database token deletes interrupted restore',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(
+        id: 'planned-owned',
+        name: '中断恢复',
+        restoreOperationId: 'operation-owned',
+      );
+      final pendingStore = _FakePendingStore()
+        ..pending.add(
+          const PendingImport(
+            projectId: 'planned-owned',
+            stagingDirectory: '/staging/planned-owned',
+            stagedFiles: [],
+            finalFiles: [],
+            operationId: 'operation-owned',
+          ),
+        );
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: _RecordingFileStore(),
+        pendingStore: pendingStore,
+      );
+
+      await service.cleanupInterruptedImports();
+
+      expect(await database.projectById('planned-owned'), isNull);
+      expect(pendingStore.pending, isEmpty);
+    },
+  );
+
+  test('mismatching database token never authorizes cleanup', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(
+      id: 'mismatch',
+      name: '其他恢复',
+      restoreOperationId: 'different-operation',
+    );
+    final pendingStore = _FakePendingStore()
+      ..pending.add(
+        const PendingImport(
+          projectId: 'mismatch',
+          stagingDirectory: '/staging/mismatch',
+          stagedFiles: ['/staging/mismatch/a.jpg'],
+          finalFiles: ['/rendered/a.jpg'],
+          operationId: 'marker-operation',
+        ),
+      );
+    final files = _RecordingFileStore();
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(_preview()),
+      files: files,
+      pendingStore: pendingStore,
+    );
+
+    await service.cleanupInterruptedImports();
+
+    expect(await database.projectById('mismatch'), isNotNull);
+    expect(files.attemptedDeletes, isEmpty);
+    expect(pendingStore.pending, hasLength(1));
+  });
+
+  test(
+    'immutable marker generations survive a failed rewrite without corrupting the last state',
+    () async {
+      final root = await Directory.systemTemp.createTemp('sitemark-marker-');
+      addTearDown(() => root.delete(recursive: true));
+      final store = AppImportPendingStore(documentsDirectory: () async => root);
+      const planned = PendingImport(
+        projectId: 'atomic-project',
+        stagingDirectory: '/staging/atomic-project',
+        stagedFiles: [],
+        finalFiles: [],
+        operationId: 'atomic-operation',
+      );
+      await store.writePending(planned);
+
+      final failedStore = AppImportPendingStore(
+        documentsDirectory: () async => root,
+        writer: _FailBeforeCommitMarkerWriter(),
+      );
+      await expectLater(
+        failedStore.writePending(
+          planned.withPhase(PendingImportPhase.ownsProject),
+        ),
+        throwsStateError,
+      );
+
+      var listed = await store.listPending();
+      expect(listed, hasLength(1));
+      expect(listed.single.phase, PendingImportPhase.planned);
+      expect(listed.single.operationId, 'atomic-operation');
+
+      final owned = planned.withPhase(PendingImportPhase.ownsProject);
+      await store.writePending(owned);
+      listed = await store.listPending();
+      expect(listed, hasLength(1));
+      expect(listed.single.phase, PendingImportPhase.ownsProject);
+      expect(listed.single.revision, 1);
+    },
+  );
+
   test(
     'successful import ignores a staging-directory cleanup failure',
     () async {
@@ -284,6 +559,85 @@ void main() {
       expect(pendingStore.cleared, [result.projectId]);
       expect(pendingStore.pending, isEmpty);
       expect(committer.deleteTreeAttempts, 1);
+    },
+  );
+
+  test(
+    'committing marker survives token clear failure and startup finalizes without rollback',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.customStatement('''
+        CREATE TRIGGER fail_import_token_clear
+        BEFORE UPDATE OF restore_operation_id ON projects
+        WHEN NEW.restore_operation_id IS NULL
+        BEGIN
+          SELECT RAISE(ABORT, 'simulated token clear failure');
+        END;
+      ''');
+      final files = _RecordingFileStore();
+      final pendingStore = _FakePendingStore();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: files,
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.importProject(zipPath: '/backups/p.zip', projectName: '待完成恢复'),
+        throwsA(
+          isA<ProjectImportFinalizationPendingException>().having(
+            (error) => error.projectId,
+            'projectId',
+            isNotEmpty,
+          ),
+        ),
+      );
+
+      expect(await database.getProjects(), isEmpty);
+      expect(await database.getAllProjectsInternal(), hasLength(1));
+      expect(pendingStore.pending.single.phase, PendingImportPhase.committing);
+      expect(files.attemptedDeletes, isEmpty);
+
+      await database.customStatement('DROP TRIGGER fail_import_token_clear');
+      await service.cleanupInterruptedImports();
+
+      expect((await database.getProjects()).single.name, '待完成恢复');
+      expect(pendingStore.pending, isEmpty);
+      expect(files.attemptedDeletes, isEmpty);
+    },
+  );
+
+  test(
+    'committing marker retries clear after token is already visible',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final files = _RecordingFileStore();
+      final pendingStore = _FakePendingStore()..throwOnClear = true;
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: files,
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.importProject(zipPath: '/backups/p.zip', projectName: '已恢复项目'),
+        throwsA(anything),
+      );
+
+      expect((await database.getProjects()).single.name, '已恢复项目');
+      expect(pendingStore.pending.single.phase, PendingImportPhase.committing);
+      expect(files.attemptedDeletes, isEmpty);
+
+      pendingStore.throwOnClear = false;
+      await service.cleanupInterruptedImports();
+
+      expect((await database.getProjects()).single.name, '已恢复项目');
+      expect(pendingStore.pending, isEmpty);
+      expect(files.attemptedDeletes, isEmpty);
     },
   );
 
@@ -344,7 +698,11 @@ void main() {
     await database.createProject(id: 'p1', name: '东区厂房改造');
     expect(await service.suggestAvailableName('东区厂房改造'), '东区厂房改造（导入）');
 
-    await database.createProject(id: 'p2', name: '东区厂房改造（导入）');
+    await database.createProject(
+      id: 'p2',
+      name: '东区厂房改造（导入）',
+      restoreOperationId: 'hidden-restore',
+    );
     expect(await service.suggestAvailableName('东区厂房改造'), '东区厂房改造（导入 2）');
   });
 
@@ -498,10 +856,12 @@ class _FakePendingStore implements ImportPendingStore {
   final pending = <PendingImport>[];
   final cleared = <String>[];
   var writes = 0;
+  bool throwOnClear = false;
 
   @override
   Future<void> writePending(PendingImport pending) async {
     writes++;
+    this.pending.removeWhere((entry) => entry.projectId == pending.projectId);
     this.pending.add(pending);
   }
 
@@ -510,6 +870,7 @@ class _FakePendingStore implements ImportPendingStore {
 
   @override
   Future<void> clearPending(String projectId) async {
+    if (throwOnClear) throw StateError('marker clear failed');
     cleared.add(projectId);
     pending.removeWhere((entry) => entry.projectId == projectId);
   }
@@ -556,5 +917,13 @@ class _RecordingFileStore implements PrivateFileStore {
     }
     attemptedDeletes.add(path);
     deleted.add(path);
+  }
+}
+
+class _FailBeforeCommitMarkerWriter implements AtomicMarkerWriter {
+  @override
+  Future<void> write(File target, String contents) async {
+    await File('${target.path}.tmp-power-loss').writeAsString('{', flush: true);
+    throw StateError('simulated power loss before atomic rename');
   }
 }

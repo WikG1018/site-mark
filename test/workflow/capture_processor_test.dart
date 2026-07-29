@@ -8,6 +8,7 @@ import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
+import 'package:sitemark/workflow/project_deletion_service.dart';
 
 const _digestA =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -270,11 +271,7 @@ void main() {
     },
   );
 
-  test('record whose project vanished (cascade) returns missing', () async {
-    // The captures.project_id FK is ON DELETE CASCADE, so removing a project
-    // also removes its captures. The processor therefore sees no record and
-    // returns `missing`; the project-existence guard is a defensive backstop
-    // for the non-cascading case.
+  test('queued capture becomes missing after project deletion', () async {
     await database.createProject(
       id: 'project-2',
       name: '临时项目',
@@ -294,7 +291,19 @@ void main() {
       captureId: 'capture-2',
       capturedAt: DateTime(2026, 7, 16, 10, 5),
     );
-    await database.delete(database.projects).go();
+    await database.resolveCaptureLocation(
+      captureId: 'capture-2',
+      resolution: 'unavailable',
+      outcome: 'unavailable',
+    );
+    final deletion = ProjectDeletionService(
+      database: database,
+      capturePaths: _ProcessorOutputPaths(),
+      files: _ProcessorPrivateFileStore(),
+      pendingStore: _ProcessorDeletionPendingStore(),
+    );
+
+    await deletion.deleteProject('project-2');
 
     final result = await processor.process('capture-2');
 
@@ -568,8 +577,7 @@ class _ProcessorImagePipeline implements ImagePipeline {
   @override
   Future<ExtractedArchivePhoto> extractArchivePhoto(
     ExtractArchivePhotoRequest request,
-  ) =>
-      throw UnimplementedError();
+  ) => throw UnimplementedError();
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) =>
@@ -609,4 +617,23 @@ class _ProcessorOutputPaths implements CaptureOutputPaths {
   @override
   Future<String> renderedPhotoPath(String captureId) async =>
       '/private/rendered/$captureId.jpg';
+}
+
+class _ProcessorPrivateFileStore implements PrivateFileStore {
+  @override
+  Future<void> deleteIfExists(String path) async {}
+
+  @override
+  Future<bool> exists(String path) async => true;
+}
+
+class _ProcessorDeletionPendingStore implements ProjectDeletionPendingStore {
+  @override
+  Future<void> clear(String projectId) async {}
+
+  @override
+  Future<List<PendingProjectDeletion>> list() async => const [];
+
+  @override
+  Future<void> write(PendingProjectDeletion pending) async {}
 }

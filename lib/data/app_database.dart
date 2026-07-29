@@ -23,6 +23,12 @@ class Projects extends Table {
   TextColumn get id => text()();
   TextColumn get name => text().withLength(min: 1, max: 120)();
   TextColumn get description => text().nullable()();
+
+  /// Internal crash-recovery ownership token for an in-flight restore.
+  ///
+  /// User-created and fully committed projects keep this null. Recovery may
+  /// delete a project only when its durable marker carries the same token.
+  TextColumn get restoreOperationId => text().nullable()();
   TextColumn get watermarkPosition =>
       text().withDefault(const Constant('bottomLeft'))();
   RealColumn get watermarkOpacity => real().withDefault(const Constant(0.78))();
@@ -138,7 +144,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -220,6 +226,9 @@ class AppDatabase extends _$AppDatabase {
         // the existing green brand identity.
         await _ensureAppSeedColorColumn();
       }
+      if (from < 8) {
+        await migrator.addColumn(projects, projects.restoreOperationId);
+      }
       await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
@@ -282,9 +291,7 @@ class AppDatabase extends _$AppDatabase {
   /// but `migrator` is only in scope inside the `MigrationStrategy` callback,
   /// so we issue the DDL directly.
   Future<void> _ensureDynamicColorColumns() async {
-    final columns = await customSelect(
-      'PRAGMA table_info(app_settings)',
-    ).get();
+    final columns = await customSelect('PRAGMA table_info(app_settings)').get();
     final columnNames = columns.map((row) => row.read<String>('name')).toSet();
     if (!columnNames.contains('use_dynamic_color')) {
       await customStatement(
@@ -305,9 +312,7 @@ class AppDatabase extends _$AppDatabase {
   /// Called from the v7 migration step. Uses `PRAGMA table_info` so the
   /// operation is idempotent and never raises "duplicate column name".
   Future<void> _ensureAppSeedColorColumn() async {
-    final columns = await customSelect(
-      'PRAGMA table_info(app_settings)',
-    ).get();
+    final columns = await customSelect('PRAGMA table_info(app_settings)').get();
     final columnNames = columns.map((row) => row.read<String>('name')).toSet();
     if (!columnNames.contains('app_seed_color_argb')) {
       await customStatement(
@@ -325,6 +330,7 @@ class AppDatabase extends _$AppDatabase {
     double? watermarkOpacity,
     int? watermarkAccentColorArgb,
     double? watermarkFontScale,
+    String? restoreOperationId,
     DateTime? createdAt,
   }) async {
     final timestamp = createdAt ?? DateTime.now();
@@ -362,6 +368,7 @@ class AppDatabase extends _$AppDatabase {
           watermarkFontScale: watermarkFontScale == null
               ? const Value.absent()
               : Value(_validatedFontScale(watermarkFontScale)),
+          restoreOperationId: Value(restoreOperationId),
           createdAt: timestamp,
           updatedAt: timestamp,
         ),
@@ -370,15 +377,25 @@ class AppDatabase extends _$AppDatabase {
   }
 
   Stream<List<Project>> watchProjects() {
-    return (select(
-      projects,
-    )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).watch();
+    return (select(projects)
+          ..where((row) => row.restoreOperationId.isNull())
+          ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
+        .watch();
   }
 
   /// One-shot read of all projects newest-first. Use this instead of
   /// `watchProjects().first` in widget tests, because the watch stream's
   /// stream-store timers do not fire under `FakeAsync` until frames are pumped.
   Future<List<Project>> getProjects() {
+    return (select(projects)
+          ..where((row) => row.restoreOperationId.isNull())
+          ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
+        .get();
+  }
+
+  /// Internal project inventory, including rows owned by an in-flight
+  /// restore. Use this for collision validation and recovery only.
+  Future<List<Project>> getAllProjectsInternal() {
     return (select(
       projects,
     )..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])).get();
@@ -447,6 +464,73 @@ class AppDatabase extends _$AppDatabase {
     return (select(
       projects,
     )..where((row) => row.id.equals(projectId))).getSingleOrNull();
+  }
+
+  Future<bool> projectHasRestoreOwnership({
+    required String projectId,
+    required String operationId,
+  }) async {
+    final project = await projectById(projectId);
+    return project?.restoreOperationId == operationId;
+  }
+
+  Future<void> clearProjectRestoreOwnership({
+    required String projectId,
+    required String operationId,
+  }) {
+    return clearProjectsRestoreOwnership(
+      projectIds: [projectId],
+      operationId: operationId,
+    );
+  }
+
+  Future<void> clearProjectsRestoreOwnership({
+    required Iterable<String> projectIds,
+    required String operationId,
+  }) async {
+    final ids = projectIds.toSet().toList(growable: false);
+    if (ids.isEmpty) return;
+    await (update(projects)..where(
+          (row) =>
+              row.id.isIn(ids) & row.restoreOperationId.equals(operationId),
+        ))
+        .write(const ProjectsCompanion(restoreOperationId: Value(null)));
+  }
+
+  Future<Project> renameProject({
+    required String projectId,
+    required String name,
+  }) {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty || trimmedName.length > 120) {
+      throw ArgumentError.value(name, 'name');
+    }
+    return transaction(() async {
+      final current = await projectById(projectId);
+      if (current == null) throw StateError('Project does not exist');
+      final displayKey = normalizedProjectNameKey(trimmedName);
+      final safeKey = safeProjectFileNameKey(trimmedName);
+      for (final existing in await select(projects).get()) {
+        if (existing.id == projectId) continue;
+        if (normalizedProjectNameKey(existing.name) == displayKey) {
+          throw const ProjectNameConflictException(
+            ProjectNameConflictKind.displayName,
+          );
+        }
+        if (safeProjectFileNameKey(existing.name) == safeKey) {
+          throw const ProjectNameConflictException(
+            ProjectNameConflictKind.safeFileName,
+          );
+        }
+      }
+      await (update(projects)..where((row) => row.id.equals(projectId))).write(
+        ProjectsCompanion(
+          name: Value(trimmedName),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      return (await projectById(projectId))!;
+    });
   }
 
   Future<Project> updateProjectWatermarkSettings({
@@ -1041,9 +1125,7 @@ class AppDatabase extends _$AppDatabase {
       await (delete(
         captureRecords,
       )..where((row) => row.projectId.equals(projectId))).go();
-      return (delete(
-        projects,
-      )..where((row) => row.id.equals(projectId))).go();
+      return (delete(projects)..where((row) => row.id.equals(projectId))).go();
     });
   }
 
@@ -1060,8 +1142,9 @@ class AppDatabase extends _$AppDatabase {
           ])
           ..where(
             captureRecords.status
-                .equals(CaptureStatus.pendingCamera.name)
-                .not(),
+                    .equals(CaptureStatus.pendingCamera.name)
+                    .not() &
+                projects.restoreOperationId.isNull(),
           )
           ..orderBy([
             OrderingTerm(

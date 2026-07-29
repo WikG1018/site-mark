@@ -39,6 +39,8 @@ void main() {
       resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
       cleanupInterruptedImports: () async => events.add('imports'),
+      cleanupInterruptedBundleRestores: () async {},
+      cleanupInterruptedProjectDeletions: () async {},
     );
 
     await tester.pumpWidget(
@@ -634,6 +636,34 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('project rename refreshes detail and back returns one level', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rename-project')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('rename-project-name')),
+      '东区厂房更新',
+    );
+    await tester.tap(find.byKey(const Key('confirm-rename-project')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('东区厂房更新'), findsWidgets);
+    expect((await database.projectById('project-1'))?.name, '东区厂房更新');
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-title')), findsOneWidget);
+    expect(find.text('东区厂房更新'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
   testWidgets('granted location hides the explanation card', (tester) async {
     await database.createProject(id: 'project-1', name: '东区厂房改造');
     final platform = _WidgetTestPlatformServices()
@@ -666,12 +696,9 @@ void main() {
       await tester.enterText(find.byKey(const Key('work-location')), 'A 区');
       await tester.enterText(find.byKey(const Key('work-content')), '检查');
       await tester.enterText(find.byKey(const Key('photographer')), '张工');
-      await tester.scrollUntilVisible(
-        find.byKey(const Key('capture-button')),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.byKey(const Key('capture-button')));
+      await tester.drag(find.byType(ListView), const Offset(0, -500));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('capture-button')).hitTestable());
       await tester.pumpAndSettle();
 
       // The capture button path must never request runtime permission or
@@ -904,8 +931,7 @@ class _WidgetTestImagePipeline implements ImagePipeline {
   @override
   Future<ExtractedArchivePhoto> extractArchivePhoto(
     ExtractArchivePhotoRequest request,
-  ) =>
-      throw UnimplementedError();
+  ) => throw UnimplementedError();
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async {

@@ -36,21 +36,59 @@ class InvalidArchiveException implements Exception {
   String toString() => message;
 }
 
+/// The project rows and files are committed, but the final visibility marker
+/// could not be cleared. Startup recovery will retry publication without
+/// rolling back or importing the project again.
+class ProjectImportFinalizationPendingException implements Exception {
+  const ProjectImportFinalizationPendingException({
+    required this.projectId,
+    required this.cause,
+  });
+
+  final String projectId;
+  final Object cause;
+
+  @override
+  String toString() =>
+      'Project import finalization is pending for $projectId: $cause';
+}
+
+abstract interface class ProjectArchiveImporter {
+  Future<rust.ProjectArchivePreview> inspect(String zipPath);
+
+  Future<ProjectImportResult> importProject({
+    required String zipPath,
+    required String projectName,
+    String? projectId,
+    String? restoreOperationId,
+    bool retainRestoreOwnership = false,
+    void Function(int completed, int total)? onProgress,
+  });
+}
+
 /// A not-yet-committed import recorded on disk, so an import interrupted by
 /// a process kill can be cleaned up on the next launch. The marker lists
 /// every file the import may have created, staged and final alike.
+enum PendingImportPhase { planned, ownsProject, committing }
+
 class PendingImport {
   const PendingImport({
     required this.projectId,
     required this.stagingDirectory,
     required this.stagedFiles,
     required this.finalFiles,
+    this.phase = PendingImportPhase.planned,
+    this.operationId,
+    this.revision = 0,
   });
 
   final String projectId;
   final String stagingDirectory;
   final List<String> stagedFiles;
   final List<String> finalFiles;
+  final PendingImportPhase phase;
+  final String? operationId;
+  final int revision;
 
   List<String> get allFiles => [...stagedFiles, ...finalFiles];
 
@@ -59,6 +97,9 @@ class PendingImport {
     'stagingDirectory': stagingDirectory,
     'stagedFiles': stagedFiles,
     'finalFiles': finalFiles,
+    'phase': phase.name,
+    'operationId': operationId,
+    'revision': revision,
   };
 
   factory PendingImport.fromJson(Map<String, dynamic> json) {
@@ -69,7 +110,61 @@ class PendingImport {
       stagingDirectory: json['stagingDirectory'] as String? ?? '',
       stagedFiles: strings('stagedFiles'),
       finalFiles: strings('finalFiles'),
+      phase: json['phase'] == PendingImportPhase.committing.name
+          ? PendingImportPhase.committing
+          : json['phase'] == PendingImportPhase.ownsProject.name
+          ? PendingImportPhase.ownsProject
+          : PendingImportPhase.planned,
+      operationId: json['operationId'] as String?,
+      revision: json['revision'] as int? ?? 0,
     );
+  }
+
+  PendingImport withPhase(PendingImportPhase value) => PendingImport(
+    projectId: projectId,
+    stagingDirectory: stagingDirectory,
+    stagedFiles: stagedFiles,
+    finalFiles: finalFiles,
+    phase: value,
+    operationId: operationId,
+    revision: revision + 1,
+  );
+}
+
+abstract interface class AtomicMarkerWriter {
+  Future<void> write(File target, String contents);
+}
+
+/// Writes an immutable marker generation in the target directory.
+///
+/// The previous generation is never replaced. A crash before rename leaves
+/// only an ignored temp file; a crash after rename leaves a complete new JSON
+/// generation. Readers select the highest valid revision.
+class DartAtomicMarkerWriter implements AtomicMarkerWriter {
+  static int _sequence = 0;
+
+  @override
+  Future<void> write(File target, String contents) async {
+    if (await target.exists()) {
+      if (await target.readAsString() == contents) return;
+      throw StateError('Marker generation already exists with other content');
+    }
+    final temporary = File(
+      '${target.path}.tmp-${DateTime.now().microsecondsSinceEpoch}-'
+      '${_sequence++}',
+    );
+    try {
+      await temporary.writeAsString(contents, flush: true);
+      await temporary.rename(target.path);
+    } finally {
+      if (await temporary.exists()) {
+        try {
+          await temporary.delete();
+        } catch (_) {
+          // An orphan temp file is deliberately ignored by marker readers.
+        }
+      }
+    }
   }
 }
 
@@ -84,11 +179,15 @@ abstract interface class ImportPendingStore {
 }
 
 class AppImportPendingStore implements ImportPendingStore {
-  AppImportPendingStore({Future<Directory> Function()? documentsDirectory})
-    : _documentsDirectory =
-          documentsDirectory ?? getApplicationDocumentsDirectory;
+  AppImportPendingStore({
+    Future<Directory> Function()? documentsDirectory,
+    AtomicMarkerWriter? writer,
+  }) : _documentsDirectory =
+           documentsDirectory ?? getApplicationDocumentsDirectory,
+       _writer = writer ?? DartAtomicMarkerWriter();
 
   final Future<Directory> Function() _documentsDirectory;
+  final AtomicMarkerWriter _writer;
 
   Future<Directory> _importsDirectory() async {
     final root = await _documentsDirectory();
@@ -100,17 +199,18 @@ class AppImportPendingStore implements ImportPendingStore {
   @override
   Future<void> writePending(PendingImport pending) async {
     final directory = await _importsDirectory();
+    final safeId = pending.projectId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     final file = File(
       '${directory.path}${Platform.pathSeparator}'
-      'pending-${pending.projectId}.json',
+      'pending-$safeId-r${pending.revision}.json',
     );
-    await file.writeAsString(jsonEncode(pending.toJson()));
+    await _writer.write(file, jsonEncode(pending.toJson()));
   }
 
   @override
   Future<List<PendingImport>> listPending() async {
     final directory = await _importsDirectory();
-    final pendings = <PendingImport>[];
+    final latest = <String, PendingImport>{};
     await for (final entity in directory.list()) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
@@ -119,23 +219,39 @@ class AppImportPendingStore implements ImportPendingStore {
         final decoded = jsonDecode(await entity.readAsString());
         if (decoded is Map<String, dynamic>) {
           final pending = PendingImport.fromJson(decoded);
-          if (pending.projectId.isNotEmpty) pendings.add(pending);
+          if (pending.projectId.isNotEmpty) {
+            final current = latest[pending.projectId];
+            if (current == null || pending.revision > current.revision) {
+              latest[pending.projectId] = pending;
+            }
+          }
         }
       } catch (_) {
         // A corrupt marker cannot be trusted; skip it here. The leftover
         // staging directory remains on disk and is harmless (app-private).
       }
     }
-    return pendings;
+    return latest.values.toList(growable: false);
   }
 
   @override
   Future<void> clearPending(String projectId) async {
     final directory = await _importsDirectory();
-    final file = File(
-      '${directory.path}${Platform.pathSeparator}pending-$projectId.json',
-    );
-    if (await file.exists()) await file.delete();
+    await for (final entity in directory.list()) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments.last;
+      if (!name.startsWith('pending-') || !name.endsWith('.json')) continue;
+      try {
+        final decoded = jsonDecode(await entity.readAsString());
+        if (decoded is Map<String, dynamic> &&
+            PendingImport.fromJson(decoded).projectId == projectId) {
+          await entity.delete();
+        }
+      } catch (_) {
+        // A corrupt legacy marker cannot prove that it belongs to this
+        // project, so leave it untouched.
+      }
+    }
   }
 }
 
@@ -227,7 +343,7 @@ class DartImportFileCommitter implements ImportFileCommitter {
 /// verifies does the import commit — database rows first, then files are
 /// moved into place. [cleanupInterruptedImports] removes the leftovers of
 /// any import that never committed (e.g. the process was killed).
-class ProjectImportService {
+class ProjectImportService implements ProjectArchiveImporter {
   ProjectImportService({
     required this.database,
     required this.images,
@@ -252,8 +368,10 @@ class ProjectImportService {
   final ImportFileCommitter committer;
   final Uuid _uuid;
   final DateTime Function() _clock;
+  static final Set<String> _activeProjectIds = <String>{};
 
   /// Reads and validates a backup archive without restoring anything.
+  @override
   Future<rust.ProjectArchivePreview> inspect(String zipPath) {
     return images.readProjectArchive(zipPath);
   }
@@ -265,7 +383,7 @@ class ProjectImportService {
     if (trimmed.isEmpty) return false;
     final displayKey = normalizedProjectNameKey(trimmed);
     final safeKey = safeProjectFileNameKey(trimmed);
-    for (final project in await database.getProjects()) {
+    for (final project in await database.getAllProjectsInternal()) {
       if (normalizedProjectNameKey(project.name) == displayKey) return true;
       if (safeProjectFileNameKey(project.name) == safeKey) return true;
     }
@@ -301,9 +419,47 @@ class ProjectImportService {
   /// Throws [InvalidArchiveException] when a photo's capture timestamp does
   /// not match the export format — restoring it with a substituted "now"
   /// would falsify an evidence field, so the backup is rejected as a whole.
+  @override
   Future<ProjectImportResult> importProject({
     required String zipPath,
     required String projectName,
+    String? projectId,
+    String? restoreOperationId,
+    bool retainRestoreOwnership = false,
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    final targetProjectId = projectId ?? _uuid.v4();
+    final requestedOperationId = restoreOperationId?.trim();
+    final operationId =
+        requestedOperationId == null || requestedOperationId.isEmpty
+        ? _uuid.v4()
+        : requestedOperationId;
+    if (!_activeProjectIds.add(targetProjectId)) {
+      throw StateError('Project restore is already in progress');
+    }
+    try {
+      if (await database.projectById(targetProjectId) != null) {
+        throw StateError('Target project already exists');
+      }
+      return await _importProject(
+        zipPath: zipPath,
+        projectName: projectName,
+        targetProjectId: targetProjectId,
+        operationId: operationId,
+        retainRestoreOwnership: retainRestoreOwnership,
+        onProgress: onProgress,
+      );
+    } finally {
+      _activeProjectIds.remove(targetProjectId);
+    }
+  }
+
+  Future<ProjectImportResult> _importProject({
+    required String zipPath,
+    required String projectName,
+    required String targetProjectId,
+    required String operationId,
+    required bool retainRestoreOwnership,
     void Function(int completed, int total)? onProgress,
   }) async {
     final preview = await inspect(zipPath);
@@ -319,8 +475,7 @@ class ProjectImportService {
     }
 
     final watermark = preview.watermark;
-    final projectId = _uuid.v4();
-    final stagingDir = await stagingPaths.stagingDirectory(projectId);
+    final stagingDir = await stagingPaths.stagingDirectory(targetProjectId);
 
     // Plan every path up front so the pending marker covers all of them.
     final plans = <_PhotoPlan>[];
@@ -330,11 +485,11 @@ class ProjectImportService {
         _PhotoPlan(
           captureId: captureId,
           stagedRendered: await stagingPaths.stagedRenderedPath(
-            projectId,
+            targetProjectId,
             captureId,
           ),
           stagedOriginal: await stagingPaths.stagedOriginalPath(
-            projectId,
+            targetProjectId,
             captureId,
           ),
           finalRendered: await capturePaths.renderedPhotoPath(captureId),
@@ -342,8 +497,8 @@ class ProjectImportService {
         ),
       );
     }
-    final pending = PendingImport(
-      projectId: projectId,
+    var pending = PendingImport(
+      projectId: targetProjectId,
       stagingDirectory: stagingDir,
       stagedFiles: [
         for (final plan in plans) ...[plan.stagedRendered, plan.stagedOriginal],
@@ -351,6 +506,7 @@ class ProjectImportService {
       finalFiles: [
         for (final plan in plans) ...[plan.finalRendered, plan.finalOriginal],
       ],
+      operationId: operationId,
     );
     await pendingStore.writePending(pending);
 
@@ -371,43 +527,41 @@ class ProjectImportService {
       }
 
       await database.createProject(
-        id: projectId,
+        id: targetProjectId,
         name: projectName,
         watermarkPosition: _validPosition(watermark?.position),
         watermarkOpacity: _validOpacity(watermark?.opacity),
         watermarkAccentColorArgb: watermark?.accentColorArgb,
         watermarkFontScale: _validFontScale(watermark?.fontScale),
+        restoreOperationId: operationId,
       );
-      try {
-        for (var index = 0; index < preview.photos.length; index++) {
-          final photo = preview.photos[index];
-          final plan = plans[index];
-          await database.insertRestoredCapture(
-            id: plan.captureId,
-            projectId: projectId,
-            photoNumber: photo.photoNumber,
-            // An archive without the original still needs an original_path:
-            // point at the canonical location and mark it cleared, the same
-            // state "clear originals" produces, so the hash stays as evidence.
-            originalPath: plan.finalOriginal,
-            originalDeletedAt: photo.hasOriginal ? null : _clock(),
-            workLocation: photo.workLocation,
-            workContent: photo.workContent,
-            photographer: photo.photographer,
-            notes: photo.notes,
-            address: photo.address,
-            latitude: photo.latitude,
-            longitude: photo.longitude,
-            accuracyMeters: photo.accuracyMeters,
-            watermarkLocaleCode: _validLocale(photo.watermarkLocaleCode),
-            originalSha256: photo.originalSha256,
-            createdAt: capturedTimes[index],
-            capturedAt: capturedTimes[index],
-          );
-        }
-      } catch (_) {
-        await database.deleteProjectCascade(projectId);
-        rethrow;
+      pending = pending.withPhase(PendingImportPhase.ownsProject);
+      await pendingStore.writePending(pending);
+      for (var index = 0; index < preview.photos.length; index++) {
+        final photo = preview.photos[index];
+        final plan = plans[index];
+        await database.insertRestoredCapture(
+          id: plan.captureId,
+          projectId: targetProjectId,
+          photoNumber: photo.photoNumber,
+          // An archive without the original still needs an original_path:
+          // point at the canonical location and mark it cleared, the same
+          // state "clear originals" produces, so the hash stays as evidence.
+          originalPath: plan.finalOriginal,
+          originalDeletedAt: photo.hasOriginal ? null : _clock(),
+          workLocation: photo.workLocation,
+          workContent: photo.workContent,
+          photographer: photo.photographer,
+          notes: photo.notes,
+          address: photo.address,
+          latitude: photo.latitude,
+          longitude: photo.longitude,
+          accuracyMeters: photo.accuracyMeters,
+          watermarkLocaleCode: _validLocale(photo.watermarkLocaleCode),
+          originalSha256: photo.originalSha256,
+          createdAt: capturedTimes[index],
+          capturedAt: capturedTimes[index],
+        );
       }
 
       // Commit point: move staged files into their final locations.
@@ -424,20 +578,45 @@ class ProjectImportService {
       committed = true;
     } finally {
       if (!committed) {
-        await _rollback(pending);
+        final fullyCleaned = await _rollback(pending);
+        if (fullyCleaned) {
+          try {
+            await pendingStore.clearPending(targetProjectId);
+          } catch (_) {
+            // A non-owning marker is safe to retain for a later retry.
+          }
+        }
       }
     }
 
-    await pendingStore.clearPending(projectId);
     try {
       await committer.deleteTree(stagingDir);
     } catch (_) {
-      // The import is already committed and its crash-recovery marker has
-      // been cleared. A leftover empty staging tree is harmless and must not
-      // turn a successful restore into a user-visible failure.
+      // Final files and rows are committed. A leftover empty staging tree is
+      // harmless and must not change the durable commit protocol below.
+    }
+    if (retainRestoreOwnership) {
+      // The bundle marker was durable before this child started and the
+      // database token remains owned by that bundle.
+      await pendingStore.clearPending(targetProjectId);
+    } else {
+      final committing = pending.withPhase(PendingImportPhase.committing);
+      await pendingStore.writePending(committing);
+      pending = committing;
+      try {
+        await _finalizeCommit(pending);
+      } catch (error, stackTrace) {
+        Error.throwWithStackTrace(
+          ProjectImportFinalizationPendingException(
+            projectId: targetProjectId,
+            cause: error,
+          ),
+          stackTrace,
+        );
+      }
     }
     return ProjectImportResult(
-      projectId: projectId,
+      projectId: targetProjectId,
       projectName: projectName.trim(),
       photoCount: preview.photos.length,
       restoredOriginals: preview.photos
@@ -456,6 +635,14 @@ class ProjectImportService {
   Future<void> cleanupInterruptedImports() async {
     final pendings = await pendingStore.listPending();
     for (final pending in pendings) {
+      if (pending.phase == PendingImportPhase.committing) {
+        try {
+          await _finalizeCommit(pending);
+        } catch (_) {
+          // Keep the committing marker and retry finalization next launch.
+        }
+        continue;
+      }
       final fullyCleaned = await _rollback(pending);
       if (fullyCleaned) {
         try {
@@ -467,11 +654,35 @@ class ProjectImportService {
     }
   }
 
+  Future<void> _finalizeCommit(PendingImport pending) async {
+    final operationId = pending.operationId;
+    final project = await database.projectById(pending.projectId);
+    if (operationId != null && operationId.isNotEmpty) {
+      await database.clearProjectRestoreOwnership(
+        projectId: pending.projectId,
+        operationId: operationId,
+      );
+    } else if (project?.restoreOperationId != null) {
+      throw StateError('Committing marker has no restore operation ID');
+    }
+    await pendingStore.clearPending(pending.projectId);
+  }
+
   /// Best-effort rollback of a [PendingImport]: deletes every known file,
   /// the staging tree, and the database rows. Individual failures are
   /// swallowed so one stubborn file never blocks the rest; the pending
   /// marker stays in place for the startup cleanup to retry.
   Future<bool> _rollback(PendingImport pending) async {
+    final project = await database.projectById(pending.projectId);
+    final operationId = pending.operationId;
+    if (project != null &&
+        (operationId == null ||
+            operationId.isEmpty ||
+            project.restoreOperationId == null ||
+            project.restoreOperationId != operationId)) {
+      // Legacy, mismatching, and null tokens never prove ownership.
+      return false;
+    }
     var fullyCleaned = true;
     for (final path in pending.allFiles) {
       try {
@@ -486,10 +697,15 @@ class ProjectImportService {
     } catch (_) {
       fullyCleaned = false;
     }
-    try {
-      await database.deleteProjectCascade(pending.projectId);
-    } catch (_) {
-      fullyCleaned = false;
+    if (project != null &&
+        operationId != null &&
+        operationId.isNotEmpty &&
+        project.restoreOperationId == operationId) {
+      try {
+        await database.deleteProjectCascade(pending.projectId);
+      } catch (_) {
+        fullyCleaned = false;
+      }
     }
     return fullyCleaned;
   }
