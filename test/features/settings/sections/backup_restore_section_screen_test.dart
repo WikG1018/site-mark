@@ -391,7 +391,7 @@ void main() {
   testWidgets(
     'successful restore returns home and keeps its success snackbar',
     (tester) async {
-      final prepared = _prepared();
+      final prepared = _prepared(bundle: true);
       var discardCalls = 0;
       final router = GoRouter(
         initialLocation: '/settings/backup-restore',
@@ -457,6 +457,7 @@ void main() {
 
       expect(find.byKey(const Key('project-home')), findsOneWidget);
       expect(find.text('恢复完成'), findsOneWidget);
+      expect(find.textContaining('下次启动'), findsNothing);
       expect(discardCalls, 0);
     },
   );

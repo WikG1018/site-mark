@@ -656,6 +656,7 @@ class ProjectBundleService {
       revision: prepared.bundleMarkerRevision + 1,
       phase: PendingBundleRestorePhase.restoring,
     );
+    final results = <ProjectImportResult>[];
     try {
       await pendingStore.write(pending);
     } catch (error) {
@@ -676,7 +677,6 @@ class ProjectBundleService {
       );
       var completedBeforeItem = 0;
       var lastReported = 0;
-      final results = <ProjectImportResult>[];
       for (final item in prepared.items) {
         final itemPhotos = item.preview.photos.length;
         final result = await importer.importProject(
@@ -713,6 +713,7 @@ class ProjectBundleService {
       if (pending.phase == PendingBundleRestorePhase.committing) {
         try {
           await _finalizeCommit(pending);
+          return results;
         } catch (_) {
           // Keep the committing marker. Startup recovery finishes visibility.
         }

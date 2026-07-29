@@ -899,6 +899,37 @@ void main() {
     );
 
     test(
+      'completed bundle returns success when immediate finalization retry works',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore(clearFailuresRemaining: 1);
+        final rollback = _FakeProjectRollback();
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: _FakeProjectImporter(),
+          pending: pending,
+          rollback: rollback,
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        final results = await service.restorePrepared(
+          prepared: prepared,
+          projectNames: const {'p1': '恢复东区', 'p2': '恢复西区'},
+        );
+
+        expect(results.map((result) => result.projectName), ['恢复东区', '恢复西区']);
+        expect((await database.getProjects()).map((project) => project.name), [
+          '恢复东区',
+          '恢复西区',
+        ]);
+        expect(pending.items, isEmpty);
+        expect(rollback.projectIds, isEmpty);
+      },
+    );
+
+    test(
       'committing marker retries marker clear after tokens are already visible',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -1494,11 +1525,13 @@ class _FakeBundlePendingStore implements BundleRestorePendingStore {
   _FakeBundlePendingStore({
     this.throwOnWrite = false,
     this.throwOnClear = false,
+    this.clearFailuresRemaining = 0,
     this.onWrite,
   });
 
   final bool throwOnWrite;
   bool throwOnClear;
+  int clearFailuresRemaining;
   final void Function()? onWrite;
   final items = <PendingBundleRestore>[];
   final writtenPhases = <PendingBundleRestorePhase>[];
@@ -1506,6 +1539,10 @@ class _FakeBundlePendingStore implements BundleRestorePendingStore {
 
   @override
   Future<void> clear(String bundleId) async {
+    if (clearFailuresRemaining > 0) {
+      clearFailuresRemaining--;
+      throw StateError('one-shot marker clear failure');
+    }
     if (throwOnClear) throw StateError('marker clear failed');
     items.removeWhere((item) => item.bundleId == bundleId);
   }
