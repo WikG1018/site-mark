@@ -4,12 +4,14 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
+import 'package:sitemark/workflow/project_backup_preflight.dart';
 
 typedef ProjectBackupExport =
     Future<ProjectBackupResult> Function({
       required List<String> projectIds,
       required bool includeOriginals,
       void Function(int completed, int total)? onProgress,
+      bool allowFailedOmissions,
     });
 
 class ProjectBackupSelectionScreen extends ConsumerStatefulWidget {
@@ -46,6 +48,54 @@ class _ProjectBackupSelectionScreenState
   Future<void> _startBackup() async {
     if (_selectedIds.isEmpty || _submitting) return;
     final strings = AppStrings.of(context);
+    final snapshot = await ProjectBackupPreflightService(
+      ref.read(databaseProvider),
+    ).inspect(_selectedIds.toList(growable: false));
+    if (!mounted) return;
+    if (snapshot.processingCount > 0) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('请等待照片处理完成'),
+          content: Text(
+            '有 ${snapshot.processingCount} 张照片仍在处理中。为避免备份遗漏，请处理完成后再试。',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    var allowFailedOmissions = false;
+    if (snapshot.failedCount > 0) {
+      allowFailedOmissions =
+          await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('存在处理失败的照片'),
+              content: Text(
+                '有 ${snapshot.failedCount} 张失败记录不会进入备份。建议先返回项目重新处理；'
+                '也可以明确选择仅备份已完成记录。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('返回处理'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('仅备份已完成记录'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!allowFailedOmissions || !mounted) return;
+    }
     final includeOriginals = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -93,6 +143,7 @@ class _ProjectBackupSelectionScreenState
     );
 
     Object? failure;
+    var omittedFailedCount = 0;
     try {
       final export =
           widget.exportProjects ??
@@ -100,18 +151,22 @@ class _ProjectBackupSelectionScreenState
             required List<String> projectIds,
             required bool includeOriginals,
             void Function(int completed, int total)? onProgress,
+            bool allowFailedOmissions = false,
           }) => ref
               .read(projectBackupServiceProvider)
               .exportProjects(
                 projectIds: projectIds,
                 includeOriginals: includeOriginals,
                 onProgress: onProgress,
+                allowFailedOmissions: allowFailedOmissions,
               );
       final result = await export(
         projectIds: _selectedIds.toList(growable: false),
         includeOriginals: includeOriginals,
         onProgress: (completed, total) => progress.value = (completed, total),
+        allowFailedOmissions: allowFailedOmissions,
       );
+      omittedFailedCount = result.omittedFailedCount;
       final share =
           widget.shareFile ??
           (path) => ref.read(shareFileServiceProvider).shareFile(path);
@@ -125,7 +180,9 @@ class _ProjectBackupSelectionScreenState
         SnackBar(
           content: Text(
             failure == null
-                ? strings.backupComplete
+                ? omittedFailedCount == 0
+                      ? strings.backupComplete
+                      : '备份完成，已按你的选择跳过 $omittedFailedCount 张失败记录'
                 : _describeBackupError(strings, failure),
           ),
         ),
@@ -175,6 +232,13 @@ class _ProjectBackupSelectionScreenState
                     ),
                   ),
                 ],
+              ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '空白项目也可以备份，项目说明和水印设置会保留。',
+                  style: TextStyle(fontSize: 13),
+                ),
               ),
               const SizedBox(height: 4),
               for (final project in projects)

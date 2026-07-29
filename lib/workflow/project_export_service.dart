@@ -8,6 +8,9 @@ abstract interface class ProjectArchiveExporter {
     required String projectId,
     required bool includeOriginals,
     String? outputZipPath,
+    DateTime? snapshotAt,
+    int omittedProcessingCount = 0,
+    int omittedFailedCount = 0,
   });
 }
 
@@ -31,15 +34,15 @@ class ProjectExportService implements ProjectArchiveExporter {
     required String projectId,
     required bool includeOriginals,
     String? outputZipPath,
+    DateTime? snapshotAt,
+    int omittedProcessingCount = 0,
+    int omittedFailedCount = 0,
   }) async {
     final project = await database.projectById(projectId);
     if (project == null) throw StateError('Project does not exist');
     final captures = (await database.capturesForProject(
       projectId,
     )).where((capture) => capture.status == CaptureStatus.ready).toList();
-    if (captures.isEmpty) {
-      throw StateError('Project has no completed captures to export');
-    }
     final photos = <ExportPhotoRecord>[];
     for (final capture in captures) {
       photos.add(
@@ -68,6 +71,11 @@ class ProjectExportService implements ProjectArchiveExporter {
       ExportProjectRequest(
         projectId: project.id,
         projectName: project.name,
+        projectDescription: project.description,
+        projectCreatedAt: project.createdAt.toIso8601String(),
+        snapshotAt: (snapshotAt ?? DateTime.now()).toIso8601String(),
+        omittedProcessingCount: omittedProcessingCount,
+        omittedFailedCount: omittedFailedCount,
         outputZipPath: outputPath,
         includeOriginals: includeOriginals,
         watermark: ExportWatermarkSettings(

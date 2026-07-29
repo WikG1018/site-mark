@@ -153,6 +153,8 @@ class AppStrings {
   String get regenerationFailed => _english ? 'Regeneration failed' : '重新生成失败';
   String get allRecords => _english ? 'All records' : '全部记录';
   String get settings => _english ? 'Settings' : '设置';
+  String get diagnosticsAndFeedback =>
+      _english ? 'Diagnostics and feedback' : '诊断与反馈';
   String get searchProjects => _english ? 'Search' : '搜索';
   String get searchProjectsHint => _english ? 'Search project name' : '搜索项目名称';
   String get noMatchingProjects =>

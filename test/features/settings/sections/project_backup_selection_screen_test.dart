@@ -99,7 +99,12 @@ void main() {
     await pumpScreen(
       tester,
       exportProjects:
-          ({required projectIds, required includeOriginals, onProgress}) {
+          ({
+            required projectIds,
+            required includeOriginals,
+            onProgress,
+            allowFailedOmissions = false,
+          }) {
             exportedIds = projectIds;
             includedOriginals = includeOriginals;
             reportProgress = onProgress;

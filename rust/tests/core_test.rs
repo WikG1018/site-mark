@@ -474,6 +474,11 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
     let result = export_project(ExportProjectRequest {
         project_id: "project-1".to_string(),
         project_name: "东区厂房改造".to_string(),
+        project_description: None,
+        project_created_at: "2026-07-16T09:00:00+08:00".to_string(),
+        snapshot_at: "2026-07-16T10:00:00+08:00".to_string(),
+        omitted_processing_count: 0,
+        omitted_failed_count: 0,
         output_zip_path: archive_path.to_string_lossy().into_owned(),
         include_originals: false,
         watermark: sample_watermark(),
@@ -518,8 +523,40 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
         .unwrap()
         .read_to_string(&mut manifest)
         .unwrap();
-    assert!(manifest.contains("\"schema_version\": 2"));
+    assert!(manifest.contains("\"schema_version\": 3"));
     assert!(manifest.contains("\"watermark\""));
+}
+
+#[test]
+fn exports_and_reads_empty_schema_v3_project() {
+    let directory = tempdir().unwrap();
+    let archive_path = directory.path().join("empty-project.zip");
+
+    let result = export_project(ExportProjectRequest {
+        project_id: "empty-project".to_string(),
+        project_name: "空白项目".to_string(),
+        project_description: Some("仅有项目设置".to_string()),
+        project_created_at: "2026-07-30T08:00:00+08:00".to_string(),
+        snapshot_at: "2026-07-30T09:00:00+08:00".to_string(),
+        omitted_processing_count: 0,
+        omitted_failed_count: 0,
+        output_zip_path: archive_path.to_string_lossy().into_owned(),
+        include_originals: false,
+        watermark: sample_watermark(),
+        photos: vec![],
+    })
+    .unwrap();
+
+    assert_eq!(result.photo_count, 0);
+    let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.schema_version, 3);
+    assert_eq!(preview.project_description.as_deref(), Some("仅有项目设置"));
+    assert_eq!(
+        preview.project_created_at.as_deref(),
+        Some("2026-07-30T08:00:00+08:00")
+    );
+    assert!(!preview.is_partial);
+    assert!(preview.photos.is_empty());
 }
 
 #[test]
@@ -697,7 +734,7 @@ fn rejects_path_navigation_in_project_id() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn restores_a_v2_project_archive_round_trip() {
+fn restores_a_v3_project_archive_round_trip() {
     let directory = tempdir().unwrap();
     let rendered = directory.path().join("rendered-source.jpg");
     let original = directory.path().join("original-source.jpg");
@@ -709,6 +746,11 @@ fn restores_a_v2_project_archive_round_trip() {
     export_project(ExportProjectRequest {
         project_id: "project-1".to_string(),
         project_name: "东区厂房改造".to_string(),
+        project_description: None,
+        project_created_at: "2026-07-16T09:00:00+08:00".to_string(),
+        snapshot_at: "2026-07-16T10:00:00+08:00".to_string(),
+        omitted_processing_count: 0,
+        omitted_failed_count: 0,
         output_zip_path: archive_path.to_string_lossy().into_owned(),
         include_originals: true,
         watermark: sample_watermark(),
@@ -733,7 +775,7 @@ fn restores_a_v2_project_archive_round_trip() {
     .unwrap();
 
     let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
-    assert_eq!(preview.schema_version, 2);
+    assert_eq!(preview.schema_version, 3);
     assert_eq!(preview.project_name, "东区厂房改造");
     assert!(preview.includes_originals);
     let watermark = preview.watermark.expect("v2 archives carry the watermark");
@@ -1018,6 +1060,11 @@ fn build_restorable_zip(directory: &tempfile::TempDir) -> std::path::PathBuf {
     export_project(ExportProjectRequest {
         project_id: "project-1".to_string(),
         project_name: "东区厂房改造".to_string(),
+        project_description: None,
+        project_created_at: "2026-07-16T09:00:00+08:00".to_string(),
+        snapshot_at: "2026-07-16T10:00:00+08:00".to_string(),
+        omitted_processing_count: 0,
+        omitted_failed_count: 0,
         output_zip_path: archive_path.to_string_lossy().into_owned(),
         include_originals: true,
         watermark: sample_watermark(),

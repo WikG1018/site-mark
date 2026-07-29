@@ -59,6 +59,7 @@ void main() {
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
         addTearDown(database.close);
+        await database.createProject(id: 'p1', name: '东区');
         final exporter = _FakeProjectExporter();
         final bundles = _FakeBundlePipeline();
         final service = ProjectBackupService(
@@ -1423,6 +1424,9 @@ class _FakeProjectExporter implements ProjectArchiveExporter {
     required String projectId,
     required bool includeOriginals,
     String? outputZipPath,
+    DateTime? snapshotAt,
+    int omittedProcessingCount = 0,
+    int omittedFailedCount = 0,
   }) async {
     requests.add(_ExportCall(projectId, includeOriginals, outputZipPath));
     if (projectId == failProjectId) throw StateError('export failed');

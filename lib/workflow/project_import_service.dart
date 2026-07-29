@@ -529,6 +529,12 @@ class ProjectImportService implements ProjectArchiveImporter {
       await database.createProject(
         id: targetProjectId,
         name: projectName,
+        description: preview.schemaVersion >= 3
+            ? preview.projectDescription
+            : null,
+        createdAt: preview.schemaVersion >= 3
+            ? DateTime.tryParse(preview.projectCreatedAt ?? '')
+            : null,
         watermarkPosition: _validPosition(watermark?.position),
         watermarkOpacity: _validOpacity(watermark?.opacity),
         watermarkAccentColorArgb: watermark?.accentColorArgb,

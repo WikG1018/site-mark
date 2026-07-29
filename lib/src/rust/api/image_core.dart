@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `open_zip`, `read_project_bundle_manifest`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `tokenize`, `unix_time_millis`, `validate_project_bundle`, `validate_render_request`, `wrap_text`, `zip_failure`
+// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `open_zip`, `read_project_bundle_manifest`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `tokenize`, `unix_time_millis`, `validate_project_bundle`, `validate_render_request`, `wrap_text`, `zip_failure`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestPhoto`, `ManifestWatermark`, `ProjectBundleManifestEntry`, `ProjectBundleManifest`, `ProjectManifestFile`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -270,6 +270,11 @@ class ExportProjectBundleRequest {
 class ExportProjectRequest {
   final String projectId;
   final String projectName;
+  final String? projectDescription;
+  final String projectCreatedAt;
+  final String snapshotAt;
+  final int omittedProcessingCount;
+  final int omittedFailedCount;
   final String outputZipPath;
   final bool includeOriginals;
   final ExportWatermarkSettings watermark;
@@ -278,6 +283,11 @@ class ExportProjectRequest {
   const ExportProjectRequest({
     required this.projectId,
     required this.projectName,
+    this.projectDescription,
+    required this.projectCreatedAt,
+    required this.snapshotAt,
+    required this.omittedProcessingCount,
+    required this.omittedFailedCount,
     required this.outputZipPath,
     required this.includeOriginals,
     required this.watermark,
@@ -288,6 +298,11 @@ class ExportProjectRequest {
   int get hashCode =>
       projectId.hashCode ^
       projectName.hashCode ^
+      projectDescription.hashCode ^
+      projectCreatedAt.hashCode ^
+      snapshotAt.hashCode ^
+      omittedProcessingCount.hashCode ^
+      omittedFailedCount.hashCode ^
       outputZipPath.hashCode ^
       includeOriginals.hashCode ^
       watermark.hashCode ^
@@ -300,6 +315,11 @@ class ExportProjectRequest {
           runtimeType == other.runtimeType &&
           projectId == other.projectId &&
           projectName == other.projectName &&
+          projectDescription == other.projectDescription &&
+          projectCreatedAt == other.projectCreatedAt &&
+          snapshotAt == other.snapshotAt &&
+          omittedProcessingCount == other.omittedProcessingCount &&
+          omittedFailedCount == other.omittedFailedCount &&
           outputZipPath == other.outputZipPath &&
           includeOriginals == other.includeOriginals &&
           watermark == other.watermark &&
@@ -492,6 +512,12 @@ class ExtractedArchivePhoto {
 class ProjectArchivePreview {
   final int schemaVersion;
   final String projectName;
+  final String? projectDescription;
+  final String? projectCreatedAt;
+  final String? snapshotAt;
+  final int omittedProcessingCount;
+  final int omittedFailedCount;
+  final bool isPartial;
   final bool includesOriginals;
   final ArchiveWatermarkSettings? watermark;
   final List<ArchivePhotoPreview> photos;
@@ -499,6 +525,12 @@ class ProjectArchivePreview {
   const ProjectArchivePreview({
     required this.schemaVersion,
     required this.projectName,
+    this.projectDescription,
+    this.projectCreatedAt,
+    this.snapshotAt,
+    this.omittedProcessingCount = 0,
+    this.omittedFailedCount = 0,
+    this.isPartial = false,
     required this.includesOriginals,
     this.watermark,
     required this.photos,
@@ -508,6 +540,12 @@ class ProjectArchivePreview {
   int get hashCode =>
       schemaVersion.hashCode ^
       projectName.hashCode ^
+      projectDescription.hashCode ^
+      projectCreatedAt.hashCode ^
+      snapshotAt.hashCode ^
+      omittedProcessingCount.hashCode ^
+      omittedFailedCount.hashCode ^
+      isPartial.hashCode ^
       includesOriginals.hashCode ^
       watermark.hashCode ^
       photos.hashCode;
@@ -519,6 +557,12 @@ class ProjectArchivePreview {
           runtimeType == other.runtimeType &&
           schemaVersion == other.schemaVersion &&
           projectName == other.projectName &&
+          projectDescription == other.projectDescription &&
+          projectCreatedAt == other.projectCreatedAt &&
+          snapshotAt == other.snapshotAt &&
+          omittedProcessingCount == other.omittedProcessingCount &&
+          omittedFailedCount == other.omittedFailedCount &&
+          isPartial == other.isPartial &&
           includesOriginals == other.includesOriginals &&
           watermark == other.watermark &&
           photos == other.photos;

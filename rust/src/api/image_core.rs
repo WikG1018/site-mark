@@ -87,6 +87,11 @@ pub struct ExportWatermarkSettings {
 pub struct ExportProjectRequest {
     pub project_id: String,
     pub project_name: String,
+    pub project_description: Option<String>,
+    pub project_created_at: String,
+    pub snapshot_at: String,
+    pub omitted_processing_count: u32,
+    pub omitted_failed_count: u32,
     pub output_zip_path: String,
     pub include_originals: bool,
     pub watermark: ExportWatermarkSettings,
@@ -165,6 +170,11 @@ struct ExportManifest<'a> {
     app: &'static str,
     project_id: &'a str,
     project_name: &'a str,
+    project_description: &'a Option<String>,
+    project_created_at: &'a str,
+    snapshot_at: &'a str,
+    omitted_processing_count: u32,
+    omitted_failed_count: u32,
     includes_originals: bool,
     watermark: &'a ExportWatermarkSettings,
     photos: &'a [ExportPhotoRecord],
@@ -355,14 +365,19 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         .write_all(&csv_bytes)
         .map_err(|error| io_failure("write CSV entry", error))?;
 
-    // Single-project exports are the restorable backup format: schema v2
+    // Single-project exports are the restorable backup format: schema v3
     // records the project watermark template and per-photo restore fields.
     // Selection archives intentionally stay at v1 and are not restorable.
     let manifest = serde_json::to_vec_pretty(&ExportManifest {
-        schema_version: 2,
+        schema_version: 3,
         app: "SiteMark",
         project_id: &request.project_id,
         project_name: &request.project_name,
+        project_description: &request.project_description,
+        project_created_at: &request.project_created_at,
+        snapshot_at: &request.snapshot_at,
+        omitted_processing_count: request.omitted_processing_count,
+        omitted_failed_count: request.omitted_failed_count,
         includes_originals: request.include_originals,
         watermark: &request.watermark,
         photos: &request.photos,
@@ -1315,6 +1330,12 @@ pub struct ArchiveWatermarkSettings {
 pub struct ProjectArchivePreview {
     pub schema_version: u32,
     pub project_name: String,
+    pub project_description: Option<String>,
+    pub project_created_at: Option<String>,
+    pub snapshot_at: Option<String>,
+    pub omitted_processing_count: u32,
+    pub omitted_failed_count: u32,
+    pub is_partial: bool,
     pub includes_originals: bool,
     pub watermark: Option<ArchiveWatermarkSettings>,
     pub photos: Vec<ArchivePhotoPreview>,
@@ -1372,6 +1393,16 @@ struct ProjectManifestFile {
     schema_version: u32,
     app: String,
     project_name: String,
+    #[serde(default)]
+    project_description: Option<String>,
+    #[serde(default)]
+    project_created_at: Option<String>,
+    #[serde(default)]
+    snapshot_at: Option<String>,
+    #[serde(default)]
+    omitted_processing_count: u32,
+    #[serde(default)]
+    omitted_failed_count: u32,
     includes_originals: bool,
     #[serde(default)]
     watermark: Option<ManifestWatermark>,
@@ -1838,7 +1869,7 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
     if manifest.app != "SiteMark" {
         return Err(invalid_data("validate manifest", "not a SiteMark archive"));
     }
-    if !(1..=2).contains(&manifest.schema_version) {
+    if !(1..=3).contains(&manifest.schema_version) {
         return Err(invalid_data(
             "validate manifest",
             format!("unsupported schema version {}", manifest.schema_version),
@@ -1847,7 +1878,7 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
     if manifest.project_name.trim().is_empty() {
         return Err(invalid_data("validate manifest", "project name is empty"));
     }
-    if manifest.photos.is_empty() {
+    if manifest.photos.is_empty() && manifest.schema_version < 3 {
         return Err(invalid_data(
             "validate manifest",
             "archive contains no photos",
@@ -2019,6 +2050,12 @@ pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, S
     Ok(ProjectArchivePreview {
         schema_version: manifest.schema_version,
         project_name: manifest.project_name,
+        project_description: manifest.project_description,
+        project_created_at: manifest.project_created_at,
+        snapshot_at: manifest.snapshot_at,
+        omitted_processing_count: manifest.omitted_processing_count,
+        omitted_failed_count: manifest.omitted_failed_count,
+        is_partial: manifest.omitted_processing_count > 0 || manifest.omitted_failed_count > 0,
         includes_originals: manifest.includes_originals,
         watermark: manifest
             .watermark

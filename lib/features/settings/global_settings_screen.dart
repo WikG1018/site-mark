@@ -31,6 +31,11 @@ class GlobalSettingsScreen extends StatelessWidget {
         strings.completionNotificationTitle,
         '/settings/notification',
       ),
+      (
+        Icons.health_and_safety_outlined,
+        strings.diagnosticsAndFeedback,
+        '/settings/diagnostics',
+      ),
       (Icons.info_outline, strings.about, '/settings/about'),
     ];
     return Scaffold(

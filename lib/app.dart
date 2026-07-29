@@ -1,10 +1,16 @@
+import 'dart:io';
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_bundle_service.dart';
+import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/projects/project_form_screen.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
@@ -12,6 +18,7 @@ import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/features/settings/sections/about_section_screen.dart';
 import 'package:sitemark/features/settings/sections/appearance_section_screen.dart';
 import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
+import 'package:sitemark/features/settings/sections/diagnostics_section_screen.dart';
 import 'package:sitemark/features/settings/sections/language_section_screen.dart';
 import 'package:sitemark/features/settings/sections/location_section_screen.dart';
 import 'package:sitemark/features/settings/sections/notification_section_screen.dart';
@@ -165,6 +172,26 @@ final shareFileServiceProvider = Provider<ShareFileService>(
   (ref) => SystemShareFileService(),
 );
 
+final diagnosticBundleServiceProvider = FutureProvider<DiagnosticBundleService>((
+  ref,
+) async {
+  final root = await getApplicationSupportDirectory();
+  final store = DiagnosticEventStore(
+    directory: Directory(
+      '${root.path}${Platform.pathSeparator}diagnostics${Platform.pathSeparator}events',
+    ),
+  );
+  return DiagnosticBundleService(store: store);
+});
+
+final diagnosticRecorderProvider = Provider<DiagnosticRecorder>(
+  (ref) => DiagnosticRecorder.fromFuture(
+    ref
+        .watch(diagnosticBundleServiceProvider.future)
+        .then((service) => service.store),
+  ),
+);
+
 final privateFileStoreProvider = Provider<PrivateFileStore>(
   (ref) => DartIoPrivateFileStore(),
 );
@@ -302,6 +329,7 @@ final projectBackupServiceProvider = Provider<ProjectBackupService>((ref) {
     bundles: ref.watch(projectBundlePipelineProvider),
     paths: ref.watch(projectBundlePathsProvider),
     files: ref.watch(projectBundleFileSystemProvider),
+    diagnostics: ref.watch(diagnosticRecorderProvider),
   );
 });
 
@@ -461,6 +489,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: 'notification',
                 pageBuilder: (context, state) =>
                     _sharedAxisPage(state, const NotificationSectionScreen()),
+              ),
+              GoRoute(
+                path: 'diagnostics',
+                pageBuilder: (context, state) =>
+                    _sharedAxisPage(state, const DiagnosticsSectionScreen()),
               ),
               GoRoute(
                 path: 'about',
