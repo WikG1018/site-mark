@@ -3,10 +3,13 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
 import 'package:sitemark/workflow/project_deletion_service.dart';
+import 'package:sitemark/workflow/project_backup_preflight.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:uuid/uuid.dart';
@@ -18,11 +21,13 @@ class ProjectBackupResult {
     required this.kind,
     required this.outputZipPath,
     required this.projectCount,
+    this.omittedFailedCount = 0,
   });
 
   final ProjectBackupKind kind;
   final String outputZipPath;
   final int projectCount;
+  final int omittedFailedCount;
 }
 
 class ProjectBackupService {
@@ -32,6 +37,7 @@ class ProjectBackupService {
     required this.bundles,
     required this.paths,
     required this.files,
+    this.diagnostics,
     String Function()? idGenerator,
   }) : _idGenerator = idGenerator ?? const Uuid().v4;
 
@@ -40,29 +46,74 @@ class ProjectBackupService {
   final ProjectBundlePipeline bundles;
   final ProjectBundlePaths paths;
   final ProjectBundleFileSystem files;
+  final DiagnosticRecorder? diagnostics;
   final String Function() _idGenerator;
 
   Future<ProjectBackupResult> exportProjects({
     required List<String> projectIds,
     required bool includeOriginals,
     void Function(int completed, int total)? onProgress,
+    bool allowFailedOmissions = false,
   }) async {
+    final stopwatch = Stopwatch()..start();
     if (projectIds.isEmpty) {
       throw StateError('Select at least one project');
     }
     if (projectIds.toSet().length != projectIds.length) {
       throw StateError('A project can only be selected once');
     }
+    final snapshot = await ProjectBackupPreflightService(
+      database,
+    ).inspect(projectIds);
+    if (snapshot.projects.any(
+      (project) => project.disposition == ProjectBackupDisposition.missing,
+    )) {
+      throw StateError('A selected project no longer exists');
+    }
+    if (snapshot.processingCount > 0) {
+      _recordBackup(
+        DiagnosticOutcome.blocked,
+        DiagnosticCode.processingInProgress,
+        snapshot.processingCount,
+        stopwatch.elapsedMilliseconds,
+      );
+      throw const ProjectBackupPreflightException(
+        ProjectBackupPreflightFailure.processing,
+      );
+    }
+    if (snapshot.failedCount > 0 && !allowFailedOmissions) {
+      _recordBackup(
+        DiagnosticOutcome.blocked,
+        DiagnosticCode.failedRecordsOmitted,
+        snapshot.failedCount,
+        stopwatch.elapsedMilliseconds,
+      );
+      throw const ProjectBackupPreflightException(
+        ProjectBackupPreflightFailure.failedRequiresConfirmation,
+      );
+    }
     if (projectIds.length == 1) {
+      final projectSnapshot = snapshot.projects.single;
       final result = await projectExporter.exportProject(
         projectId: projectIds.single,
         includeOriginals: includeOriginals,
+        snapshotAt: snapshot.capturedAt,
+        omittedFailedCount: projectSnapshot.failedCount,
       );
       onProgress?.call(1, 1);
+      _recordBackup(
+        DiagnosticOutcome.success,
+        projectSnapshot.failedCount == 0
+            ? DiagnosticCode.none
+            : DiagnosticCode.failedRecordsOmitted,
+        1,
+        stopwatch.elapsedMilliseconds,
+      );
       return ProjectBackupResult(
         kind: ProjectBackupKind.singleProject,
         outputZipPath: result.outputZipPath,
         projectCount: 1,
+        omittedFailedCount: snapshot.failedCount,
       );
     }
 
@@ -90,6 +141,8 @@ class ProjectBackupService {
           projectId: project.id,
           includeOriginals: includeOriginals,
           outputZipPath: archivePath,
+          snapshotAt: snapshot.capturedAt,
+          omittedFailedCount: snapshot.projects[index].failedCount,
         );
         sources.add(
           rust.ProjectBundleSource(
@@ -108,10 +161,19 @@ class ProjectBackupService {
         ),
       );
       onProgress?.call(totalSteps, totalSteps);
+      _recordBackup(
+        DiagnosticOutcome.success,
+        snapshot.failedCount == 0
+            ? DiagnosticCode.none
+            : DiagnosticCode.failedRecordsOmitted,
+        projects.length,
+        stopwatch.elapsedMilliseconds,
+      );
       return ProjectBackupResult(
         kind: ProjectBackupKind.bundle,
         outputZipPath: result.outputZipPath,
         projectCount: projects.length,
+        omittedFailedCount: snapshot.failedCount,
       );
     } finally {
       try {
@@ -120,6 +182,24 @@ class ProjectBackupService {
         // The final archive is independent of its temporary inner ZIPs.
       }
     }
+  }
+
+  void _recordBackup(
+    DiagnosticOutcome outcome,
+    DiagnosticCode code,
+    int count,
+    int durationMs,
+  ) {
+    diagnostics?.record(
+      DiagnosticEvent(
+        timestamp: DateTime.now(),
+        category: DiagnosticCategory.backup,
+        outcome: outcome,
+        code: code,
+        count: count,
+        durationMs: durationMs,
+      ),
+    );
   }
 }
 

@@ -3,6 +3,14 @@ import 'package:sitemark/domain/capture_status.dart';
 
 enum ProjectBackupDisposition { empty, ready, processing, failed, missing }
 
+enum ProjectBackupPreflightFailure { processing, failedRequiresConfirmation }
+
+class ProjectBackupPreflightException implements Exception {
+  const ProjectBackupPreflightException(this.failure);
+
+  final ProjectBackupPreflightFailure failure;
+}
+
 class ProjectBackupProjectSnapshot {
   const ProjectBackupProjectSnapshot({
     required this.projectId,

@@ -25,46 +25,56 @@ void main() {
     expect(result.projects.single.failedCount, 0);
   });
 
-  test('classifies processing and failed records and aggregates counts',
-      () async {
-    await database.createProject(id: 'mixed', name: '混合项目');
-    await database.createPendingCapture(
-      id: 'processing',
-      projectId: 'mixed',
-      originalPath: '/processing.jpg',
-      workLocation: 'A区',
-      workContent: '检查',
-      photographer: '张工',
-      watermarkLocaleCode: 'zh',
-    );
-    final failed = await database.createPendingCapture(
-      id: 'failed',
-      projectId: 'mixed',
-      originalPath: '/failed.jpg',
-      workLocation: 'A区',
-      workContent: '检查',
-      photographer: '张工',
-      watermarkLocaleCode: 'zh',
-    );
-    await database.markFailed(captureId: failed.id, reason: 'failure');
+  test(
+    'classifies processing and failed records and aggregates counts',
+    () async {
+      await database.createProject(id: 'mixed', name: '混合项目');
+      await database.createPendingCapture(
+        id: 'processing',
+        projectId: 'mixed',
+        originalPath: '/processing.jpg',
+        workLocation: 'A区',
+        workContent: '检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+      );
+      final failed = await database.createPendingCapture(
+        id: 'failed',
+        projectId: 'mixed',
+        originalPath: '/failed.jpg',
+        workLocation: 'A区',
+        workContent: '检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+      );
+      await database.markFailed(captureId: failed.id, reason: 'failure');
 
-    final result = await service.inspect(const ['mixed']);
+      final result = await service.inspect(const ['mixed']);
 
-    expect(result.projects.single.disposition, ProjectBackupDisposition.failed);
-    expect(result.projects.single.processingCount, 1);
-    expect(result.projects.single.failedCount, 1);
-    expect(result.processingCount, 1);
-    expect(result.failedCount, 1);
-  });
+      expect(
+        result.projects.single.disposition,
+        ProjectBackupDisposition.failed,
+      );
+      expect(result.projects.single.processingCount, 1);
+      expect(result.projects.single.failedCount, 1);
+      expect(result.processingCount, 1);
+      expect(result.failedCount, 1);
+    },
+  );
 
-  test('rejects duplicate selections and represents a missing project',
-      () async {
-    expect(
-      () => service.inspect(const ['a', 'a']),
-      throwsA(isA<ArgumentError>()),
-    );
+  test(
+    'rejects duplicate selections and represents a missing project',
+    () async {
+      expect(
+        () => service.inspect(const ['a', 'a']),
+        throwsA(isA<ArgumentError>()),
+      );
 
-    final result = await service.inspect(const ['missing']);
-    expect(result.projects.single.disposition, ProjectBackupDisposition.missing);
-  });
+      final result = await service.inspect(const ['missing']);
+      expect(
+        result.projects.single.disposition,
+        ProjectBackupDisposition.missing,
+      );
+    },
+  );
 }

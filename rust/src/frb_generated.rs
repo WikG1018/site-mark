@@ -575,6 +575,11 @@ impl SseDecode for crate::api::image_core::ExportProjectRequest {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_projectId = <String>::sse_decode(deserializer);
         let mut var_projectName = <String>::sse_decode(deserializer);
+        let mut var_projectDescription = <Option<String>>::sse_decode(deserializer);
+        let mut var_projectCreatedAt = <String>::sse_decode(deserializer);
+        let mut var_snapshotAt = <String>::sse_decode(deserializer);
+        let mut var_omittedProcessingCount = <u32>::sse_decode(deserializer);
+        let mut var_omittedFailedCount = <u32>::sse_decode(deserializer);
         let mut var_outputZipPath = <String>::sse_decode(deserializer);
         let mut var_includeOriginals = <bool>::sse_decode(deserializer);
         let mut var_watermark =
@@ -584,6 +589,11 @@ impl SseDecode for crate::api::image_core::ExportProjectRequest {
         return crate::api::image_core::ExportProjectRequest {
             project_id: var_projectId,
             project_name: var_projectName,
+            project_description: var_projectDescription,
+            project_created_at: var_projectCreatedAt,
+            snapshot_at: var_snapshotAt,
+            omitted_processing_count: var_omittedProcessingCount,
+            omitted_failed_count: var_omittedFailedCount,
             output_zip_path: var_outputZipPath,
             include_originals: var_includeOriginals,
             watermark: var_watermark,
@@ -828,6 +838,12 @@ impl SseDecode for crate::api::image_core::ProjectArchivePreview {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_schemaVersion = <u32>::sse_decode(deserializer);
         let mut var_projectName = <String>::sse_decode(deserializer);
+        let mut var_projectDescription = <Option<String>>::sse_decode(deserializer);
+        let mut var_projectCreatedAt = <Option<String>>::sse_decode(deserializer);
+        let mut var_snapshotAt = <Option<String>>::sse_decode(deserializer);
+        let mut var_omittedProcessingCount = <u32>::sse_decode(deserializer);
+        let mut var_omittedFailedCount = <u32>::sse_decode(deserializer);
+        let mut var_isPartial = <bool>::sse_decode(deserializer);
         let mut var_includesOriginals = <bool>::sse_decode(deserializer);
         let mut var_watermark =
             <Option<crate::api::image_core::ArchiveWatermarkSettings>>::sse_decode(deserializer);
@@ -836,6 +852,12 @@ impl SseDecode for crate::api::image_core::ProjectArchivePreview {
         return crate::api::image_core::ProjectArchivePreview {
             schema_version: var_schemaVersion,
             project_name: var_projectName,
+            project_description: var_projectDescription,
+            project_created_at: var_projectCreatedAt,
+            snapshot_at: var_snapshotAt,
+            omitted_processing_count: var_omittedProcessingCount,
+            omitted_failed_count: var_omittedFailedCount,
+            is_partial: var_isPartial,
             includes_originals: var_includesOriginals,
             watermark: var_watermark,
             photos: var_photos,
@@ -1156,6 +1178,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportProjectRequ
         [
             self.project_id.into_into_dart().into_dart(),
             self.project_name.into_into_dart().into_dart(),
+            self.project_description.into_into_dart().into_dart(),
+            self.project_created_at.into_into_dart().into_dart(),
+            self.snapshot_at.into_into_dart().into_dart(),
+            self.omitted_processing_count.into_into_dart().into_dart(),
+            self.omitted_failed_count.into_into_dart().into_dart(),
             self.output_zip_path.into_into_dart().into_dart(),
             self.include_originals.into_into_dart().into_dart(),
             self.watermark.into_into_dart().into_dart(),
@@ -1336,6 +1363,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ProjectArchivePre
         [
             self.schema_version.into_into_dart().into_dart(),
             self.project_name.into_into_dart().into_dart(),
+            self.project_description.into_into_dart().into_dart(),
+            self.project_created_at.into_into_dart().into_dart(),
+            self.snapshot_at.into_into_dart().into_dart(),
+            self.omitted_processing_count.into_into_dart().into_dart(),
+            self.omitted_failed_count.into_into_dart().into_dart(),
+            self.is_partial.into_into_dart().into_dart(),
             self.includes_originals.into_into_dart().into_dart(),
             self.watermark.into_into_dart().into_dart(),
             self.photos.into_into_dart().into_dart(),
@@ -1578,6 +1611,11 @@ impl SseEncode for crate::api::image_core::ExportProjectRequest {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.project_id, serializer);
         <String>::sse_encode(self.project_name, serializer);
+        <Option<String>>::sse_encode(self.project_description, serializer);
+        <String>::sse_encode(self.project_created_at, serializer);
+        <String>::sse_encode(self.snapshot_at, serializer);
+        <u32>::sse_encode(self.omitted_processing_count, serializer);
+        <u32>::sse_encode(self.omitted_failed_count, serializer);
         <String>::sse_encode(self.output_zip_path, serializer);
         <bool>::sse_encode(self.include_originals, serializer);
         <crate::api::image_core::ExportWatermarkSettings>::sse_encode(self.watermark, serializer);
@@ -1761,6 +1799,12 @@ impl SseEncode for crate::api::image_core::ProjectArchivePreview {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u32>::sse_encode(self.schema_version, serializer);
         <String>::sse_encode(self.project_name, serializer);
+        <Option<String>>::sse_encode(self.project_description, serializer);
+        <Option<String>>::sse_encode(self.project_created_at, serializer);
+        <Option<String>>::sse_encode(self.snapshot_at, serializer);
+        <u32>::sse_encode(self.omitted_processing_count, serializer);
+        <u32>::sse_encode(self.omitted_failed_count, serializer);
+        <bool>::sse_encode(self.is_partial, serializer);
         <bool>::sse_encode(self.includes_originals, serializer);
         <Option<crate::api::image_core::ArchiveWatermarkSettings>>::sse_encode(
             self.watermark,

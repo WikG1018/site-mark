@@ -9,9 +9,9 @@ manufacturer camera experience.
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![Offline](https://img.shields.io/badge/Network-offline--first-176B55)
-![Status](https://img.shields.io/badge/status-v0.7.0--prerelease-orange)
+![Status](https://img.shields.io/badge/status-v0.8.0--development-orange)
 
-**当前版本：[`v0.7.0` 签名预发布版](https://github.com/WikG1018/site-mark/releases/tag/v0.7.0)**
+**当前开发版本：`v0.8.0`（将在合并并发布后提供正式下载）**
 
 支持 Android 12 及以上系统。预发布版适合试用和现场反馈，重要项目请同时保留已导出的归档文件。
 
@@ -19,9 +19,9 @@ manufacturer camera experience.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [下载 sitemark-v0.7.0-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v0.7.0/sitemark-v0.7.0-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [下载 sitemark-v0.7.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v0.7.0/sitemark-v0.7.0-universal.apk) |
-| SHA-256 | 校验下载文件完整性 | [查看 SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v0.7.0/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | 合并发布后提供 |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | 合并发布后提供 |
+| SHA-256 | 校验下载文件完整性 | 合并发布后提供 |
 
 > **重要数据警告：** 卸载 SiteMark 会删除项目数据库和应用私有原图；已经发布到 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载或切换签名前，请先前往“设置 → 备份与恢复”备份重要项目（建议勾选“包含私有原图”）；备份文件可在重装或换机后从同一页面恢复到应用内。
 
@@ -32,15 +32,14 @@ manufacturer camera experience.
 3. 后续使用相同正式签名的新版本时，可以覆盖安装并保留应用数据。
 4. 旧 Debug APK 使用不同签名，Android 可能拒绝直接覆盖安装。
 5. 遇到签名冲突时，先在“设置 → 备份与恢复”备份重要项目和原图，卸载旧版后重新安装，再从同一页面恢复。
-6. [Release 页面](https://github.com/WikG1018/site-mark/releases/tag/v0.7.0)提供版本说明和校验文件。
+6. [Release 页面](https://github.com/WikG1018/site-mark/releases)提供版本说明和校验文件。
 
-## v0.7.0 更新内容
+## v0.8.0 更新内容
 
-- **备份与恢复归位设置页**：入口调整到“设置 → 备份与恢复”，备份、恢复职责分开，首页不再放置容易误解的文件选择按钮。
-- **支持单项目和多项目备份**：可选择一个或多个项目，并决定是否包含应用私有原图；单项目生成可恢复 ZIP，多项目生成一个可恢复备份包。
-- **恢复过程更可靠**：恢复前校验归档结构和原图 SHA-256；失败或被系统中断时自动清理临时文件和未完成项目，避免半恢复数据出现在项目列表。
-- **项目管理补齐**：项目详情可重命名或删除项目；重命名不改历史照片证据，删除项目不删除已经保存到 Android 系统相册的照片。
-- **定位提示更克制**：仅在尚未授权且未主动关闭时显示说明；授权、拒绝或关闭后不会持续占据拍摄页，仍可在“设置 → 定位”管理权限。
+- **空白项目也能备份**：没有拍摄记录的项目会保存项目说明、创建时间和水印设置，不再只显示笼统的“备份失败”。
+- **备份完整性预检**：区分空白、处理中、失败和已完成记录；处理中记录会阻止备份，失败记录必须由用户明确确认后才允许只备份已完成部分。
+- **诊断与反馈**：设置页新增本机诊断入口，记录最多保留 7 天、占用不超过 2 MB，可由用户主动生成 ZIP 并通过系统分享面板发送。
+- **隐私保护**：诊断记录不会自动上传，诊断包不包含照片、项目名称、工程内容、拍摄人、位置坐标、文件路径或原始异常；分享前会再次列出包含和排除内容。
 
 从旧版本覆盖升级会保留现有项目和拍摄记录。升级、卸载或换机前，仍建议先备份重要项目并把备份文件复制到应用目录之外。
 
