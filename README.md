@@ -1,6 +1,6 @@
 # SiteMark 工程印记
 
-> 调用手机厂商系统相机的开源工程水印相机：无广告、无云端、原图留在本机。
+> 调用手机厂商系统相机的开源工程水印相机：无广告、无云端、支持项目备份恢复，原图留在本机。
 
 An open-source, offline-first engineering watermark camera that keeps the
 manufacturer camera experience.
@@ -9,9 +9,9 @@ manufacturer camera experience.
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![Offline](https://img.shields.io/badge/Network-offline--first-176B55)
-![Status](https://img.shields.io/badge/status-v0.6.0--prerelease-orange)
+![Status](https://img.shields.io/badge/status-v0.7.0--prerelease-orange)
 
-**当前版本：[`v0.6.0` 签名预发布版](https://github.com/WikG1018/site-mark/releases/tag/v0.6.0)**
+**当前版本：[`v0.7.0` 签名预发布版](https://github.com/WikG1018/site-mark/releases/tag/v0.7.0)**
 
 支持 Android 12 及以上系统。预发布版适合试用和现场反馈，重要项目请同时保留已导出的归档文件。
 
@@ -19,9 +19,9 @@ manufacturer camera experience.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [下载 sitemark-v0.6.0-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v0.6.0/sitemark-v0.6.0-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [下载 sitemark-v0.6.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v0.6.0/sitemark-v0.6.0-universal.apk) |
-| SHA-256 | 校验下载文件完整性 | [查看 SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v0.6.0/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [下载 sitemark-v0.7.0-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v0.7.0/sitemark-v0.7.0-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [下载 sitemark-v0.7.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v0.7.0/sitemark-v0.7.0-universal.apk) |
+| SHA-256 | 校验下载文件完整性 | [查看 SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v0.7.0/SHA256SUMS.txt) |
 
 > **重要数据警告：** 卸载 SiteMark 会删除项目数据库和应用私有原图；已经发布到 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载或切换签名前，请先前往“设置 → 备份与恢复”备份重要项目（建议勾选“包含私有原图”）；备份文件可在重装或换机后从同一页面恢复到应用内。
 
@@ -32,7 +32,17 @@ manufacturer camera experience.
 3. 后续使用相同正式签名的新版本时，可以覆盖安装并保留应用数据。
 4. 旧 Debug APK 使用不同签名，Android 可能拒绝直接覆盖安装。
 5. 遇到签名冲突时，先在“设置 → 备份与恢复”备份重要项目和原图，卸载旧版后重新安装，再从同一页面恢复。
-6. [Release 页面](https://github.com/WikG1018/site-mark/releases/tag/v0.6.0)提供版本说明和校验文件。
+6. [Release 页面](https://github.com/WikG1018/site-mark/releases/tag/v0.7.0)提供版本说明和校验文件。
+
+## v0.7.0 更新内容
+
+- **备份与恢复归位设置页**：入口调整到“设置 → 备份与恢复”，备份、恢复职责分开，首页不再放置容易误解的文件选择按钮。
+- **支持单项目和多项目备份**：可选择一个或多个项目，并决定是否包含应用私有原图；单项目生成可恢复 ZIP，多项目生成一个可恢复备份包。
+- **恢复过程更可靠**：恢复前校验归档结构和原图 SHA-256；失败或被系统中断时自动清理临时文件和未完成项目，避免半恢复数据出现在项目列表。
+- **项目管理补齐**：项目详情可重命名或删除项目；重命名不改历史照片证据，删除项目不删除已经保存到 Android 系统相册的照片。
+- **定位提示更克制**：仅在尚未授权且未主动关闭时显示说明；授权、拒绝或关闭后不会持续占据拍摄页，仍可在“设置 → 定位”管理权限。
+
+从旧版本覆盖升级会保留现有项目和拍摄记录。升级、卸载或换机前，仍建议先备份重要项目并把备份文件复制到应用目录之外。
 
 ## 实际效果 / Screenshots
 
@@ -78,7 +88,7 @@ SiteMark 不在应用里重做相机界面，而是通过 Android 标准 Intent 
 | 文件与内部编号 | 新照片使用“项目名称-SM-日期-当日序号”的短文件名，水印画面不显示编号 |
 | 存储管理 | 总设置显示应用内原图、成片、导出和数据库占用，可清理本地导出 ZIP |
 | 工程导出 | 项目可导出 ZIP，其中包含 CSV、JSON 和水印成片，并可选择附带原图 |
-| 备份恢复 | 在“设置 → 备份与恢复”选择一个或多个项目备份；支持恢复单项目 ZIP 和多项目备份包 |
+| 备份恢复 | 在“设置 → 备份与恢复”选择一个或多个项目，可选是否包含私有原图；支持恢复单项目 ZIP 和多项目备份包 |
 
 ## 快速使用
 
@@ -89,7 +99,7 @@ SiteMark 不在应用里重做相机界面，而是通过 Android 标准 Intent 
 5. 上一张在后台处理时继续拍摄。
 6. 搜索或筛选记录，检查预览、详情、文件大小和原图状态。
 7. 批量导出、再次保存、清理原图或删除，也可在详情页单独处理。
-8. 卸载或换机前进入“设置 → 备份与恢复”，选择一个或多个项目备份；之后可在同一页面恢复。
+8. 卸载或换机前进入“设置 → 备份与恢复”，选择一个或多个项目备份，并把备份文件保存到可靠位置；之后可在同一页面恢复。
 
 ## 原图生命周期与删除
 
@@ -142,6 +152,8 @@ SiteMark 只通过 Android URI 授权机制临时提供拍摄目标。
 多项目备份包。恢复时从“设置 → 备份与恢复”选择相应文件。
 恢复会保留照片编号、拍摄时间、工程信息和原图 SHA-256（导入时重新校验，不一致即中止），
 v2 备份还会还原项目水印设置和 GPS 坐标；早期 v1 导出包同样可以导入，水印设置使用默认值。
+恢复过程中项目会保持隐藏；只有整个项目或多项目备份包完成提交后才会显示。应用异常退出
+或系统杀进程后，下一次启动会继续完成已经提交的文件收尾，或回滚未完成的恢复。
 拍摄记录编辑页生成的普通选择/分享 ZIP 仅用于对外发送，不能用于恢复。恢复的照片不会
 自动发布到 Android 系统相册，如有需要可通过现有的“再次保存”批量操作重新发布。
 
@@ -160,10 +172,10 @@ v2 备份还会还原项目水印设置和 GPS 坐标；早期 v1 导出包同�
 
 ## 验证状态
 
-`v0.6.0` 已通过以下本地自动化验证：
+`v0.7.0` 发布前已通过以下本地自动化验证：
 
-- 344 项 Flutter 测试通过；
-- 31 项 Rust 测试通过；
+- 441 项 Flutter 测试通过；
+- 39 项 Rust 测试通过；
 - `flutter analyze` 无问题；
 - Android 单元测试通过；
 
@@ -171,7 +183,7 @@ v2 备份还会还原项目水印设置和 GPS 坐标；早期 v1 导出包同�
 Release 下载资产。
 
 预发布版仍需要持续补充多品牌真机兼容性反馈。测试安装前请先阅读本页的数据警告，
-并在 [Release 页面](https://github.com/WikG1018/site-mark/releases/tag/v0.6.0)查看版本说明和校验文件。
+并在 [Release 页面](https://github.com/WikG1018/site-mark/releases/tag/v0.7.0)查看版本说明和校验文件。
 
 ## 技术架构 / Architecture
 
