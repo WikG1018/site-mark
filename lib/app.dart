@@ -555,6 +555,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                               ? state.extra! as CaptureRecord
                               : null),
                       initialImagePath: arguments?.initialImagePath,
+                      siblingCaptures: arguments?.siblingCaptures,
                     ),
                   );
                 },

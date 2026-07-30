@@ -156,30 +156,25 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
             }
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              scrollCacheExtent: const ScrollCacheExtent.pixels(480),
               itemCount: filtered.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final project = filtered[index];
-                return RepaintBoundary(
-                  child: Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(16),
-                      leading: CircleAvatar(
-                        child: Text(project.name.characters.first),
-                      ),
-                      title: Text(
-                        project.name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      subtitle: Text(project.description ?? strings.localOnly),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push(
-                        '/projects/${project.id}',
-                        extra: project,
-                      ),
+                return Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(16),
+                    leading: CircleAvatar(
+                      child: Text(project.name.characters.first),
                     ),
+                    title: Text(
+                      project.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    subtitle: Text(project.description ?? strings.localOnly),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () =>
+                        context.push('/projects/${project.id}', extra: project),
                   ),
                 );
               },

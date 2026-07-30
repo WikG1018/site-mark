@@ -25,8 +25,7 @@ class CaptureImagePreview extends StatefulWidget {
     this.heroDestination = false,
     this.initialImagePath,
     this.onImageResolved,
-    this.siblingPaths,
-    this.siblingIndex,
+    this.siblingCaptures,
   });
 
   final CaptureRecord capture;
@@ -40,12 +39,9 @@ class CaptureImagePreview extends StatefulWidget {
   final String? initialImagePath;
   final ValueChanged<String>? onImageResolved;
 
-  /// Absolute image paths of adjacent captures. When non-null and non-empty,
-  /// the fullscreen viewer will allow left/right swipe between them.
-  final List<String>? siblingPaths;
-
-  /// Index of the current capture inside [siblingPaths].
-  final int? siblingIndex;
+  /// Ordered captures from the current filtered list. Their paths are resolved
+  /// lazily when a fullscreen page becomes visible.
+  final List<CaptureRecord>? siblingCaptures;
 
   @override
   State<CaptureImagePreview> createState() => _CaptureImagePreviewState();
@@ -106,8 +102,14 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   }
 
   Future<_PreviewResolution> _resolve() async {
-    final capture = widget.capture;
-    switch (widget.source) {
+    return _resolveCapture(widget.capture, widget.source);
+  }
+
+  Future<_PreviewResolution> _resolveCapture(
+    CaptureRecord capture,
+    CapturePreviewSource source,
+  ) async {
+    switch (source) {
       case CapturePreviewSource.watermarked:
         try {
           final renderedPath = await widget.outputPaths.renderedPhotoPath(
@@ -127,7 +129,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
             ? _PreviewResolution.image(capture.originalPath, status: null)
             : const _PreviewResolution.originalMissing();
       case CapturePreviewSource.bestAvailable:
-        final originalExists = _existsOrFalse(capture.originalPath);
+        final originalExists = capture.originalDeletedAt == null
+            ? _existsOrFalse(capture.originalPath)
+            : Future<bool>.value(false);
         if (capture.status == CaptureStatus.ready) {
           try {
             final renderedPath = await widget.outputPaths.renderedPhotoPath(
@@ -174,7 +178,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
           return AnimatedSwitcher(
             duration: widget.heroDestination
                 ? Duration.zero
-                : AppMotion.medium2,
+                : AppMotion.durationOf(context, AppMotion.short4),
             child: _placeholder(
               context,
               strings,
@@ -183,7 +187,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
           );
         }
         return AnimatedSwitcher(
-          duration: widget.heroDestination ? Duration.zero : AppMotion.medium2,
+          duration: widget.heroDestination
+              ? Duration.zero
+              : AppMotion.durationOf(context, AppMotion.short4),
           child: switch (resolution.kind) {
             _PreviewResolutionKind.image => _image(
               context,
@@ -286,7 +292,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
                   if (wasSynchronouslyLoaded) return child;
                   return AnimatedOpacity(
                     opacity: frame == null ? 0 : 1,
-                    duration: AppMotion.medium2,
+                    duration: AppMotion.durationOf(context, AppMotion.short4),
                     curve: AppMotion.standard,
                     child: child,
                   );
@@ -338,6 +344,8 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         }
         if (widget.thumbnail) return preview;
         return GestureDetector(
+          key: Key('capture-image-open-${widget.capture.id}'),
+          behavior: HitTestBehavior.opaque,
           onTap:
               widget.onOpen ??
               () => _openFullscreen(context, path, previewImage: provider),
@@ -363,33 +371,61 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     String path, {
     required ImageProvider<Object> previewImage,
   }) {
-    final siblings = widget.siblingPaths;
-    final index = widget.siblingIndex;
-    final Widget page;
-    if (siblings != null &&
-        siblings.isNotEmpty &&
-        index != null &&
-        index >= 0 &&
-        index < siblings.length) {
-      page = CaptureFullscreenScreen(
-        paths: siblings,
-        initialIndex: index,
-        previewImages: {path: previewImage},
-      );
-    } else {
-      page = CaptureFullscreenScreen.single(
-        path: path,
-        previewImage: previewImage,
-      );
+    final source = widget.source;
+    final currentCapture = widget.capture;
+    final ordered = <CaptureRecord>[...?widget.siblingCaptures];
+    if (!ordered.any((capture) => capture.id == currentCapture.id)) {
+      ordered.add(currentCapture);
     }
+    final candidates = ordered
+        .where((capture) {
+          if (capture.id == currentCapture.id) return true;
+          return switch (source) {
+            CapturePreviewSource.watermarked =>
+              capture.status == CaptureStatus.ready,
+            CapturePreviewSource.original => capture.originalDeletedAt == null,
+            CapturePreviewSource.bestAvailable =>
+              capture.status == CaptureStatus.ready ||
+                  capture.originalDeletedAt == null,
+          };
+        })
+        .toList(growable: false);
+    final photos = candidates
+        .map((capture) {
+          final isCurrent = capture.id == currentCapture.id;
+          return CaptureFullscreenPhoto(
+            id: capture.id,
+            initialPath: isCurrent ? path : null,
+            previewImage: isCurrent ? previewImage : null,
+            resolvePath: () async {
+              if (isCurrent) return path;
+              final resolution = await _resolveCapture(capture, source);
+              return resolution.kind == _PreviewResolutionKind.image
+                  ? resolution.path
+                  : null;
+            },
+          );
+        })
+        .toList(growable: false);
+    final currentIndex = photos.indexWhere(
+      (photo) => photo.id == currentCapture.id,
+    );
+    final page = CaptureFullscreenScreen(
+      photos: photos,
+      initialIndex: currentIndex,
+    );
 
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         opaque: true,
-        transitionDuration: AppMotion.long2,
-        reverseTransitionDuration: AppMotion.medium4,
+        transitionDuration: AppMotion.durationOf(context, AppMotion.long2),
+        reverseTransitionDuration: AppMotion.durationOf(
+          context,
+          AppMotion.medium4,
+        ),
         pageBuilder: (context, animation, secondaryAnimation) => page,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          if (MediaQuery.disableAnimationsOf(context)) return child;
           final curved = CurvedAnimation(
             parent: animation,
             curve: AppMotion.emphasizedDecelerate,

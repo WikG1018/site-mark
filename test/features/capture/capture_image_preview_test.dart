@@ -84,6 +84,7 @@ CaptureRecord _record({
   required String id,
   required CaptureStatus status,
   String? failureReason,
+  DateTime? originalDeletedAt,
 }) {
   return CaptureRecord(
     id: id,
@@ -100,6 +101,7 @@ CaptureRecord _record({
     processingAttempts: 0,
     watermarkLocaleCode: 'zh',
     locationResolution: 'resolved',
+    originalDeletedAt: originalDeletedAt,
   );
 }
 
@@ -411,7 +413,7 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: const CaptureFullscreenScreen(path: '/rendered/capture-1.jpg'),
+          home: CaptureFullscreenScreen.single(path: '/rendered/capture-1.jpg'),
         ),
       ),
     );
@@ -425,6 +427,79 @@ void main() {
     );
     expect(fullscreenImage.image, isNot(isA<ResizeImage>()));
   });
+
+  testWidgets(
+    'fullscreen siblings use each capture best available image and current index',
+    (tester) async {
+      final current = _record(id: 'capture-1', status: CaptureStatus.ready);
+      final renderedSibling = _record(
+        id: 'capture-2',
+        status: CaptureStatus.ready,
+      );
+      final originalSibling = _record(
+        id: 'capture-3',
+        status: CaptureStatus.failed,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 320,
+                  height: 240,
+                  child: CaptureImagePreview(
+                    capture: current,
+                    outputPaths: _FakeOutputPaths(),
+                    siblingCaptures: [
+                      renderedSibling,
+                      current,
+                      originalSibling,
+                    ],
+                    fileExists: (path) {
+                      return path == '/private/rendered/capture-1.jpg' ||
+                          path == '/private/rendered/capture-2.jpg' ||
+                          path == '/private/capture-3.jpg';
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      tester
+          .widget<GestureDetector>(
+            find.byKey(const Key('capture-image-open-capture-1')),
+          )
+          .onTap!();
+      await tester.pumpAndSettle();
+
+      final viewer = tester.widget<CaptureFullscreenScreen>(
+        find.byType(CaptureFullscreenScreen),
+      );
+      expect(
+        await Future.wait(viewer.photos.map((photo) => photo.resolvePath())),
+        [
+          '/private/rendered/capture-2.jpg',
+          '/private/rendered/capture-1.jpg',
+          '/private/capture-3.jpg',
+        ],
+      );
+      expect(viewer.initialIndex, 1);
+    },
+  );
 
   testWidgets('ready preview uses rendered image and rendering uses original', (
     tester,
@@ -452,6 +527,27 @@ void main() {
     expect(find.byKey(const Key('original-preview-capture-1')), findsOneWidget);
     expect(find.byKey(const Key('rendered-preview-capture-1')), findsNothing);
   });
+
+  testWidgets(
+    'best available never falls back to an original marked as deleted',
+    (tester) async {
+      final capture = _record(
+        id: 'capture-1',
+        status: CaptureStatus.ready,
+        originalDeletedAt: DateTime(2026, 7, 16, 10),
+      );
+
+      await pumpPreview(
+        tester,
+        capture: capture,
+        renderedExists: false,
+        originalExists: true,
+      );
+
+      expect(find.byKey(const Key('original-preview-capture-1')), findsNothing);
+      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+    },
+  );
 
   testWidgets('failed capture shows original with failure overlay', (
     tester,

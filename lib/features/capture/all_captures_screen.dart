@@ -100,9 +100,11 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
         ),
       );
     }
+    final siblingCaptures = rows
+        .map((summary) => summary.capture)
+        .toList(growable: false);
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
-      scrollCacheExtent: const ScrollCacheExtent.pixels(480),
       itemCount: rows.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
@@ -131,6 +133,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
             extra: CaptureDetailArguments(
               capture: summary.capture,
               initialImagePath: initialImagePath,
+              siblingCaptures: siblingCaptures,
             ),
           ),
         );
@@ -211,7 +214,10 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                     _filterBar(context, strings, projects, dateOptionSummaries),
                     Expanded(
                       child: AnimatedSwitcher(
-                        duration: AppMotion.durationOf(context, AppMotion.short4),
+                        duration: AppMotion.durationOf(
+                          context,
+                          AppMotion.short4,
+                        ),
                         child: !allSnapshot.hasData
                             ? const Skeletonizer(
                                 key: Key('capture-list-skeleton'),

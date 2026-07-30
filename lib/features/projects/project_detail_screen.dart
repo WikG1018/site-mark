@@ -101,13 +101,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         .toList(growable: false);
   }
 
-  List<String> _siblingPathsFor(List<CaptureSummary> captures) {
-    return captures
-        .map((s) => s.capture.originalPath)
-        .where((p) => p.isNotEmpty)
-        .toList(growable: false);
-  }
-
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
@@ -313,9 +306,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     bool loadingCaptures = false,
   }) {
     final hasAnyRecord = allProjectSummaries.isNotEmpty;
-    final siblingPaths = _siblingPathsFor(captures);
+    final siblingCaptures = captures
+        .map((summary) => summary.capture)
+        .toList(growable: false);
     return CustomScrollView(
-      scrollCacheExtent: const ScrollCacheExtent.pixels(480),
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
@@ -333,7 +327,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           ),
         ),
         if (!loadingCaptures && hasAnyRecord)
-          Sli verToBoxAdapter(
+          SliverToBoxAdapter(
             child: CaptureDateFilterBar(
               filter: filter,
               summaries: allProjectSummaries,
@@ -387,9 +381,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               itemBuilder: (context, index) {
                 final summary = captures[index];
                 final id = summary.capture.id;
-                final siblingIndex = siblingPaths.indexOf(
-                  summary.capture.originalPath,
-                );
                 return CaptureRecordCard(
                   summary: summary,
                   selectionMode: _selectionController.editing,
@@ -410,8 +401,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     extra: CaptureDetailArguments(
                       capture: summary.capture,
                       initialImagePath: initialImagePath,
-                      siblingPaths: siblingPaths.isEmpty ? null : siblingPaths,
-                      siblingIndex: siblingIndex >= 0 ? siblingIndex : null,
+                      siblingCaptures: siblingCaptures,
                     ),
                   ),
                 );

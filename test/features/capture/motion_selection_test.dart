@@ -124,7 +124,7 @@ void main() {
     await disposeTree(tester);
   });
 
-  testWidgets('project first frame uses real header without fake photo rows', (
+  testWidgets('project first frame uses real header with skeleton photo rows', (
     tester,
   ) async {
     await seedReadyCapture();
@@ -133,9 +133,12 @@ void main() {
     await tester.pumpWidget(buildProjectDetail(initialProject: project));
 
     expect(find.text('东区厂房改造'), findsNWidgets(2));
-    expect(find.byType(Card), findsOneWidget);
     expect(find.text('拍摄记录'), findsOneWidget);
-    expect(find.byType(Skeletonizer), findsNothing);
+    expect(
+      find.byKey(const Key('project-capture-list-skeleton')),
+      findsOneWidget,
+    );
+    expect(find.text('2026-07-16 · 001'), findsNothing);
     await disposeTree(tester);
   });
 
@@ -213,6 +216,7 @@ void main() {
       // initState assertion. The route tree mirrors app.dart but with a
       // minimal capture-detail stub.
       CaptureRecord? pushedInitialCapture;
+      List<CaptureRecord>? pushedSiblingCaptures;
       final router = GoRouter(
         initialLocation: '/records',
         routes: [
@@ -233,6 +237,7 @@ void main() {
                     builder: (context, state) {
                       if (state.extra case CaptureDetailArguments arguments) {
                         pushedInitialCapture = arguments.capture;
+                        pushedSiblingCaptures = arguments.siblingCaptures;
                       }
                       return Scaffold(
                         appBar: AppBar(title: const Text('记录详情')),
@@ -276,6 +281,9 @@ void main() {
       // Verify we're on the capture detail screen.
       expect(find.text('记录详情'), findsOneWidget);
       expect(pushedInitialCapture?.id, 'capture-1');
+      expect(pushedSiblingCaptures?.map((capture) => capture.id), [
+        'capture-1',
+      ]);
 
       // Pop back via the AppBar back button.
       await tester.tap(find.byType(BackButton));
@@ -566,8 +574,7 @@ class _TestImagePipeline implements ImagePipeline {
   @override
   Future<ExtractedArchivePhoto> extractArchivePhoto(
     ExtractArchivePhotoRequest request,
-  ) =>
-      throw UnimplementedError();
+  ) => throw UnimplementedError();
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async =>
