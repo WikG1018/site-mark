@@ -102,6 +102,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
+      scrollCacheExtent: const ScrollCacheExtent.pixels(480),
       itemCount: rows.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
@@ -183,7 +184,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
               },
               tooltip: editing ? strings.done : strings.editRecords,
               icon: AnimatedSwitcher(
-                duration: AppMotion.short4,
+                duration: AppMotion.durationOf(context, AppMotion.short4),
                 child: Icon(
                   editing ? Icons.done : Icons.edit_outlined,
                   key: ValueKey(editing),
@@ -210,7 +211,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                     _filterBar(context, strings, projects, dateOptionSummaries),
                     Expanded(
                       child: AnimatedSwitcher(
-                        duration: AppMotion.short4,
+                        duration: AppMotion.durationOf(context, AppMotion.short4),
                         child: !allSnapshot.hasData
                             ? const Skeletonizer(
                                 key: Key('capture-list-skeleton'),
@@ -239,7 +240,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
           },
         ),
         bottomNavigationBar: AnimatedSwitcher(
-          duration: AppMotion.medium4,
+          duration: AppMotion.durationOf(context, AppMotion.medium4),
           transitionBuilder: (child, animation) {
             final curved = animation.drive(
               CurveTween(curve: AppMotion.emphasizedDecelerate),
