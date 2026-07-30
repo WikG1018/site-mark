@@ -325,7 +325,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             child: _ProjectHeader(project: project),
           ),
         ),
-        SliverToBoxAdapter(
+        Sli verToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
             child: Text(
