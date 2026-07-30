@@ -15,6 +15,7 @@ import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 enum _ProjectAction { rename, delete }
 
@@ -336,9 +337,22 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           ),
         if (loadingCaptures)
-          const SliverFillRemaining(
-            hasScrollBody: false,
-            child: SizedBox.shrink(),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+            sliver: SliverToBoxAdapter(
+              child: Skeletonizer(
+                key: const Key('project-capture-list-skeleton'),
+                child: Column(
+                  children: List.generate(
+                    4,
+                    (_) => const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: _CaptureCardSkeleton(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           )
         else if (!hasAnyRecord)
           SliverFillRemaining(
@@ -752,6 +766,49 @@ class _ProjectHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(project.description!),
                   ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Fixed-layout skeleton that matches CaptureRecordCard proportions.
+/// Used only while the first capture summaries are still loading.
+class _CaptureCardSkeleton extends StatelessWidget {
+  const _CaptureCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 96,
+              height: 96,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: const ColoredBox(color: Colors.grey),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SM-0000-000', style: textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text('0000/00/00 00:00', style: textTheme.bodyMedium),
+                  const SizedBox(height: 2),
+                  Text('---', style: textTheme.bodySmall),
                 ],
               ),
             ),
