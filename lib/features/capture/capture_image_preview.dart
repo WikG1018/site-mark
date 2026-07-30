@@ -89,8 +89,9 @@ class CaptureImagePreview extends StatefulWidget {
 
   /// Keeps the detail endpoint visually continuous with the list Hero flight.
   ///
-  /// The flight shuttle decodes the same path at 2048 px, so the destination
-  /// reuses that cache key and skips its own switch/frame fades.
+  /// The flight shuttle and this destination both decode via
+  /// [CapturePhotoHero.flightCacheWidth] so they share one [ResizeImage] cache
+  /// key and the destination can skip its own switch/frame fades.
   final bool heroDestination;
 
   /// Concrete image path already resolved by the source list item.
@@ -327,7 +328,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         final cacheWidth = widget.thumbnail
             ? 192
             : widget.heroDestination
-            ? 2048
+            ? CapturePhotoHero.flightCacheWidth(context)
             : _detailCacheWidth(context, constraints);
         final provider = ResizeImage.resizeIfNeeded(
           cacheWidth,
