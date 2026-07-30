@@ -36,6 +36,11 @@ class CapturePhotoHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Respect system reduce-motion: skip the Hero flight entirely so the
+    // destination appears immediately without a flying image.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return child;
+    }
     return Hero(
       tag: tag,
       // Keep the list thumbnail painted underneath the overlay. The default
