@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -124,11 +125,14 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: buildSharedAxisRouteTransition(
-          animation: const AlwaysStoppedAnimation(1),
-          secondaryAnimation: const AlwaysStoppedAnimation(0.5),
-          freezeSecondary: true,
-          child: const SizedBox(key: Key('capture-list')),
+        home: Builder(
+          builder: (context) => buildSharedAxisRouteTransition(
+            context: context,
+            animation: const AlwaysStoppedAnimation(1),
+            secondaryAnimation: const AlwaysStoppedAnimation(0.5),
+            freezeSecondary: true,
+            child: const SizedBox(key: Key('capture-list')),
+          ),
         ),
       ),
     );
@@ -148,11 +152,14 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: buildFadeThroughRouteTransition(
-          animation: const AlwaysStoppedAnimation(1),
-          secondaryAnimation: const AlwaysStoppedAnimation(0.5),
-          freezeSecondary: true,
-          child: const SizedBox(key: Key('capture-list')),
+        home: Builder(
+          builder: (context) => buildFadeThroughRouteTransition(
+            context: context,
+            animation: const AlwaysStoppedAnimation(1),
+            secondaryAnimation: const AlwaysStoppedAnimation(0.5),
+            freezeSecondary: true,
+            child: const SizedBox(key: Key('capture-list')),
+          ),
         ),
       ),
     );
@@ -165,5 +172,31 @@ void main() {
     );
     expect(fades, isNotEmpty);
     expect(fades.every((fade) => fade.opacity.value == 1), isTrue);
+  });
+
+  testWidgets('reduce-motion skips shared-axis transition widgets', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          );
+        },
+        home: Builder(
+          builder: (context) => buildSharedAxisRouteTransition(
+            context: context,
+            animation: const AlwaysStoppedAnimation(0.5),
+            secondaryAnimation: const AlwaysStoppedAnimation(0.5),
+            child: const SizedBox(key: Key('reduced-motion-child')),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('reduced-motion-child')), findsOneWidget);
+    expect(find.byType(SharedAxisTransition), findsNothing);
   });
 }

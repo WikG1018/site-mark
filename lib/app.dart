@@ -365,6 +365,7 @@ CustomTransitionPage<void> _sharedAxisPage(
     reverseTransitionDuration: AppMotion.medium2,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return buildSharedAxisRouteTransition(
+        context: context,
         animation: animation,
         secondaryAnimation: secondaryAnimation,
         freezeSecondary: freezeSecondary,
@@ -386,6 +387,9 @@ CustomTransitionPage<void> _captureDetailPage(
     transitionDuration: AppMotion.medium2,
     reverseTransitionDuration: AppMotion.medium2,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        return child;
+      }
       return buildCaptureDetailRouteTransition(
         animation: animation,
         child: child,
@@ -408,6 +412,7 @@ CustomTransitionPage<void> _fadeThroughPage(
     reverseTransitionDuration: AppMotion.medium2,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return buildFadeThroughRouteTransition(
+        context: context,
         animation: animation,
         secondaryAnimation: secondaryAnimation,
         freezeSecondary: freezeSecondary,
@@ -550,6 +555,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                               ? state.extra! as CaptureRecord
                               : null),
                       initialImagePath: arguments?.initialImagePath,
+                      siblingCaptures: arguments?.siblingCaptures,
                     ),
                   );
                 },

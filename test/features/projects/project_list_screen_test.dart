@@ -9,7 +9,6 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 
 class _ControlledProjectsDatabase extends AppDatabase {
   _ControlledProjectsDatabase() : super.forTesting(NativeDatabase.memory());
@@ -79,32 +78,35 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('home first frame does not paint fake project rows', (
-    tester,
-  ) async {
-    database = _ControlledProjectsDatabase();
-    addTearDown(database.close);
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(database)],
-        child: const MaterialApp(
-          locale: Locale('zh'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: [
-            AppStrings.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          home: ProjectListScreen(),
+  testWidgets(
+    'home first frame shows Skeletonizer without real project cards',
+    (tester) async {
+      database = _ControlledProjectsDatabase();
+      addTearDown(database.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [databaseProvider.overrideWithValue(database)],
+          child: const MaterialApp(
+            locale: Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: ProjectListScreen(),
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.byType(Skeletonizer), findsNothing);
-    expect(find.byType(Card), findsNothing);
-    await disposeApp(tester);
-  });
+      // Loading state shows a fixed skeleton layout but no real project data.
+      expect(find.byKey(const Key('project-list-skeleton')), findsOneWidget);
+      expect(find.text('东区厂房改造'), findsNothing);
+      expect(find.text('西区管线整改'), findsNothing);
+      await disposeApp(tester);
+    },
+  );
 
   testWidgets('home search ignores Latin case and clears then exits', (
     tester,

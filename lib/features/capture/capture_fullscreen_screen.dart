@@ -7,39 +7,93 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 
+/// Lazily resolves one photo shown by [CaptureFullscreenScreen].
+///
+/// Keeping resolution lazy prevents opening the viewer from stat-ing and
+/// decoding every photo in a large project up front. [initialPath] and
+/// [previewImage] keep the tapped photo visible immediately.
+final class CaptureFullscreenPhoto {
+  CaptureFullscreenPhoto({
+    required this.id,
+    required this.resolvePath,
+    this.initialPath,
+    this.previewImage,
+  });
+
+  factory CaptureFullscreenPhoto.resolved({
+    required String path,
+    ImageProvider<Object>? previewImage,
+  }) {
+    return CaptureFullscreenPhoto(
+      id: path,
+      initialPath: path,
+      previewImage: previewImage,
+      resolvePath: () async => path,
+    );
+  }
+
+  final String id;
+  final Future<String?> Function() resolvePath;
+  final String? initialPath;
+  final ImageProvider<Object>? previewImage;
+}
+
 /// Full-screen immersive photo viewer pushed from the detail image preview.
+///
+/// Supports a list of image paths so the user can swipe left/right between
+/// adjacent captures. When only a single path is supplied the behaviour is
+/// identical to the previous single-image viewer.
 ///
 /// The page sits on a pure black [Scaffold] and enters
 /// [SystemUiMode.immersiveSticky] while visible (restoring
 /// [SystemUiMode.edgeToEdge] on dispose). Gestures:
 ///
-/// - single tap toggles the transparent chrome [AppBar] (an
-///   [AnimatedOpacity] overlay) together with the system bars;
-/// - double tap animates the [TransformationController] between 1x and 2x,
-///   focusing the 2x zoom on the tapped point;
-/// - while at 1x, a vertical drag moves the photo with the finger and shrinks
-///   it proportionally; releasing past the dismiss threshold (or with enough
-///   velocity) pops the route, otherwise the photo animates back;
-/// - while zoomed past 1x the [InteractiveViewer] pans normally and the
-///   drag-to-dismiss gesture is disabled.
-///
-/// The image area declares a live-region [Semantics] label and decodes the
-/// photo at its full native resolution so zoom (up to 4x) preserves original
-/// detail. Memory peaks are mitigated by the OS page cache and the fact that
-/// the viewer is only reached from the detail screen for a single image.
+/// - single tap toggles the transparent chrome [AppBar];
+/// - double tap animates the [TransformationController] between 1x and 2x;
+/// - while at 1x, a vertical drag moves the photo and can dismiss the route;
+/// - while zoomed past 1x the [InteractiveViewer] pans normally;
+/// - horizontal swipe (PageView) is only active when the current page is at 1x.
 class CaptureFullscreenScreen extends ConsumerStatefulWidget {
-  const CaptureFullscreenScreen({
+  CaptureFullscreenScreen({
     super.key,
-    required this.path,
-    this.previewImage,
-  });
+    required this.photos,
+    this.initialIndex = 0,
+  }) : assert(photos.isNotEmpty, 'photos must not be empty'),
+       assert(initialIndex >= 0 && initialIndex < photos.length);
 
-  /// Absolute path of the on-disk photo to display.
-  final String path;
+  final List<CaptureFullscreenPhoto> photos;
 
-  /// Already-decoded detail preview kept visible while the full-resolution
-  /// image is decoded for zooming.
-  final ImageProvider<Object>? previewImage;
+  /// Index of the photo that should be shown first.
+  final int initialIndex;
+
+  factory CaptureFullscreenScreen.fromPaths({
+    Key? key,
+    required List<String> paths,
+    int initialIndex = 0,
+  }) {
+    return CaptureFullscreenScreen(
+      key: key,
+      photos: paths
+          .map((path) => CaptureFullscreenPhoto.resolved(path: path))
+          .toList(growable: false),
+      initialIndex: initialIndex,
+    );
+  }
+
+  /// Convenience constructor kept for existing single-image call sites.
+  factory CaptureFullscreenScreen.single({
+    Key? key,
+    required String path,
+    ImageProvider<Object>? previewImage,
+  }) {
+    return CaptureFullscreenScreen(
+      key: key,
+      photos: [
+        CaptureFullscreenPhoto.resolved(path: path, previewImage: previewImage),
+      ],
+      initialIndex: 0,
+    );
+  }
 
   @override
   ConsumerState<CaptureFullscreenScreen> createState() =>
@@ -54,8 +108,10 @@ class _CaptureFullscreenScreenState
   static const double _dragShrinkFactor = 600;
   static const double _minDragScale = 0.7;
 
-  final TransformationController _transformationController =
-      TransformationController();
+  late final PageController _pageController;
+  final Map<int, TransformationController> _transformationControllers = {};
+  final Map<int, VoidCallback> _transformationListeners = {};
+  final Map<int, Future<String?>> _pathFutures = {};
   late final AnimationController _scaleController = AnimationController(
     vsync: this,
     duration: AppMotion.medium4,
@@ -71,32 +127,41 @@ class _CaptureFullscreenScreenState
   double _dragOffset = 0;
   bool _zoomed = false;
   bool _chromeVisible = false;
+  int _currentPage = 0;
+  int? _scaleTargetPage;
   VoidCallback? _releaseDetach;
+
+  TransformationController _controllerFor(int index) {
+    return _transformationControllers.putIfAbsent(index, () {
+      final controller = TransformationController();
+      void listener() => _onTransformChanged(index);
+      _transformationListeners[index] = listener;
+      controller.addListener(listener);
+      return controller;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    _currentPage = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    _transformationController.addListener(_onTransformChanged);
+
     _scaleController.addListener(() {
       final animation = _scaleAnimation;
-      if (animation != null) _transformationController.value = animation.value;
+      final targetPage = _scaleTargetPage;
+      if (animation != null && targetPage != null) {
+        _controllerFor(targetPage).value = animation.value;
+      }
     });
     _dragController.addListener(() {
       final animation = _dragAnimation;
       if (animation != null) setState(() => _dragOffset = animation.value);
     });
-    // ITGSA fair-memory: the fullscreen viewer holds the photo at its full
-    // native resolution (so 4x zoom preserves detail). When a MEMORY_TRIM or
-    // a framework memory-pressure callback arrives, pop the route so the
-    // Bitmap is released immediately rather than waiting for the user to
-    // dismiss. The viewer is only reachable from the detail screen, so
-    // popping returns the user to a sensible place.
+
     final controller = ref.read(memoryPressureControllerProvider);
     _releaseDetach = controller.attachRelease(() {
-      // Only pop if this route is still the topmost — the release handler
-      // can fire while a different route (e.g. a system dialog or another
-      // push) has replaced this one on the navigator stack.
       if (!mounted) return;
       final route = ModalRoute.of(context);
       if (route?.isCurrent ?? false) {
@@ -111,12 +176,30 @@ class _CaptureFullscreenScreenState
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _scaleController.dispose();
     _dragController.dispose();
-    _transformationController.dispose();
+    _pageController.dispose();
+    for (final entry in _transformationControllers.entries) {
+      final listener = _transformationListeners[entry.key];
+      if (listener != null) entry.value.removeListener(listener);
+      entry.value.dispose();
+    }
     super.dispose();
   }
 
-  void _onTransformChanged() {
-    final zoomed = _transformationController.value.getMaxScaleOnAxis() > 1.01;
+  void _onPageChanged(int index) {
+    _scaleController.stop();
+    _scaleAnimation = null;
+    _scaleTargetPage = null;
+    final zoomed = _controllerFor(index).value.getMaxScaleOnAxis() > 1.01;
+    setState(() {
+      _currentPage = index;
+      _zoomed = zoomed;
+      _dragOffset = 0;
+    });
+  }
+
+  void _onTransformChanged(int index) {
+    if (index != _currentPage) return;
+    final zoomed = _controllerFor(index).value.getMaxScaleOnAxis() > 1.01;
     if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
   }
 
@@ -130,7 +213,8 @@ class _CaptureFullscreenScreenState
   }
 
   void _handleDoubleTap() {
-    final current = _transformationController.value;
+    final targetPage = _currentPage;
+    final current = _controllerFor(targetPage).value;
     final Matrix4 end;
     if (current.getMaxScaleOnAxis() > 1.01) {
       end = Matrix4.identity();
@@ -144,12 +228,17 @@ class _CaptureFullscreenScreenState
         ..scaleByDouble(2.0, 2.0, 2.0, 1)
         ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
     }
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controllerFor(targetPage).value = end;
+      return;
+    }
     _scaleAnimation = Matrix4Tween(begin: current, end: end).animate(
       CurvedAnimation(
         parent: _scaleController,
         curve: AppMotion.emphasizedDecelerate,
       ),
     );
+    _scaleTargetPage = targetPage;
     _scaleController.forward(from: 0);
   }
 
@@ -167,6 +256,10 @@ class _CaptureFullscreenScreenState
     if (_dragOffset.abs() > _dismissThreshold ||
         velocity.abs() > _dismissVelocity) {
       Navigator.of(context).pop();
+      return;
+    }
+    if (MediaQuery.disableAnimationsOf(context)) {
+      setState(() => _dragOffset = 0);
       return;
     }
     _dragAnimation = Tween<double>(begin: _dragOffset, end: 0).animate(
@@ -190,75 +283,111 @@ class _CaptureFullscreenScreenState
       body: Stack(
         fit: StackFit.expand,
         children: [
-          GestureDetector(
-            onTap: _toggleChrome,
-            onDoubleTapDown: (details) =>
-                _doubleTapPosition = details.localPosition,
-            onDoubleTap: _handleDoubleTap,
-            onVerticalDragStart: _zoomed ? null : _onVerticalDragStart,
-            onVerticalDragUpdate: _zoomed ? null : _onVerticalDragUpdate,
-            onVerticalDragEnd: _zoomed ? null : _onVerticalDragEnd,
-            child: Transform.translate(
-              offset: Offset(0, _dragOffset),
-              child: Transform.scale(
-                scale: dragScale,
-                child: InteractiveViewer(
-                  transformationController: _transformationController,
-                  panEnabled: _zoomed,
-                  minScale: 1,
-                  maxScale: 4,
-                  child: Center(
-                    child: Semantics(
-                      label: strings.fullscreenPhotoSemantics,
-                      liveRegion: true,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (widget.previewImage != null)
-                            Image(
-                              image: widget.previewImage!,
-                              fit: BoxFit.contain,
-                              gaplessPlayback: true,
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.photos.length,
+            onPageChanged: _onPageChanged,
+            // Only allow horizontal swipe when not zoomed.
+            physics: _zoomed
+                ? const NeverScrollableScrollPhysics()
+                : const PageScrollPhysics(),
+            itemBuilder: (context, index) {
+              final photo = widget.photos[index];
+              final preview = photo.previewImage;
+              final transformController = _controllerFor(index);
+
+              return GestureDetector(
+                key: Key('fullscreen-photo-$index'),
+                onTap: _toggleChrome,
+                onDoubleTapDown: (details) =>
+                    _doubleTapPosition = details.localPosition,
+                onDoubleTap: index == _currentPage ? _handleDoubleTap : null,
+                onVerticalDragStart: (!_zoomed && index == _currentPage)
+                    ? _onVerticalDragStart
+                    : null,
+                onVerticalDragUpdate: (!_zoomed && index == _currentPage)
+                    ? _onVerticalDragUpdate
+                    : null,
+                onVerticalDragEnd: (!_zoomed && index == _currentPage)
+                    ? _onVerticalDragEnd
+                    : null,
+                child: Transform.translate(
+                  offset: index == _currentPage
+                      ? Offset(0, _dragOffset)
+                      : Offset.zero,
+                  child: Transform.scale(
+                    scale: index == _currentPage ? dragScale : 1.0,
+                    child: InteractiveViewer(
+                      transformationController: transformController,
+                      panEnabled: _zoomed && index == _currentPage,
+                      minScale: 1,
+                      maxScale: 4,
+                      child: Center(
+                        child: Semantics(
+                          label: strings.fullscreenPhotoSemantics,
+                          liveRegion: index == _currentPage,
+                          child: FutureBuilder<String?>(
+                            future: _pathFutures.putIfAbsent(
+                              index,
+                              photo.resolvePath,
                             ),
-                          Image.file(
-                            File(widget.path),
-                            fit: BoxFit.contain,
-                            gaplessPlayback: true,
-                            frameBuilder:
-                                (
-                                  context,
-                                  child,
-                                  frame,
-                                  wasSynchronouslyLoaded,
-                                ) {
-                                  if (wasSynchronouslyLoaded) return child;
-                                  return AnimatedOpacity(
-                                    opacity: frame == null ? 0 : 1,
-                                    duration: AppMotion.short4,
-                                    curve: AppMotion.standard,
-                                    child: child,
-                                  );
-                                },
-                            errorBuilder: (context, error, _) =>
-                                widget.previewImage != null
-                                ? const SizedBox.shrink()
-                                : Center(
-                                    child: Icon(
-                                      Icons.broken_image_outlined,
-                                      size: 64,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.error,
+                            initialData: photo.initialPath,
+                            builder: (context, snapshot) {
+                              final path = snapshot.data;
+                              return Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  if (preview != null)
+                                    Image(
+                                      image: preview,
+                                      fit: BoxFit.contain,
+                                      gaplessPlayback: true,
                                     ),
-                                  ),
+                                  if (path != null)
+                                    Image.file(
+                                      File(path),
+                                      fit: BoxFit.contain,
+                                      gaplessPlayback: true,
+                                      frameBuilder:
+                                          (
+                                            context,
+                                            child,
+                                            frame,
+                                            wasSynchronouslyLoaded,
+                                          ) {
+                                            if (wasSynchronouslyLoaded) {
+                                              return child;
+                                            }
+                                            return AnimatedOpacity(
+                                              opacity: frame == null ? 0 : 1,
+                                              duration: AppMotion.durationOf(
+                                                context,
+                                                AppMotion.short4,
+                                              ),
+                                              curve: AppMotion.standard,
+                                              child: child,
+                                            );
+                                          },
+                                      errorBuilder: (context, error, _) =>
+                                          preview != null
+                                          ? const SizedBox.shrink()
+                                          : _missingPhoto(context),
+                                    )
+                                  else if (snapshot.connectionState ==
+                                          ConnectionState.done &&
+                                      preview == null)
+                                    _missingPhoto(context),
+                                ],
+                              );
+                            },
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
           Positioned(
             top: 0,
@@ -267,7 +396,7 @@ class _CaptureFullscreenScreenState
             child: AnimatedOpacity(
               key: const Key('fullscreen-chrome'),
               opacity: _chromeVisible ? 1 : 0,
-              duration: AppMotion.short4,
+              duration: AppMotion.durationOf(context, AppMotion.short4),
               child: IgnorePointer(
                 ignoring: !_chromeVisible,
                 child: SafeArea(
@@ -288,6 +417,16 @@ class _CaptureFullscreenScreenState
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _missingPhoto(BuildContext context) {
+    return Center(
+      child: Icon(
+        Icons.broken_image_outlined,
+        size: 64,
+        color: Theme.of(context).colorScheme.error,
       ),
     );
   }

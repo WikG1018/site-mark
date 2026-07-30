@@ -20,8 +20,27 @@ class CapturePhotoHero extends StatelessWidget {
   final String path;
   final Widget child;
 
+  /// Decode width shared by list → detail Hero flight and the detail
+  /// [heroDestination] endpoint so both hit the same [ResizeImage] cache key.
+  ///
+  /// Derived from the current screen width and device pixel ratio so low-end
+  /// / narrow devices do not pay for a full 2048 px decode, while still
+  /// covering typical phone detail widths. Clamped to [512, 2048].
+  static int flightCacheWidth(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final physical = size.width * dpr;
+    if (!physical.isFinite || physical <= 0) return 1024;
+    return physical.ceil().clamp(512, 2048);
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Respect system reduce-motion: skip the Hero flight entirely so the
+    // destination appears immediately without a flying image.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return child;
+    }
     return Hero(
       tag: tag,
       // Keep the list thumbnail painted underneath the overlay. The default
@@ -37,7 +56,7 @@ class CapturePhotoHero extends StatelessWidget {
             toHeroContext,
           ) {
             final provider = ResizeImage.resizeIfNeeded(
-              2048,
+              flightCacheWidth(flightContext),
               null,
               FileImage(File(path)),
             );

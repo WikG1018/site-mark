@@ -10,49 +10,8 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/platform_services.dart';
 
-/// Selects which on-disk source [CaptureImagePreview] renders.
-///
-/// - [CapturePreviewSource.bestAvailable]: keep the historical fallback
-///   behaviour (rendered photo for `ready` rows when present, otherwise the
-///   private original, otherwise a status placeholder).
-/// - [CapturePreviewSource.watermarked]: resolve only the rendered watermark
-///   photo via [CaptureOutputPaths.renderedPhotoPath]. When the file is missing
-///   the preview shows a "watermarked not yet available" placeholder instead of
-///   silently falling back to the original.
-/// - [CapturePreviewSource.original]: resolve only the private original. When
-///   the original has been cleared ([CaptureRecord.originalDeletedAt] non-null)
-///   or is unexpectedly missing on disk, the preview shows the original-state
-///   placeholder. It must never silently render the watermarked photo under the
-///   "Original" tab.
 enum CapturePreviewSource { bestAvailable, watermarked, original }
 
-/// Reusable capture image preview.
-///
-/// Resolves the on-disk source for [capture] in this order:
-///
-/// - [CaptureStatus.ready]: the rendered watermark photo when it exists,
-///   otherwise the private original.
-/// - [CaptureStatus.captured], [CaptureStatus.rendering],
-///   [CaptureStatus.failed]: the private original when it exists.
-/// - missing file: a Material placeholder with the status/error label.
-///
-/// When [thumbnail] is `false` (the detail surface) tapping the image pushes
-/// the full-screen [CaptureFullscreenScreen] route (pinch 1x–4x, double-tap
-/// zoom, drag-down to dismiss). The async rendered path is resolved with a
-/// [FutureBuilder]; [fileExists] is overridable so widget tests can simulate
-/// on-disk state without touching the filesystem.
-///
-/// File existence is checked asynchronously via [File.exists] and the resolved
-/// [_PreviewResolution] is cached per `State` instance, refreshed only when the
-/// relevant inputs change. Decoded frames fade in via [Image.frameBuilder]
-/// except for Hero thumbnails, whose immediate handoff avoids a second fade.
-/// Same-slot content swaps (status overlay to final photo, placeholder to
-/// image) cross-fade through an [AnimatedSwitcher] driven by the keyed subtrees.
-///
-/// Pass an explicit [source] to render only the watermarked or original photo
-/// (used by the detail screen's segmented control). The default
-/// [CapturePreviewSource.bestAvailable] keeps the historical fallback behaviour
-/// used by list thumbnails.
 class CaptureImagePreview extends StatefulWidget {
   const CaptureImagePreview({
     super.key,
@@ -66,38 +25,23 @@ class CaptureImagePreview extends StatefulWidget {
     this.heroDestination = false,
     this.initialImagePath,
     this.onImageResolved,
+    this.siblingCaptures,
   });
 
   final CaptureRecord capture;
   final CaptureOutputPaths outputPaths;
   final bool thumbnail;
   final VoidCallback? onOpen;
-
-  /// Predicate used to verify whether a resolved path exists on disk. Defaults
-  /// to the asynchronous [File.exists] in production; tests can inject either
-  /// a synchronous or asynchronous fake to control which branch the widget
-  /// takes.
   final FutureOr<bool> Function(String path)? fileExists;
-
-  /// Selects which on-disk source to render. See [CapturePreviewSource].
   final CapturePreviewSource source;
-
-  /// Optional Hero tag for a ready record preview. The Hero is created only
-  /// after the concrete photo path has resolved, so both endpoints fly the
-  /// same image instead of a loading or placeholder subtree.
   final String? heroTag;
-
-  /// Keeps the detail endpoint visually continuous with the list Hero flight.
-  ///
-  /// The flight shuttle decodes the same path at 2048 px, so the destination
-  /// reuses that cache key and skips its own switch/frame fades.
   final bool heroDestination;
-
-  /// Concrete image path already resolved by the source list item.
   final String? initialImagePath;
-
-  /// Reports the concrete path represented by a successful image preview.
   final ValueChanged<String>? onImageResolved;
+
+  /// Ordered captures from the current filtered list. Their paths are resolved
+  /// lazily when a fullscreen page becomes visible.
+  final List<CaptureRecord>? siblingCaptures;
 
   @override
   State<CaptureImagePreview> createState() => _CaptureImagePreviewState();
@@ -158,8 +102,14 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   }
 
   Future<_PreviewResolution> _resolve() async {
-    final capture = widget.capture;
-    switch (widget.source) {
+    return _resolveCapture(widget.capture, widget.source);
+  }
+
+  Future<_PreviewResolution> _resolveCapture(
+    CaptureRecord capture,
+    CapturePreviewSource source,
+  ) async {
+    switch (source) {
       case CapturePreviewSource.watermarked:
         try {
           final renderedPath = await widget.outputPaths.renderedPhotoPath(
@@ -179,7 +129,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
             ? _PreviewResolution.image(capture.originalPath, status: null)
             : const _PreviewResolution.originalMissing();
       case CapturePreviewSource.bestAvailable:
-        final originalExists = _existsOrFalse(capture.originalPath);
+        final originalExists = capture.originalDeletedAt == null
+            ? _existsOrFalse(capture.originalPath)
+            : Future<bool>.value(false);
         if (capture.status == CaptureStatus.ready) {
           try {
             final renderedPath = await widget.outputPaths.renderedPhotoPath(
@@ -188,9 +140,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
             if (await _existsOrFalse(renderedPath)) {
               return _PreviewResolution.image(renderedPath, status: null);
             }
-          } catch (_) {
-            // A rendered result is optional for the best-available source.
-          }
+          } catch (_) {}
         }
         if (await originalExists) {
           return _PreviewResolution.image(
@@ -228,7 +178,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
           return AnimatedSwitcher(
             duration: widget.heroDestination
                 ? Duration.zero
-                : AppMotion.medium2,
+                : AppMotion.durationOf(context, AppMotion.short4),
             child: _placeholder(
               context,
               strings,
@@ -237,7 +187,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
           );
         }
         return AnimatedSwitcher(
-          duration: widget.heroDestination ? Duration.zero : AppMotion.medium2,
+          duration: widget.heroDestination
+              ? Duration.zero
+              : AppMotion.durationOf(context, AppMotion.short4),
           child: switch (resolution.kind) {
             _PreviewResolutionKind.image => _image(
               context,
@@ -275,18 +227,12 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         );
       },
     );
-    // The detail endpoint must participate in Hero matching from its first
-    // frame. Its concrete image path resolves asynchronously, while the list
-    // thumbnail already supplies the custom, image-only flight shuttle.
     if (widget.heroTag != null && !widget.thumbnail) {
       return Hero(tag: widget.heroTag!, child: preview);
     }
     return preview;
   }
 
-  /// Label shown while the existence check is in flight. Mirrors the most
-  /// likely placeholder the resolution will land on so the cross-fade does not
-  /// flash a different label first.
   String _loadingLabel(AppStrings strings) {
     return switch (widget.source) {
       CapturePreviewSource.watermarked => strings.watermarkedUnavailable,
@@ -327,7 +273,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         final cacheWidth = widget.thumbnail
             ? 192
             : widget.heroDestination
-            ? 2048
+            ? CapturePhotoHero.flightCacheWidth(context)
             : _detailCacheWidth(context, constraints);
         final provider = ResizeImage.resizeIfNeeded(
           cacheWidth,
@@ -346,7 +292,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
                   if (wasSynchronouslyLoaded) return child;
                   return AnimatedOpacity(
                     opacity: frame == null ? 0 : 1,
-                    duration: AppMotion.medium2,
+                    duration: AppMotion.durationOf(context, AppMotion.short4),
                     curve: AppMotion.standard,
                     child: child,
                   );
@@ -398,6 +344,8 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         }
         if (widget.thumbnail) return preview;
         return GestureDetector(
+          key: Key('capture-image-open-${widget.capture.id}'),
+          behavior: HitTestBehavior.opaque,
           onTap:
               widget.onOpen ??
               () => _openFullscreen(context, path, previewImage: provider),
@@ -418,22 +366,66 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     return physicalWidth.ceil().clamp(1, 2048);
   }
 
-  /// Detail-surface decode width cap, derived from the available horizontal
-  /// space and the device pixel ratio. The full-screen viewer does NOT use
-  /// this cap — it keeps the original resolution so 4x zoom stays sharp.
   void _openFullscreen(
     BuildContext context,
     String path, {
     required ImageProvider<Object> previewImage,
   }) {
+    final source = widget.source;
+    final currentCapture = widget.capture;
+    final ordered = <CaptureRecord>[...?widget.siblingCaptures];
+    if (!ordered.any((capture) => capture.id == currentCapture.id)) {
+      ordered.add(currentCapture);
+    }
+    final candidates = ordered
+        .where((capture) {
+          if (capture.id == currentCapture.id) return true;
+          return switch (source) {
+            CapturePreviewSource.watermarked =>
+              capture.status == CaptureStatus.ready,
+            CapturePreviewSource.original => capture.originalDeletedAt == null,
+            CapturePreviewSource.bestAvailable =>
+              capture.status == CaptureStatus.ready ||
+                  capture.originalDeletedAt == null,
+          };
+        })
+        .toList(growable: false);
+    final photos = candidates
+        .map((capture) {
+          final isCurrent = capture.id == currentCapture.id;
+          return CaptureFullscreenPhoto(
+            id: capture.id,
+            initialPath: isCurrent ? path : null,
+            previewImage: isCurrent ? previewImage : null,
+            resolvePath: () async {
+              if (isCurrent) return path;
+              final resolution = await _resolveCapture(capture, source);
+              return resolution.kind == _PreviewResolutionKind.image
+                  ? resolution.path
+                  : null;
+            },
+          );
+        })
+        .toList(growable: false);
+    final currentIndex = photos.indexWhere(
+      (photo) => photo.id == currentCapture.id,
+    );
+    final page = CaptureFullscreenScreen(
+      photos: photos,
+      initialIndex: currentIndex,
+    );
+
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         opaque: true,
-        transitionDuration: AppMotion.long2,
-        reverseTransitionDuration: AppMotion.medium4,
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            CaptureFullscreenScreen(path: path, previewImage: previewImage),
+        transitionDuration: AppMotion.durationOf(context, AppMotion.long2),
+        reverseTransitionDuration: AppMotion.durationOf(
+          context,
+          AppMotion.medium4,
+        ),
+        pageBuilder: (context, animation, secondaryAnimation) => page,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          if (MediaQuery.disableAnimationsOf(context)) return child;
           final curved = CurvedAnimation(
             parent: animation,
             curve: AppMotion.emphasizedDecelerate,

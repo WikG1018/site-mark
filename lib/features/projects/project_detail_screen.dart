@@ -15,6 +15,7 @@ import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 enum _ProjectAction { rename, delete }
 
@@ -40,10 +41,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   late Future<Project?> _projectFuture;
   late Stream<List<CaptureSummary>> _captureSummariesStream;
 
-  /// Latest filtered captures emitted by the inner StreamBuilder. Updated
-  /// synchronously during build (no `setState`) so the AppBar's select-all
-  /// action and the bottom action bar can resolve status without an extra
-  /// async hop. Stays empty until the first emit.
   List<CaptureSummary> _latestCaptures = const [];
 
   @override
@@ -210,7 +207,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   },
                   tooltip: editing ? strings.done : strings.editRecords,
                   icon: AnimatedSwitcher(
-                    duration: AppMotion.short4,
+                    duration: AppMotion.durationOf(context, AppMotion.short4),
                     child: Icon(
                       editing ? Icons.done : Icons.edit_outlined,
                       key: ValueKey(editing),
@@ -253,7 +250,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     },
                   ),
             bottomNavigationBar: AnimatedSwitcher(
-              duration: AppMotion.medium4,
+              duration: AppMotion.durationOf(context, AppMotion.medium4),
               transitionBuilder: (child, animation) {
                 final curved = animation.drive(
                   CurveTween(curve: AppMotion.emphasizedDecelerate),
@@ -278,7 +275,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   : const SizedBox.shrink(key: Key('batch-bar-empty')),
             ),
             floatingActionButton: AnimatedSwitcher(
-              duration: AppMotion.medium2,
+              duration: AppMotion.durationOf(context, AppMotion.medium2),
               switchInCurve: AppMotion.emphasized,
               switchOutCurve: AppMotion.emphasized,
               transitionBuilder: (child, animation) =>
@@ -309,6 +306,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     bool loadingCaptures = false,
   }) {
     final hasAnyRecord = allProjectSummaries.isNotEmpty;
+    final siblingCaptures = captures
+        .map((summary) => summary.capture)
+        .toList(growable: false);
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -335,9 +335,22 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           ),
         if (loadingCaptures)
-          const SliverFillRemaining(
-            hasScrollBody: false,
-            child: SizedBox.shrink(),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+            sliver: SliverToBoxAdapter(
+              child: Skeletonizer(
+                key: const Key('project-capture-list-skeleton'),
+                child: Column(
+                  children: List.generate(
+                    4,
+                    (_) => const Padding(
+                      padding: EdgeInsets.only(bottom: 10),
+                      child: _CaptureCardSkeleton(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           )
         else if (!hasAnyRecord)
           SliverFillRemaining(
@@ -377,9 +390,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       summary.capture.status == CaptureStatus.failed,
                   onSelectedChanged: (selected) {
                     if (selected && !_selectionController.editing) {
-                      // Long-press entry: the card reports a selection outside
-                      // selection mode, so enter editing and select it in one
-                      // step.
                       _selectionController.enterWithSelection(id);
                     } else {
                       _selectionController.toggle(id);
@@ -391,6 +401,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     extra: CaptureDetailArguments(
                       capture: summary.capture,
                       initialImagePath: initialImagePath,
+                      siblingCaptures: siblingCaptures,
                     ),
                   ),
                 );
@@ -751,6 +762,47 @@ class _ProjectHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(project.description!),
                   ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CaptureCardSkeleton extends StatelessWidget {
+  const _CaptureCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 96,
+              height: 96,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: const ColoredBox(color: Colors.grey),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('SM-0000-000', style: textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text('0000/00/00 00:00', style: textTheme.bodyMedium),
+                  const SizedBox(height: 2),
+                  Text('---', style: textTheme.bodySmall),
                 ],
               ),
             ),

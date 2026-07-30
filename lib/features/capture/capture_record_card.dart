@@ -145,7 +145,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               AnimatedSize(
-                duration: AppMotion.medium2,
+                duration: AppMotion.durationOf(context, AppMotion.medium2),
                 curve: AppMotion.standard,
                 child: widget.selectionMode
                     ? Row(
@@ -196,7 +196,10 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                           label: '${strings.statusSemanticsPrefix}: $label',
                           child: ExcludeSemantics(
                             child: AnimatedSwitcher(
-                              duration: AppMotion.short4,
+                              duration: AppMotion.durationOf(
+                                context,
+                                AppMotion.short4,
+                              ),
                               child: Row(
                                 key: ValueKey(capture.status),
                                 mainAxisSize: MainAxisSize.min,

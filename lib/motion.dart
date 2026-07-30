@@ -1,4 +1,4 @@
-import 'package:flutter/animation.dart';
+import 'package:flutter/widgets.dart';
 
 abstract final class AppMotion {
   static const Duration short4 = Duration(milliseconds: 200);
@@ -10,4 +10,10 @@ abstract final class AppMotion {
   static const Cubic emphasizedDecelerate = Cubic(0.05, 0.7, 0.1, 1.0);
   static const Cubic emphasizedAccelerate = Cubic(0.3, 0.0, 0.8, 0.15);
   static const Curve standard = Curves.easeInOutCubic;
+
+  /// Returns [duration] unless the user has enabled system reduce-motion,
+  /// in which case animations collapse to zero for accessibility.
+  static Duration durationOf(BuildContext context, Duration duration) {
+    return MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
+  }
 }

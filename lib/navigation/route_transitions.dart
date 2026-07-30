@@ -51,11 +51,15 @@ Widget buildCaptureDetailRouteTransition({
 /// photo detail route is on top. This prevents the returning Hero from landing
 /// on a list that is simultaneously fading and translating underneath it.
 Widget buildSharedAxisRouteTransition({
+  required BuildContext context,
   required Animation<double> animation,
   required Animation<double> secondaryAnimation,
   required Widget child,
   bool freezeSecondary = false,
 }) {
+  if (MediaQuery.disableAnimationsOf(context)) {
+    return child;
+  }
   return SharedAxisTransition(
     animation: animation,
     secondaryAnimation: freezeSecondary
@@ -71,11 +75,15 @@ Widget buildSharedAxisRouteTransition({
 /// See [buildSharedAxisRouteTransition] for why capture-list destinations
 /// freeze their secondary animation while a photo detail route covers them.
 Widget buildFadeThroughRouteTransition({
+  required BuildContext context,
   required Animation<double> animation,
   required Animation<double> secondaryAnimation,
   required Widget child,
   bool freezeSecondary = false,
 }) {
+  if (MediaQuery.disableAnimationsOf(context)) {
+    return child;
+  }
   return FadeThroughTransition(
     animation: animation,
     secondaryAnimation: freezeSecondary

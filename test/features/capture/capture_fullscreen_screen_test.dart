@@ -23,8 +23,9 @@ class _Host extends StatelessWidget {
         child: TextButton(
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) =>
-                  const CaptureFullscreenScreen(path: '/nonexistent-photo.jpg'),
+              builder: (_) => CaptureFullscreenScreen.single(
+                path: '/nonexistent-photo.jpg',
+              ),
             ),
           ),
           child: const Text('open'),
@@ -95,7 +96,7 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: CaptureFullscreenScreen(
+          home: CaptureFullscreenScreen.single(
             path: '/nonexistent-photo.jpg',
             previewImage: preview,
           ),
@@ -117,6 +118,43 @@ void main() {
     expect(fullImage.frameBuilder, isNotNull);
   });
 
+  testWidgets('opens at the requested photo and swipes to the next one', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.fromPaths(
+            paths: ['/first.jpg', '/second.jpg', '/third.jpg'],
+            initialIndex: 1,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final pageView = tester.widget<PageView>(find.byType(PageView));
+    expect(pageView.controller!.page, 1);
+    expect(find.byKey(const Key('fullscreen-photo-1')), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('fullscreen-photo-1')),
+      const Offset(-600, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(pageView.controller!.page, 2);
+    expect(find.byKey(const Key('fullscreen-photo-2')), findsOneWidget);
+  });
+
   testWidgets('double tap zooms to 2x and back to 1x', (tester) async {
     await pumpHost(tester);
     expect(viewerScale(tester), closeTo(1, 0.001));
@@ -127,6 +165,39 @@ void main() {
 
     await doubleTapViewer(tester);
     expect(viewerScale(tester), closeTo(1, 0.001));
+  });
+
+  testWidgets('reduce motion applies double-tap zoom without animation', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.single(path: '/photo.jpg'),
+        ),
+      ),
+    );
+
+    final target = find.byType(InteractiveViewer);
+    await tester.tap(target);
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.tap(target);
+    await tester.pump();
+
+    expect(viewerScale(tester), closeTo(2, 0.001));
+    await tester.pump(const Duration(milliseconds: 50));
   });
 
   testWidgets('vertical drag past the threshold dismisses the viewer', (
