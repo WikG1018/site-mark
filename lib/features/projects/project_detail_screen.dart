@@ -336,12 +336,12 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           ),
         if (loadingCaptures)
-          const SliverFillRemaining(
+          const SiverFillRemaining(
             hasScrollBody: false,
             child: SizedBox.shrink(),
           )
         else if (!hasAnyRecord)
-          SliverFillRemaining(
+          SiverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
