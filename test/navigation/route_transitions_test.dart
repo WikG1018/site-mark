@@ -177,22 +177,32 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(disableAnimations: true),
-        child: MaterialApp(
-          home: Builder(
-            builder: (context) => buildSharedAxisRouteTransition(
-              context: context,
-              animation: const AlwaysStoppedAnimation(0.5),
-              secondaryAnimation: const AlwaysStoppedAnimation(0.5),
-              child: const SizedBox(key: Key('reduced-motion-child')),
-            ),
+      MaterialApp(
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          );
+        },
+        home: Builder(
+          builder: (context) => buildSharedAxisRouteTransition(
+            context: context,
+            animation: const AlwaysStoppedAnimation(0.5),
+            secondaryAnimation: const AlwaysStoppedAnimation(0.5),
+            child: const SizedBox(key: Key('reduced-motion-child')),
           ),
         ),
       ),
     );
 
     expect(find.byKey(const Key('reduced-motion-child')), findsOneWidget);
-    expect(find.byType(FadeTransition), findsNothing);
+    // Short-circuit returns the child directly; no SharedAxis fade layer.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('reduced-motion-child')),
+        matching: find.byType(FadeTransition),
+      ),
+      findsNothing,
+    );
   });
 }

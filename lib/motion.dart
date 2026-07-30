@@ -1,4 +1,3 @@
-import 'package:flutter/animation.dart';
 import 'package:flutter/widgets.dart';
 
 abstract final class AppMotion {
