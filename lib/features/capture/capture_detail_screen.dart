@@ -18,10 +18,19 @@ final class CaptureDetailArguments {
   const CaptureDetailArguments({
     required this.capture,
     required this.initialImagePath,
+    this.siblingPaths,
+    this.siblingIndex,
   });
 
   final CaptureRecord capture;
   final String? initialImagePath;
+
+  /// Absolute image paths of adjacent captures (ordered). When provided the
+  /// fullscreen viewer can swipe left/right between them.
+  final List<String>? siblingPaths;
+
+  /// Index of the current capture inside [siblingPaths].
+  final int? siblingIndex;
 }
 
 /// Photo detail surface with explicit watermarked/original preview, file
@@ -48,12 +57,16 @@ class CaptureDetailScreen extends ConsumerStatefulWidget {
     required this.captureId,
     this.initialCapture,
     this.initialImagePath,
+    this.siblingPaths,
+    this.siblingIndex,
   });
 
   final String projectId;
   final String captureId;
   final CaptureRecord? initialCapture;
   final String? initialImagePath;
+  final List<String>? siblingPaths;
+  final int? siblingIndex;
 
   @override
   ConsumerState<CaptureDetailScreen> createState() =>
@@ -146,6 +159,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     source: effectiveSource,
                     heroDestination: heroTag != null,
                     initialImagePath: widget.initialImagePath,
+                    siblingPaths: widget.siblingPaths,
+                    siblingIndex: widget.siblingIndex,
                   ),
                 ),
               ),
