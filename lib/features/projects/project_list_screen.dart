@@ -5,6 +5,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
   const ProjectListScreen({super.key});
@@ -124,10 +125,17 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           stream: database.watchProjects(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              // The local database normally emits within one frame. Keeping
-              // this state visually empty avoids flashing a fabricated list
-              // with the wrong number of projects.
-              return const SizedBox.shrink();
+              // Fixed small number of skeleton cards. Never invent a real
+              // project count that would flash incorrect data.
+              return Skeletonizer(
+                key: const Key('project-list-skeleton'),
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                  itemCount: 5,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (_, _) => const _ProjectCardSkeleton(),
+                ),
+              );
             }
             final projects = snapshot.data!;
             if (projects.isEmpty) {
@@ -183,6 +191,29 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           icon: const Icon(Icons.add),
           label: Text(strings.newProject),
         ),
+      ),
+    );
+  }
+}
+
+/// Placeholder card used only by Skeletonizer while the first projects emit.
+/// Layout mirrors the real Card + ListTile so the cross-fade does not jump.
+class _ProjectCardSkeleton extends StatelessWidget {
+  const _ProjectCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: const CircleAvatar(child: Text('P')),
+        title: Text(
+          'Project Name Placeholder',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        subtitle: const Text('Local only'),
+        trailing: const Icon(Icons.chevron_right),
       ),
     );
   }
