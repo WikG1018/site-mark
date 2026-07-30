@@ -433,7 +433,10 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         transitionDuration: AppMotion.long2,
         reverseTransitionDuration: AppMotion.medium4,
         pageBuilder: (context, animation, secondaryAnimation) =>
-            CaptureFullscreenScreen(path: path, previewImage: previewImage),
+            CaptureFullscreenScreen.single(
+              path: path,
+              previewImage: previewImage,
+            ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final curved = CurvedAnimation(
             parent: animation,
