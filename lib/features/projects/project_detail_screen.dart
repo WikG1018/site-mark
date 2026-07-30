@@ -328,7 +328,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           ),
         ),
         if (!loadingCaptures && hasAnyRecord)
-          SiverToBoxAdapter(
+          SliverToBoxAdapter(
             child: CaptureDateFilterBar(
               filter: filter,
               summaries: allProjectSummaries,
@@ -336,12 +336,12 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           ),
         if (loadingCaptures)
-          const SiverFillRemaining(
+          const SliverFillRemaining(
             hasScrollBody: false,
             child: SizedBox.shrink(),
           )
         else if (!hasAnyRecord)
-          SiverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
@@ -351,7 +351,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           )
         else if (captures.isEmpty)
-          SiverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
@@ -361,9 +361,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           )
         else
-          SiverPadding(
+          SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-            sliver: SiverList.separated(
+            sliver: SliverList.separated(
               itemCount: captures.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
