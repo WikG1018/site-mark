@@ -210,7 +210,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   },
                   tooltip: editing ? strings.done : strings.editRecords,
                   icon: AnimatedSwitcher(
-                    duration: AppMotion.short4,
+                    duration: AppMotion.durationOf(context, AppMotion.short4),
                     child: Icon(
                       editing ? Icons.done : Icons.edit_outlined,
                       key: ValueKey(editing),
@@ -253,7 +253,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     },
                   ),
             bottomNavigationBar: AnimatedSwitcher(
-              duration: AppMotion.medium4,
+              duration: AppMotion.durationOf(context, AppMotion.medium4),
               transitionBuilder: (child, animation) {
                 final curved = animation.drive(
                   CurveTween(curve: AppMotion.emphasizedDecelerate),
@@ -278,7 +278,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   : const SizedBox.shrink(key: Key('batch-bar-empty')),
             ),
             floatingActionButton: AnimatedSwitcher(
-              duration: AppMotion.medium2,
+              duration: AppMotion.durationOf(context, AppMotion.medium2),
               switchInCurve: AppMotion.emphasized,
               switchOutCurve: AppMotion.emphasized,
               transitionBuilder: (child, animation) =>
@@ -310,8 +310,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   }) {
     final hasAnyRecord = allProjectSummaries.isNotEmpty;
     return CustomScrollView(
+      scrollCacheExtent: const ScrollCacheExtent.pixels(480),
       slivers: [
-        SliverToBoxAdapter(
+        SiverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
             child: _ProjectHeader(project: project),
@@ -327,7 +328,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           ),
         ),
         if (!loadingCaptures && hasAnyRecord)
-          SliverToBoxAdapter(
+          SiverToBoxAdapter(
             child: CaptureDateFilterBar(
               filter: filter,
               summaries: allProjectSummaries,
@@ -340,7 +341,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             child: SizedBox.shrink(),
           )
         else if (!hasAnyRecord)
-          SliverFillRemaining(
+          SiverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
@@ -350,7 +351,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           )
         else if (captures.isEmpty)
-          SliverFillRemaining(
+          SiverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
@@ -360,7 +361,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           )
         else
-          SliverPadding(
+          SiverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
             sliver: SliverList.separated(
               itemCount: captures.length,
