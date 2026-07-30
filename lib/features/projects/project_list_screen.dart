@@ -5,6 +5,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
   const ProjectListScreen({super.key});
@@ -103,7 +104,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                 tooltip: strings.searchProjects,
                 icon: AnimatedRotation(
                   turns: _searching ? 0.5 : 0,
-                  duration: AppMotion.short4,
+                  duration: AppMotion.durationOf(context, AppMotion.short4),
                   child: const Icon(Icons.search),
                 ),
               ),
@@ -124,10 +125,10 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           stream: database.watchProjects(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              // The local database normally emits within one frame. Keeping
-              // this state visually empty avoids flashing a fabricated list
-              // with the wrong number of projects.
-              return const SizedBox.shrink();
+              return const Skeletonizer(
+                key: Key('project-list-skeleton'),
+                child: _ProjectListSkeleton(),
+              );
             }
             final projects = snapshot.data!;
             if (projects.isEmpty) {
@@ -148,25 +149,30 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
             }
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+              cacheExtent: 480,
               itemCount: filtered.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final project = filtered[index];
-                return Card(
-                  clipBehavior: Clip.antiAlias,
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: CircleAvatar(
-                      child: Text(project.name.characters.first),
+                return RepaintBoundary(
+                  child: Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(16),
+                      leading: CircleAvatar(
+                        child: Text(project.name.characters.first),
+                      ),
+                      title: Text(
+                        project.name,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      subtitle: Text(project.description ?? strings.localOnly),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push(
+                        '/projects/${project.id}',
+                        extra: project,
+                      ),
                     ),
-                    title: Text(
-                      project.name,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    subtitle: Text(project.description ?? strings.localOnly),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () =>
-                        context.push('/projects/${project.id}', extra: project),
                   ),
                 );
               },
@@ -179,6 +185,34 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           label: Text(strings.newProject),
         ),
       ),
+    );
+  }
+}
+
+/// Placeholder list painted by [Skeletonizer] while the first projects emit is
+/// in flight. Mirrors the real card row so the cross-fade does not jump.
+class _ProjectListSkeleton extends StatelessWidget {
+  const _ProjectListSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      itemCount: 6,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final textTheme = Theme.of(context).textTheme;
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: const CircleAvatar(child: Text('P')),
+            title: Text('Project name', style: textTheme.titleMedium),
+            subtitle: Text('Local only description', style: textTheme.bodyMedium),
+            trailing: const Icon(Icons.chevron_right),
+          ),
+        );
+      },
     );
   }
 }
