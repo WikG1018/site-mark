@@ -148,7 +148,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
             }
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              scrollCacheExtent: 480,
+              scrollCacheExtent: const ScrollCacheExtent.pixels(480),
               itemCount: filtered.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
