@@ -312,7 +312,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     return CustomScrollView(
       scrollCacheExtent: const ScrollCacheExtent.pixels(480),
       slivers: [
-        SiverToBoxAdapter(
+        SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
             child: _ProjectHeader(project: project),
@@ -341,7 +341,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             child: SizedBox.shrink(),
           )
         else if (!hasAnyRecord)
-          SiverFillRemaining(
+          SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Text(
@@ -363,7 +363,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         else
           SiverPadding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-            sliver: SliverList.separated(
+            sliver: SiverList.separated(
               itemCount: captures.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
