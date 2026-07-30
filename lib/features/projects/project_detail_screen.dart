@@ -101,8 +101,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         .toList(growable: false);
   }
 
-  /// Best-effort sibling paths for fullscreen swipe.
-  /// Uses originalPath when available (most reliable on-disk path).
   List<String> _siblingPathsFor(List<CaptureSummary> captures) {
     return captures
         .map((s) => s.capture.originalPath)
@@ -319,13 +317,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     return CustomScrollView(
       scrollCacheExtent: const ScrollCacheExtent.pixels(480),
       slivers: [
-        Sli verToBoxAdapter(
+        SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
             child: _ProjectHeader(project: project),
           ),
         ),
-        Sli verToBoxAdapter(
+        SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
             child: Text(
