@@ -79,7 +79,7 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('home first frame does not paint fake project rows', (
+  testWidgets('home first frame shows Skeletonizer without real project cards', (
     tester,
   ) async {
     database = _ControlledProjectsDatabase();
@@ -101,7 +101,9 @@ void main() {
       ),
     );
 
-    expect(find.byType(Skeletonizer), findsNothing);
+    // Loading state must show Skeletonizer and must not paint real Cards
+    // (which would invent a wrong project count).
+    expect(find.byType(Skeletonizer), findsOneWidget);
     expect(find.byType(Card), findsNothing);
     await disposeApp(tester);
   });
