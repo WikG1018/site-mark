@@ -20,11 +20,12 @@ class CapturePhotoHero extends StatelessWidget {
   final String path;
   final Widget child;
 
-  /// Decode width shared by list → detail Hero flight.
+  /// Decode width shared by list → detail Hero flight and the detail
+  /// [heroDestination] endpoint so both hit the same [ResizeImage] cache key.
   ///
   /// Derived from the current screen width and device pixel ratio so low-end
-  /// / narrow devices do not pay for a full 2048 px decode during the flight,
-  /// while still matching the detail endpoint's cache key on typical phones.
+  /// / narrow devices do not pay for a full 2048 px decode, while still
+  /// covering typical phone detail widths. Clamped to [512, 2048].
   static int flightCacheWidth(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final dpr = MediaQuery.devicePixelRatioOf(context);

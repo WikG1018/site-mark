@@ -5,7 +5,6 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
   const ProjectListScreen({super.key});
@@ -125,10 +124,10 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           stream: database.watchProjects(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return const Skeletonizer(
-                key: Key('project-list-skeleton'),
-                child: _ProjectListSkeleton(),
-              );
+              // The local database normally emits within one frame. Keeping
+              // this state visually empty avoids flashing a fabricated list
+              // with the wrong number of projects.
+              return const SizedBox.shrink();
             }
             final projects = snapshot.data!;
             if (projects.isEmpty) {
@@ -185,34 +184,6 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           label: Text(strings.newProject),
         ),
       ),
-    );
-  }
-}
-
-/// Placeholder list painted by [Skeletonizer] while the first projects emit is
-/// in flight. Mirrors the real card row so the cross-fade does not jump.
-class _ProjectListSkeleton extends StatelessWidget {
-  const _ProjectListSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-      itemCount: 6,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final textTheme = Theme.of(context).textTheme;
-        return Card(
-          clipBehavior: Clip.antiAlias,
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: const CircleAvatar(child: Text('P')),
-            title: Text('Project name', style: textTheme.titleMedium),
-            subtitle: Text('Local only description', style: textTheme.bodyMedium),
-            trailing: const Icon(Icons.chevron_right),
-          ),
-        );
-      },
     );
   }
 }
