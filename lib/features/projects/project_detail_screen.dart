@@ -41,10 +41,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   late Future<Project?> _projectFuture;
   late Stream<List<CaptureSummary>> _captureSummariesStream;
 
-  /// Latest filtered captures emitted by the inner StreamBuilder. Updated
-  /// synchronously during build (no `setState`) so the AppBar's select-all
-  /// action and the bottom action bar can resolve status without an extra
-  /// async hop. Stays empty until the first emit.
   List<CaptureSummary> _latestCaptures = const [];
 
   @override
@@ -102,6 +98,15 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               summary.capture.status == CaptureStatus.failed,
         )
         .map((summary) => summary.capture.id)
+        .toList(growable: false);
+  }
+
+  /// Best-effort sibling paths for fullscreen swipe.
+  /// Uses originalPath when available (most reliable on-disk path).
+  List<String> _siblingPathsFor(List<CaptureSummary> captures) {
+    return captures
+        .map((s) => s.capture.originalPath)
+        .where((p) => p.isNotEmpty)
         .toList(growable: false);
   }
 
@@ -310,10 +315,11 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     bool loadingCaptures = false,
   }) {
     final hasAnyRecord = allProjectSummaries.isNotEmpty;
+    final siblingPaths = _siblingPathsFor(captures);
     return CustomScrollView(
       scrollCacheExtent: const ScrollCacheExtent.pixels(480),
       slivers: [
-        SliverToBoxAdapter(
+        Sli verToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
             child: _ProjectHeader(project: project),
@@ -329,7 +335,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           ),
         ),
         if (!loadingCaptures && hasAnyRecord)
-          SliverToBoxAdapter(
+          Sli verToBoxAdapter(
             child: CaptureDateFilterBar(
               filter: filter,
               summaries: allProjectSummaries,
@@ -383,6 +389,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               itemBuilder: (context, index) {
                 final summary = captures[index];
                 final id = summary.capture.id;
+                final siblingIndex = siblingPaths.indexOf(
+                  summary.capture.originalPath,
+                );
                 return CaptureRecordCard(
                   summary: summary,
                   selectionMode: _selectionController.editing,
@@ -392,9 +401,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       summary.capture.status == CaptureStatus.failed,
                   onSelectedChanged: (selected) {
                     if (selected && !_selectionController.editing) {
-                      // Long-press entry: the card reports a selection outside
-                      // selection mode, so enter editing and select it in one
-                      // step.
                       _selectionController.enterWithSelection(id);
                     } else {
                       _selectionController.toggle(id);
@@ -406,6 +412,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     extra: CaptureDetailArguments(
                       capture: summary.capture,
                       initialImagePath: initialImagePath,
+                      siblingPaths: siblingPaths.isEmpty ? null : siblingPaths,
+                      siblingIndex: siblingIndex >= 0 ? siblingIndex : null,
                     ),
                   ),
                 );
@@ -776,8 +784,6 @@ class _ProjectHeader extends StatelessWidget {
   }
 }
 
-/// Fixed-layout skeleton that matches CaptureRecordCard proportions.
-/// Used only while the first capture summaries are still loading.
 class _CaptureCardSkeleton extends StatelessWidget {
   const _CaptureCardSkeleton();
 
