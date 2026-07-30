@@ -1,3 +1,4 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -196,13 +197,6 @@ void main() {
     );
 
     expect(find.byKey(const Key('reduced-motion-child')), findsOneWidget);
-    // Short-circuit returns the child directly; no SharedAxis fade layer.
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('reduced-motion-child')),
-        matching: find.byType(FadeTransition),
-      ),
-      findsNothing,
-    );
+    expect(find.byType(SharedAxisTransition), findsNothing);
   });
 }
