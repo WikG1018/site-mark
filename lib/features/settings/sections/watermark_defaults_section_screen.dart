@@ -37,8 +37,10 @@ class _WatermarkDefaultsSectionScreenState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Position
-          Text(strings.watermarkPosition,
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            strings.watermarkPosition,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           SegmentedButton<String>(
             key: const Key('default-position-segmented'),
@@ -46,104 +48,128 @@ class _WatermarkDefaultsSectionScreenState
             segments: [
               ButtonSegment(
                 value: 'bottomLeft',
-                label: Text(strings.bottomLeft,
-                    key: const Key('default-position-bottomLeft')),
+                label: Text(
+                  strings.bottomLeft,
+                  key: const Key('default-position-bottomLeft'),
+                ),
               ),
               ButtonSegment(
                 value: 'bottomRight',
-                label: Text(strings.bottomRight,
-                    key: const Key('default-position-bottomRight')),
+                label: Text(
+                  strings.bottomRight,
+                  key: const Key('default-position-bottomRight'),
+                ),
               ),
             ],
             selected: {settings.defaultWatermarkPosition},
             onSelectionChanged: (selection) => ref
                 .read(appSettingControllerProvider.notifier)
-                .update((s) =>
-                    s.copyWith(defaultWatermarkPosition: selection.single)),
+                .update(
+                  (s) => s.copyWith(defaultWatermarkPosition: selection.single),
+                ),
           ),
           const SizedBox(height: 24),
           // Opacity slider (migrate _dragValue logic)
-          Builder(builder: (context) {
-            final opacity =
-                (_dragValue ?? settings.defaultWatermarkOpacity).clamp(0.20, 0.95);
-            final percent = (opacity * 100).round();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [
-                  Expanded(
-                    child: Text(strings.watermarkOpacity,
-                        style: Theme.of(context).textTheme.titleMedium),
+          Builder(
+            builder: (context) {
+              final opacity = (_dragValue ?? settings.defaultWatermarkOpacity)
+                  .clamp(0.20, 0.95);
+              final percent = (opacity * 100).round();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          strings.watermarkOpacity,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      Text('$percent%'),
+                    ],
                   ),
-                  Text('$percent%'),
-                ]),
-                Slider(
-                  key: const Key('opacity-slider'),
-                  value: opacity,
-                  min: 0.20,
-                  max: 0.95,
-                  divisions: 75,
-                  label: '$percent%',
-                  onChanged: (value) =>
-                      setState(() => _dragValue = value),
-                  onChangeEnd: (value) {
-                    ref
-                        .read(appSettingControllerProvider.notifier)
-                        .update((s) =>
-                            s.copyWith(defaultWatermarkOpacity: value));
-                    setState(() => _dragValue = null);
-                  },
-                ),
-              ],
-            );
-          }),
+                  Slider(
+                    key: const Key('opacity-slider'),
+                    value: opacity,
+                    min: 0.20,
+                    max: 0.95,
+                    divisions: 75,
+                    label: '$percent%',
+                    onChanged: (value) => setState(() => _dragValue = value),
+                    onChangeEnd: (value) {
+                      ref
+                          .read(appSettingControllerProvider.notifier)
+                          .update(
+                            (s) => s.copyWith(defaultWatermarkOpacity: value),
+                          );
+                      setState(() => _dragValue = null);
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 8),
-          Text(strings.opacityHint,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            strings.opacityHint,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 20),
           // Font scale slider (migrate _fontScaleDragValue logic)
-          Builder(builder: (context) {
-            final fontScale =
-                (_fontScaleDragValue ?? settings.defaultWatermarkFontScale)
-                    .clamp(0.80, 1.60);
-            final percent = (fontScale * 100).round();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [
-                  Expanded(
-                    child: Text(strings.watermarkFontSize,
-                        style: Theme.of(context).textTheme.titleMedium),
+          Builder(
+            builder: (context) {
+              final fontScale =
+                  (_fontScaleDragValue ?? settings.defaultWatermarkFontScale)
+                      .clamp(0.80, 1.60);
+              final percent = (fontScale * 100).round();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          strings.watermarkFontSize,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      Text('$percent%'),
+                    ],
                   ),
-                  Text('$percent%'),
-                ]),
-                Slider(
-                  key: const Key('default-font-scale-slider'),
-                  value: fontScale,
-                  min: 0.80,
-                  max: 1.60,
-                  divisions: 16,
-                  label: '$percent%',
-                  onChanged: (value) =>
-                      setState(() => _fontScaleDragValue = value),
-                  onChangeEnd: (value) {
-                    ref
-                        .read(appSettingControllerProvider.notifier)
-                        .update((s) =>
-                            s.copyWith(defaultWatermarkFontScale: value));
-                    setState(() => _fontScaleDragValue = null);
-                  },
-                ),
-              ],
-            );
-          }),
+                  Slider(
+                    key: const Key('default-font-scale-slider'),
+                    value: fontScale,
+                    min: 0.80,
+                    max: 1.60,
+                    divisions: 16,
+                    label: '$percent%',
+                    onChanged: (value) =>
+                        setState(() => _fontScaleDragValue = value),
+                    onChangeEnd: (value) {
+                      ref
+                          .read(appSettingControllerProvider.notifier)
+                          .update(
+                            (s) => s.copyWith(defaultWatermarkFontScale: value),
+                          );
+                      setState(() => _fontScaleDragValue = null);
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: 8),
-          Text(strings.fontScaleHint,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            strings.fontScaleHint,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 20),
           // Accent color
-          Text(strings.accentColor,
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            strings.accentColor,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 10,
@@ -158,8 +184,11 @@ class _WatermarkDefaultsSectionScreenState
                       settings.defaultWatermarkAccentColorArgb == swatch.argb,
                   onSelected: () => ref
                       .read(appSettingControllerProvider.notifier)
-                      .update((s) => s.copyWith(
-                          defaultWatermarkAccentColorArgb: swatch.argb)),
+                      .update(
+                        (s) => s.copyWith(
+                          defaultWatermarkAccentColorArgb: swatch.argb,
+                        ),
+                      ),
                 ),
             ],
           ),

@@ -34,7 +34,10 @@ class AppearanceSectionScreen extends ConsumerWidget {
             segments: [
               ButtonSegment(
                 value: 'system',
-                label: Text(strings.systemTheme, key: const Key('theme-system')),
+                label: Text(
+                  strings.systemTheme,
+                  key: const Key('theme-system'),
+                ),
               ),
               ButtonSegment(
                 value: 'light',
@@ -53,8 +56,10 @@ class AppearanceSectionScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           if (!settings.useDynamicColor) ...[
             const SizedBox(height: 12),
-            Text(strings.appThemeColor,
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              strings.appThemeColor,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 10,
@@ -68,8 +73,9 @@ class AppearanceSectionScreen extends ConsumerWidget {
                     selected: settings.appSeedColorArgb == swatch.argb,
                     onSelected: () => ref
                         .read(appSettingControllerProvider.notifier)
-                        .update((s) =>
-                            s.copyWith(appSeedColorArgb: swatch.argb)),
+                        .update(
+                          (s) => s.copyWith(appSeedColorArgb: swatch.argb),
+                        ),
                   ),
               ],
             ),

@@ -49,38 +49,42 @@ void main() {
       expect(PaintingBinding.instance.imageCache.currentSize, 0);
     });
 
-    test('trim level invokes release handlers without pausing background work',
-        () async {
-      final controller = MemoryPressureController();
+    test(
+      'trim level invokes release handlers without pausing background work',
+      () async {
+        final controller = MemoryPressureController();
 
-      final control = _RecordingBackgroundControl();
-      var releaseCalls = 0;
-      controller.attachBackground(control);
-      controller.attachRelease(() => releaseCalls++);
+        final control = _RecordingBackgroundControl();
+        var releaseCalls = 0;
+        controller.attachBackground(control);
+        controller.attachRelease(() => releaseCalls++);
 
-      await controller.dispatch(MemoryPressureLevel.trim);
+        await controller.dispatch(MemoryPressureLevel.trim);
 
-      // TRIM does NOT pause polling — lifecycle owns pause/resume. This
-      // prevents a forged or real TRIM from stalling foreground polling.
-      expect(control.pauseCalls, 0);
-      expect(releaseCalls, 1);
-    });
+        // TRIM does NOT pause polling — lifecycle owns pause/resume. This
+        // prevents a forged or real TRIM from stalling foreground polling.
+        expect(control.pauseCalls, 0);
+        expect(releaseCalls, 1);
+      },
+    );
 
-    test('kill level invokes kill hooks but does not pause background',
-        () async {
-      final controller = MemoryPressureController();
+    test(
+      'kill level invokes kill hooks but does not pause background',
+      () async {
+        final controller = MemoryPressureController();
 
-      final control = _RecordingBackgroundControl();
-      final hook = _RecordingKillHook();
-      controller.attachBackground(control);
-      controller.attachKillHook(hook);
+        final control = _RecordingBackgroundControl();
+        final hook = _RecordingKillHook();
+        controller.attachBackground(control);
+        controller.attachKillHook(hook);
 
-      await controller.dispatch(MemoryPressureLevel.kill);
+        await controller.dispatch(MemoryPressureLevel.kill);
 
-      // Kill does not pause background work; it only persists state.
-      expect(control.pauseCalls, 0);
-      expect(hook.persistCalls, 1);
-    });
+        // Kill does not pause background work; it only persists state.
+        expect(control.pauseCalls, 0);
+        expect(hook.persistCalls, 1);
+      },
+    );
 
     test('resumeBackgroundWork resumes all attached controls', () {
       final controller = MemoryPressureController();
@@ -123,20 +127,22 @@ void main() {
     // Tests for the separated operations (C1 fix: foreground pressure must
     // not pause polling, and backgrounding must pair pause + release).
 
-    test('pauseBackgroundWork pauses controls without releasing caches',
-        () async {
-      final controller = MemoryPressureController();
+    test(
+      'pauseBackgroundWork pauses controls without releasing caches',
+      () async {
+        final controller = MemoryPressureController();
 
-      final control = _RecordingBackgroundControl();
-      var releaseCalls = 0;
-      controller.attachBackground(control);
-      controller.attachRelease(() => releaseCalls++);
+        final control = _RecordingBackgroundControl();
+        var releaseCalls = 0;
+        controller.attachBackground(control);
+        controller.attachRelease(() => releaseCalls++);
 
-      controller.pauseBackgroundWork();
+        controller.pauseBackgroundWork();
 
-      expect(control.pauseCalls, 1);
-      expect(releaseCalls, 0);
-    });
+        expect(control.pauseCalls, 1);
+        expect(releaseCalls, 0);
+      },
+    );
 
     test('releaseResources clears caches without pausing controls', () async {
       final controller = MemoryPressureController();
@@ -182,9 +188,7 @@ void main() {
       await service.handlers.first(MemoryPressureLevel.trim, null);
 
       // The coordinator should have acked with success=true.
-      expect(service.acks, [
-        (MemoryPressureLevel.trim, true),
-      ]);
+      expect(service.acks, [(MemoryPressureLevel.trim, true)]);
     });
   });
 }
@@ -192,10 +196,7 @@ void main() {
 /// Creates a 1×1 [ui.Image] for seeding the image cache in tests.
 Future<ui.Image> _createTestImage() async {
   final recorder = ui.PictureRecorder();
-  ui.Canvas(recorder).drawColor(
-    const ui.Color(0xFFFFFFFF),
-    ui.BlendMode.src,
-  );
+  ui.Canvas(recorder).drawColor(const ui.Color(0xFFFFFFFF), ui.BlendMode.src);
   final picture = recorder.endRecording();
   final image = await picture.toImage(1, 1);
   picture.dispose();

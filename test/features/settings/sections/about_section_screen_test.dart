@@ -53,7 +53,7 @@ void main() {
     tester,
   ) async {
     await pumpScreen(tester);
-    expect(find.text('0.8.0+11'), findsOneWidget);
+    expect(find.text('0.8.1+12'), findsOneWidget);
   });
 
   testWidgets('about shows and opens the full GitHub repository URL', (

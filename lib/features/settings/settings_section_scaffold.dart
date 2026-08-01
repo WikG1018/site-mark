@@ -22,10 +22,7 @@ class SettingsSectionScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [body],
-      ),
+      body: ListView(padding: const EdgeInsets.all(20), children: [body]),
     );
   }
 }

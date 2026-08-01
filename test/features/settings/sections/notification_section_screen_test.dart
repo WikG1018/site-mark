@@ -30,7 +30,9 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(database),
-          completionNotificationServiceProvider.overrideWithValue(notifications),
+          completionNotificationServiceProvider.overrideWithValue(
+            notifications,
+          ),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),

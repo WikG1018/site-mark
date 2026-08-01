@@ -15,22 +15,22 @@ void main() {
     tempDir = await Directory.systemTemp.createTemp('draft_store_test_');
     TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (MethodCall call) async {
-        if (call.method == 'getApplicationDocumentsDirectory') {
-          return tempDir.path;
-        }
-        return null;
-      },
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (MethodCall call) async {
+            if (call.method == 'getApplicationDocumentsDirectory') {
+              return tempDir.path;
+            }
+            return null;
+          },
+        );
   });
 
   tearDown(() async {
     TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
     if (await tempDir.exists()) {
       await tempDir.delete(recursive: true);
     }
@@ -80,29 +80,36 @@ void main() {
       expect(await store.load('nonexistent-id'), isNull);
     });
 
-    test('path separators in projectId are sanitized to prevent directory traversal', () async {
-      final store = FileCaptureFormDraftStore();
-      const snapshot = CaptureFormDraftSnapshot(
-        projectId: 'a/b',
-        workLocation: 'Loc1',
-        workContent: 'Content1',
-        photographer: 'P1',
-        notes: 'N1',
-      );
+    test(
+      'path separators in projectId are sanitized to prevent directory traversal',
+      () async {
+        final store = FileCaptureFormDraftStore();
+        const snapshot = CaptureFormDraftSnapshot(
+          projectId: 'a/b',
+          workLocation: 'Loc1',
+          workContent: 'Content1',
+          photographer: 'P1',
+          notes: 'N1',
+        );
 
-      await store.save(snapshot);
+        await store.save(snapshot);
 
-      // Loading with the original key works.
-      final loaded = await store.load('a/b');
-      expect(loaded, isNotNull);
-      expect(loaded!.workLocation, 'Loc1');
+        // Loading with the original key works.
+        final loaded = await store.load('a/b');
+        expect(loaded, isNotNull);
+        expect(loaded!.workLocation, 'Loc1');
 
-      // The file is written directly under the docs directory with
-      // separators replaced — no subdirectory is created.
-      final files = tempDir.listSync().whereType<File>().map((f) => f.path).toList();
-      expect(files.length, 1);
-      expect(files.first, contains('kill_form_draft_a_b.json'));
-    });
+        // The file is written directly under the docs directory with
+        // separators replaced — no subdirectory is created.
+        final files = tempDir
+            .listSync()
+            .whereType<File>()
+            .map((f) => f.path)
+            .toList();
+        expect(files.length, 1);
+        expect(files.first, contains('kill_form_draft_a_b.json'));
+      },
+    );
 
     test('corrupt file content returns null instead of throwing', () async {
       final store = FileCaptureFormDraftStore();

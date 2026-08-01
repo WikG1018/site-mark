@@ -6,6 +6,7 @@ Stream<T> watchWithConditionalPolling<T>({
   required bool Function(T value) shouldPoll,
   bool Function(T previous, T next)? equals,
   Duration pollInterval = const Duration(seconds: 1),
+
   /// When true, the polling timer is stopped and stays stopped until the
   /// callback returns false again. Used by [AppDatabase.setPollingPaused] to
   /// suspend background polling while the app is backgrounded (ITGSA fair

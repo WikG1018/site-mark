@@ -28,7 +28,10 @@ class LanguageSectionScreen extends ConsumerWidget {
         segments: [
           ButtonSegment(
             value: null,
-            label: Text(strings.systemLanguage, key: const Key('language-system')),
+            label: Text(
+              strings.systemLanguage,
+              key: const Key('language-system'),
+            ),
           ),
           ButtonSegment(
             value: 'zh',
@@ -44,7 +47,9 @@ class LanguageSectionScreen extends ConsumerWidget {
         },
         onSelectionChanged: (selection) => ref
             .read(appSettingControllerProvider.notifier)
-            .update((s) => s.copyWith(localeCode: Value(selection.single ?? ''))),
+            .update(
+              (s) => s.copyWith(localeCode: Value(selection.single ?? '')),
+            ),
       ),
     );
   }

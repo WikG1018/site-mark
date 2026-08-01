@@ -9,6 +9,14 @@ plugins {
 
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
+val requireReleaseSigning = providers.gradleProperty("requireReleaseSigning")
+    .orNull
+    .equals("true", ignoreCase = true)
+if (requireReleaseSigning && !keystorePropertiesFile.exists()) {
+    throw GradleException(
+        "Release signing is required, but android/key.properties is missing",
+    )
+}
 if (keystorePropertiesFile.exists()) {
     FileInputStream(keystorePropertiesFile).use(keystoreProperties::load)
 }
