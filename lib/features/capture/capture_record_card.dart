@@ -46,6 +46,7 @@ class CaptureRecordCard extends ConsumerStatefulWidget {
     this.selected = false,
     this.selectable = true,
     this.onSelectedChanged,
+    this.searchTerms,
   });
 
   final CaptureSummary summary;
@@ -55,6 +56,7 @@ class CaptureRecordCard extends ConsumerStatefulWidget {
   final bool selected;
   final bool selectable;
   final ValueChanged<bool>? onSelectedChanged;
+  final List<String>? searchTerms;
 
   @override
   ConsumerState<CaptureRecordCard> createState() => _CaptureRecordCardState();
@@ -105,6 +107,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     final strings = AppStrings.of(context);
     final capture = widget.summary.capture;
     final (label, icon, color) = _statusPresentation(capture.status, strings);
+    final searchSnippet = _searchSnippet(capture, strings);
     final VoidCallback? cardTap = widget.selectionMode
         ? widget.selectable
               ? () {
@@ -236,6 +239,18 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                       capture.photographer,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    if (searchSnippet != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        searchSnippet,
+                        key: const Key('capture-search-snippet'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ],
                     if (capture.failureReason != null) ...[
                       const SizedBox(height: 4),
                       Text(
@@ -284,6 +299,31 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
       OriginalPhotoState.cleared => strings.originalCleared,
       OriginalPhotoState.missing => strings.originalMissing,
     };
+  }
+
+  String? _searchSnippet(CaptureRecord capture, AppStrings strings) {
+    final terms = widget.searchTerms
+        ?.map((term) => term.trim().toLowerCase())
+        .where((term) => term.isNotEmpty)
+        .toList(growable: false);
+    if (terms == null || terms.isEmpty) return null;
+
+    bool matches(String? value) {
+      if (value == null || value.isEmpty) return false;
+      final normalized = value.toLowerCase();
+      return terms.any(normalized.contains);
+    }
+
+    if (matches(capture.notes)) {
+      return strings.captureSearchNotes(capture.notes!);
+    }
+    if (matches(capture.address)) {
+      return strings.captureSearchAddress(capture.address!);
+    }
+    if (matches(capture.photoNumber)) {
+      return strings.captureSearchPhotoNumber(capture.photoNumber!);
+    }
+    return null;
   }
 
   (String, IconData, Color) _statusPresentation(

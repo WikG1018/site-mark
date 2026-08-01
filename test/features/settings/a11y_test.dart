@@ -6,37 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
-import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
-
-CaptureRecord _record({required String id, required DateTime capturedAt}) {
-  return CaptureRecord(
-    id: id,
-    projectId: 'project-1',
-    photoNumber: 'SM-$id',
-    workLocation: 'A 区',
-    workContent: '风管',
-    photographer: '张工',
-    originalPath: '/private/$id.jpg',
-    status: CaptureStatus.ready,
-    createdAt: capturedAt,
-    capturedAt: capturedAt,
-    processingAttempts: 0,
-    watermarkLocaleCode: 'zh',
-    locationResolution: 'resolved',
-  );
-}
-
-CaptureSummary _summary({required String id, required DateTime capturedAt}) {
-  return CaptureSummary(
-    capture: _record(id: id, capturedAt: capturedAt),
-    projectName: '东区厂房改造',
-  );
-}
 
 void main() {
   testWidgets('global settings screen meets the Android tap target guideline', (
@@ -74,11 +49,11 @@ void main() {
   testWidgets('capture date filter bar meets the Android tap target '
       'guideline', (tester) async {
     final filter = ValueNotifier(const CaptureFilter());
-    final summaries = [
-      _summary(id: 'a', capturedAt: DateTime(2025, 6, 1, 9)),
-      _summary(id: 'b', capturedAt: DateTime(2026, 7, 16, 9)),
-      _summary(id: 'c', capturedAt: DateTime(2026, 8, 2, 9)),
-    ];
+    const options = CaptureDateOptions(
+      years: [2025, 2026],
+      months: [6, 7, 8],
+      days: [1, 2, 16],
+    );
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('zh'),
@@ -95,7 +70,7 @@ void main() {
             builder: (context, value, _) {
               return CaptureDateFilterBar(
                 filter: value,
-                summaries: summaries,
+                options: options,
                 onChanged: (next) => filter.value = next,
               );
             },
