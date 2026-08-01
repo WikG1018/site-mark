@@ -56,6 +56,7 @@ String escapeLikeLiteral(String value) =>
 final class CaptureQueryRepository implements CaptureQuerySource {
   CaptureQueryRepository(this._database);
 
+  static const _selectionIdChunkSize = 900;
   static const _summarySelect = '''
 SELECT c.*, p.name AS project_name
 FROM captures AS c
@@ -210,16 +211,35 @@ ORDER BY value ASC
   }
 
   @override
-  Future<CaptureSelectionSnapshot> inspectSelection(Set<String> ids) {
+  Future<CaptureSelectionSnapshot> inspectSelection(Set<String> ids) async {
     if (ids.isEmpty) {
-      return Future.value(
-        const CaptureSelectionSnapshot(ids: {}, allReady: false),
-      );
+      return const CaptureSelectionSnapshot(ids: {}, allReady: false);
     }
-    final placeholders = List.filled(ids.length, '?').join(', ');
-    return _loadSelection(
-      clauses: ['p.restore_operation_id IS NULL', 'c.id IN ($placeholders)'],
-      variables: ids.map(Variable<String>.new).toList(growable: false),
+    final selectedIds = ids.toList(growable: false);
+    final eligibleIds = <String>{};
+    var everyEligibleRowReady = true;
+    for (
+      var start = 0;
+      start < selectedIds.length;
+      start += _selectionIdChunkSize
+    ) {
+      final end = start + _selectionIdChunkSize < selectedIds.length
+          ? start + _selectionIdChunkSize
+          : selectedIds.length;
+      final chunk = selectedIds.sublist(start, end);
+      final placeholders = List.filled(chunk.length, '?').join(', ');
+      final snapshot = await _loadSelection(
+        clauses: ['p.restore_operation_id IS NULL', 'c.id IN ($placeholders)'],
+        variables: chunk.map(Variable<String>.new).toList(growable: false),
+      );
+      eligibleIds.addAll(snapshot.ids);
+      if (snapshot.ids.isNotEmpty && !snapshot.allReady) {
+        everyEligibleRowReady = false;
+      }
+    }
+    return CaptureSelectionSnapshot(
+      ids: eligibleIds,
+      allReady: eligibleIds.isNotEmpty && everyEligibleRowReady,
     );
   }
 

@@ -432,6 +432,37 @@ void main() {
   });
 
   test(
+    'loadSelectable returns every eligible row beyond the first page',
+    () async {
+      final selectable = await repository.loadSelectable(
+        const CaptureListQuery(filter: CaptureFilter(projectId: 'bulk')),
+      );
+
+      expect(selectable.ids, hasLength(10000));
+      expect(selectable.ids, containsAll(['bulk-00000', 'bulk-09999']));
+      expect(selectable.allReady, isTrue);
+    },
+  );
+
+  test(
+    'inspectSelection handles more IDs than one SQLite variable batch',
+    () async {
+      final selectedIds = {
+        for (var index = 0; index < 40000; index++)
+          index < 10000
+              ? 'bulk-${index.toString().padLeft(5, '0')}'
+              : 'stale-${index.toString().padLeft(5, '0')}',
+      };
+
+      final inspected = await repository.inspectSelection(selectedIds);
+
+      expect(inspected.ids, hasLength(10000));
+      expect(inspected.ids, containsAll(['bulk-00000', 'bulk-09999']));
+      expect(inspected.allReady, isTrue);
+    },
+  );
+
+  test(
     'loads the nearest newer and older adjacent rows in list order',
     () async {
       const query = CaptureListQuery(
