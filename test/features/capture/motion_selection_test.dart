@@ -487,6 +487,67 @@ void main() {
     await disposeTree(tester);
   });
 
+  testWidgets('confirmed delete survives batch bar disposal', (tester) async {
+    final media = _RecordingDeleteMediaService(
+      database: database,
+      result: Future.value(
+        const CaptureActionResult(
+          succeededIds: ['capture-0'],
+          skippedIds: [],
+          failures: {},
+        ),
+      ),
+    );
+    final controller = CaptureSelectionController()
+      ..enter()
+      ..replaceAll(const ['capture-0'], allReady: true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => Scaffold(
+            bottomNavigationBar: controller.selectedIds.isEmpty
+                ? null
+                : CaptureBatchActionBar(
+                    controller: controller,
+                    mediaService: media,
+                    exportService: buildTestExportService(database),
+                    shareService: _TestShareService(),
+                  ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 张照片'), findsOneWidget);
+
+    controller.replaceAll(const [], allReady: false);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(media.deleteCalls, [
+      ['capture-0'],
+    ]);
+    await disposeTree(tester);
+  });
+
   // ─── Test 6: 骨架屏存在性 ──────────────────────────────────────────────
   testWidgets(
     'Skeletonizer pattern shows placeholder before stream data arrives',

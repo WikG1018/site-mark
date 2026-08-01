@@ -55,36 +55,47 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
 
   List<String> get _selectedIds => widget.controller.selectedIds.toList();
 
-  Future<void> _runWithProgress(
+  Future<void> _runSnapshotWithProgress(
     String snackbarTitle,
+    List<String> ids,
     Future<CaptureActionResult> Function(List<String> ids) op, {
-    List<String>? overrideIds,
+    required ScaffoldMessengerState? messenger,
+    required AppStrings strings,
+    required CaptureSelectionController controller,
   }) async {
-    final ids = overrideIds ?? _selectedIds;
-    if (ids.isEmpty) return;
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    setState(() {
-      _busy = true;
-      _exporting = false;
-      _completed = 0;
-      _total = ids.length;
-    });
+    final snapshot = List<String>.unmodifiable(ids);
+    if (snapshot.isEmpty) return;
+    if (mounted) {
+      setState(() {
+        _busy = true;
+        _exporting = false;
+        _completed = 0;
+        _total = snapshot.length;
+      });
+    }
     var succeeded = 0;
     var skipped = 0;
     var failed = 0;
     try {
-      for (var i = 0; i < ids.length; i++) {
-        final result = await op([ids[i]]);
+      for (var i = 0; i < snapshot.length; i++) {
+        final result = await op([snapshot[i]]);
         succeeded += result.succeededIds.length;
         skipped += result.skippedIds.length;
         failed += result.failures.length;
-        if (!mounted) return;
-        setState(() => _completed = i + 1);
+        if (mounted) setState(() => _completed = i + 1);
       }
     } catch (error) {
-      failed += ids.length;
+      failed += snapshot.length;
       if (mounted) {
-        _showResult(messenger, snackbarTitle, succeeded, skipped, failed);
+        _showResult(
+          messenger,
+          strings,
+          controller,
+          snackbarTitle,
+          succeeded,
+          skipped,
+          failed,
+        );
       }
       return;
     } finally {
@@ -98,19 +109,28 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
       }
     }
     if (mounted) {
-      _showResult(messenger, snackbarTitle, succeeded, skipped, failed);
+      _showResult(
+        messenger,
+        strings,
+        controller,
+        snackbarTitle,
+        succeeded,
+        skipped,
+        failed,
+      );
     }
   }
 
   void _showResult(
     ScaffoldMessengerState? messenger,
+    AppStrings strings,
+    CaptureSelectionController controller,
     String title,
     int succeeded,
     int skipped,
     int failed,
   ) {
     if (messenger == null) return;
-    final strings = AppStrings.of(context);
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -118,13 +138,18 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         ),
         action: SnackBarAction(
           label: strings.viewAction,
-          onPressed: () => widget.controller.exit(),
+          onPressed: controller.exit,
         ),
       ),
     );
   }
 
-  Future<bool?> _confirm(String title, String message) {
+  Future<bool?> _confirm(
+    String title,
+    String message, {
+    required String cancelLabel,
+    required String deleteLabel,
+  }) {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -133,7 +158,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(AppStrings.of(context).cancel),
+            child: Text(cancelLabel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -143,7 +168,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
               HapticFeedback.heavyImpact();
               Navigator.pop(dialogContext, true);
             },
-            child: Text(AppStrings.of(context).deleteAction),
+            child: Text(deleteLabel),
           ),
         ],
       ),
@@ -152,7 +177,10 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
 
   Future<void> _export() async {
     final ids = _selectedIds;
-    if (ids.isEmpty || !widget.controller.allSelectedReady) return;
+    final controller = widget.controller;
+    if (ids.isEmpty || !controller.allSelectedReady) return;
+    final exportService = widget.exportService;
+    final shareService = widget.shareService;
     final strings = AppStrings.of(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() {
@@ -162,17 +190,33 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
       _total = 1;
     });
     try {
-      final result = await widget.exportService.exportSelection(
+      final result = await exportService.exportSelection(
         captureIds: ids,
         includeOriginals: false,
       );
-      await widget.shareService.shareFile(result.outputZipPath);
+      await shareService.shareFile(result.outputZipPath);
       if (mounted) {
-        _showResult(messenger, strings.exportSelection, ids.length, 0, 0);
+        _showResult(
+          messenger,
+          strings,
+          controller,
+          strings.exportSelection,
+          ids.length,
+          0,
+          0,
+        );
       }
     } catch (error) {
       if (mounted) {
-        _showResult(messenger, strings.exportSelection, 0, 0, ids.length);
+        _showResult(
+          messenger,
+          strings,
+          controller,
+          strings.exportSelection,
+          0,
+          0,
+          ids.length,
+        );
       }
     } finally {
       if (mounted) {
@@ -187,11 +231,19 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   }
 
   Future<void> _republish() async {
-    if (!widget.controller.allSelectedReady) return;
+    final controller = widget.controller;
+    if (!controller.allSelectedReady) return;
+    final ids = _selectedIds;
+    final mediaService = widget.mediaService;
     final strings = AppStrings.of(context);
-    await _runWithProgress(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    await _runSnapshotWithProgress(
       strings.saveToGallery,
-      (ids) => widget.mediaService.republish(ids),
+      ids,
+      mediaService.republish,
+      messenger: messenger,
+      strings: strings,
+      controller: controller,
     );
   }
 
@@ -224,31 +276,45 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
 
   Future<void> _executeClearOriginals(List<String> ids) async {
     if (!mounted) return;
+    final controller = widget.controller;
+    final mediaService = widget.mediaService;
     final strings = AppStrings.of(context);
-    await _runWithProgress(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    await _runSnapshotWithProgress(
       strings.clearOriginals,
-      (ids) => widget.mediaService.clearOriginals(ids),
-      overrideIds: ids,
+      ids,
+      mediaService.clearOriginals,
+      messenger: messenger,
+      strings: strings,
+      controller: controller,
     );
     // Exit selection mode so the cleared state is visible in the cards.
-    if (mounted) widget.controller.exit();
+    if (mounted) controller.exit();
   }
 
   Future<void> _deleteAll() async {
     final ids = _selectedIds;
     if (ids.isEmpty) return;
+    final controller = widget.controller;
+    final mediaService = widget.mediaService;
     final strings = AppStrings.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final confirmed = await _confirm(
       strings.deleteAll,
       strings.confirmDeleteAll(ids.length),
+      cancelLabel: strings.cancel,
+      deleteLabel: strings.deleteAction,
     );
     if (confirmed != true) return;
-    await _runWithProgress(
+    await _runSnapshotWithProgress(
       strings.deleteAll,
-      (ids) => widget.mediaService.deleteAll(ids),
-      overrideIds: ids,
+      ids,
+      mediaService.deleteAll,
+      messenger: messenger,
+      strings: strings,
+      controller: controller,
     );
-    widget.controller.exit();
+    if (mounted) controller.exit();
   }
 
   @override
