@@ -1,22 +1,28 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/capture_filter.dart';
-import 'package:sitemark/domain/capture_summary_filter.dart';
+import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
+import 'package:sitemark/features/capture/capture_paged_list.dart';
+import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
+import 'package:sitemark/features/capture/capture_search_field.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
-import 'package:skeletonizer/skeletonizer.dart';
 
 enum _ProjectAction { rename, delete }
 
@@ -25,10 +31,12 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
     super.key,
     required this.projectId,
     this.initialProject,
+    this.querySource,
   });
 
   final String projectId;
   final Project? initialProject;
+  final CaptureQuerySource? querySource;
 
   @override
   ConsumerState<ProjectDetailScreen> createState() =>
@@ -37,17 +45,29 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
 
 class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   CaptureFilter? _filter;
+  String _searchText = '';
+  bool _searching = false;
+  CaptureDateOptions _dateOptions = const CaptureDateOptions();
+  int _dateOptionsGeneration = 0;
+  int _selectionGeneration = 0;
+  bool _selectAllLoading = false;
+  bool _allQuerySelected = false;
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
   late Future<Project?> _projectFuture;
-  late Stream<List<CaptureSummary>> _captureSummariesStream;
-
-  List<CaptureSummary> _latestCaptures = const [];
+  late final CaptureQuerySource _querySource;
+  late final CapturePagerController _pagerController;
 
   @override
   void initState() {
     super.initState();
+    _querySource =
+        widget.querySource ?? ref.read(captureQueryRepositoryProvider);
+    _pagerController = CapturePagerController(_querySource, pageSize: 50);
     _loadPageData();
+    unawaited(_pagerController.setQuery(_query));
+    unawaited(_loadDateOptions(_query));
+    _pagerController.addListener(_onPagerChanged);
     _selectionController.addListener(_onSelectionChanged);
   }
 
@@ -56,25 +76,40 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.projectId != widget.projectId) {
       _filter = null;
-      _latestCaptures = const [];
+      _searchText = '';
+      _searching = false;
+      _invalidateSelectionRequests();
+      _selectionController.clearForFilterChange();
       _loadPageData();
+      _startQuery();
     }
   }
 
   void _loadPageData() {
-    final database = ref.read(databaseProvider);
-    _projectFuture = database.projectById(widget.projectId);
-    _captureSummariesStream = database.watchCaptureSummaries(
-      CaptureFilter(projectId: widget.projectId),
-    );
+    _projectFuture = ref.read(databaseProvider).projectById(widget.projectId);
+  }
+
+  void _onPagerChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onSelectionChanged() {
+    if (!_selectionController.editing) {
+      _selectionGeneration++;
+      _selectAllLoading = false;
+      _allQuerySelected = false;
+    } else if (_selectionController.selectedIds.isEmpty) {
+      _allQuerySelected = false;
+    }
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _dateOptionsGeneration++;
+    _selectionGeneration++;
+    _pagerController.removeListener(_onPagerChanged);
+    _pagerController.dispose();
     _selectionController.removeListener(_onSelectionChanged);
     _selectionController.dispose();
     super.dispose();
@@ -84,22 +119,118 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       _filter?.selectProject(widget.projectId) ??
       CaptureFilter(projectId: widget.projectId);
 
-  void _onFilterChanged(CaptureFilter next) {
-    setState(() {
-      _filter = next;
-      _selectionController.clearForFilterChange();
-    });
+  CaptureListQuery get _query =>
+      CaptureListQuery(filter: _filterForProject(), searchText: _searchText);
+
+  Future<void> _loadDateOptions(CaptureListQuery query) async {
+    final generation = ++_dateOptionsGeneration;
+    try {
+      final options = await _querySource.loadDateOptions(query);
+      if (!mounted || generation != _dateOptionsGeneration) return;
+      setState(() => _dateOptions = options);
+    } catch (_) {
+      if (!mounted || generation != _dateOptionsGeneration) return;
+      setState(() => _dateOptions = const CaptureDateOptions());
+    }
   }
 
-  List<String> _selectableIds(List<CaptureSummary> captures) {
-    return captures
-        .where(
-          (summary) =>
-              summary.capture.status == CaptureStatus.ready ||
-              summary.capture.status == CaptureStatus.failed,
-        )
-        .map((summary) => summary.capture.id)
-        .toList(growable: false);
+  void _startQuery() {
+    final query = _query;
+    unawaited(_pagerController.setQuery(query));
+    unawaited(_loadDateOptions(query));
+  }
+
+  void _onFilterChanged(CaptureFilter next) {
+    _invalidateSelectionRequests();
+    setState(() => _filter = next);
+    _selectionController.clearForFilterChange();
+    _startQuery();
+  }
+
+  void _onSearchChanged(String value) {
+    _invalidateSelectionRequests();
+    _searchText = value;
+    _selectionController.clearForFilterChange();
+    _startQuery();
+  }
+
+  void _exitSearch() {
+    final clearQuery = _searchText.isNotEmpty;
+    _invalidateSelectionRequests();
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() {
+      _searching = false;
+      if (clearQuery) _searchText = '';
+    });
+    if (clearQuery) {
+      _selectionController.clearForFilterChange();
+      _startQuery();
+    }
+  }
+
+  void _invalidateSelectionRequests() {
+    _selectionGeneration++;
+    _selectAllLoading = false;
+    _allQuerySelected = false;
+  }
+
+  Future<void> _toggleSelectAll() async {
+    if (!_selectionController.editing || _selectAllLoading) return;
+    final generation = ++_selectionGeneration;
+    final query = _query;
+    setState(() => _selectAllLoading = true);
+    try {
+      final snapshot = await _querySource.loadSelectable(query);
+      if (!mounted || generation != _selectionGeneration) return;
+      _selectAllLoading = false;
+      _selectionController.toggleAllSnapshot(snapshot);
+      _allQuerySelected =
+          snapshot.ids.isNotEmpty &&
+          _selectionController.selectedIds.length == snapshot.ids.length &&
+          snapshot.ids.every(_selectionController.selectedIds.contains);
+    } catch (_) {
+      if (!mounted || generation != _selectionGeneration) return;
+      setState(() => _selectAllLoading = false);
+      _showSelectionRetry(() => unawaited(_toggleSelectAll()));
+    }
+  }
+
+  Future<void> _inspectSelection() async {
+    if (!_selectionController.editing) return;
+    final ids = _selectionController.selectedIds;
+    if (ids.isEmpty) return;
+    final generation = ++_selectionGeneration;
+    try {
+      final snapshot = await _querySource.inspectSelection(ids);
+      if (!mounted || generation != _selectionGeneration) return;
+      _selectionController.replaceAll(
+        snapshot.ids,
+        allReady: snapshot.allReady,
+      );
+    } catch (_) {
+      if (!mounted || generation != _selectionGeneration) return;
+      _showSelectionRetry(() => unawaited(_inspectSelection()));
+    }
+  }
+
+  void _showSelectionRetry(VoidCallback retry) {
+    final strings = AppStrings.of(context);
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(strings.captureListLoadFailed),
+        action: SnackBarAction(label: strings.retry, onPressed: retry),
+      ),
+    );
+  }
+
+  void _toggleSelection(String id, bool selected) {
+    _invalidateSelectionRequests();
+    if (selected && !_selectionController.editing) {
+      _selectionController.enterWithSelection(id);
+    } else {
+      _selectionController.toggle(id);
+    }
+    unawaited(_inspectSelection());
   }
 
   @override
@@ -107,14 +238,17 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     final strings = AppStrings.of(context);
     final filter = _filterForProject();
     final editing = _selectionController.editing;
-    final allEligibleSelected = _selectionController.allSelected(
-      _selectableIds(_latestCaptures),
-    );
+    final allEligibleSelected =
+        _allQuerySelected && _selectionController.selectedIds.isNotEmpty;
     return PopScope(
-      canPop: !editing,
+      canPop: !editing && !_searching,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _selectionController.editing) {
+        if (didPop) return;
+        if (_selectionController.editing) {
+          _invalidateSelectionRequests();
           _selectionController.exit();
+        } else if (_searching) {
+          _exitSearch();
         }
       },
       child: FutureBuilder<Project?>(
@@ -122,11 +256,45 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         initialData: widget.initialProject,
         builder: (context, projectSnapshot) {
           final project = projectSnapshot.data;
+          final waitingForProject =
+              project == null &&
+              projectSnapshot.connectionState != ConnectionState.done;
+          final projectLoadFailed = project == null && projectSnapshot.hasError;
+          final projectMissing =
+              project == null && !waitingForProject && !projectLoadFailed;
+          final title =
+              project?.name ??
+              (projectLoadFailed
+                  ? strings.projectLoadFailed
+                  : projectMissing
+                  ? strings.projectNotFound
+                  : strings.appName);
           return Scaffold(
             appBar: AppBar(
-              title: Text(project?.name ?? strings.appName),
+              title: AnimatedSwitcher(
+                key: const Key('capture-search-title-switcher'),
+                duration: AppMotion.durationOf(context, AppMotion.short4),
+                layoutBuilder: (currentChild, previousChildren) => Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [...previousChildren, ?currentChild],
+                ),
+                child: project != null && _searching
+                    ? CaptureSearchField(
+                        key: const ValueKey('capture-search-title'),
+                        initialText: _searchText,
+                        onChanged: _onSearchChanged,
+                      )
+                    : Text(title, key: const ValueKey('capture-list-title')),
+              ),
               actions: [
-                if (project != null && !editing) ...[
+                if (project != null && !_searching && !editing)
+                  IconButton(
+                    key: const Key('search-captures'),
+                    onPressed: () => setState(() => _searching = true),
+                    tooltip: strings.searchCaptures,
+                    icon: const Icon(Icons.search),
+                  ),
+                if (project != null && !editing && !_searching) ...[
                   IconButton(
                     onPressed: () =>
                         context.push('/projects/${project.id}/settings'),
@@ -185,76 +353,62 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     ],
                   ),
                 ],
-                if (editing)
+                if (project != null && editing)
                   IconButton(
                     key: const Key('select-all-captures'),
-                    onPressed: () {
-                      _selectionController.toggleAll(
-                        _selectableIds(_latestCaptures),
-                      );
-                    },
+                    onPressed: _selectAllLoading ? null : _toggleSelectAll,
                     tooltip: allEligibleSelected
                         ? strings.deselectAll
                         : strings.selectAll,
-                    icon: Icon(
-                      allEligibleSelected
-                          ? Icons.check_box_outline_blank
-                          : Icons.select_all_outlined,
+                    icon: _selectAllLoading
+                        ? const SizedBox.square(
+                            key: Key('select-all-progress'),
+                            dimension: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            allEligibleSelected
+                                ? Icons.check_box_outline_blank
+                                : Icons.select_all_outlined,
+                          ),
+                  ),
+                if (project != null)
+                  IconButton(
+                    key: const Key('edit-captures'),
+                    onPressed: () {
+                      if (_selectionController.editing) {
+                        _invalidateSelectionRequests();
+                        _selectionController.exit();
+                      } else {
+                        _selectionController.enter();
+                      }
+                    },
+                    tooltip: editing ? strings.done : strings.editRecords,
+                    icon: AnimatedSwitcher(
+                      duration: AppMotion.durationOf(context, AppMotion.short4),
+                      child: Icon(
+                        editing ? Icons.done : Icons.edit_outlined,
+                        key: ValueKey(editing),
+                      ),
                     ),
                   ),
-                IconButton(
-                  key: const Key('edit-captures'),
-                  onPressed: () {
-                    if (_selectionController.editing) {
-                      _selectionController.exit();
-                    } else {
-                      _selectionController.enter();
-                    }
-                  },
-                  tooltip: editing ? strings.done : strings.editRecords,
-                  icon: AnimatedSwitcher(
-                    duration: AppMotion.durationOf(context, AppMotion.short4),
-                    child: Icon(
-                      editing ? Icons.done : Icons.edit_outlined,
-                      key: ValueKey(editing),
-                    ),
-                  ),
-                ),
               ],
             ),
-            body: project == null
-                ? const SizedBox.shrink()
-                : StreamBuilder<List<CaptureSummary>>(
-                    stream: _captureSummariesStream,
-                    builder: (context, captureSnapshot) {
-                      final allProjectSummaries = captureSnapshot.data;
-                      final captures = allProjectSummaries == null
-                          ? null
-                          : filterCaptureSummaries(allProjectSummaries, filter);
-                      if (captures != null) {
-                        _latestCaptures = captures;
-                      }
-                      if (captures == null) {
-                        return _projectCaptureList(
-                          context,
-                          strings,
-                          project,
-                          filter,
-                          const [],
-                          const [],
-                          loadingCaptures: true,
-                        );
-                      }
-                      return _projectCaptureList(
-                        context,
-                        strings,
-                        project,
-                        filter,
-                        allProjectSummaries!,
-                        captures,
-                      );
-                    },
-                  ),
+            body: waitingForProject
+                ? _projectLoadingList(strings)
+                : projectLoadFailed
+                ? _ProjectUnavailableState(
+                    key: const Key('project-load-error'),
+                    icon: Icons.cloud_off_outlined,
+                    message: strings.projectLoadFailed,
+                  )
+                : projectMissing
+                ? _ProjectUnavailableState(
+                    key: const Key('project-not-found'),
+                    icon: Icons.folder_off_outlined,
+                    message: strings.projectNotFound,
+                  )
+                : _projectCaptureList(context, strings, project!, filter),
             bottomNavigationBar: AnimatedSwitcher(
               duration: AppMotion.durationOf(context, AppMotion.medium4),
               transitionBuilder: (child, animation) {
@@ -269,14 +423,16 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   child: FadeTransition(opacity: curved, child: child),
                 );
               },
-              child: editing && _selectionController.selectedIds.isNotEmpty
+              child:
+                  project != null &&
+                      editing &&
+                      _selectionController.selectedIds.isNotEmpty
                   ? CaptureBatchActionBar(
                       key: const Key('batch-bar'),
                       controller: _selectionController,
                       mediaService: ref.watch(captureMediaServiceProvider),
                       exportService: ref.watch(projectExportServiceProvider),
                       shareService: ref.watch(shareFileServiceProvider),
-                      summaries: _latestCaptures,
                     )
                   : const SizedBox.shrink(key: Key('batch-bar-empty')),
             ),
@@ -302,21 +458,38 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     );
   }
 
+  Widget _projectLoadingList(AppStrings strings) {
+    return CapturePagedList(
+      controller: _pagerController,
+      source: _querySource,
+      emptyMessage: strings.noCaptures,
+      skeletonKey: const Key('project-capture-list-skeleton'),
+      contentKey: const Key('project-capture-list-content'),
+      skeletonItemCount: 4,
+      forceInitialLoading: true,
+      itemBuilder: (_, _, _) => const SizedBox.shrink(),
+    );
+  }
+
   Widget _projectCaptureList(
     BuildContext context,
     AppStrings strings,
     Project project,
     CaptureFilter filter,
-    List<CaptureSummary> allProjectSummaries,
-    List<CaptureSummary> captures, {
-    bool loadingCaptures = false,
-  }) {
-    final hasAnyRecord = allProjectSummaries.isNotEmpty;
-    final siblingCaptures = captures
-        .map((summary) => summary.capture)
-        .toList(growable: false);
-    return CustomScrollView(
-      slivers: [
+  ) {
+    final hasDateFilter =
+        filter.year != null || filter.month != null || filter.day != null;
+    final hasActiveQuery =
+        hasDateFilter ||
+        _pagerController.state.query.normalizedTerms.isNotEmpty;
+    return CapturePagedList(
+      controller: _pagerController,
+      source: _querySource,
+      emptyMessage: hasActiveQuery ? strings.filteredEmpty : strings.noCaptures,
+      skeletonKey: const Key('project-capture-list-skeleton'),
+      contentKey: const Key('project-capture-list-content'),
+      skeletonItemCount: 4,
+      sliversBefore: [
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
@@ -332,89 +505,46 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           ),
         ),
-        if (!loadingCaptures && hasAnyRecord)
+        if (_dateOptions.years.isNotEmpty || hasDateFilter)
           SliverToBoxAdapter(
             child: CaptureDateFilterBar(
               filter: filter,
-              summaries: allProjectSummaries,
+              options: _dateOptions,
               onChanged: _onFilterChanged,
             ),
           ),
-        if (loadingCaptures)
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-            sliver: SliverToBoxAdapter(
-              child: Skeletonizer(
-                key: const Key('project-capture-list-skeleton'),
-                child: Column(
-                  children: List.generate(
-                    4,
-                    (_) => const Padding(
-                      padding: EdgeInsets.only(bottom: 10),
-                      child: _CaptureCardSkeleton(),
-                    ),
-                  ),
+      ],
+      itemBuilder: (context, summary, _) {
+        final id = summary.capture.id;
+        return CaptureRecordCard(
+          key: ValueKey(id),
+          summary: summary,
+          searchTerms: _pagerController.state.query.normalizedTerms,
+          selectionMode: _selectionController.editing,
+          selected: _selectionController.selectedIds.contains(id),
+          selectable:
+              summary.capture.status == CaptureStatus.ready ||
+              summary.capture.status == CaptureStatus.failed,
+          onSelectedChanged: (selected) {
+            _toggleSelection(id, selected);
+          },
+          onTap: (initialImagePath) => context.push(
+            '/projects/${widget.projectId}/captures/$id',
+            extra: CaptureDetailArguments(
+              capture: summary.capture,
+              initialImagePath: initialImagePath,
+              navigationContext: CaptureNavigationContext(
+                query: _pagerController.state.query,
+                cursor: (
+                  sortTime:
+                      summary.capture.capturedAt ?? summary.capture.createdAt,
+                  id: summary.capture.id,
                 ),
               ),
             ),
-          )
-        else if (!hasAnyRecord)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: Text(
-                strings.noCaptures,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ),
-          )
-        else if (captures.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: Text(
-                strings.filteredEmpty,
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-            ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-            sliver: SliverList.separated(
-              itemCount: captures.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final summary = captures[index];
-                final id = summary.capture.id;
-                return CaptureRecordCard(
-                  summary: summary,
-                  selectionMode: _selectionController.editing,
-                  selected: _selectionController.selectedIds.contains(id),
-                  selectable:
-                      summary.capture.status == CaptureStatus.ready ||
-                      summary.capture.status == CaptureStatus.failed,
-                  onSelectedChanged: (selected) {
-                    if (selected && !_selectionController.editing) {
-                      _selectionController.enterWithSelection(id);
-                    } else {
-                      _selectionController.toggle(id);
-                    }
-                  },
-                  onTap: (initialImagePath) => context.push(
-                    '/projects/${widget.projectId}'
-                    '/captures/$id',
-                    extra: CaptureDetailArguments(
-                      capture: summary.capture,
-                      initialImagePath: initialImagePath,
-                      siblingCaptures: siblingCaptures,
-                    ),
-                  ),
-                );
-              },
-            ),
           ),
-      ],
+        );
+      },
     );
   }
 
@@ -680,6 +810,42 @@ class _DeleteProjectDialogState extends State<_DeleteProjectDialog> {
   }
 }
 
+class _ProjectUnavailableState extends StatelessWidget {
+  const _ProjectUnavailableState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ProjectHeader extends StatelessWidget {
   const _ProjectHeader({required this.project});
 
@@ -711,47 +877,6 @@ class _ProjectHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(project.description!),
                   ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CaptureCardSkeleton extends StatelessWidget {
-  const _CaptureCardSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 96,
-              height: 96,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: const ColoredBox(color: Colors.grey),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('SM-0000-000', style: textTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text('0000/00/00 00:00', style: textTheme.bodyMedium),
-                  const SizedBox(height: 2),
-                  Text('---', style: textTheme.bodySmall),
                 ],
               ),
             ),

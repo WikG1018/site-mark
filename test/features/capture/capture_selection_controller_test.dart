@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 
 void main() {
@@ -54,5 +55,34 @@ void main() {
     controller.enterWithSelection('b');
 
     expect(controller.selectedIds, {'a', 'b'});
+  });
+
+  test('replaceAll owns query-wide IDs and their readiness qualification', () {
+    final controller = CaptureSelectionController()..enter();
+
+    controller.replaceAll(
+      List.generate(120, (index) => 'id-$index'),
+      allReady: false,
+    );
+
+    expect(controller.selectedIds, hasLength(120));
+    expect(controller.allSelectedReady, isFalse);
+
+    controller.toggleAllSnapshot(
+      const CaptureSelectionSnapshot(ids: {}, allReady: false),
+    );
+    expect(controller.selectedIds, isEmpty);
+    expect(controller.allSelectedReady, isFalse);
+  });
+
+  test('individual changes invalidate a previously ready qualification', () {
+    final controller = CaptureSelectionController()..enter();
+    controller.replaceAll(const ['a', 'b'], allReady: true);
+    expect(controller.allSelectedReady, isTrue);
+
+    controller.toggle('b');
+
+    expect(controller.selectedIds, {'a'});
+    expect(controller.allSelectedReady, isFalse);
   });
 }

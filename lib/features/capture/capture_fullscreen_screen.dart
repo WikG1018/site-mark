@@ -1,42 +1,16 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 
-/// Lazily resolves one photo shown by [CaptureFullscreenScreen].
-///
-/// Keeping resolution lazy prevents opening the viewer from stat-ing and
-/// decoding every photo in a large project up front. [initialPath] and
-/// [previewImage] keep the tapped photo visible immediately.
-final class CaptureFullscreenPhoto {
-  CaptureFullscreenPhoto({
-    required this.id,
-    required this.resolvePath,
-    this.initialPath,
-    this.previewImage,
-  });
-
-  factory CaptureFullscreenPhoto.resolved({
-    required String path,
-    ImageProvider<Object>? previewImage,
-  }) {
-    return CaptureFullscreenPhoto(
-      id: path,
-      initialPath: path,
-      previewImage: previewImage,
-      resolvePath: () async => path,
-    );
-  }
-
-  final String id;
-  final Future<String?> Function() resolvePath;
-  final String? initialPath;
-  final ImageProvider<Object>? previewImage;
-}
+export 'package:sitemark/features/capture/capture_fullscreen_sequence.dart'
+    show CaptureFullscreenPhoto;
 
 /// Full-screen immersive photo viewer pushed from the detail image preview.
 ///
@@ -54,14 +28,26 @@ final class CaptureFullscreenPhoto {
 /// - while zoomed past 1x the [InteractiveViewer] pans normally;
 /// - horizontal swipe (PageView) is only active when the current page is at 1x.
 class CaptureFullscreenScreen extends ConsumerStatefulWidget {
+  // The bounds assertion reads the runtime list length, so this constructor
+  // cannot be const even though the widget itself is immutable.
+  // ignore: prefer_const_constructors_in_immutables
   CaptureFullscreenScreen({
     super.key,
-    required this.photos,
+    required List<CaptureFullscreenPhoto> photos,
     this.initialIndex = 0,
-  }) : assert(photos.isNotEmpty, 'photos must not be empty'),
+  }) : _photos = photos,
+       sequence = null,
+       assert(photos.isNotEmpty, 'photos must not be empty'),
        assert(initialIndex >= 0 && initialIndex < photos.length);
 
-  final List<CaptureFullscreenPhoto> photos;
+  const CaptureFullscreenScreen.sequence({super.key, required this.sequence})
+    : _photos = const [],
+      initialIndex = 0;
+
+  final List<CaptureFullscreenPhoto> _photos;
+  final CaptureFullscreenSequence? sequence;
+
+  List<CaptureFullscreenPhoto> get photos => sequence?.photos ?? _photos;
 
   /// Index of the photo that should be shown first.
   final int initialIndex;
@@ -107,11 +93,12 @@ class _CaptureFullscreenScreenState
   static const double _dismissVelocity = 700;
   static const double _dragShrinkFactor = 600;
   static const double _minDragScale = 0.7;
+  static const int _prefetchEdgeDistance = 2;
 
   late final PageController _pageController;
-  final Map<int, TransformationController> _transformationControllers = {};
-  final Map<int, VoidCallback> _transformationListeners = {};
-  final Map<int, Future<String?>> _pathFutures = {};
+  final Map<String, TransformationController> _transformationControllers = {};
+  final Map<String, VoidCallback> _transformationListeners = {};
+  final Map<String, Future<String?>> _pathFutures = {};
   late final AnimationController _scaleController = AnimationController(
     vsync: this,
     duration: AppMotion.medium4,
@@ -128,14 +115,17 @@ class _CaptureFullscreenScreenState
   bool _zoomed = false;
   bool _chromeVisible = false;
   int _currentPage = 0;
-  int? _scaleTargetPage;
+  String? _currentPhotoId;
+  String? _scaleTargetPhotoId;
+  int _sequenceGeneration = 0;
+  late List<CaptureFullscreenPhoto> _photos;
   VoidCallback? _releaseDetach;
 
-  TransformationController _controllerFor(int index) {
-    return _transformationControllers.putIfAbsent(index, () {
+  TransformationController _controllerFor(String photoId) {
+    return _transformationControllers.putIfAbsent(photoId, () {
       final controller = TransformationController();
-      void listener() => _onTransformChanged(index);
-      _transformationListeners[index] = listener;
+      void listener() => _onTransformChanged(photoId);
+      _transformationListeners[photoId] = listener;
       controller.addListener(listener);
       return controller;
     });
@@ -144,15 +134,18 @@ class _CaptureFullscreenScreenState
   @override
   void initState() {
     super.initState();
+    _photos = List.of(widget.photos);
     _currentPage = widget.initialIndex;
+    _currentPhotoId = _photos[widget.initialIndex].id;
     _pageController = PageController(initialPage: widget.initialIndex);
+    widget.sequence?.addListener(_onSequenceChanged);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
     _scaleController.addListener(() {
       final animation = _scaleAnimation;
-      final targetPage = _scaleTargetPage;
-      if (animation != null && targetPage != null) {
-        _controllerFor(targetPage).value = animation.value;
+      final targetPhotoId = _scaleTargetPhotoId;
+      if (animation != null && targetPhotoId != null) {
+        _controllerFor(targetPhotoId).value = animation.value;
       }
     });
     _dragController.addListener(() {
@@ -168,38 +161,150 @@ class _CaptureFullscreenScreenState
         Navigator.of(context).maybePop();
       }
     });
+
+    if (widget.sequence != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeLoadAdjacent(_currentPage);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant CaptureFullscreenScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sequence == widget.sequence) return;
+    oldWidget.sequence?.removeListener(_onSequenceChanged);
+    oldWidget.sequence?.dispose();
+    widget.sequence?.addListener(_onSequenceChanged);
+    _scaleController.stop();
+    _scaleAnimation = null;
+    _scaleTargetPhotoId = null;
+    _sequenceGeneration++;
+    _resetPhotoCachesForSequence();
+    _photos = List<CaptureFullscreenPhoto>.of(widget.photos);
+    _currentPage = widget.initialIndex;
+    _currentPhotoId = _photos[widget.initialIndex].id;
+    _zoomed = false;
+    _dragOffset = 0;
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(widget.initialIndex);
+    }
+    if (widget.sequence != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeLoadAdjacent(_currentPage);
+      });
+    }
   }
 
   @override
   void dispose() {
     _releaseDetach?.call();
+    widget.sequence?.removeListener(_onSequenceChanged);
+    widget.sequence?.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _scaleController.dispose();
     _dragController.dispose();
     _pageController.dispose();
+    _disposePhotoControllers();
+    super.dispose();
+  }
+
+  void _disposePhotoControllers() {
     for (final entry in _transformationControllers.entries) {
       final listener = _transformationListeners[entry.key];
       if (listener != null) entry.value.removeListener(listener);
       entry.value.dispose();
     }
-    super.dispose();
+    _transformationControllers.clear();
+    _transformationListeners.clear();
   }
 
-  void _onPageChanged(int index) {
-    _scaleController.stop();
-    _scaleAnimation = null;
-    _scaleTargetPage = null;
-    final zoomed = _controllerFor(index).value.getMaxScaleOnAxis() > 1.01;
-    setState(() {
-      _currentPage = index;
-      _zoomed = zoomed;
-      _dragOffset = 0;
+  void _resetPhotoCachesForSequence() {
+    final retiredControllers = _transformationControllers.entries
+        .map((entry) {
+          final listener = _transformationListeners[entry.key];
+          if (listener != null) entry.value.removeListener(listener);
+          return entry.value;
+        })
+        .toList(growable: false);
+    _transformationControllers.clear();
+    _transformationListeners.clear();
+    _pathFutures.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final controller in retiredControllers) {
+        controller.dispose();
+      }
     });
   }
 
-  void _onTransformChanged(int index) {
-    if (index != _currentPage) return;
-    final zoomed = _controllerFor(index).value.getMaxScaleOnAxis() > 1.01;
+  void _onSequenceChanged() {
+    if (!mounted) return;
+    final sequence = widget.sequence;
+    if (sequence == null) return;
+    final nextPhotos = List<CaptureFullscreenPhoto>.of(sequence.photos);
+    final oldFirstId = _photos.first.id;
+    final prependCount = nextPhotos.indexWhere(
+      (photo) => photo.id == oldFirstId,
+    );
+    final currentPhotoId = _currentPhotoId;
+    final nextCurrentPage = currentPhotoId == null
+        ? _currentPage
+        : nextPhotos.indexWhere((photo) => photo.id == currentPhotoId);
+    final hasPrepend = prependCount > 0;
+    final canCorrectPixels = hasPrepend && _pageController.hasClients;
+    final correctedPixels = canCorrectPixels
+        ? _pageController.position.pixels +
+              prependCount * _pageController.position.viewportDimension
+        : null;
+
+    // Replace the backing list and correct pixels synchronously before the
+    // next build. This keeps a fractional swipe on the exact same visible
+    // pixels and avoids building the old index with a newly prepended photo.
+    _photos = nextPhotos;
+    if (correctedPixels != null) {
+      final position = _pageController.position;
+      position.hold(() {});
+      position.correctPixels(correctedPixels);
+    }
+    setState(() {
+      if (nextCurrentPage >= 0) _currentPage = nextCurrentPage;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _maybeLoadAdjacent(_currentPage);
+    });
+  }
+
+  void _maybeLoadAdjacent(int index) {
+    final sequence = widget.sequence;
+    if (sequence == null || _photos.isEmpty) return;
+    if (index <= _prefetchEdgeDistance) {
+      unawaited(sequence.loadNewer());
+    }
+    if (index >= _photos.length - 1 - _prefetchEdgeDistance) {
+      unawaited(sequence.loadOlder());
+    }
+  }
+
+  void _onPageChanged(int index) {
+    if (index < 0 || index >= _photos.length) return;
+    _scaleController.stop();
+    _scaleAnimation = null;
+    _scaleTargetPhotoId = null;
+    final photoId = _photos[index].id;
+    final zoomed = _controllerFor(photoId).value.getMaxScaleOnAxis() > 1.01;
+    widget.sequence?.select(photoId);
+    setState(() {
+      _currentPage = index;
+      _currentPhotoId = photoId;
+      _zoomed = zoomed;
+      _dragOffset = 0;
+    });
+    _maybeLoadAdjacent(index);
+  }
+
+  void _onTransformChanged(String photoId) {
+    if (photoId != _currentPhotoId) return;
+    final zoomed = _controllerFor(photoId).value.getMaxScaleOnAxis() > 1.01;
     if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
   }
 
@@ -213,8 +318,9 @@ class _CaptureFullscreenScreenState
   }
 
   void _handleDoubleTap() {
-    final targetPage = _currentPage;
-    final current = _controllerFor(targetPage).value;
+    final targetPhotoId = _currentPhotoId;
+    if (targetPhotoId == null) return;
+    final current = _controllerFor(targetPhotoId).value;
     final Matrix4 end;
     if (current.getMaxScaleOnAxis() > 1.01) {
       end = Matrix4.identity();
@@ -229,7 +335,7 @@ class _CaptureFullscreenScreenState
         ..translateByDouble(-focal.dx, -focal.dy, 0, 1);
     }
     if (MediaQuery.disableAnimationsOf(context)) {
-      _controllerFor(targetPage).value = end;
+      _controllerFor(targetPhotoId).value = end;
       return;
     }
     _scaleAnimation = Matrix4Tween(begin: current, end: end).animate(
@@ -238,7 +344,7 @@ class _CaptureFullscreenScreenState
         curve: AppMotion.emphasizedDecelerate,
       ),
     );
-    _scaleTargetPage = targetPage;
+    _scaleTargetPhotoId = targetPhotoId;
     _scaleController.forward(from: 0);
   }
 
@@ -271,6 +377,20 @@ class _CaptureFullscreenScreenState
     _dragController.forward(from: 0);
   }
 
+  bool get _showNewerRetry {
+    final sequence = widget.sequence;
+    return sequence != null &&
+        sequence.newerError != null &&
+        _currentPage <= _prefetchEdgeDistance;
+  }
+
+  bool get _showOlderRetry {
+    final sequence = widget.sequence;
+    return sequence != null &&
+        sequence.olderError != null &&
+        _currentPage >= _photos.length - 1 - _prefetchEdgeDistance;
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
@@ -285,101 +405,117 @@ class _CaptureFullscreenScreenState
         children: [
           PageView.builder(
             controller: _pageController,
-            itemCount: widget.photos.length,
+            itemCount: _photos.length,
             onPageChanged: _onPageChanged,
             // Only allow horizontal swipe when not zoomed.
             physics: _zoomed
                 ? const NeverScrollableScrollPhysics()
                 : const PageScrollPhysics(),
             itemBuilder: (context, index) {
-              final photo = widget.photos[index];
+              final photo = _photos[index];
               final preview = photo.previewImage;
-              final transformController = _controllerFor(index);
+              final transformController = _controllerFor(photo.id);
 
-              return GestureDetector(
-                key: Key('fullscreen-photo-$index'),
-                onTap: _toggleChrome,
-                onDoubleTapDown: (details) =>
-                    _doubleTapPosition = details.localPosition,
-                onDoubleTap: index == _currentPage ? _handleDoubleTap : null,
-                onVerticalDragStart: (!_zoomed && index == _currentPage)
-                    ? _onVerticalDragStart
-                    : null,
-                onVerticalDragUpdate: (!_zoomed && index == _currentPage)
-                    ? _onVerticalDragUpdate
-                    : null,
-                onVerticalDragEnd: (!_zoomed && index == _currentPage)
-                    ? _onVerticalDragEnd
-                    : null,
-                child: Transform.translate(
-                  offset: index == _currentPage
-                      ? Offset(0, _dragOffset)
-                      : Offset.zero,
-                  child: Transform.scale(
-                    scale: index == _currentPage ? dragScale : 1.0,
-                    child: InteractiveViewer(
-                      transformationController: transformController,
-                      panEnabled: _zoomed && index == _currentPage,
-                      minScale: 1,
-                      maxScale: 4,
-                      child: Center(
-                        child: Semantics(
-                          label: strings.fullscreenPhotoSemantics,
-                          liveRegion: index == _currentPage,
-                          child: FutureBuilder<String?>(
-                            future: _pathFutures.putIfAbsent(
-                              index,
-                              photo.resolvePath,
-                            ),
-                            initialData: photo.initialPath,
-                            builder: (context, snapshot) {
-                              final path = snapshot.data;
-                              return Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  if (preview != null)
-                                    Image(
-                                      image: preview,
-                                      fit: BoxFit.contain,
-                                      gaplessPlayback: true,
-                                    ),
-                                  if (path != null)
-                                    Image.file(
-                                      File(path),
-                                      fit: BoxFit.contain,
-                                      gaplessPlayback: true,
-                                      frameBuilder:
-                                          (
-                                            context,
-                                            child,
-                                            frame,
-                                            wasSynchronouslyLoaded,
-                                          ) {
-                                            if (wasSynchronouslyLoaded) {
-                                              return child;
-                                            }
-                                            return AnimatedOpacity(
-                                              opacity: frame == null ? 0 : 1,
-                                              duration: AppMotion.durationOf(
+              return KeyedSubtree(
+                key: ValueKey(
+                  'fullscreen-photo-instance-$_sequenceGeneration-${photo.id}',
+                ),
+                child: KeyedSubtree(
+                  key: Key('fullscreen-photo-id-${photo.id}'),
+                  child: GestureDetector(
+                    key: Key('fullscreen-photo-$index'),
+                    onTap: _toggleChrome,
+                    onDoubleTapDown: (details) =>
+                        _doubleTapPosition = details.localPosition,
+                    onDoubleTap: index == _currentPage
+                        ? _handleDoubleTap
+                        : null,
+                    onVerticalDragStart: (!_zoomed && index == _currentPage)
+                        ? _onVerticalDragStart
+                        : null,
+                    onVerticalDragUpdate: (!_zoomed && index == _currentPage)
+                        ? _onVerticalDragUpdate
+                        : null,
+                    onVerticalDragEnd: (!_zoomed && index == _currentPage)
+                        ? _onVerticalDragEnd
+                        : null,
+                    child: Transform.translate(
+                      offset: index == _currentPage
+                          ? Offset(0, _dragOffset)
+                          : Offset.zero,
+                      child: Transform.scale(
+                        scale: index == _currentPage ? dragScale : 1.0,
+                        child: InteractiveViewer(
+                          transformationController: transformController,
+                          panEnabled: _zoomed && index == _currentPage,
+                          minScale: 1,
+                          maxScale: 4,
+                          child: Center(
+                            child: Semantics(
+                              label: strings.fullscreenPhotoSemantics,
+                              liveRegion: index == _currentPage,
+                              child: FutureBuilder<String?>(
+                                key: ValueKey(
+                                  'fullscreen-path-$_sequenceGeneration-${photo.id}',
+                                ),
+                                future: _pathFutures.putIfAbsent(
+                                  photo.id,
+                                  photo.resolvePath,
+                                ),
+                                initialData: photo.initialPath,
+                                builder: (context, snapshot) {
+                                  final path = snapshot.data;
+                                  return Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      if (preview != null)
+                                        Image(
+                                          image: preview,
+                                          fit: BoxFit.contain,
+                                          gaplessPlayback: true,
+                                        ),
+                                      if (path != null)
+                                        Image.file(
+                                          File(path),
+                                          fit: BoxFit.contain,
+                                          gaplessPlayback: true,
+                                          frameBuilder:
+                                              (
                                                 context,
-                                                AppMotion.short4,
-                                              ),
-                                              curve: AppMotion.standard,
-                                              child: child,
-                                            );
-                                          },
-                                      errorBuilder: (context, error, _) =>
-                                          preview != null
-                                          ? const SizedBox.shrink()
-                                          : _missingPhoto(context),
-                                    )
-                                  else if (snapshot.connectionState ==
-                                          ConnectionState.done &&
-                                      preview == null)
-                                    _missingPhoto(context),
-                                ],
-                              );
-                            },
+                                                child,
+                                                frame,
+                                                wasSynchronouslyLoaded,
+                                              ) {
+                                                if (wasSynchronouslyLoaded) {
+                                                  return child;
+                                                }
+                                                return AnimatedOpacity(
+                                                  opacity: frame == null
+                                                      ? 0
+                                                      : 1,
+                                                  duration:
+                                                      AppMotion.durationOf(
+                                                        context,
+                                                        AppMotion.short4,
+                                                      ),
+                                                  curve: AppMotion.standard,
+                                                  child: child,
+                                                );
+                                              },
+                                          errorBuilder: (context, error, _) =>
+                                              preview != null
+                                              ? const SizedBox.shrink()
+                                              : _missingPhoto(context),
+                                        )
+                                      else if (snapshot.connectionState ==
+                                              ConnectionState.done &&
+                                          preview == null)
+                                        _missingPhoto(context),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -389,6 +525,22 @@ class _CaptureFullscreenScreenState
               );
             },
           ),
+          if (_showNewerRetry)
+            _edgeRetry(
+              key: const Key('fullscreen-newer-retry'),
+              alignment: Alignment.centerLeft,
+              icon: Icons.chevron_left,
+              onPressed: widget.sequence!.retryNewer,
+              tooltip: strings.loadMoreFailedRetry,
+            ),
+          if (_showOlderRetry)
+            _edgeRetry(
+              key: const Key('fullscreen-older-retry'),
+              alignment: Alignment.centerRight,
+              icon: Icons.chevron_right,
+              onPressed: widget.sequence!.retryOlder,
+              tooltip: strings.loadMoreFailedRetry,
+            ),
           Positioned(
             top: 0,
             left: 0,
@@ -427,6 +579,27 @@ class _CaptureFullscreenScreenState
         Icons.broken_image_outlined,
         size: 64,
         color: Theme.of(context).colorScheme.error,
+      ),
+    );
+  }
+
+  Widget _edgeRetry({
+    required Key key,
+    required Alignment alignment,
+    required IconData icon,
+    required VoidCallback onPressed,
+    required String tooltip,
+  }) {
+    return Align(
+      alignment: alignment,
+      child: SafeArea(
+        minimum: const EdgeInsets.all(12),
+        child: IconButton.filledTonal(
+          key: key,
+          onPressed: onPressed,
+          tooltip: tooltip,
+          icon: Icon(icon),
+        ),
       ),
     );
   }

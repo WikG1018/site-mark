@@ -9,6 +9,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
@@ -18,14 +19,13 @@ final class CaptureDetailArguments {
   const CaptureDetailArguments({
     required this.capture,
     required this.initialImagePath,
-    this.siblingCaptures,
+    this.navigationContext,
   });
 
   final CaptureRecord capture;
   final String? initialImagePath;
 
-  /// Ordered captures from the list that opened this detail route.
-  final List<CaptureRecord>? siblingCaptures;
+  final CaptureNavigationContext? navigationContext;
 }
 
 /// Photo detail surface with explicit watermarked/original preview, file
@@ -52,14 +52,14 @@ class CaptureDetailScreen extends ConsumerStatefulWidget {
     required this.captureId,
     this.initialCapture,
     this.initialImagePath,
-    this.siblingCaptures,
+    this.navigationContext,
   });
 
   final String projectId;
   final String captureId;
   final CaptureRecord? initialCapture;
   final String? initialImagePath;
-  final List<CaptureRecord>? siblingCaptures;
+  final CaptureNavigationContext? navigationContext;
 
   @override
   ConsumerState<CaptureDetailScreen> createState() =>
@@ -104,6 +104,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     final database = ref.watch(databaseProvider);
     final mediaService = ref.watch(captureMediaServiceProvider);
     final outputPaths = ref.watch(captureOutputPathsProvider);
+    final querySource = ref.watch(captureQueryRepositoryProvider);
     return StreamBuilder<CaptureRecord?>(
       stream: database.watchCaptureById(_captureId),
       initialData: widget.initialCapture,
@@ -152,7 +153,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     source: effectiveSource,
                     heroDestination: heroTag != null,
                     initialImagePath: widget.initialImagePath,
-                    siblingCaptures: widget.siblingCaptures,
+                    navigationContext: widget.navigationContext,
+                    querySource: querySource,
                   ),
                 ),
               ),

@@ -74,6 +74,11 @@ class AppStrings {
   String get projectDeletedCleanupPending => _english
       ? 'Project deleted. Photos in the system gallery and exported backups were retained. Remaining private files will be cleaned up the next time the app starts.'
       : '项目已删除，系统相册中的照片和已导出备份已保留；残留私有文件将在下次启动继续清理';
+  String get projectNotFound =>
+      _english ? 'Project not found or deleted' : '项目不存在或已删除';
+  String get projectLoadFailed => _english
+      ? 'Could not load the project. Go back and try again.'
+      : '项目加载失败，请返回后重试';
   String get descriptionOptional =>
       _english ? 'Description (optional)' : '项目说明（选填）';
   String get save => _english ? 'Save' : '保存';
@@ -182,6 +187,23 @@ class AppStrings {
       : '拍摄时间、定位结果、照片编号和原图哈希不会被修改。';
   String get regenerationFailed => _english ? 'Regeneration failed' : '重新生成失败';
   String get allRecords => _english ? 'All records' : '全部记录';
+  String get searchCaptures => _english ? 'Search records' : '搜索记录';
+  String get searchCapturesHint => _english
+      ? 'Search project, location, content, photographer, notes, address, or photo number'
+      : '搜索项目、部位、内容、拍摄人、备注、地址或照片编号';
+  String get clearSearch => _english ? 'Clear search' : '清空搜索';
+  String get captureListLoadFailed => _english
+      ? 'Could not load capture records. Please try again.'
+      : '拍摄记录加载失败，请重试';
+  String get loadMoreFailedRetry =>
+      _english ? 'Could not load more. Tap to retry.' : '加载更多失败，点击重试';
+  String get newCaptureRecords => _english ? 'New records' : '有新记录';
+  String captureSearchNotes(String value) =>
+      _english ? 'Notes: $value' : '备注：$value';
+  String captureSearchAddress(String value) =>
+      _english ? 'Address: $value' : '地址：$value';
+  String captureSearchPhotoNumber(String value) =>
+      _english ? 'Photo number: $value' : '照片编号：$value';
   String get settings => _english ? 'Settings' : '设置';
   String get diagnosticsAndFeedback =>
       _english ? 'Diagnostics and feedback' : '诊断与反馈';

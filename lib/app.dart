@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/diagnostics/diagnostic_bundle_service.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
@@ -66,6 +67,10 @@ final databaseProvider = Provider<AppDatabase>((ref) {
     database.close();
   });
   return database;
+});
+
+final captureQueryRepositoryProvider = Provider<CaptureQueryRepository>((ref) {
+  return CaptureQueryRepository(ref.watch(databaseProvider));
 });
 
 class _DatabasePollingControl implements BackgroundWorkControl {
@@ -569,7 +574,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                               ? state.extra! as CaptureRecord
                               : null),
                       initialImagePath: arguments?.initialImagePath,
-                      siblingCaptures: arguments?.siblingCaptures,
+                      navigationContext: arguments?.navigationContext,
                     ),
                   );
                 },

@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
-import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
@@ -18,39 +18,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 
-CaptureRecord _record({required String id, required DateTime capturedAt}) {
-  return CaptureRecord(
-    id: id,
-    projectId: 'project-1',
-    photoNumber: 'SM-$id',
-    workLocation: 'A 区',
-    workContent: '风管',
-    photographer: '张工',
-    originalPath: '/private/$id.jpg',
-    status: CaptureStatus.ready,
-    createdAt: capturedAt,
-    capturedAt: capturedAt,
-    processingAttempts: 0,
-    watermarkLocaleCode: 'zh',
-    locationResolution: 'resolved',
-  );
-}
-
-CaptureSummary _summary({required String id, required DateTime capturedAt}) {
-  return CaptureSummary(
-    capture: _record(id: id, capturedAt: capturedAt),
-    projectName: '东区厂房改造',
-  );
-}
-
 Widget filterHarnessLive(ValueNotifier<CaptureFilter> filter) {
-  final summaries = [
-    _summary(id: 'a', capturedAt: DateTime(2025, 6, 1, 9)),
-    _summary(id: 'b', capturedAt: DateTime(2026, 7, 16, 9)),
-    _summary(id: 'c', capturedAt: DateTime(2026, 8, 2, 9)),
-    _summary(id: 'd', capturedAt: DateTime(2026, 7, 16, 14)),
-    _summary(id: 'e', capturedAt: DateTime(2026, 7, 17, 9)),
-  ];
   return MaterialApp(
     locale: const Locale('zh'),
     supportedLocales: AppStrings.supportedLocales,
@@ -66,7 +34,32 @@ Widget filterHarnessLive(ValueNotifier<CaptureFilter> filter) {
         builder: (context, value, _) {
           return CaptureDateFilterBar(
             filter: value,
-            summaries: summaries,
+            options: switch ((value.year, value.month)) {
+              (2025, 6) => const CaptureDateOptions(
+                years: [2025, 2026],
+                months: [6],
+                days: [1],
+              ),
+              (2025, _) => const CaptureDateOptions(
+                years: [2025, 2026],
+                months: [6],
+              ),
+              (2026, 7) => const CaptureDateOptions(
+                years: [2025, 2026],
+                months: [7, 8],
+                days: [16, 17],
+              ),
+              (2026, 8) => const CaptureDateOptions(
+                years: [2025, 2026],
+                months: [7, 8],
+                days: [2],
+              ),
+              (2026, _) => const CaptureDateOptions(
+                years: [2025, 2026],
+                months: [7, 8],
+              ),
+              _ => const CaptureDateOptions(years: [2025, 2026]),
+            },
             onChanged: (next) => filter.value = next,
           );
         },

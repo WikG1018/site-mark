@@ -3,9 +3,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
-import 'package:sitemark/features/capture/capture_photo_hero.dart';
+import 'package:sitemark/data/capture_query_repository.dart';
+import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
+import 'package:sitemark/features/capture/capture_photo_hero.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -25,7 +28,8 @@ class CaptureImagePreview extends StatefulWidget {
     this.heroDestination = false,
     this.initialImagePath,
     this.onImageResolved,
-    this.siblingCaptures,
+    this.navigationContext,
+    this.querySource,
   });
 
   final CaptureRecord capture;
@@ -39,9 +43,8 @@ class CaptureImagePreview extends StatefulWidget {
   final String? initialImagePath;
   final ValueChanged<String>? onImageResolved;
 
-  /// Ordered captures from the current filtered list. Their paths are resolved
-  /// lazily when a fullscreen page becomes visible.
-  final List<CaptureRecord>? siblingCaptures;
+  final CaptureNavigationContext? navigationContext;
+  final CaptureQuerySource? querySource;
 
   @override
   State<CaptureImagePreview> createState() => _CaptureImagePreviewState();
@@ -373,47 +376,54 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   }) {
     final source = widget.source;
     final currentCapture = widget.capture;
-    final ordered = <CaptureRecord>[...?widget.siblingCaptures];
-    if (!ordered.any((capture) => capture.id == currentCapture.id)) {
-      ordered.add(currentCapture);
-    }
-    final candidates = ordered
-        .where((capture) {
-          if (capture.id == currentCapture.id) return true;
-          return switch (source) {
-            CapturePreviewSource.watermarked =>
-              capture.status == CaptureStatus.ready,
-            CapturePreviewSource.original => capture.originalDeletedAt == null,
-            CapturePreviewSource.bestAvailable =>
-              capture.status == CaptureStatus.ready ||
-                  capture.originalDeletedAt == null,
-          };
-        })
-        .toList(growable: false);
-    final photos = candidates
-        .map((capture) {
-          final isCurrent = capture.id == currentCapture.id;
-          return CaptureFullscreenPhoto(
-            id: capture.id,
-            initialPath: isCurrent ? path : null,
-            previewImage: isCurrent ? previewImage : null,
-            resolvePath: () async {
-              if (isCurrent) return path;
+    final currentPhoto = CaptureFullscreenPhoto(
+      id: currentCapture.id,
+      initialPath: path,
+      previewImage: previewImage,
+      resolvePath: () async => path,
+    );
+    final navigationContext = widget.navigationContext;
+    final querySource = widget.querySource;
+    final CaptureFullscreenScreen page;
+    if (navigationContext == null || querySource == null) {
+      page = CaptureFullscreenScreen(photos: [currentPhoto]);
+    } else {
+      final cursors = <String, CapturePageCursor>{
+        currentCapture.id: navigationContext.cursor,
+      };
+      final sequence = CaptureFullscreenSequence(
+        current: currentPhoto,
+        loader: (direction, anchorId) async {
+          final cursor = cursors[anchorId];
+          if (cursor == null) return const [];
+          final summaries = await querySource.loadAdjacent(
+            navigationContext.query,
+            cursor,
+            newer: direction == CaptureFullscreenDirection.newer,
+            limit: 10,
+          );
+          final pendingPhotos = <Future<CaptureFullscreenPhoto>>[];
+          for (final summary in summaries) {
+            final capture = summary.capture;
+            cursors[capture.id] = _cursorFor(capture);
+            pendingPhotos.add(() async {
               final resolution = await _resolveCapture(capture, source);
-              return resolution.kind == _PreviewResolutionKind.image
+              final path = resolution.kind == _PreviewResolutionKind.image
                   ? resolution.path
                   : null;
-            },
-          );
-        })
-        .toList(growable: false);
-    final currentIndex = photos.indexWhere(
-      (photo) => photo.id == currentCapture.id,
-    );
-    final page = CaptureFullscreenScreen(
-      photos: photos,
-      initialIndex: currentIndex,
-    );
+              return CaptureFullscreenPhoto(
+                id: capture.id,
+                includeInSequence: path != null,
+                initialPath: path,
+                resolvePath: () async => path,
+              );
+            }());
+          }
+          return Future.wait(pendingPhotos);
+        },
+      );
+      page = CaptureFullscreenScreen.sequence(sequence: sequence);
+    }
 
     Navigator.of(context).push(
       PageRouteBuilder<void>(
@@ -441,6 +451,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
       ),
     );
   }
+
+  CapturePageCursor _cursorFor(CaptureRecord capture) =>
+      (sortTime: capture.capturedAt ?? capture.createdAt, id: capture.id);
 
   Widget _placeholder(
     BuildContext context,

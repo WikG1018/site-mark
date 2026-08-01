@@ -1,13 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
+import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 /// Cascading year → month → day filter for capture lists.
 ///
-/// Derives sorted distinct options from the supplied [summaries] using the
-/// local capture date (`coalesce(capturedAt, createdAt)`). Selecting a year
+/// Consumes repository-derived [options]. Selecting a year
 /// resets month and day; selecting a month resets day; clearing a year resets
 /// the entire selection. Disabled month/day controls show the "all" label
 /// until their parent is selected.
@@ -18,82 +18,108 @@ import 'package:sitemark/l10n/app_strings.dart';
 /// `showModalBottomSheet`. The [padding] defaults to a small horizontal inset;
 /// callers that embed this bar inside their own [Row] (e.g. the all-records
 /// screen beside a project menu) pass [EdgeInsets.zero].
-class CaptureDateFilterBar extends StatelessWidget {
+class CaptureDateFilterBar extends StatefulWidget {
   const CaptureDateFilterBar({
     super.key,
     required this.filter,
-    required this.summaries,
+    required this.options,
     required this.onChanged,
     this.padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
   });
 
   final CaptureFilter filter;
-  final List<CaptureSummary> summaries;
+  final CaptureDateOptions options;
   final ValueChanged<CaptureFilter> onChanged;
   final EdgeInsetsGeometry padding;
 
   @override
+  State<CaptureDateFilterBar> createState() => _CaptureDateFilterBarState();
+}
+
+class _CaptureDateFilterBarState extends State<CaptureDateFilterBar> {
+  late final ValueNotifier<CaptureDateOptions> _options = ValueNotifier(
+    widget.options,
+  );
+
+  @override
+  void didUpdateWidget(covariant CaptureDateFilterBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.options, widget.options)) {
+      final options = widget.options;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(widget.options, options)) {
+          _options.value = options;
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _options.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final dates = summaries
-        .map(
-          (summary) => summary.capture.capturedAt ?? summary.capture.createdAt,
-        )
-        .toList();
-    final options = _cascadeOptions(dates, filter);
 
     if (MediaQuery.sizeOf(context).width < 360) {
       return Padding(
-        padding: padding,
+        padding: widget.padding,
         child: Align(
           alignment: Alignment.centerLeft,
           child: IconButton(
             key: const Key('filter-sheet-trigger'),
             icon: const Icon(Icons.filter_list_outlined),
             tooltip: strings.filterAction,
-            onPressed: () => _openFilterSheet(context, dates),
+            onPressed: () => _openFilterSheet(context),
           ),
         ),
       );
     }
 
     return Padding(
-      padding: padding,
+      padding: widget.padding,
       child: Row(
         children: [
           Expanded(
             child: _menu(
               key: const Key('filter-year'),
-              value: filter.year,
-              options: options.years,
+              value: widget.filter.year,
+              options: widget.options.years,
               allLabel: strings.allYears,
               labelFor: (value) => value.toString(),
               enabled: true,
-              onChanged: (value) => onChanged(filter.selectYear(value)),
+              onChanged: (value) =>
+                  widget.onChanged(widget.filter.selectYear(value)),
             ),
           ),
           const SizedBox(width: 6),
           Expanded(
             child: _menu(
               key: const Key('filter-month'),
-              value: filter.month,
-              options: options.months,
+              value: widget.filter.month,
+              options: widget.options.months,
               allLabel: strings.allMonths,
               labelFor: (value) => '$value${strings.monthSuffix}',
-              enabled: filter.year != null,
-              onChanged: (value) => onChanged(filter.selectMonth(value)),
+              enabled: widget.filter.year != null,
+              onChanged: (value) =>
+                  widget.onChanged(widget.filter.selectMonth(value)),
             ),
           ),
           const SizedBox(width: 6),
           Expanded(
             child: _menu(
               key: const Key('filter-day'),
-              value: filter.day,
-              options: options.days,
+              value: widget.filter.day,
+              options: widget.options.days,
               allLabel: strings.allDays,
               labelFor: (value) => '$value${strings.daySuffix}',
-              enabled: filter.year != null && filter.month != null,
-              onChanged: (value) => onChanged(filter.selectDay(value)),
+              enabled:
+                  widget.filter.year != null && widget.filter.month != null,
+              onChanged: (value) =>
+                  widget.onChanged(widget.filter.selectDay(value)),
             ),
           ),
         ],
@@ -101,14 +127,14 @@ class CaptureDateFilterBar extends StatelessWidget {
     );
   }
 
-  void _openFilterSheet(BuildContext context, List<DateTime> dates) {
+  void _openFilterSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       builder: (context) => _NarrowFilterSheet(
-        filter: filter,
-        dates: dates,
-        onChanged: onChanged,
+        filter: widget.filter,
+        options: _options,
+        onChanged: widget.onChanged,
       ),
     );
   }
@@ -138,37 +164,6 @@ class CaptureDateFilterBar extends StatelessWidget {
   }
 }
 
-List<int> _distinctSorted(Iterable<int> values) {
-  final set = values.toSet();
-  final list = set.toList()..sort();
-  return list;
-}
-
-({List<int> years, List<int> months, List<int> days}) _cascadeOptions(
-  List<DateTime> dates,
-  CaptureFilter filter,
-) {
-  final years = _distinctSorted(dates.map((date) => date.year));
-  final months = filter.year == null
-      ? <int>[]
-      : _distinctSorted(
-          dates
-              .where((date) => date.year == filter.year)
-              .map((date) => date.month),
-        );
-  final days = (filter.year == null || filter.month == null)
-      ? <int>[]
-      : _distinctSorted(
-          dates
-              .where(
-                (date) =>
-                    date.year == filter.year && date.month == filter.month,
-              )
-              .map((date) => date.day),
-        );
-  return (years: years, months: months, days: days);
-}
-
 /// Bottom-sheet body for the sub-360dp layout: mirrors the wide bar's three
 /// cascading menus as full-width [DropdownMenu]s. Holds a local copy of the
 /// filter so the month/day option lists react to in-sheet selections while
@@ -176,12 +171,12 @@ List<int> _distinctSorted(Iterable<int> values) {
 class _NarrowFilterSheet extends StatefulWidget {
   const _NarrowFilterSheet({
     required this.filter,
-    required this.dates,
+    required this.options,
     required this.onChanged,
   });
 
   final CaptureFilter filter;
-  final List<DateTime> dates;
+  final ValueListenable<CaptureDateOptions> options;
   final ValueChanged<CaptureFilter> onChanged;
 
   @override
@@ -199,44 +194,46 @@ class _NarrowFilterSheetState extends State<_NarrowFilterSheet> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final options = _cascadeOptions(widget.dates, _filter);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _dropdown(
-              key: ValueKey('sheet-year-${_filter.year}'),
-              value: _filter.year,
-              options: options.years,
-              allLabel: strings.allYears,
-              labelFor: (value) => value.toString(),
-              enabled: true,
-              onChanged: (value) => _update(_filter.selectYear(value)),
-            ),
-            const SizedBox(height: 12),
-            _dropdown(
-              key: ValueKey('sheet-month-${_filter.month}'),
-              value: _filter.month,
-              options: options.months,
-              allLabel: strings.allMonths,
-              labelFor: (value) => '$value${strings.monthSuffix}',
-              enabled: _filter.year != null,
-              onChanged: (value) => _update(_filter.selectMonth(value)),
-            ),
-            const SizedBox(height: 12),
-            _dropdown(
-              key: ValueKey('sheet-day-${_filter.day}'),
-              value: _filter.day,
-              options: options.days,
-              allLabel: strings.allDays,
-              labelFor: (value) => '$value${strings.daySuffix}',
-              enabled: _filter.year != null && _filter.month != null,
-              onChanged: (value) => _update(_filter.selectDay(value)),
-            ),
-          ],
+    return ValueListenableBuilder<CaptureDateOptions>(
+      valueListenable: widget.options,
+      builder: (context, options, _) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _dropdown(
+                key: ValueKey('sheet-year-${_filter.year}'),
+                value: _filter.year,
+                options: options.years,
+                allLabel: strings.allYears,
+                labelFor: (value) => value.toString(),
+                enabled: true,
+                onChanged: (value) => _update(_filter.selectYear(value)),
+              ),
+              const SizedBox(height: 12),
+              _dropdown(
+                key: ValueKey('sheet-month-${_filter.month}'),
+                value: _filter.month,
+                options: options.months,
+                allLabel: strings.allMonths,
+                labelFor: (value) => '$value${strings.monthSuffix}',
+                enabled: _filter.year != null,
+                onChanged: (value) => _update(_filter.selectMonth(value)),
+              ),
+              const SizedBox(height: 12),
+              _dropdown(
+                key: ValueKey('sheet-day-${_filter.day}'),
+                value: _filter.day,
+                options: options.days,
+                allLabel: strings.allDays,
+                labelFor: (value) => '$value${strings.daySuffix}',
+                enabled: _filter.year != null && _filter.month != null,
+                onChanged: (value) => _update(_filter.selectDay(value)),
+              ),
+            ],
+          ),
         ),
       ),
     );

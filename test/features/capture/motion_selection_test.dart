@@ -11,6 +11,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -216,7 +217,7 @@ void main() {
       // initState assertion. The route tree mirrors app.dart but with a
       // minimal capture-detail stub.
       CaptureRecord? pushedInitialCapture;
-      List<CaptureRecord>? pushedSiblingCaptures;
+      CaptureNavigationContext? pushedNavigationContext;
       final router = GoRouter(
         initialLocation: '/records',
         routes: [
@@ -237,7 +238,7 @@ void main() {
                     builder: (context, state) {
                       if (state.extra case CaptureDetailArguments arguments) {
                         pushedInitialCapture = arguments.capture;
-                        pushedSiblingCaptures = arguments.siblingCaptures;
+                        pushedNavigationContext = arguments.navigationContext;
                       }
                       return Scaffold(
                         appBar: AppBar(title: const Text('记录详情')),
@@ -281,9 +282,8 @@ void main() {
       // Verify we're on the capture detail screen.
       expect(find.text('记录详情'), findsOneWidget);
       expect(pushedInitialCapture?.id, 'capture-1');
-      expect(pushedSiblingCaptures?.map((capture) => capture.id), [
-        'capture-1',
-      ]);
+      expect(pushedNavigationContext?.query.searchText, isEmpty);
+      expect(pushedNavigationContext?.cursor.id, 'capture-1');
 
       // Pop back via the AppBar back button.
       await tester.tap(find.byType(BackButton));
@@ -313,11 +313,7 @@ void main() {
       );
       final controller = CaptureSelectionController()
         ..enter()
-        ..selectAll(['capture-1']);
-      final capture = await database.captureById('capture-1');
-      final summaries = [
-        CaptureSummary(capture: capture!, projectName: '东区厂房改造'),
-      ];
+        ..replaceAll(['capture-1'], allReady: true);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -335,7 +331,6 @@ void main() {
               mediaService: media,
               exportService: buildTestExportService(database),
               shareService: _TestShareService(),
-              summaries: summaries,
             ),
           ),
         ),
@@ -387,11 +382,7 @@ void main() {
     );
     final controller = CaptureSelectionController()
       ..enter()
-      ..selectAll(['capture-1']);
-    final capture = await database.captureById('capture-1');
-    final summaries = [
-      CaptureSummary(capture: capture!, projectName: '东区厂房改造'),
-    ];
+      ..replaceAll(['capture-1'], allReady: true);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -409,7 +400,6 @@ void main() {
             mediaService: media,
             exportService: buildTestExportService(database),
             shareService: _TestShareService(),
-            summaries: summaries,
           ),
         ),
       ),
@@ -430,6 +420,131 @@ void main() {
     final after = await database.captureById('capture-1');
     expect(after?.originalDeletedAt, isNotNull);
 
+    await disposeTree(tester);
+  });
+
+  testWidgets('delete executes the exact selection confirmed by the user', (
+    tester,
+  ) async {
+    final deleteGate = Completer<CaptureActionResult>();
+    final media = _RecordingDeleteMediaService(
+      database: database,
+      result: deleteGate.future,
+    );
+    final controller = CaptureSelectionController()
+      ..enter()
+      ..replaceAll(const ['capture-0'], allReady: true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          bottomNavigationBar: CaptureBatchActionBar(
+            controller: controller,
+            mediaService: media,
+            exportService: buildTestExportService(database),
+            shareService: _TestShareService(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 张照片'), findsOneWidget);
+
+    controller.replaceAll(
+      List.generate(120, (index) => 'capture-$index'),
+      allReady: false,
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(media.deleteCalls, [
+      ['capture-0'],
+    ]);
+    expect(find.text('正在处理 0/1'), findsOneWidget);
+
+    deleteGate.complete(
+      const CaptureActionResult(
+        succeededIds: ['capture-0'],
+        skippedIds: [],
+        failures: {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('成功 1，跳过 0，失败 0'), findsOneWidget);
+    await disposeTree(tester);
+  });
+
+  testWidgets('confirmed delete survives batch bar disposal', (tester) async {
+    final media = _RecordingDeleteMediaService(
+      database: database,
+      result: Future.value(
+        const CaptureActionResult(
+          succeededIds: ['capture-0'],
+          skippedIds: [],
+          failures: {},
+        ),
+      ),
+    );
+    final controller = CaptureSelectionController()
+      ..enter()
+      ..replaceAll(const ['capture-0'], allReady: true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) => Scaffold(
+            bottomNavigationBar: controller.selectedIds.isEmpty
+                ? null
+                : CaptureBatchActionBar(
+                    controller: controller,
+                    mediaService: media,
+                    exportService: buildTestExportService(database),
+                    shareService: _TestShareService(),
+                  ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 张照片'), findsOneWidget);
+
+    controller.replaceAll(const [], allReady: false);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(media.deleteCalls, [
+      ['capture-0'],
+    ]);
     await disposeTree(tester);
   });
 
@@ -605,4 +720,22 @@ class _TestSelectionExportPaths implements SelectionExportPaths {
 class _TestShareService implements ShareFileService {
   @override
   Future<void> shareFile(String path) async {}
+}
+
+class _RecordingDeleteMediaService extends CaptureMediaService {
+  _RecordingDeleteMediaService({required super.database, required this.result})
+    : super(
+        platform: _TestPlatform(),
+        outputPaths: _TestOutputPaths(),
+        files: _TestFileStore(),
+      );
+
+  final Future<CaptureActionResult> result;
+  final List<List<String>> deleteCalls = [];
+
+  @override
+  Future<CaptureActionResult> deleteAll(List<String> captureIds) {
+    deleteCalls.add(List.unmodifiable(captureIds));
+    return result;
+  }
 }

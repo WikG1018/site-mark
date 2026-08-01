@@ -55,6 +55,28 @@ void main() {
         foreground.watchCaptureSummaries(const CaptureFilter()),
       );
       final all = StreamIterator(foreground.watchAllCaptureSummaries());
+      final selectedInitial = Completer<List<CaptureSummary>>();
+      final selectedReady = Completer<List<CaptureSummary>>();
+      final selectedSubscription = foreground
+          .watchCaptureSummariesByIds({'capture-1'})
+          .listen((rows) {
+            final status = rows.single.capture.status;
+            if (status == CaptureStatus.captured &&
+                !selectedInitial.isCompleted) {
+              selectedInitial.complete(rows);
+            }
+            if (status == CaptureStatus.ready && !selectedReady.isCompleted) {
+              selectedReady.complete(rows);
+            }
+          });
+      addTearDown(selectedSubscription.cancel);
+
+      expect(
+        (await selectedInitial.future.timeout(
+          const Duration(seconds: 1),
+        )).single.capture.status,
+        CaptureStatus.captured,
+      );
 
       expect(await detail.moveNext(), isTrue);
       expect(detail.current?.status, CaptureStatus.captured);
@@ -84,6 +106,14 @@ void main() {
         all,
         (rows) => rows.single.capture.status == CaptureStatus.ready,
       );
+      late List<CaptureSummary> readySelected;
+      try {
+        readySelected = await selectedReady.future.timeout(
+          const Duration(seconds: 1),
+        );
+      } finally {
+        await selectedSubscription.cancel();
+      }
 
       expect(readyDetail?.publishedUri, 'content://media/site-mark/1');
       expect(readyFiltered.single.projectName, '东区厂房改造');
@@ -91,6 +121,7 @@ void main() {
         readyAll.single.capture.publishedUri,
         'content://media/site-mark/1',
       );
+      expect(readySelected.single.projectName, '东区厂房改造');
       await detail.cancel();
       await filtered.cancel();
       await all.cancel();
