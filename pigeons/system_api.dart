@@ -12,6 +12,8 @@ import 'package:pigeon/pigeon.dart';
 )
 enum CameraOutcome { captured, cancelled, failed }
 
+enum ArchiveSaveOutcome { saved, cancelled }
+
 enum LocationOutcome {
   precise,
   approximate,
@@ -115,6 +117,9 @@ abstract class SiteMarkSystemApi {
 
   @async
   MediaPublishResult publishJpeg(String sourcePath, String displayName);
+
+  @async
+  ArchiveSaveOutcome saveArchive(String sourcePath, String suggestedName);
 
   @async
   void deletePublishedImage(String contentUri);

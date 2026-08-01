@@ -66,6 +66,10 @@ class SiteMarkSystemPlugin :
             api?.onCameraActivityResult(resultCode)
             return true
         }
+        if (requestCode == AndroidSystemApi.REQUEST_ARCHIVE_SAVE) {
+            api?.onArchiveSaveActivityResult(resultCode, data)
+            return true
+        }
         return false
     }
 

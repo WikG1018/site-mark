@@ -520,6 +520,23 @@ abstract interface class ShareFileService {
   Future<void> shareFile(String path);
 }
 
+abstract interface class ArchiveSaveService {
+  Future<ArchiveSaveOutcome> saveArchive(String sourcePath);
+}
+
+class PigeonArchiveSaveService implements ArchiveSaveService {
+  PigeonArchiveSaveService({SiteMarkSystemApi? api})
+    : _api = api ?? SiteMarkSystemApi();
+
+  final SiteMarkSystemApi _api;
+
+  @override
+  Future<ArchiveSaveOutcome> saveArchive(String sourcePath) {
+    final suggestedName = File(sourcePath).uri.pathSegments.last;
+    return _api.saveArchive(sourcePath, suggestedName);
+  }
+}
+
 class SystemShareFileService implements ShareFileService {
   @override
   Future<void> shareFile(String path) async {

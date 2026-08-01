@@ -384,6 +384,16 @@ class AppStrings {
   String get backupComplete => _english
       ? 'Backup created. Choose where to share or save it.'
       : '备份已生成，请选择分享或保存位置';
+  String get backupSaved => _english ? 'Backup saved' : '备份已保存';
+  String get backupGeneratedNotSaved => _english
+      ? 'Backup created, but not yet saved to the selected location'
+      : '备份文件已生成，但尚未保存到所选位置';
+  String get backupSaveFailed => _english
+      ? 'Backup created, but it could not be saved. Try again or share it.'
+      : '备份文件已生成，但保存失败；可再次保存或改用分享';
+  String get saveAgain => _english ? 'Save again' : '再次保存';
+  String get shareBackup => _english ? 'Share' : '分享';
+  String get backupShared => _english ? 'Backup shared' : '备份已分享';
   String get backupFailedFriendly =>
       _english ? 'Could not create the backup' : '无法生成备份';
   String get chooseRestoreZip => _english ? 'Choose backup ZIP' : '选择备份 ZIP';

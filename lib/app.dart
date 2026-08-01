@@ -172,6 +172,10 @@ final shareFileServiceProvider = Provider<ShareFileService>(
   (ref) => SystemShareFileService(),
 );
 
+final archiveSaveServiceProvider = Provider<ArchiveSaveService>(
+  (ref) => PigeonArchiveSaveService(),
+);
+
 final diagnosticBundleServiceProvider = FutureProvider<DiagnosticBundleService>((
   ref,
 ) async {

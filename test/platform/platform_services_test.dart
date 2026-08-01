@@ -130,6 +130,20 @@ void main() {
       expect(api.settingsOpened, isTrue);
     });
   });
+
+  test('archive saver sends the source path and basename to Android', () async {
+    final api = _FakeSystemApi();
+    final service = PigeonArchiveSaveService(api: api);
+    final source =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}'
+        'sitemark-backup-123.zip';
+
+    final outcome = await service.saveArchive(source);
+
+    expect(outcome, ArchiveSaveOutcome.saved);
+    expect(api.archiveSourcePath, source);
+    expect(api.archiveSuggestedName, 'sitemark-backup-123.zip');
+  });
 }
 
 class _FakeSystemApi extends SiteMarkSystemApi {
@@ -144,6 +158,18 @@ class _FakeSystemApi extends SiteMarkSystemApi {
     mimeType: 'image/jpeg',
   );
   bool settingsOpened = false;
+  String? archiveSourcePath;
+  String? archiveSuggestedName;
+
+  @override
+  Future<ArchiveSaveOutcome> saveArchive(
+    String sourcePath,
+    String suggestedName,
+  ) async {
+    archiveSourcePath = sourcePath;
+    archiveSuggestedName = suggestedName;
+    return ArchiveSaveOutcome.saved;
+  }
 
   @override
   Future<LocationPermissionState> getLocationPermissionState() async =>
