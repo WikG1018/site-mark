@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
+import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
@@ -129,8 +130,55 @@ class _CapturePagedListState extends State<CapturePagedList> {
         unawaited(widget.controller.refresh());
         return;
       }
+      if (_watchedRowsChangeQueryMembershipOrOrder(rows)) {
+        unawaited(widget.controller.refresh());
+        return;
+      }
       widget.controller.replaceWatchedRows(rows);
     });
+  }
+
+  bool _watchedRowsChangeQueryMembershipOrOrder(
+    Iterable<CaptureSummary> watchedRows,
+  ) {
+    final visibleRows = {
+      for (final row in widget.controller.state.rows) row.capture.id: row,
+    };
+    final query = widget.controller.state.query;
+    for (final row in watchedRows) {
+      final previous = visibleRows[row.capture.id];
+      if (previous == null ||
+          _rowChangesQueryMembershipOrOrder(previous, row, query)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _rowChangesQueryMembershipOrOrder(
+    CaptureSummary previous,
+    CaptureSummary current,
+    CaptureListQuery query,
+  ) {
+    final before = previous.capture;
+    final after = current.capture;
+    if ((before.status == CaptureStatus.pendingCamera) !=
+            (after.status == CaptureStatus.pendingCamera) ||
+        before.capturedAt != after.capturedAt ||
+        before.createdAt != after.createdAt) {
+      return true;
+    }
+    if (query.filter.projectId != null && before.projectId != after.projectId) {
+      return true;
+    }
+    if (query.normalizedTerms.isEmpty) return false;
+    return previous.projectName != current.projectName ||
+        before.workLocation != after.workLocation ||
+        before.workContent != after.workContent ||
+        before.photographer != after.photographer ||
+        before.notes != after.notes ||
+        before.photoNumber != after.photoNumber ||
+        before.address != after.address;
   }
 
   void _scheduleLoadMore(int index, CapturePagerState state) {

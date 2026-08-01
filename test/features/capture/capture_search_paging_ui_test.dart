@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
+import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
@@ -555,6 +556,112 @@ void main() {
       await _unmount(tester);
     },
   );
+
+  testWidgets(
+    'watched edit that no longer matches the search refreshes the page',
+    (tester) async {
+      final source = _FakeCaptureQuerySource()
+        ..enqueue(
+          () => Future.value(
+            _page([_summary(0, notes: '保留关键词')], hasMore: false),
+          ),
+        )
+        ..enqueue(() => Future.value(_page([], hasMore: false)));
+      final controller = CapturePagerController(source);
+      unawaited(
+        controller.setQuery(const CaptureListQuery(searchText: '保留关键词')),
+      );
+      addTearDown(() {
+        controller.dispose();
+        unawaited(source.dispose());
+      });
+
+      await tester.pumpWidget(_pagedHarness(controller, source));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('row-capture-0')), findsOneWidget);
+
+      source.watchedRows.add([_summary(0, notes: '已移除关键词')]);
+      await tester.pumpAndSettle();
+
+      expect(source.pageQueries, hasLength(2));
+      expect(find.byKey(const Key('row-capture-0')), findsNothing);
+      await _unmount(tester);
+    },
+  );
+
+  testWidgets('watched edit outside the date predicate refreshes the page', (
+    tester,
+  ) async {
+    final source = _FakeCaptureQuerySource()
+      ..enqueue(
+        () => Future.value(
+          _page([
+            _summary(0, capturedAt: DateTime(2026, 7, 16, 12)),
+          ], hasMore: false),
+        ),
+      )
+      ..enqueue(() => Future.value(_page([], hasMore: false)));
+    final controller = CapturePagerController(source);
+    unawaited(
+      controller.setQuery(
+        const CaptureListQuery(
+          filter: CaptureFilter(year: 2026, month: 7, day: 16),
+        ),
+      ),
+    );
+    addTearDown(() {
+      controller.dispose();
+      unawaited(source.dispose());
+    });
+
+    await tester.pumpWidget(_pagedHarness(controller, source));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('row-capture-0')), findsOneWidget);
+
+    source.watchedRows.add([
+      _summary(0, capturedAt: DateTime(2026, 7, 17, 12)),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(source.pageQueries, hasLength(2));
+    expect(find.byKey(const Key('row-capture-0')), findsNothing);
+    await _unmount(tester);
+  });
+
+  testWidgets('stale watched refresh cannot overwrite a later query', (
+    tester,
+  ) async {
+    final staleRefresh = Completer<CapturePage>();
+    final source = _FakeCaptureQuerySource()
+      ..enqueue(
+        () => Future.value(_page([_summary(0, notes: '旧关键词')], hasMore: false)),
+      )
+      ..enqueue(() => staleRefresh.future)
+      ..enqueue(
+        () => Future.value(_page([_summary(1, notes: '新关键词')], hasMore: false)),
+      );
+    final controller = CapturePagerController(source);
+    unawaited(controller.setQuery(const CaptureListQuery(searchText: '旧关键词')));
+    addTearDown(() {
+      controller.dispose();
+      unawaited(source.dispose());
+    });
+
+    await tester.pumpWidget(_pagedHarness(controller, source));
+    await tester.pumpAndSettle();
+    source.watchedRows.add([_summary(0, notes: '已移除关键词')]);
+    await _pumpUntil(tester, () => source.pageQueries.length == 2);
+
+    await controller.setQuery(const CaptureListQuery(searchText: '新关键词'));
+    await tester.pump();
+    staleRefresh.complete(_page([_summary(2, notes: '过期关键词')], hasMore: false));
+    await tester.pumpAndSettle();
+
+    expect(controller.state.query.searchText, '新关键词');
+    expect(find.byKey(const Key('row-capture-1')), findsOneWidget);
+    expect(find.byKey(const Key('row-capture-2')), findsNothing);
+    await _unmount(tester);
+  });
 
   testWidgets('a newer cursor refreshes at top without showing an action', (
     tester,
