@@ -413,6 +413,45 @@ void main() {
     },
   );
 
+  test(
+    'watches selected capture summaries through rendering completion',
+    () async {
+      await database.createProject(id: 'project', name: '车间改造');
+      final pending = await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'A 区',
+        workContent: '风管安装',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+      );
+      await database.markCaptured(
+        captureId: pending.id,
+        capturedAt: DateTime(2026, 7, 16, 9, 32),
+      );
+      await database.markRendering(
+        captureId: pending.id,
+        originalSha256: originalHash,
+      );
+
+      final updates = StreamIterator(
+        database.watchCaptureSummariesByIds({'capture-1'}),
+      );
+      addTearDown(updates.cancel);
+      expect(await updates.moveNext(), isTrue);
+      expect(updates.current.single.capture.status, CaptureStatus.rendering);
+
+      await database.markReady(
+        captureId: pending.id,
+        publishedUri: 'content://media/photo/1',
+      );
+
+      expect(await updates.moveNext(), isTrue);
+      expect(updates.current.single.capture.status, CaptureStatus.ready);
+    },
+  );
+
   test('rejects illegal persisted state transitions', () async {
     await database.createProject(
       id: 'project',

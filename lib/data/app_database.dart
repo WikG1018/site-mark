@@ -144,13 +144,14 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) async {
       await migrator.createAll();
       await _createCaptureIndexes();
+      await _createCaptureCursorIndexes();
     },
     onUpgrade: (migrator, from, to) async {
       // When migrating from v2 directly to v4+, migrator.createTable creates
@@ -229,6 +230,9 @@ class AppDatabase extends _$AppDatabase {
       if (from < 8) {
         await migrator.addColumn(projects, projects.restoreOperationId);
       }
+      if (from < 9) {
+        await _createCaptureCursorIndexes();
+      }
       await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
@@ -277,6 +281,17 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS capture_records_project_sort_idx '
       'ON captures (project_id, COALESCE(captured_at, created_at) DESC)',
+    );
+  }
+
+  Future<void> _createCaptureCursorIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_sort_cursor_idx '
+      'ON captures (COALESCE(captured_at, created_at) DESC, id DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_records_project_sort_cursor_idx '
+      'ON captures (project_id, COALESCE(captured_at, created_at) DESC, id DESC)',
     );
   }
 
@@ -859,6 +874,12 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  Stream<List<CaptureSummary>> watchCaptureSummariesByIds(Set<String> ids) {
+    if (ids.isEmpty) return Stream.value(const []);
+    final query = _captureSummarySelectable(null, ids: ids);
+    return query.watch();
+  }
+
   /// Unfiltered summary stream used to derive available filter options
   /// (projects, years, months, days) without applying the user's selection.
   Stream<List<CaptureSummary>> watchAllCaptureSummaries() {
@@ -1132,7 +1153,10 @@ class AppDatabase extends _$AppDatabase {
   /// Shared select with a join on `captures.project_id = projects.id`,
   /// excluding `pendingCamera` rows, applying an optional [filter], and
   /// sorting by `coalesce(captured_at, created_at)` descending.
-  Selectable<CaptureSummary> _captureSummarySelectable(CaptureFilter? filter) {
+  Selectable<CaptureSummary> _captureSummarySelectable(
+    CaptureFilter? filter, {
+    Set<String>? ids,
+  }) {
     final query =
         select(captureRecords).join([
             innerJoin(
@@ -1156,6 +1180,9 @@ class AppDatabase extends _$AppDatabase {
             ),
           ]);
 
+    if (ids != null) {
+      query.where(captureRecords.id.isIn(ids));
+    }
     if (filter != null) {
       if (filter.projectId != null) {
         query.where(captureRecords.projectId.equals(filter.projectId!));

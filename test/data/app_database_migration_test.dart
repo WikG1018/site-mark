@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart' show QueryExecutor;
+import 'package:drift/drift.dart' show QueryExecutor, Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -493,29 +493,135 @@ Future<Map<String, String>> captureIndexes(AppDatabase database) async {
   };
 }
 
-String _normalizedSql(String sql) =>
+/// Opens the v8 table shapes and index set, then lets the current database
+/// implementation run the real v8 upgrade path.
+QueryExecutor openV8AndUpgrade() {
+  final db = sqlite3.openInMemory();
+  db.execute('''
+    CREATE TABLE projects (
+      id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      restore_operation_id TEXT,
+      watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+      watermark_opacity REAL NOT NULL DEFAULT 0.78,
+      watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE app_settings (
+      id TEXT NOT NULL,
+      theme_mode TEXT NOT NULL DEFAULT 'system',
+      locale_code TEXT,
+      default_watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+      default_watermark_opacity REAL NOT NULL DEFAULT 0.78,
+      default_watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      default_watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+      location_permission_prompt_dismissed INTEGER NOT NULL DEFAULT 0,
+      use_dynamic_color INTEGER NOT NULL DEFAULT 0,
+      completion_notifications_enabled INTEGER NOT NULL DEFAULT 0,
+      app_seed_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE captures (
+      id TEXT NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+      photo_number TEXT,
+      work_location TEXT NOT NULL,
+      work_content TEXT NOT NULL,
+      photographer TEXT NOT NULL,
+      notes TEXT,
+      original_path TEXT NOT NULL,
+      published_uri TEXT,
+      original_sha256 TEXT,
+      status TEXT NOT NULL,
+      failure_reason TEXT,
+      created_at INTEGER NOT NULL,
+      captured_at INTEGER,
+      latitude REAL,
+      longitude REAL,
+      accuracy_meters REAL,
+      address TEXT,
+      location_outcome TEXT,
+      processing_attempts INTEGER NOT NULL DEFAULT 0,
+      watermark_locale_code TEXT NOT NULL DEFAULT 'zh',
+      location_resolution TEXT NOT NULL DEFAULT 'resolved',
+      original_deleted_at INTEGER,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('CREATE INDEX capture_records_status_idx ON captures (status)');
+  db.execute(
+    'CREATE INDEX capture_records_sort_idx '
+    'ON captures (COALESCE(captured_at, created_at) DESC)',
+  );
+  db.execute(
+    'CREATE INDEX capture_records_project_sort_idx '
+    'ON captures (project_id, COALESCE(captured_at, created_at) DESC)',
+  );
+  db.execute('PRAGMA user_version = 8;');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
+Future<Map<String, String>> indexSql(
+  AppDatabase database,
+  String pattern,
+) async {
+  final rows = await database
+      .customSelect(
+        'SELECT name, sql FROM sqlite_master '
+        'WHERE type = \'index\' AND name LIKE ? AND sql IS NOT NULL '
+        'ORDER BY name',
+        variables: [Variable.withString(pattern)],
+      )
+      .get();
+  return {
+    for (final row in rows) row.read<String>('name'): row.read<String>('sql'),
+  };
+}
+
+String normalizedSql(String sql) =>
     sql.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
 
 Future<void> expectCaptureIndexes(AppDatabase database) async {
   final indexes = await captureIndexes(database);
   expect(indexes.keys, {
     'capture_records_project_sort_idx',
+    'capture_records_project_sort_cursor_idx',
     'capture_records_sort_idx',
+    'capture_records_sort_cursor_idx',
     'capture_records_status_idx',
   });
   expect(
-    _normalizedSql(indexes['capture_records_status_idx']!),
+    normalizedSql(indexes['capture_records_status_idx']!),
     'create index capture_records_status_idx on captures (status)',
   );
   expect(
-    _normalizedSql(indexes['capture_records_sort_idx']!),
+    normalizedSql(indexes['capture_records_sort_idx']!),
     'create index capture_records_sort_idx on captures '
     '(coalesce(captured_at, created_at) desc)',
   );
   expect(
-    _normalizedSql(indexes['capture_records_project_sort_idx']!),
+    normalizedSql(indexes['capture_records_project_sort_idx']!),
     'create index capture_records_project_sort_idx on captures '
     '(project_id, coalesce(captured_at, created_at) desc)',
+  );
+  expect(
+    normalizedSql(indexes['capture_records_sort_cursor_idx']!),
+    'create index capture_records_sort_cursor_idx on captures '
+    '(coalesce(captured_at, created_at) desc, id desc)',
+  );
+  expect(
+    normalizedSql(indexes['capture_records_project_sort_cursor_idx']!),
+    'create index capture_records_project_sort_cursor_idx on captures '
+    '(project_id, coalesce(captured_at, created_at) desc, id desc)',
   );
 }
 
@@ -720,6 +826,24 @@ void main() {
     addTearDown(database.close);
 
     await expectCaptureIndexes(database);
+  });
+
+  test('v8 to v9 creates stable cursor indexes', () async {
+    final database = AppDatabase.forTesting(openV8AndUpgrade());
+    addTearDown(database.close);
+
+    final indexes = await indexSql(database, 'capture_records_%_cursor_idx');
+    expect(
+      indexes.keys,
+      containsAll({
+        'capture_records_sort_cursor_idx',
+        'capture_records_project_sort_cursor_idx',
+      }),
+    );
+    expect(
+      normalizedSql(indexes['capture_records_sort_cursor_idx']!),
+      contains('coalesce(captured_at, created_at) desc, id desc'),
+    );
   });
 
   test('v6 to v7 migration adds app_seed_color_argb column', () async {
