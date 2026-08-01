@@ -14,15 +14,23 @@ typedef ProjectBackupExport =
       bool allowFailedOmissions,
     });
 
+class ProjectBackupSelectionArguments {
+  const ProjectBackupSelectionArguments({this.initialProjectIds = const {}});
+
+  final Set<String> initialProjectIds;
+}
+
 class ProjectBackupSelectionScreen extends ConsumerStatefulWidget {
   const ProjectBackupSelectionScreen({
     super.key,
     this.exportProjects,
     this.shareFile,
+    this.initialProjectIds = const {},
   });
 
   final ProjectBackupExport? exportProjects;
   final Future<void> Function(String path)? shareFile;
+  final Set<String> initialProjectIds;
 
   @override
   ConsumerState<ProjectBackupSelectionScreen> createState() =>
@@ -31,8 +39,14 @@ class ProjectBackupSelectionScreen extends ConsumerStatefulWidget {
 
 class _ProjectBackupSelectionScreenState
     extends ConsumerState<ProjectBackupSelectionScreen> {
-  final Set<String> _selectedIds = {};
+  late final Set<String> _selectedIds;
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIds = {...widget.initialProjectIds};
+  }
 
   void _toggleAll(List<Project> projects) {
     setState(() {

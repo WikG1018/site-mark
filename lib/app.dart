@@ -468,10 +468,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'backup',
-                    pageBuilder: (context, state) => _sharedAxisPage(
-                      state,
-                      const ProjectBackupSelectionScreen(),
-                    ),
+                    pageBuilder: (context, state) {
+                      final arguments =
+                          state.extra is ProjectBackupSelectionArguments
+                          ? state.extra! as ProjectBackupSelectionArguments
+                          : const ProjectBackupSelectionArguments();
+                      return _sharedAxisPage(
+                        state,
+                        ProjectBackupSelectionScreen(
+                          initialProjectIds: arguments.initialProjectIds,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

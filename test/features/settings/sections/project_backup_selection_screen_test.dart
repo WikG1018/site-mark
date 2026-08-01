@@ -27,6 +27,7 @@ void main() {
     WidgetTester tester, {
     ProjectBackupExport? exportProjects,
     Future<void> Function(String path)? shareFile,
+    Set<String> initialProjectIds = const {},
   }) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
@@ -47,6 +48,7 @@ void main() {
           home: ProjectBackupSelectionScreen(
             exportProjects: exportProjects,
             shareFile: shareFile,
+            initialProjectIds: initialProjectIds,
           ),
         ),
       ),
@@ -85,6 +87,25 @@ void main() {
       find.widgetWithText(FilledButton, '继续'),
     );
     expect(button.onPressed, isNull);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('preselects a project opened from project details', (
+    tester,
+  ) async {
+    await pumpScreen(tester, initialProjectIds: const {'p2'});
+
+    expect(find.text('已选择 1 个项目'), findsOneWidget);
+    final tile = tester.widget<CheckboxListTile>(
+      find.widgetWithText(CheckboxListTile, '二号项目'),
+    );
+    expect(tile.value, isTrue);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('backup-continue')))
+          .onPressed,
+      isNotNull,
+    );
     await disposeScreen(tester);
   });
 

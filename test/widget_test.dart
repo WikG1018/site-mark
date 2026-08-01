@@ -355,10 +355,13 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.archive_outlined));
     await tester.pumpAndSettle();
-    expect(find.text('导出项目资料'), findsOneWidget);
-    await tester.tap(find.text('生成并分享'));
+    expect(find.text('备份项目'), findsOneWidget);
+    expect(find.text('已选择 1 个项目'), findsOneWidget);
+    expect(find.text('东区厂房改造'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    expect(share.lastPath, '/exports/project-1.zip');
+    expect(find.text('拍摄记录'), findsOneWidget);
 
     await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();
