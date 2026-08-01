@@ -877,7 +877,15 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<CaptureSummary>> watchCaptureSummariesByIds(Set<String> ids) {
     if (ids.isEmpty) return Stream.value(const []);
     final query = _captureSummarySelectable(null, ids: ids);
-    return query.watch();
+    return watchWithConditionalPolling(
+      source: query.watch(),
+      load: query.get,
+      shouldPoll: (rows) =>
+          rows.any((summary) => _isProcessing(summary.capture.status)),
+      equals: _sameCaptureSummaries,
+      pollInterval: externalRefreshInterval,
+      isPaused: () => _pollingPaused,
+    );
   }
 
   /// Unfiltered summary stream used to derive available filter options
@@ -1176,6 +1184,10 @@ class AppDatabase extends _$AppDatabase {
                 captureRecords.capturedAt,
                 captureRecords.createdAt,
               ]),
+              mode: OrderingMode.desc,
+            ),
+            OrderingTerm(
+              expression: captureRecords.id,
               mode: OrderingMode.desc,
             ),
           ]);
