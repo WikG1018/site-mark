@@ -402,24 +402,24 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
             newer: direction == CaptureFullscreenDirection.newer,
             limit: 10,
           );
-          final photos = <CaptureFullscreenPhoto>[];
+          final pendingPhotos = <Future<CaptureFullscreenPhoto>>[];
           for (final summary in summaries) {
             final capture = summary.capture;
             cursors[capture.id] = _cursorFor(capture);
-            photos.add(
-              CaptureFullscreenPhoto(
+            pendingPhotos.add(() async {
+              final resolution = await _resolveCapture(capture, source);
+              final path = resolution.kind == _PreviewResolutionKind.image
+                  ? resolution.path
+                  : null;
+              return CaptureFullscreenPhoto(
                 id: capture.id,
-                includeInSequence: _supportsSource(capture, source),
-                resolvePath: () async {
-                  final resolution = await _resolveCapture(capture, source);
-                  return resolution.kind == _PreviewResolutionKind.image
-                      ? resolution.path
-                      : null;
-                },
-              ),
-            );
+                includeInSequence: path != null,
+                initialPath: path,
+                resolvePath: () async => path,
+              );
+            }());
           }
-          return photos;
+          return Future.wait(pendingPhotos);
         },
       );
       page = CaptureFullscreenScreen.sequence(sequence: sequence);
@@ -454,16 +454,6 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
 
   CapturePageCursor _cursorFor(CaptureRecord capture) =>
       (sortTime: capture.capturedAt ?? capture.createdAt, id: capture.id);
-
-  bool _supportsSource(CaptureRecord capture, CapturePreviewSource source) =>
-      switch (source) {
-        CapturePreviewSource.watermarked =>
-          capture.status == CaptureStatus.ready,
-        CapturePreviewSource.original => capture.originalDeletedAt == null,
-        CapturePreviewSource.bestAvailable =>
-          capture.status == CaptureStatus.ready ||
-              capture.originalDeletedAt == null,
-      };
 
   Widget _placeholder(
     BuildContext context,

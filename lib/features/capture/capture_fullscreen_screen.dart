@@ -117,6 +117,7 @@ class _CaptureFullscreenScreenState
   int _currentPage = 0;
   String? _currentPhotoId;
   String? _scaleTargetPhotoId;
+  int _sequenceGeneration = 0;
   late List<CaptureFullscreenPhoto> _photos;
   VoidCallback? _releaseDetach;
 
@@ -178,6 +179,8 @@ class _CaptureFullscreenScreenState
     _scaleController.stop();
     _scaleAnimation = null;
     _scaleTargetPhotoId = null;
+    _sequenceGeneration++;
+    _resetPhotoCachesForSequence();
     _photos = List<CaptureFullscreenPhoto>.of(widget.photos);
     _currentPage = widget.initialIndex;
     _currentPhotoId = _photos[widget.initialIndex].id;
@@ -216,6 +219,24 @@ class _CaptureFullscreenScreenState
     _transformationListeners.clear();
   }
 
+  void _resetPhotoCachesForSequence() {
+    final retiredControllers = _transformationControllers.entries
+        .map((entry) {
+          final listener = _transformationListeners[entry.key];
+          if (listener != null) entry.value.removeListener(listener);
+          return entry.value;
+        })
+        .toList(growable: false);
+    _transformationControllers.clear();
+    _transformationListeners.clear();
+    _pathFutures.clear();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final controller in retiredControllers) {
+        controller.dispose();
+      }
+    });
+  }
+
   void _onSequenceChanged() {
     if (!mounted) return;
     final sequence = widget.sequence;
@@ -241,7 +262,9 @@ class _CaptureFullscreenScreenState
     // pixels and avoids building the old index with a newly prepended photo.
     _photos = nextPhotos;
     if (correctedPixels != null) {
-      _pageController.position.correctPixels(correctedPixels);
+      final position = _pageController.position;
+      position.hold(() {});
+      position.correctPixels(correctedPixels);
     }
     setState(() {
       if (nextCurrentPage >= 0) _currentPage = nextCurrentPage;
@@ -394,91 +417,104 @@ class _CaptureFullscreenScreenState
               final transformController = _controllerFor(photo.id);
 
               return KeyedSubtree(
-                key: Key('fullscreen-photo-id-${photo.id}'),
-                child: GestureDetector(
-                  key: Key('fullscreen-photo-$index'),
-                  onTap: _toggleChrome,
-                  onDoubleTapDown: (details) =>
-                      _doubleTapPosition = details.localPosition,
-                  onDoubleTap: index == _currentPage ? _handleDoubleTap : null,
-                  onVerticalDragStart: (!_zoomed && index == _currentPage)
-                      ? _onVerticalDragStart
-                      : null,
-                  onVerticalDragUpdate: (!_zoomed && index == _currentPage)
-                      ? _onVerticalDragUpdate
-                      : null,
-                  onVerticalDragEnd: (!_zoomed && index == _currentPage)
-                      ? _onVerticalDragEnd
-                      : null,
-                  child: Transform.translate(
-                    offset: index == _currentPage
-                        ? Offset(0, _dragOffset)
-                        : Offset.zero,
-                    child: Transform.scale(
-                      scale: index == _currentPage ? dragScale : 1.0,
-                      child: InteractiveViewer(
-                        transformationController: transformController,
-                        panEnabled: _zoomed && index == _currentPage,
-                        minScale: 1,
-                        maxScale: 4,
-                        child: Center(
-                          child: Semantics(
-                            label: strings.fullscreenPhotoSemantics,
-                            liveRegion: index == _currentPage,
-                            child: FutureBuilder<String?>(
-                              future: _pathFutures.putIfAbsent(
-                                photo.id,
-                                photo.resolvePath,
+                key: ValueKey(
+                  'fullscreen-photo-instance-$_sequenceGeneration-${photo.id}',
+                ),
+                child: KeyedSubtree(
+                  key: Key('fullscreen-photo-id-${photo.id}'),
+                  child: GestureDetector(
+                    key: Key('fullscreen-photo-$index'),
+                    onTap: _toggleChrome,
+                    onDoubleTapDown: (details) =>
+                        _doubleTapPosition = details.localPosition,
+                    onDoubleTap: index == _currentPage
+                        ? _handleDoubleTap
+                        : null,
+                    onVerticalDragStart: (!_zoomed && index == _currentPage)
+                        ? _onVerticalDragStart
+                        : null,
+                    onVerticalDragUpdate: (!_zoomed && index == _currentPage)
+                        ? _onVerticalDragUpdate
+                        : null,
+                    onVerticalDragEnd: (!_zoomed && index == _currentPage)
+                        ? _onVerticalDragEnd
+                        : null,
+                    child: Transform.translate(
+                      offset: index == _currentPage
+                          ? Offset(0, _dragOffset)
+                          : Offset.zero,
+                      child: Transform.scale(
+                        scale: index == _currentPage ? dragScale : 1.0,
+                        child: InteractiveViewer(
+                          transformationController: transformController,
+                          panEnabled: _zoomed && index == _currentPage,
+                          minScale: 1,
+                          maxScale: 4,
+                          child: Center(
+                            child: Semantics(
+                              label: strings.fullscreenPhotoSemantics,
+                              liveRegion: index == _currentPage,
+                              child: FutureBuilder<String?>(
+                                key: ValueKey(
+                                  'fullscreen-path-$_sequenceGeneration-${photo.id}',
+                                ),
+                                future: _pathFutures.putIfAbsent(
+                                  photo.id,
+                                  photo.resolvePath,
+                                ),
+                                initialData: photo.initialPath,
+                                builder: (context, snapshot) {
+                                  final path = snapshot.data;
+                                  return Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      if (preview != null)
+                                        Image(
+                                          image: preview,
+                                          fit: BoxFit.contain,
+                                          gaplessPlayback: true,
+                                        ),
+                                      if (path != null)
+                                        Image.file(
+                                          File(path),
+                                          fit: BoxFit.contain,
+                                          gaplessPlayback: true,
+                                          frameBuilder:
+                                              (
+                                                context,
+                                                child,
+                                                frame,
+                                                wasSynchronouslyLoaded,
+                                              ) {
+                                                if (wasSynchronouslyLoaded) {
+                                                  return child;
+                                                }
+                                                return AnimatedOpacity(
+                                                  opacity: frame == null
+                                                      ? 0
+                                                      : 1,
+                                                  duration:
+                                                      AppMotion.durationOf(
+                                                        context,
+                                                        AppMotion.short4,
+                                                      ),
+                                                  curve: AppMotion.standard,
+                                                  child: child,
+                                                );
+                                              },
+                                          errorBuilder: (context, error, _) =>
+                                              preview != null
+                                              ? const SizedBox.shrink()
+                                              : _missingPhoto(context),
+                                        )
+                                      else if (snapshot.connectionState ==
+                                              ConnectionState.done &&
+                                          preview == null)
+                                        _missingPhoto(context),
+                                    ],
+                                  );
+                                },
                               ),
-                              initialData: photo.initialPath,
-                              builder: (context, snapshot) {
-                                final path = snapshot.data;
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    if (preview != null)
-                                      Image(
-                                        image: preview,
-                                        fit: BoxFit.contain,
-                                        gaplessPlayback: true,
-                                      ),
-                                    if (path != null)
-                                      Image.file(
-                                        File(path),
-                                        fit: BoxFit.contain,
-                                        gaplessPlayback: true,
-                                        frameBuilder:
-                                            (
-                                              context,
-                                              child,
-                                              frame,
-                                              wasSynchronouslyLoaded,
-                                            ) {
-                                              if (wasSynchronouslyLoaded) {
-                                                return child;
-                                              }
-                                              return AnimatedOpacity(
-                                                opacity: frame == null ? 0 : 1,
-                                                duration: AppMotion.durationOf(
-                                                  context,
-                                                  AppMotion.short4,
-                                                ),
-                                                curve: AppMotion.standard,
-                                                child: child,
-                                              );
-                                            },
-                                        errorBuilder: (context, error, _) =>
-                                            preview != null
-                                            ? const SizedBox.shrink()
-                                            : _missingPhoto(context),
-                                      )
-                                    else if (snapshot.connectionState ==
-                                            ConnectionState.done &&
-                                        preview == null)
-                                      _missingPhoto(context),
-                                  ],
-                                );
-                              },
                             ),
                           ),
                         ),

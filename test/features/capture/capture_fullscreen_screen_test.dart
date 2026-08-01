@@ -74,6 +74,13 @@ Future<void> doubleTapViewer(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+List<String> paintedFilePaths(WidgetTester tester) => tester
+    .widgetList<Image>(find.byType(Image))
+    .map((image) => image.image)
+    .whereType<FileImage>()
+    .map((provider) => provider.file.path)
+    .toList(growable: false);
+
 void main() {
   testWidgets('shows current immediately and prefetches both directions', (
     tester,
@@ -190,6 +197,89 @@ void main() {
     );
     await gesture.up();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('ballistic prepend freezes the corrected visible photo', (
+    tester,
+  ) async {
+    final newer = Completer<List<CaptureFullscreenPhoto>>();
+    final sequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto(
+        id: 'current',
+        initialPath: '/current.jpg',
+        resolvePath: () async => '/current.jpg',
+      ),
+      loader: (direction, anchorId) {
+        if (direction == CaptureFullscreenDirection.newer) {
+          return newer.future;
+        }
+        return Future.value([
+          for (var index = 0; index < 10; index++)
+            CaptureFullscreenPhoto(
+              id: 'older-$index',
+              resolvePath: () async => '/older-$index.jpg',
+            ),
+        ]);
+      },
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.sequence(sequence: sequence),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    final pageController = tester
+        .widget<PageView>(find.byType(PageView))
+        .controller!;
+    final currentTransform = tester
+        .widget<InteractiveViewer>(
+          find.descendant(
+            of: find.byKey(const Key('fullscreen-photo-id-current')),
+            matching: find.byType(InteractiveViewer),
+          ),
+        )
+        .transformationController!;
+    final transformBefore = List<double>.of(currentTransform.value.storage);
+
+    await tester.fling(find.byType(PageView), const Offset(-180, 0), 1000);
+    final pageBeforePrepend = pageController.page!;
+    expect(pageBeforePrepend, greaterThan(0));
+    expect(pageBeforePrepend, lessThan(1));
+    final visibleIdBefore = sequence.currentId;
+
+    newer.complete([
+      CaptureFullscreenPhoto(
+        id: 'newer-2',
+        resolvePath: () async => '/newer-2.jpg',
+      ),
+      CaptureFullscreenPhoto(
+        id: 'newer-1',
+        resolvePath: () async => '/newer-1.jpg',
+      ),
+    ]);
+    await tester.pump();
+    final correctedPage = pageBeforePrepend + 2;
+    expect(pageController.page, closeTo(correctedPage, 0.001));
+    expect(sequence.currentId, visibleIdBefore);
+    expect(currentTransform.value.storage, orderedEquals(transformBefore));
+
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(pageController.page, closeTo(correctedPage, 0.001));
+      expect(sequence.currentId, visibleIdBefore);
+      expect(currentTransform.value.storage, orderedEquals(transformBefore));
+    }
   });
 
   testWidgets('an edge failure exposes only that edge retry', (tester) async {
@@ -400,6 +490,94 @@ void main() {
     expect(
       find.byKey(const Key('fullscreen-photo-id-new-current')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('same-ID sequence replacement resets path and zoom state', (
+    tester,
+  ) async {
+    final oldPath = Completer<String?>();
+    final newPath = Completer<String?>();
+    final oldSequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto(
+        id: 'same-id',
+        initialPath: '/source-a.jpg',
+        resolvePath: () => oldPath.future,
+      ),
+      loader: (direction, anchorId) async => [],
+    );
+    final newSequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto(
+        id: 'same-id',
+        resolvePath: () => newPath.future,
+      ),
+      loader: (direction, anchorId) async => [],
+    );
+    final selected = ValueNotifier(oldSequence);
+    addTearDown(selected.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ValueListenableBuilder<CaptureFullscreenSequence>(
+            valueListenable: selected,
+            builder: (context, sequence, _) => CaptureFullscreenScreen.sequence(
+              key: const Key('same-id-viewer'),
+              sequence: sequence,
+            ),
+          ),
+        ),
+      ),
+    );
+    final oldController = tester
+        .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+        .transformationController!;
+    oldController.value = Matrix4.diagonal3Values(2, 2, 1);
+    await tester.pump();
+    expect(
+      tester.widget<PageView>(find.byType(PageView)).physics,
+      isA<NeverScrollableScrollPhysics>(),
+    );
+
+    selected.value = newSequence;
+    await tester.pump();
+
+    final newController = tester
+        .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+        .transformationController!;
+    expect(newController, isNot(same(oldController)));
+    expect(
+      newController.value.storage,
+      orderedEquals(Matrix4.identity().storage),
+    );
+    expect(
+      tester.widget<PageView>(find.byType(PageView)).physics,
+      isA<PageScrollPhysics>(),
+    );
+    expect(paintedFilePaths(tester), isNot(contains('/source-a.jpg')));
+
+    oldPath.complete('/source-a-late.jpg');
+    await tester.pump();
+    expect(
+      paintedFilePaths(tester),
+      isNot(anyOf(contains('/source-a.jpg'), contains('/source-a-late.jpg'))),
+    );
+
+    newPath.complete('/source-b.jpg');
+    await tester.pump();
+    await tester.pump();
+    expect(paintedFilePaths(tester), contains('/source-b.jpg'));
+    expect(
+      paintedFilePaths(tester),
+      isNot(anyOf(contains('/source-a.jpg'), contains('/source-a-late.jpg'))),
     );
   });
 
