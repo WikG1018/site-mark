@@ -193,9 +193,9 @@ final class CapturePagerController extends ChangeNotifier {
   void _handleNewestCursor(CapturePageCursor? cursor) {
     if (_disposed || cursor == null) return;
     _observedNewestCursor = cursor;
+    if (_state.initialLoading) return;
     final current = _newestCursor;
     if (current == null) {
-      if (_state.initialLoading) return;
       if (_atTop) {
         _observedNewestCursor = null;
         unawaited(refresh());

@@ -232,6 +232,11 @@ void main() {
     source.emitNewest('q', _cursor(newest));
     await Future<void>.delayed(Duration.zero);
     expect(source.pageRequestCount, 2);
+
+    source.emitNewest('q', _cursor(newest));
+    await Future<void>.delayed(Duration.zero);
+    expect(source.pageRequestCount, 2);
+
     source.completePage('q', _page([newest], hasMore: false));
     await Future<void>.delayed(Duration.zero);
     expect(controller.state.rows.single.capture.id, 'new');
