@@ -412,6 +412,9 @@ class AppStrings {
       ? 'Backup created. Choose where to share or save it.'
       : '备份已生成，请选择分享或保存位置';
   String get backupSaved => _english ? 'Backup saved' : '备份已保存';
+  String backupSavedWithOmissions(int count) => _english
+      ? 'Backup saved; $count failed photo(s) were omitted as confirmed'
+      : '备份已保存，已按你的选择跳过 $count 张失败记录';
   String get backupGeneratedNotSaved => _english
       ? 'Backup created, but not yet saved to the selected location'
       : '备份文件已生成，但尚未保存到所选位置';
@@ -421,6 +424,9 @@ class AppStrings {
   String get saveAgain => _english ? 'Save again' : '再次保存';
   String get shareBackup => _english ? 'Share' : '分享';
   String get backupShared => _english ? 'Backup shared' : '备份已分享';
+  String get backupShareFailed => _english
+      ? 'Could not share the backup. You can try again.'
+      : '无法分享备份，请重试';
   String get backupFailedFriendly =>
       _english ? 'Could not create the backup' : '无法生成备份';
   String get chooseRestoreZip => _english ? 'Choose backup ZIP' : '选择备份 ZIP';

@@ -215,6 +215,7 @@ void main() {
     await tester.tap(find.byKey(const Key('backup-share')));
     await tester.pumpAndSettle();
     expect(sharedPath, '/tmp/projects.zip');
+    expect(find.text('备份已分享'), findsOneWidget);
     await disposeScreen(tester);
   });
 }

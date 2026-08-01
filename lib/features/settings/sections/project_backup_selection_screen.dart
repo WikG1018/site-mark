@@ -228,7 +228,7 @@ class _ProjectBackupSelectionScreenState
         : outcome == ArchiveSaveOutcome.saved
         ? result.omittedFailedCount == 0
               ? strings.backupSaved
-              : '备份已保存，已按你的选择跳过 ${result.omittedFailedCount} 张失败记录'
+              : strings.backupSavedWithOmissions(result.omittedFailedCount)
         : strings.backupGeneratedNotSaved;
     ScaffoldMessenger.of(
       context,
@@ -250,10 +250,13 @@ class _ProjectBackupSelectionScreenState
     }
     if (!mounted) return;
     setState(() => _sharing = false);
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.removeCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(
         content: Text(
-          failure == null ? strings.backupShared : strings.backupSaveFailed,
+          failure == null ? strings.backupShared : strings.backupShareFailed,
         ),
       ),
     );

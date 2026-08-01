@@ -102,7 +102,7 @@ jobs:
             "$APKSIGNER" verify --verbose --print-certs "$APK"
             BADGING="$($AAPT2 dump badging "$APK")"
             grep -Fq "package: name='io.github.wikg1018.sitemark' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'" <<<"$BADGING"
-            grep -Fxq "sdkVersion:'31'" <<<"$BADGING"
+            grep -Fxq "minSdkVersion:'31'" <<<"$BADGING"
             grep -Fxq "targetSdkVersion:'36'" <<<"$BADGING"
             PERMISSIONS="$($AAPT2 dump permissions "$APK")"
             for FORBIDDEN in \
