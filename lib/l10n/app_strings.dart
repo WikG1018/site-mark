@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/domain/app_links.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 
 class AppStrings {
   const AppStrings(this.locale);
@@ -102,6 +103,32 @@ class AppStrings {
   String get waitingForProcessing => _english ? 'Waiting' : '等待处理';
   String get rendering => _english ? 'Rendering watermark' : '生成水印';
   String get captureFailed => _english ? 'Capture failed' : '拍摄失败';
+  String captureFailureMessage(CaptureFailureCode code) => switch (code) {
+    CaptureFailureCode.cameraUnavailable =>
+      _english
+          ? 'The system camera is unavailable. Check the camera app and try again.'
+          : '系统相机暂不可用，请检查相机应用后重试',
+    CaptureFailureCode.queueUnavailable =>
+      _english
+          ? 'The photo is safe. Background processing will retry automatically.'
+          : '照片已安全保留，后台处理会自动重试',
+    CaptureFailureCode.originalMissing =>
+      _english
+          ? 'The original is missing, so the watermarked photo cannot be created.'
+          : '原图已缺失，无法生成水印照片',
+    CaptureFailureCode.originalModified =>
+      _english
+          ? 'The original has changed. Processing stopped to protect the record.'
+          : '原图已发生变化，为保护工程记录已停止处理',
+    CaptureFailureCode.processingFailed =>
+      _english
+          ? 'Photo processing failed. Keep the original and try processing again.'
+          : '照片处理失败，请保留原图并重新处理',
+    CaptureFailureCode.unexpected =>
+      _english
+          ? 'The photo could not be processed. Please try again.'
+          : '照片处理失败，请重试',
+  };
   String get captureQueuedContinue => _english
       ? 'Photo queued for background processing. Continue shooting.'
       : '照片已加入后台处理，可继续拍摄';

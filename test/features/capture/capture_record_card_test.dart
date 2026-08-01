@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -66,7 +67,11 @@ Future<void> pumpCard(
   await tester.pumpAndSettle();
 }
 
-CaptureRecord record({required String id, required CaptureStatus status}) {
+CaptureRecord record({
+  required String id,
+  required CaptureStatus status,
+  String? failureReason,
+}) {
   return CaptureRecord(
     id: id,
     projectId: 'project-1',
@@ -81,6 +86,7 @@ CaptureRecord record({required String id, required CaptureStatus status}) {
     processingAttempts: 0,
     watermarkLocaleCode: 'zh',
     locationResolution: 'resolved',
+    failureReason: failureReason,
   );
 }
 
@@ -107,6 +113,31 @@ void main() {
       find.byType(CaptureImagePreview),
     );
     expect(preview.heroTag, isNull);
+  });
+
+  testWidgets('failed card translates codes and hides legacy exception text', (
+    tester,
+  ) async {
+    await pumpCard(
+      tester,
+      capture: record(
+        id: 'capture-1',
+        status: CaptureStatus.failed,
+        failureReason: CaptureFailureCode.originalMissing.storageCode,
+      ),
+    );
+    expect(find.textContaining('原图已缺失'), findsOneWidget);
+
+    await pumpCard(
+      tester,
+      capture: record(
+        id: 'capture-2',
+        status: CaptureStatus.failed,
+        failureReason: 'Bad state: native bridge exploded',
+      ),
+    );
+    expect(find.textContaining('处理失败'), findsOneWidget);
+    expect(find.textContaining('native bridge'), findsNothing);
   });
 
   testWidgets('tap forwards the exact image path already shown by the card', (

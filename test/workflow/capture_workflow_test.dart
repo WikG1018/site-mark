@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
@@ -242,6 +243,34 @@ void main() {
   );
 
   test(
+    'camera failure persists a stable code instead of platform text',
+    () async {
+      platform.cameraOutcome = CameraOutcome.failed;
+      platform.cameraErrorMessage = 'ActivityNotFoundException: vendor detail';
+
+      final result = await workflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+        ),
+      );
+
+      final record = await database.captureById('capture-1');
+      expect(result.outcome, CaptureWorkflowOutcome.failed);
+      expect(result.failureCode, CaptureFailureCode.cameraUnavailable);
+      expect(
+        record?.failureReason,
+        CaptureFailureCode.cameraUnavailable.storageCode,
+      );
+      expect(record?.failureReason, isNot(contains('vendor detail')));
+    },
+  );
+
+  test(
     'launchCamera runs before location resolves and workflow returns queued',
     () async {
       // Replace the location future with one we control so we can prove the
@@ -445,6 +474,7 @@ void main() {
 
 class _FakePlatformServices implements PlatformServices {
   CameraOutcome cameraOutcome = CameraOutcome.captured;
+  String? cameraErrorMessage;
   final List<String> publishedNames = [];
   final List<String> events = [];
   (String, bool)? finishedCapture;
@@ -474,6 +504,7 @@ class _FakePlatformServices implements PlatformServices {
     return CameraCaptureResult(
       outcome: cameraOutcome,
       outputPath: '/private/$captureId.jpg',
+      errorMessage: cameraErrorMessage,
     );
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
@@ -258,7 +259,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${strings.captureFailed}: ${result.errorMessage ?? ''}',
+              '${strings.captureFailed}: '
+              '${strings.captureFailureMessage(result.failureCode ?? CaptureFailureCode.unexpected)}',
             ),
           ),
         );

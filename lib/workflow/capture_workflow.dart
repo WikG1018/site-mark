@@ -1,5 +1,6 @@
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
@@ -81,12 +82,12 @@ class CaptureWorkflowResult {
   const CaptureWorkflowResult({
     required this.outcome,
     this.capture,
-    this.errorMessage,
+    this.failureCode,
   });
 
   final CaptureWorkflowOutcome outcome;
   final CaptureRecord? capture;
-  final String? errorMessage;
+  final CaptureFailureCode? failureCode;
 }
 
 class CaptureWorkflow {
@@ -162,13 +163,13 @@ class CaptureWorkflow {
         case CameraOutcome.failed:
           final failed = await database.markFailed(
             captureId: captureId,
-            reason: camera.errorMessage ?? 'System camera failed',
+            reason: CaptureFailureCode.cameraUnavailable.storageCode,
           );
           await platform.finishCameraCapture(captureId, false);
           return CaptureWorkflowResult(
             outcome: CaptureWorkflowOutcome.failed,
             capture: failed,
-            errorMessage: camera.errorMessage,
+            failureCode: CaptureFailureCode.cameraUnavailable,
           );
         case CameraOutcome.captured:
           keepOriginalOnFailure = true;
@@ -186,7 +187,7 @@ class CaptureWorkflow {
         try {
           failed = await database.markFailed(
             captureId: captureId,
-            reason: error.toString(),
+            reason: CaptureFailureCode.unexpected.storageCode,
           );
         } on StateError {
           failed = record;
@@ -198,7 +199,7 @@ class CaptureWorkflow {
       return CaptureWorkflowResult(
         outcome: CaptureWorkflowOutcome.failed,
         capture: failed,
-        errorMessage: error.toString(),
+        failureCode: CaptureFailureCode.unexpected,
       );
     }
   }
@@ -252,7 +253,7 @@ class CaptureWorkflow {
         try {
           failed = await database.markFailed(
             captureId: recovered.captureId,
-            reason: error.toString(),
+            reason: CaptureFailureCode.unexpected.storageCode,
           );
         } on StateError {
           failed = latest;
@@ -262,7 +263,7 @@ class CaptureWorkflow {
       return CaptureWorkflowResult(
         outcome: CaptureWorkflowOutcome.failed,
         capture: failed,
-        errorMessage: error.toString(),
+        failureCode: CaptureFailureCode.unexpected,
       );
     }
   }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
@@ -107,9 +108,9 @@ final class CaptureProcessor {
 
     // Step 5: verify the captured-time/photo-number/path evidence is present.
     // These are permanent failures regardless of attempt budget.
-    final permanentMissing = _validateEvidence(attempted);
-    if (permanentMissing != null) {
-      await _failPermanently(captureId, permanentMissing);
+    final evidenceFailure = _validateEvidence(attempted);
+    if (evidenceFailure != null) {
+      await _failPermanently(captureId, evidenceFailure);
       return CaptureProcessResult.failed;
     }
 
@@ -127,14 +128,11 @@ final class CaptureProcessor {
       if (_isTransient(error) && attempts < maxAttempts) {
         return CaptureProcessResult.retry;
       }
-      await _failPermanently(captureId, error.toString());
+      await _failPermanently(captureId, _processingFailureCode(error));
       return CaptureProcessResult.failed;
     }
     if (hashResult.isMismatch) {
-      await _failPermanently(
-        captureId,
-        'Original photo hash verification failed; the file was modified',
-      );
+      await _failPermanently(captureId, CaptureFailureCode.originalModified);
       return CaptureProcessResult.failed;
     }
 
@@ -184,21 +182,21 @@ final class CaptureProcessor {
       if (_isTransient(error) && attempts < maxAttempts) {
         return CaptureProcessResult.retry;
       }
-      await _failPermanently(captureId, error.toString());
+      await _failPermanently(captureId, _processingFailureCode(error));
       return CaptureProcessResult.failed;
     }
   }
 
   /// Returns a non-null reason string when required evidence is missing.
-  String? _validateEvidence(CaptureRecord record) {
+  CaptureFailureCode? _validateEvidence(CaptureRecord record) {
     if (record.originalPath.trim().isEmpty) {
-      return 'Original photo path is missing';
+      return CaptureFailureCode.originalMissing;
     }
     if (record.capturedAt == null) {
-      return 'Captured timestamp is missing';
+      return CaptureFailureCode.processingFailed;
     }
     if (record.photoNumber == null || record.photoNumber!.trim().isEmpty) {
-      return 'Photo number is missing';
+      return CaptureFailureCode.processingFailed;
     }
     return null;
   }
@@ -221,13 +219,30 @@ final class CaptureProcessor {
     );
   }
 
-  Future<void> _failPermanently(String captureId, String reason) async {
+  Future<void> _failPermanently(
+    String captureId,
+    CaptureFailureCode failure,
+  ) async {
     try {
-      await database.markFailed(captureId: captureId, reason: reason);
+      await database.markFailed(
+        captureId: captureId,
+        reason: failure.storageCode,
+      );
     } on StateError {
       // The record transitioned concurrently (e.g. another worker marked it
       // ready). There is nothing more to do; the caller's result still holds.
     }
+  }
+
+  CaptureFailureCode _processingFailureCode(Object error) {
+    if (error is PathNotFoundException) {
+      return CaptureFailureCode.originalMissing;
+    }
+    if (error is ImagePipelineException &&
+        error.kind == ImagePipelineFailureKind.notFound) {
+      return CaptureFailureCode.originalMissing;
+    }
+    return CaptureFailureCode.processingFailed;
   }
 
   bool _isTransient(Object error) {

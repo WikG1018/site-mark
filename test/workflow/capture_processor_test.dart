@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
@@ -166,6 +167,10 @@ void main() {
     final record = await database.captureById('capture-1');
     expect(record?.status, CaptureStatus.failed);
     expect(record?.processingAttempts, 3);
+    expect(
+      record?.failureReason,
+      CaptureFailureCode.processingFailed.storageCode,
+    );
   });
 
   test(
@@ -321,7 +326,10 @@ void main() {
     expect(result, CaptureProcessResult.failed);
     final record = await database.captureById('capture-1');
     expect(record?.status, CaptureStatus.failed);
-    expect(record?.failureReason, isNotNull);
+    expect(
+      record?.failureReason,
+      CaptureFailureCode.originalModified.storageCode,
+    );
     expect(platform.publishedNames, isEmpty);
   });
 
@@ -370,7 +378,10 @@ void main() {
       final record = await database.captureById('capture-1');
       expect(record?.status, CaptureStatus.failed);
       expect(record?.processingAttempts, 1);
-      expect(record?.failureReason, isNotNull);
+      expect(
+        record?.failureReason,
+        CaptureFailureCode.originalMissing.storageCode,
+      );
       expect(platform.publishedNames, isEmpty);
     },
   );
@@ -414,6 +425,10 @@ void main() {
       (await database.captureById('capture-1'))?.status,
       CaptureStatus.failed,
     );
+    expect(
+      (await database.captureById('capture-1'))?.failureReason,
+      CaptureFailureCode.originalMissing.storageCode,
+    );
   });
 
   test('invalid-data Rust hash error fails immediately', () async {
@@ -427,6 +442,10 @@ void main() {
     expect(
       (await database.captureById('capture-1'))?.status,
       CaptureStatus.failed,
+    );
+    expect(
+      (await database.captureById('capture-1'))?.failureReason,
+      CaptureFailureCode.processingFailed.storageCode,
     );
   });
 

@@ -67,13 +67,11 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
           '/projects/${widget.projectId}/captures/${widget.captureId}',
         );
       }
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _working = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${AppStrings.of(context).regenerationFailed}: $error'),
-        ),
+        SnackBar(content: Text(AppStrings.of(context).regenerationFailed)),
       );
     }
   }
