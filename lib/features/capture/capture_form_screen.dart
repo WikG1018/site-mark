@@ -232,6 +232,23 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
               duration: const Duration(seconds: 2),
             ),
           );
+      case CaptureWorkflowOutcome.delayed:
+        try {
+          await ref.read(captureFormDraftStoreProvider).clear(widget.projectId);
+        } catch (_) {
+          // The durable capture is authoritative; a stale draft is harmless.
+        }
+        if (!mounted) return;
+        _notesController.clear();
+        setState(() => _working = false);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(strings.captureQueueDelayedContinue),
+              duration: const Duration(seconds: 4),
+            ),
+          );
       case CaptureWorkflowOutcome.cancelled:
         // The camera was dismissed without a photo; stay on the form and
         // re-enable the button without surfacing a confirmation.

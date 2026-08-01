@@ -21,6 +21,11 @@ enum CaptureProcessResult {
   /// WorkManager should reschedule the work.
   retry,
 
+  /// Location evidence is still being resolved. The current WorkManager item
+  /// should finish successfully; the foreground coordinator registers a new
+  /// idempotent wake-up after location is resolved or marked unavailable.
+  deferred,
+
   /// A permanent failure occurred (missing data, hash mismatch, or the third
   /// transient failure). The record is marked `failed`.
   failed,
@@ -90,10 +95,10 @@ final class CaptureProcessor {
 
     // Guard: a capture whose location source is still pending must not consume
     // the render budget. The CaptureLocationCoordinator enqueues the capture
-    // again once location is resolved or marked unavailable, so return `retry`
-    // without incrementing attempts.
+    // again once location is resolved or marked unavailable, so finish this
+    // work item without incrementing attempts or entering WorkManager backoff.
     if (record.locationResolution == 'pending') {
-      return CaptureProcessResult.retry;
+      return CaptureProcessResult.deferred;
     }
 
     // Step 4: increment the attempt counter in a single transaction.

@@ -240,12 +240,13 @@ void main() {
   });
 
   test(
-    'pending location resolution returns retry without incrementing attempts',
+    'pending location resolution defers without incrementing attempts',
     () async {
       // A capture whose location source is still pending must not consume the
       // render budget. The coordinator enqueues the capture again once the
       // location is resolved or marked unavailable, so the processor returns
-      // `retry` without touching the attempt counter.
+      // `deferred` without touching the attempt counter. The WorkManager task
+      // itself succeeds; the location coordinator registers a new wake-up.
       await database.createPendingCapture(
         id: 'capture-1',
         projectId: 'project-1',
@@ -263,7 +264,7 @@ void main() {
 
       final result = await processor.process('capture-1');
 
-      expect(result, CaptureProcessResult.retry);
+      expect(result, CaptureProcessResult.deferred);
       final record = await database.captureById('capture-1');
       expect(record?.processingAttempts, 0);
       expect(record?.status, CaptureStatus.captured);

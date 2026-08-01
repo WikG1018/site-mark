@@ -116,6 +116,9 @@ final class PersistentCaptureBackgroundScheduler
 ///
 /// Each capture is registered as a one-off task on the [captureProcessingQueue]
 /// chain using [ExistingWorkPolicy.append], so WorkManager runs them serially.
+/// The pinned Android plugin maps this Dart value to native
+/// `APPEND_OR_REPLACE`, dropping failed/cancelled prerequisites before starting
+/// the next chain rather than poisoning later captures.
 /// The per-capture `tag` (`capture:<id>`) supports cancellation/inspection.
 /// Input data carries the `captureId` so the dispatcher knows which record to
 /// process.
@@ -235,12 +238,13 @@ Future<void> _notifyCaptureReady(AppDatabase database, String captureId) async {
 @pragma('vm:entry-point')
 void captureCallbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
-    WidgetsFlutterBinding.ensureInitialized();
-    if (taskName != captureProcessingTask) return true;
-    final captureId = inputData?['captureId'] as String?;
-    if (captureId == null || captureId.isEmpty) return true;
-    final database = AppDatabase();
+    AppDatabase? database;
     try {
+      WidgetsFlutterBinding.ensureInitialized();
+      if (taskName != captureProcessingTask) return true;
+      final captureId = inputData?['captureId'] as String?;
+      if (captureId == null || captureId.isEmpty) return true;
+      database = AppDatabase();
       final result = await buildHeadlessCaptureProcessor(
         database,
       ).process(captureId);
@@ -248,8 +252,16 @@ void captureCallbackDispatcher() {
         await _notifyCaptureReady(database, captureId);
       }
       return result != CaptureProcessResult.retry;
+    } catch (_) {
+      // Keep the task retryable even when database creation/opening, Rust
+      // initialization or other processor-adjacent code throws unexpectedly.
+      return false;
     } finally {
-      await database.close();
+      try {
+        await database?.close();
+      } catch (_) {
+        // Closing a broken handle must not escape and cancel later work.
+      }
     }
   });
 }

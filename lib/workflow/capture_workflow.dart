@@ -54,9 +54,11 @@ class CaptureEdits {
 
 /// Outcome of a foreground capture coordination step.
 ///
-/// `queued` means the capture was marked `captured` and enqueued for background
-/// rendering/publishing; the UI should not wait for the watermarked result.
-enum CaptureWorkflowOutcome { queued, cancelled, failed }
+/// `queued` means the capture was marked `captured` and WorkManager accepted a
+/// background task. `delayed` means the original and database row are durable,
+/// but the first queue registration failed; the location coordinator retries
+/// the wake-up in the current session and startup recovery remains the fallback.
+enum CaptureWorkflowOutcome { queued, delayed, cancelled, failed }
 
 /// Local milestones between a capture-button tap and the request to open the
 /// system camera. These diagnostics are opt-in and never contain capture data.
@@ -319,8 +321,8 @@ class CaptureWorkflow {
   }
 
   /// Marks the capture `captured`, finishes the camera target keeping the
-  /// original, and returns the queued result. Location resolution and
-  /// background enqueue are delegated to [locationCoordinator] by the caller.
+  /// original, and waits only for the lightweight WorkManager registration.
+  /// Location resolution, rendering and publishing remain asynchronous.
   Future<CaptureWorkflowResult> _captureAndEnqueue({
     required String captureId,
     required String originalPath,
@@ -330,6 +332,14 @@ class CaptureWorkflow {
       capturedAt: _now(),
     );
     await platform.finishCameraCapture(captureId, true);
+    try {
+      await scheduler.enqueue(captureId);
+    } catch (_) {
+      return CaptureWorkflowResult(
+        outcome: CaptureWorkflowOutcome.delayed,
+        capture: captured,
+      );
+    }
     return CaptureWorkflowResult(
       outcome: CaptureWorkflowOutcome.queued,
       capture: captured,
