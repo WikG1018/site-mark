@@ -10,6 +10,7 @@ void main() {
         recoverCamera: () async => events.add('camera'),
         resolveLocations: () async => events.add('location'),
         reconcileQueue: () async => events.add('queue'),
+        cleanupInterruptedExports: () async => events.add('exports'),
         cleanupInterruptedImports: () async => events.add('imports'),
         cleanupInterruptedBundleRestores: () async => events.add('bundles'),
         cleanupInterruptedProjectDeletions: () async => events.add('deletions'),
@@ -18,6 +19,7 @@ void main() {
       await recovery.run();
 
       expect(events, [
+        'exports',
         'imports',
         'bundles',
         'deletions',
@@ -34,6 +36,7 @@ void main() {
       recoverCamera: () async => events.add('camera'),
       resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
+      cleanupInterruptedExports: () async => events.add('exports'),
       cleanupInterruptedImports: () async {
         events.add('imports');
         throw StateError('simulated cleanup failure');
@@ -45,6 +48,7 @@ void main() {
     await recovery.run();
 
     expect(events, [
+      'exports',
       'imports',
       'bundles',
       'deletions',
@@ -62,6 +66,7 @@ void main() {
         recoverCamera: () async => events.add('camera'),
         resolveLocations: () async => events.add('location'),
         reconcileQueue: () async => events.add('queue'),
+        cleanupInterruptedExports: () async => events.add('exports'),
         cleanupInterruptedImports: () async => events.add('imports'),
         cleanupInterruptedBundleRestores: () async {
           events.add('bundles');
@@ -73,6 +78,7 @@ void main() {
       await recovery.run();
 
       expect(events, [
+        'exports',
         'imports',
         'bundles',
         'deletions',
@@ -91,6 +97,7 @@ void main() {
         recoverCamera: () async => events.add('camera'),
         resolveLocations: () async => events.add('location'),
         reconcileQueue: () async => events.add('queue'),
+        cleanupInterruptedExports: () async => events.add('exports'),
         cleanupInterruptedImports: () async => events.add('imports'),
         cleanupInterruptedBundleRestores: () async => events.add('bundles'),
         cleanupInterruptedProjectDeletions: () async {
@@ -102,6 +109,7 @@ void main() {
       await recovery.run();
 
       expect(events, [
+        'exports',
         'imports',
         'bundles',
         'deletions',
@@ -118,6 +126,10 @@ void main() {
       recoverCamera: () async => events.add('camera'),
       resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
+      cleanupInterruptedExports: () async {
+        events.add('exports');
+        throw StateError('export');
+      },
       cleanupInterruptedImports: () async {
         events.add('imports');
         throw StateError('import');
@@ -135,6 +147,7 @@ void main() {
     await recovery.run();
 
     expect(events, [
+      'exports',
       'imports',
       'bundles',
       'deletions',

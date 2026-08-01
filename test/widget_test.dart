@@ -38,6 +38,7 @@ void main() {
       recoverCamera: () async => events.add('camera'),
       resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
+      cleanupInterruptedExports: () async => events.add('exports'),
       cleanupInterruptedImports: () async => events.add('imports'),
       cleanupInterruptedBundleRestores: () async {},
       cleanupInterruptedProjectDeletions: () async {},
@@ -54,7 +55,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(events, ['imports', 'camera', 'location', 'queue']);
+    expect(events, ['exports', 'imports', 'camera', 'location', 'queue']);
     await disposeApp(tester);
   });
 

@@ -51,6 +51,7 @@ void main() {
             recoverCamera: _noOpRecovery,
             resolveLocations: _noOpRecovery,
             reconcileQueue: _noOpRecovery,
+            cleanupInterruptedExports: _noOpRecovery,
             cleanupInterruptedImports: _noOpRecovery,
             cleanupInterruptedBundleRestores: _noOpRecovery,
             cleanupInterruptedProjectDeletions: _noOpRecovery,
