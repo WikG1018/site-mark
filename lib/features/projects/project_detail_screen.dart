@@ -12,6 +12,7 @@ import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
+import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
@@ -133,8 +134,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     icon: const Icon(Icons.tune_outlined),
                   ),
                   IconButton(
-                    onPressed: () => _exportProject(context, ref, project.id),
-                    tooltip: strings.exportProject,
+                    onPressed: () => context.push(
+                      '/settings/backup-restore/backup',
+                      extra: ProjectBackupSelectionArguments(
+                        initialProjectIds: {project.id},
+                      ),
+                    ),
+                    tooltip: strings.backupProjects,
                     icon: const Icon(Icons.archive_outlined),
                   ),
                   PopupMenuButton<_ProjectAction>(
@@ -410,63 +416,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           ),
       ],
     );
-  }
-
-  Future<void> _exportProject(
-    BuildContext context,
-    WidgetRef ref,
-    String projectId,
-  ) async {
-    final strings = AppStrings.of(context);
-    var includeOriginals = false;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(strings.exportProjectData),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: includeOriginals,
-                title: Text(strings.includeOriginals),
-                onChanged: (value) {
-                  setDialogState(() => includeOriginals = value ?? false);
-                },
-              ),
-              Text(strings.includeOriginalsHint),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(strings.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(strings.generateAndShare),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-    try {
-      final result = await ref
-          .read(projectExportServiceProvider)
-          .exportProject(
-            projectId: projectId,
-            includeOriginals: includeOriginals,
-          );
-      await ref.read(shareFileServiceProvider).shareFile(result.outputZipPath);
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${strings.exportFailed}: $error')),
-      );
-    }
   }
 
   Future<void> _renameProject(Project project) async {

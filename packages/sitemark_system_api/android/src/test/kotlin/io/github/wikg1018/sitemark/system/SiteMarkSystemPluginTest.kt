@@ -6,6 +6,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.BinaryMessenger
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
@@ -58,5 +59,16 @@ class SiteMarkSystemPluginTest {
             plugin.apiForTest().requireActivityForTest()
         }
         assertNotNull(error.message)
+    }
+
+    @Test
+    fun archiveSaveActivityResultsAreClaimedByThePlugin() {
+        assertTrue(
+            plugin.onActivityResult(
+                AndroidSystemApi.REQUEST_ARCHIVE_SAVE,
+                Activity.RESULT_CANCELED,
+                null,
+            ),
+        )
     }
 }

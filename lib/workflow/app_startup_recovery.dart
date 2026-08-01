@@ -3,6 +3,7 @@ class AppStartupRecovery {
     required this.recoverCamera,
     required this.resolveLocations,
     required this.reconcileQueue,
+    required this.cleanupInterruptedExports,
     required this.cleanupInterruptedImports,
     required this.cleanupInterruptedBundleRestores,
     required this.cleanupInterruptedProjectDeletions,
@@ -11,11 +12,18 @@ class AppStartupRecovery {
   final Future<void> Function() recoverCamera;
   final Future<void> Function() resolveLocations;
   final Future<void> Function() reconcileQueue;
+  final Future<void> Function() cleanupInterruptedExports;
   final Future<void> Function() cleanupInterruptedImports;
   final Future<void> Function() cleanupInterruptedBundleRestores;
   final Future<void> Function() cleanupInterruptedProjectDeletions;
 
   Future<void> run() async {
+    try {
+      await cleanupInterruptedExports();
+    } catch (_) {
+      // Export staging contains no committed backup. Cleanup is retried on the
+      // next launch and must never block recovery of user data.
+    }
     // Remove half-imported projects first so they never surface in the UI
     // or confuse the other recovery steps.
     try {

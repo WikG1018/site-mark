@@ -5,8 +5,10 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
-import 'package:sitemark/shared/theme/accent_choice_chip.dart' show AccentChoiceChip;
-import 'package:sitemark/shared/theme/accent_swatches.dart' show accentSwatches, accentLabel;
+import 'package:sitemark/shared/theme/accent_choice_chip.dart'
+    show AccentChoiceChip;
+import 'package:sitemark/shared/theme/accent_swatches.dart'
+    show accentSwatches, accentLabel;
 
 class ProjectWatermarkSettingsScreen extends ConsumerStatefulWidget {
   const ProjectWatermarkSettingsScreen({super.key, required this.projectId});

@@ -204,6 +204,17 @@ enum class CameraOutcome(val raw: Int) {
   }
 }
 
+enum class ArchiveSaveOutcome(val raw: Int) {
+  SAVED(0),
+  CANCELLED(1);
+
+  companion object {
+    fun ofRaw(raw: Int): ArchiveSaveOutcome? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 enum class LocationOutcome(val raw: Int) {
   PRECISE(0),
   APPROXIMATE(1),
@@ -481,35 +492,40 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
       }
       130.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          LocationOutcome.ofRaw(it.toInt())
+          ArchiveSaveOutcome.ofRaw(it.toInt())
         }
       }
       131.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          LocationPermissionState.ofRaw(it.toInt())
+          LocationOutcome.ofRaw(it.toInt())
         }
       }
       132.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          CameraCaptureResult.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          LocationPermissionState.ofRaw(it.toInt())
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RecoveredCameraCapture.fromList(it)
+          CameraCaptureResult.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          LocationResult.fromList(it)
+          RecoveredCameraCapture.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ImageMetadataResult.fromList(it)
+          LocationResult.fromList(it)
         }
       }
       136.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ImageMetadataResult.fromList(it)
+        }
+      }
+      137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           MediaPublishResult.fromList(it)
         }
@@ -523,32 +539,36 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
         stream.write(129)
         writeValue(stream, value.raw.toLong())
       }
-      is LocationOutcome -> {
+      is ArchiveSaveOutcome -> {
         stream.write(130)
         writeValue(stream, value.raw.toLong())
       }
-      is LocationPermissionState -> {
+      is LocationOutcome -> {
         stream.write(131)
         writeValue(stream, value.raw.toLong())
       }
-      is CameraCaptureResult -> {
+      is LocationPermissionState -> {
         stream.write(132)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is RecoveredCameraCapture -> {
+      is CameraCaptureResult -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is LocationResult -> {
+      is RecoveredCameraCapture -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is ImageMetadataResult -> {
+      is LocationResult -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is MediaPublishResult -> {
+      is ImageMetadataResult -> {
         stream.write(136)
+        writeValue(stream, value.toList())
+      }
+      is MediaPublishResult -> {
+        stream.write(137)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -569,6 +589,7 @@ interface SiteMarkSystemApi {
   fun inspectImage(path: String, callback: (Result<ImageMetadataResult>) -> Unit)
   fun requestCurrentLocation(timeoutMillis: Long, callback: (Result<LocationResult>) -> Unit)
   fun publishJpeg(sourcePath: String, displayName: String, callback: (Result<MediaPublishResult>) -> Unit)
+  fun saveArchive(sourcePath: String, suggestedName: String, callback: (Result<ArchiveSaveOutcome>) -> Unit)
   fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit)
 
   companion object {
@@ -748,6 +769,27 @@ interface SiteMarkSystemApi {
             val sourcePathArg = args[0] as String
             val displayNameArg = args[1] as String
             api.publishJpeg(sourcePathArg, displayNameArg) { result: Result<MediaPublishResult> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SystemApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SystemApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.saveArchive$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourcePathArg = args[0] as String
+            val suggestedNameArg = args[1] as String
+            api.saveArchive(sourcePathArg, suggestedNameArg) { result: Result<ArchiveSaveOutcome> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SystemApiPigeonUtils.wrapError(error))

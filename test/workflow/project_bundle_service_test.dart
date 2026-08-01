@@ -26,8 +26,38 @@ void main() {
 
       final exportPath = await paths.exportStagingDirectory('export-id');
       expect(await Directory(exportPath).exists(), isTrue);
+      expect(await paths.exportStagingDirectories(), [exportPath]);
+
+      final stagedArchive = await paths.backupStagingArchivePath(exportPath);
+      expect(stagedArchive, endsWith('sitemark-backup.tmp.zip'));
+      final firstBackup = await paths.backupZipPath('operation-1');
+      final secondBackup = await paths.backupZipPath('operation-2');
+      expect(firstBackup, isNot(secondBackup));
     },
   );
+
+  test('production file commit never overwrites an existing backup', () async {
+    final root = await Directory.systemTemp.createTemp('sitemark-commit-');
+    addTearDown(() => root.delete(recursive: true));
+    final source = File('${root.path}${Platform.pathSeparator}source.zip');
+    final destination = File(
+      '${root.path}${Platform.pathSeparator}exports'
+      '${Platform.pathSeparator}backup.zip',
+    );
+    await source.writeAsString('new backup');
+    final files = DartProjectBundleFileSystem();
+
+    await files.commitFile(source.path, destination.path);
+
+    expect(await destination.readAsString(), 'new backup');
+    expect(await source.exists(), isFalse);
+    await source.writeAsString('replacement');
+    await expectLater(
+      files.commitFile(source.path, destination.path),
+      throwsA(isA<StateError>()),
+    );
+    expect(await destination.readAsString(), 'new backup');
+  });
 
   group('ProjectBackupService', () {
     test('rejects empty and duplicate project selections', () async {
@@ -55,19 +85,20 @@ void main() {
     });
 
     test(
-      'one selected project keeps the existing single-project archive',
+      'one selected project commits a staged archive to a unique final path',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
         addTearDown(database.close);
         await database.createProject(id: 'p1', name: '东区');
         final exporter = _FakeProjectExporter();
         final bundles = _FakeBundlePipeline();
+        final files = _FakeBundleFiles();
         final service = ProjectBackupService(
           projectExporter: exporter,
           database: database,
           bundles: bundles,
           paths: _FakeBundlePaths(),
-          files: _FakeBundleFiles(),
+          files: files,
           idGenerator: () => 'bundle-1',
         );
 
@@ -77,9 +108,19 @@ void main() {
         );
 
         expect(result.kind, ProjectBackupKind.singleProject);
-        expect(result.outputZipPath, '/exports/p1.zip');
-        expect(exporter.requests.single.outputZipPath, isNull);
+        expect(result.outputZipPath, '/exports/sitemark-backup-bundle-1.zip');
+        expect(
+          exporter.requests.single.outputZipPath,
+          '/imports/bundle-export-bundle-1/projects/p1.zip',
+        );
         expect(bundles.exportRequests, isEmpty);
+        expect(files.committedFiles, [
+          (
+            '/imports/bundle-export-bundle-1/projects/p1.zip',
+            '/exports/sitemark-backup-bundle-1.zip',
+          ),
+        ]);
+        expect(files.deletedTrees, ['/imports/bundle-export-bundle-1']);
       },
     );
 
@@ -110,15 +151,25 @@ void main() {
         );
 
         expect(result.kind, ProjectBackupKind.bundle);
-        expect(result.outputZipPath, '/exports/sitemark-backup.zip');
+        expect(result.outputZipPath, '/exports/sitemark-backup-bundle-1.zip');
         expect(exporter.requests.map((request) => request.outputZipPath), [
           '/imports/bundle-export-bundle-1/projects/p1.zip',
           '/imports/bundle-export-bundle-1/projects/p2.zip',
         ]);
         expect(bundles.exportRequests.single.projects, hasLength(2));
+        expect(
+          bundles.exportRequests.single.outputZipPath,
+          '/imports/bundle-export-bundle-1/sitemark-backup.tmp.zip',
+        );
         expect(bundles.exportRequests.single.projects[0].projectName, '东区');
         expect(progress, ['1/3', '2/3', '3/3']);
         expect(files.deletedTrees, ['/imports/bundle-export-bundle-1']);
+        expect(files.committedFiles, [
+          (
+            '/imports/bundle-export-bundle-1/sitemark-backup.tmp.zip',
+            '/exports/sitemark-backup-bundle-1.zip',
+          ),
+        ]);
       },
     );
 
@@ -146,6 +197,56 @@ void main() {
       );
 
       expect(files.deletedTrees, ['/imports/bundle-export-bundle-2']);
+      expect(files.committedFiles, isEmpty);
+    });
+
+    test('final path failure still cleans staging', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'p1', name: '东区');
+      final files = _FakeBundleFiles();
+      final service = ProjectBackupService(
+        projectExporter: _FakeProjectExporter(),
+        database: database,
+        bundles: _FakeBundlePipeline(),
+        paths: _FakeBundlePaths(failBackupPath: true),
+        files: files,
+        idGenerator: () => 'bundle-path-failure',
+      );
+
+      await expectLater(
+        service.exportProjects(
+          projectIds: const ['p1'],
+          includeOriginals: false,
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(files.deletedTrees, [
+        '/imports/bundle-export-bundle-path-failure',
+      ]);
+    });
+
+    test('cleans every interrupted export staging directory', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final paths = _FakeBundlePaths()
+        ..interruptedExportDirectories = [
+          '/imports/bundle-export-old-1',
+          '/imports/bundle-export-old-2',
+        ];
+      final files = _FakeBundleFiles();
+      final service = ProjectBackupService(
+        projectExporter: _FakeProjectExporter(),
+        database: database,
+        bundles: _FakeBundlePipeline(),
+        paths: paths,
+        files: files,
+      );
+
+      await service.cleanupInterruptedExports();
+
+      expect(files.deletedTrees, paths.interruptedExportDirectories);
     });
   });
 
@@ -1484,8 +1585,24 @@ class _FakeBundlePipeline implements ProjectBundlePipeline {
 }
 
 class _FakeBundlePaths implements ProjectBundlePaths {
+  _FakeBundlePaths({this.failBackupPath = false});
+
+  final bool failBackupPath;
+  List<String> interruptedExportDirectories = const [];
+
   @override
-  Future<String> backupZipPath() async => '/exports/sitemark-backup.zip';
+  Future<String> backupZipPath(String operationId) async {
+    if (failBackupPath) throw StateError('backup path failed');
+    return '/exports/sitemark-backup-$operationId.zip';
+  }
+
+  @override
+  Future<String> backupStagingArchivePath(String stagingDirectory) async =>
+      '$stagingDirectory/sitemark-backup.tmp.zip';
+
+  @override
+  Future<List<String>> exportStagingDirectories() async =>
+      interruptedExportDirectories;
 
   @override
   Future<String> exportStagingDirectory(String bundleId) async =>
@@ -1510,6 +1627,12 @@ class _FakeBundleFiles implements ProjectBundleFileSystem {
   final bool failEnsure;
   final ensureDirectories = <String>[];
   final deletedTrees = <String>[];
+  final committedFiles = <(String, String)>[];
+
+  @override
+  Future<void> commitFile(String sourcePath, String destinationPath) async {
+    committedFiles.add((sourcePath, destinationPath));
+  }
 
   @override
   Future<void> ensureDirectory(String path) async {

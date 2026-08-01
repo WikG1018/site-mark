@@ -29,10 +29,8 @@ enum MemoryPressureLevel {
   kill,
 }
 
-typedef MemoryPressureHandler = Future<void> Function(
-  MemoryPressureLevel level,
-  int? eventId,
-);
+typedef MemoryPressureHandler =
+    Future<void> Function(MemoryPressureLevel level, int? eventId);
 
 /// Abstraction over the native side that:
 ///
@@ -66,10 +64,9 @@ abstract class MemoryPressureService {
 /// Riverpod provider. Production wires [PlatformMemoryPressureService]
 /// via `MyApp(memoryPressureService: ...)`; the default [NoopMemoryPressureService]
 /// keeps tests (and any non-ITGSA platform) running without extra overrides.
-final memoryPressureServiceProvider =
-    Provider<MemoryPressureService>((ref) {
-      return NoopMemoryPressureService();
-    });
+final memoryPressureServiceProvider = Provider<MemoryPressureService>((ref) {
+  return NoopMemoryPressureService();
+});
 
 /// Production implementation backed by a [MethodChannel] named
 /// `sitemark/memory_pressure`.
@@ -103,7 +100,9 @@ class PlatformMemoryPressureService implements MemoryPressureService {
         if (level == null) return null;
         final eventId = args['eventId'] is int
             ? args['eventId'] as int
-            : (args['eventId'] is num ? (args['eventId'] as num).toInt() : null);
+            : (args['eventId'] is num
+                  ? (args['eventId'] as num).toInt()
+                  : null);
         await _dispatch(level, eventId);
       }
       return null;
@@ -168,7 +167,6 @@ class PlatformMemoryPressureService implements MemoryPressureService {
     }
     return null;
   }
-
 }
 
 /// A no-op implementation used when the production service is not available

@@ -120,6 +120,29 @@ void main() {
     expect(platform.launchCameraCount, 1);
     await disposeApp(tester);
   });
+
+  testWidgets('camera failure shows guidance without raw platform text', (
+    tester,
+  ) async {
+    final platform = _CaptureFormPlatform(
+      permissionState: LocationPermissionState.denied,
+      cameraOutcome: CameraOutcome.failed,
+      cameraErrorMessage: 'ActivityNotFoundException: vendor detail',
+    );
+    await pumpCaptureForm(tester, platform: platform);
+
+    await tester.enterText(find.byKey(const Key('work-location')), 'A 区三层');
+    await tester.enterText(find.byKey(const Key('work-content')), '设备安装检查');
+    await tester.enterText(find.byKey(const Key('photographer')), '张工');
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('capture-button')).hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('系统相机暂不可用'), findsOneWidget);
+    expect(find.textContaining('vendor detail'), findsNothing);
+    await disposeApp(tester);
+  });
 }
 
 class _NoOpCompletionNotificationService
@@ -143,9 +166,15 @@ class _NoOpCompletionNotificationService
 }
 
 class _CaptureFormPlatform implements PlatformServices {
-  _CaptureFormPlatform({required this.permissionState});
+  _CaptureFormPlatform({
+    required this.permissionState,
+    this.cameraOutcome = CameraOutcome.cancelled,
+    this.cameraErrorMessage,
+  });
 
   final LocationPermissionState permissionState;
+  final CameraOutcome cameraOutcome;
+  final String? cameraErrorMessage;
   int requestLocationPermissionCount = 0;
   int launchCameraCount = 0;
 
@@ -170,8 +199,9 @@ class _CaptureFormPlatform implements PlatformServices {
   Future<CameraCaptureResult> launchCamera(String captureId) async {
     launchCameraCount++;
     return CameraCaptureResult(
-      outcome: CameraOutcome.cancelled,
+      outcome: cameraOutcome,
       outputPath: '/private/$captureId.jpg',
+      errorMessage: cameraErrorMessage,
     );
   }
 

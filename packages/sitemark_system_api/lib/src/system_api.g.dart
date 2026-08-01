@@ -99,6 +99,8 @@ int _deepHash(Object? value) {
 
 enum CameraOutcome { captured, cancelled, failed }
 
+enum ArchiveSaveOutcome { saved, cancelled }
+
 enum LocationOutcome {
   precise,
   approximate,
@@ -420,26 +422,29 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is CameraOutcome) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    } else if (value is LocationOutcome) {
+    } else if (value is ArchiveSaveOutcome) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    } else if (value is LocationPermissionState) {
+    } else if (value is LocationOutcome) {
       buffer.putUint8(131);
       writeValue(buffer, value.index);
-    } else if (value is CameraCaptureResult) {
+    } else if (value is LocationPermissionState) {
       buffer.putUint8(132);
-      writeValue(buffer, value.encode());
-    } else if (value is RecoveredCameraCapture) {
+      writeValue(buffer, value.index);
+    } else if (value is CameraCaptureResult) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is LocationResult) {
+    } else if (value is RecoveredCameraCapture) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is ImageMetadataResult) {
+    } else if (value is LocationResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is MediaPublishResult) {
+    } else if (value is ImageMetadataResult) {
       buffer.putUint8(136);
+      writeValue(buffer, value.encode());
+    } else if (value is MediaPublishResult) {
+      buffer.putUint8(137);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -454,19 +459,22 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : CameraOutcome.values[value];
       case 130:
         final value = readValue(buffer) as int?;
-        return value == null ? null : LocationOutcome.values[value];
+        return value == null ? null : ArchiveSaveOutcome.values[value];
       case 131:
         final value = readValue(buffer) as int?;
-        return value == null ? null : LocationPermissionState.values[value];
+        return value == null ? null : LocationOutcome.values[value];
       case 132:
-        return CameraCaptureResult.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : LocationPermissionState.values[value];
       case 133:
-        return RecoveredCameraCapture.decode(readValue(buffer)!);
+        return CameraCaptureResult.decode(readValue(buffer)!);
       case 134:
-        return LocationResult.decode(readValue(buffer)!);
+        return RecoveredCameraCapture.decode(readValue(buffer)!);
       case 135:
-        return ImageMetadataResult.decode(readValue(buffer)!);
+        return LocationResult.decode(readValue(buffer)!);
       case 136:
+        return ImageMetadataResult.decode(readValue(buffer)!);
+      case 137:
         return MediaPublishResult.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -692,6 +700,30 @@ class SiteMarkSystemApi {
       isNullValid: false,
     );
     return pigeonVar_replyValue! as MediaPublishResult;
+  }
+
+  Future<ArchiveSaveOutcome> saveArchive(
+    String sourcePath,
+    String suggestedName,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.saveArchive$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[sourcePath, suggestedName],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as ArchiveSaveOutcome;
   }
 
   Future<void> deletePublishedImage(String contentUri) async {

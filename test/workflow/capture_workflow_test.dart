@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
@@ -81,7 +82,7 @@ void main() {
     expect(result.outcome, CaptureWorkflowOutcome.queued);
     expect(record?.status, CaptureStatus.captured);
     expect(record?.photoNumber, '东区厂房改造-SM-20260716-001');
-    expect(scheduler.enqueuedIds, ['capture-1']);
+    expect(scheduler.enqueuedIds, ['capture-1', 'capture-1']);
     expect(images.lastRenderRequest, isNull);
     expect(platform.publishedNames, isEmpty);
     expect(platform.finishedCapture, ('capture-1', true));
@@ -89,6 +90,64 @@ void main() {
     expect(record?.originalSha256, isNull);
     expect(record?.publishedUri, isNull);
   });
+
+  test(
+    'capture does not report queued before WorkManager accepts it',
+    () async {
+      scheduler.enqueueGate = Completer<void>();
+      var completed = false;
+
+      final future = workflow
+          .capture(
+            const CaptureDraft(
+              projectId: 'project-1',
+              projectName: '东区厂房改造',
+              workLocation: 'A 区三层',
+              workContent: '风管安装检查',
+              photographer: '张工',
+              watermarkLocaleCode: 'zh',
+              useLocationFallback: false,
+            ),
+          )
+          .then((value) {
+            completed = true;
+            return value;
+          });
+      await Future<void>.delayed(Duration.zero);
+
+      expect(completed, isFalse);
+      scheduler.enqueueGate!.complete();
+      final result = await future;
+      expect(result.outcome, CaptureWorkflowOutcome.queued);
+    },
+  );
+
+  test(
+    'initial queue failure returns delayed and keeps captured record',
+    () async {
+      scheduler.enqueueFailures = 1;
+
+      final result = await workflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+          useLocationFallback: false,
+        ),
+      );
+      await drainCoordinator();
+
+      expect(result.outcome, CaptureWorkflowOutcome.delayed);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.captured);
+      expect(platform.finishedCapture, ('capture-1', true));
+      expect(scheduler.enqueueAttempts, 2);
+      expect(scheduler.enqueuedIds, ['capture-1']);
+    },
+  );
 
   test(
     'reports local pre-launch timing before requesting the camera',
@@ -184,6 +243,34 @@ void main() {
   );
 
   test(
+    'camera failure persists a stable code instead of platform text',
+    () async {
+      platform.cameraOutcome = CameraOutcome.failed;
+      platform.cameraErrorMessage = 'ActivityNotFoundException: vendor detail';
+
+      final result = await workflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+        ),
+      );
+
+      final record = await database.captureById('capture-1');
+      expect(result.outcome, CaptureWorkflowOutcome.failed);
+      expect(result.failureCode, CaptureFailureCode.cameraUnavailable);
+      expect(
+        record?.failureReason,
+        CaptureFailureCode.cameraUnavailable.storageCode,
+      );
+      expect(record?.failureReason, isNot(contains('vendor detail')));
+    },
+  );
+
+  test(
     'launchCamera runs before location resolves and workflow returns queued',
     () async {
       // Replace the location future with one we control so we can prove the
@@ -221,7 +308,7 @@ void main() {
       );
       await drainCoordinator();
 
-      expect(scheduler.enqueuedIds, ['capture-1']);
+      expect(scheduler.enqueuedIds, ['capture-1', 'capture-1']);
       final record = await database.captureById('capture-1');
       expect(record?.locationResolution, 'resolved');
       expect(record?.locationOutcome, 'precise');
@@ -254,7 +341,7 @@ void main() {
       CaptureStatus.captured,
     );
     expect(platform.finishedCapture, ('capture-1', true));
-    expect(scheduler.enqueuedIds, ['capture-1']);
+    expect(scheduler.enqueuedIds, ['capture-1', 'capture-1']);
     expect(images.lastRenderRequest, isNull);
   });
 
@@ -387,6 +474,7 @@ void main() {
 
 class _FakePlatformServices implements PlatformServices {
   CameraOutcome cameraOutcome = CameraOutcome.captured;
+  String? cameraErrorMessage;
   final List<String> publishedNames = [];
   final List<String> events = [];
   (String, bool)? finishedCapture;
@@ -416,6 +504,7 @@ class _FakePlatformServices implements PlatformServices {
     return CameraCaptureResult(
       outcome: cameraOutcome,
       outputPath: '/private/$captureId.jpg',
+      errorMessage: cameraErrorMessage,
     );
   }
 
@@ -476,8 +565,7 @@ class _FakeImagePipeline implements ImagePipeline {
   @override
   Future<ExtractedArchivePhoto> extractArchivePhoto(
     ExtractArchivePhotoRequest request,
-  ) =>
-      throw UnimplementedError();
+  ) => throw UnimplementedError();
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) =>
@@ -523,12 +611,21 @@ class _FakePrivateFileStore implements PrivateFileStore {
 
 class _RecordingScheduler implements CaptureBackgroundScheduler {
   final List<String> enqueuedIds = [];
+  int enqueueAttempts = 0;
+  int enqueueFailures = 0;
+  Completer<void>? enqueueGate;
 
   @override
   Future<void> initialize() async {}
 
   @override
   Future<void> enqueue(String captureId) async {
+    enqueueAttempts++;
+    await enqueueGate?.future;
+    if (enqueueFailures > 0) {
+      enqueueFailures--;
+      throw StateError('queue unavailable');
+    }
     enqueuedIds.add(captureId);
   }
 

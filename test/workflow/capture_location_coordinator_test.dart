@@ -27,6 +27,7 @@ void main() {
       database: database,
       platform: platform,
       scheduler: scheduler,
+      retryDelays: const [Duration.zero],
     );
   });
 
@@ -142,29 +143,33 @@ void main() {
     expect(scheduler.enqueuedIds, ['capture-1']);
   });
 
-  test('already-resolved records are skipped entirely', () async {
-    await seedPendingLocationCapture();
-    // Manually resolve the record before the coordinator runs.
-    await database.resolveCaptureLocation(
-      captureId: 'capture-1',
-      resolution: 'resolved',
-      outcome: 'exif',
-      latitude: 24.513,
-      longitude: 117.6471,
-    );
-    platform.exifLatitude = 99.9;
-    platform.exifLongitude = 99.9;
+  test(
+    'already-resolved records keep their location and still enqueue',
+    () async {
+      await seedPendingLocationCapture();
+      // Manually resolve the record before the coordinator runs.
+      await database.resolveCaptureLocation(
+        captureId: 'capture-1',
+        resolution: 'resolved',
+        outcome: 'exif',
+        latitude: 24.513,
+        longitude: 117.6471,
+      );
+      platform.exifLatitude = 99.9;
+      platform.exifLongitude = 99.9;
 
-    await coordinator.resolve('capture-1', fallback: null, enqueue: true);
+      await coordinator.resolve('capture-1', fallback: null, enqueue: true);
 
-    // The coordinator must not overwrite the existing resolution.
-    final record = await database.captureById('capture-1');
-    expect(record?.locationResolution, 'resolved');
-    expect(record?.latitude, 24.513);
-    expect(record?.longitude, 117.6471);
-    // And must not enqueue because the record was already resolved.
-    expect(scheduler.enqueuedIds, isEmpty);
-  });
+      // The coordinator must not overwrite the existing resolution.
+      final record = await database.captureById('capture-1');
+      expect(record?.locationResolution, 'resolved');
+      expect(record?.latitude, 24.513);
+      expect(record?.longitude, 117.6471);
+      // Location is not overwritten, but a caller requesting enqueue still gets
+      // an idempotent WorkManager wake-up.
+      expect(scheduler.enqueuedIds, ['capture-1']);
+    },
+  );
 
   test(
     'reconcilePendingLocations resolves pending rows without enqueuing',
@@ -223,6 +228,22 @@ void main() {
     expect(record?.locationResolution, 'resolved');
     expect(scheduler.enqueuedIds, ['capture-1']);
   });
+
+  test(
+    'begin retries a transient enqueue failure in the same session',
+    () async {
+      await seedPendingLocationCapture();
+      scheduler.enqueueFailures = 1;
+
+      coordinator.begin('capture-1', fallback: null);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(scheduler.enqueueAttempts, 2);
+      expect(scheduler.enqueuedIds, ['capture-1']);
+    },
+  );
 }
 
 class _CoordinatorPlatform implements PlatformServices {
@@ -288,12 +309,19 @@ class _CoordinatorPlatform implements PlatformServices {
 
 class _RecordingScheduler implements CaptureBackgroundScheduler {
   final List<String> enqueuedIds = [];
+  int enqueueAttempts = 0;
+  int enqueueFailures = 0;
 
   @override
   Future<void> initialize() async {}
 
   @override
   Future<void> enqueue(String captureId) async {
+    enqueueAttempts++;
+    if (enqueueFailures > 0) {
+      enqueueFailures--;
+      throw StateError('transient enqueue failure');
+    }
     enqueuedIds.add(captureId);
   }
 

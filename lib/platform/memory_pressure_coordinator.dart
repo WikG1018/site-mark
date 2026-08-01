@@ -166,15 +166,16 @@ class MemoryPressureController {
 
 /// Riverpod provider for the central [MemoryPressureController]. Singleton
 /// across the app lifetime.
-final memoryPressureControllerProvider =
-    Provider<MemoryPressureController>((ref) {
-      final controller = MemoryPressureController();
-      // No explicit dispose needed: the controller holds only lists of
-      // detach callbacks owned by their registrants, which detach on their
-      // own dispose. Keeping a no-op onDispose makes future migration to a
-      // disposable controller trivial.
-      return controller;
-    });
+final memoryPressureControllerProvider = Provider<MemoryPressureController>((
+  ref,
+) {
+  final controller = MemoryPressureController();
+  // No explicit dispose needed: the controller holds only lists of
+  // detach callbacks owned by their registrants, which detach on their
+  // own dispose. Keeping a no-op onDispose makes future migration to a
+  // disposable controller trivial.
+  return controller;
+});
 
 /// Coordinates memory-pressure events between the [MemoryPressureService]
 /// (native broadcasts + framework `didHaveMemoryPressure`) and the
@@ -185,10 +186,7 @@ final memoryPressureControllerProvider =
 /// event to the controller. After the controller finishes (handlers awaited),
 /// the coordinator ACKs the OEM Binder via `service.acknowledge`.
 class MemoryPressureCoordinator {
-  MemoryPressureCoordinator({
-    required this.service,
-    required this.controller,
-  });
+  MemoryPressureCoordinator({required this.service, required this.controller});
 
   final MemoryPressureService service;
   final MemoryPressureController controller;

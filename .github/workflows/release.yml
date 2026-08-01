@@ -13,6 +13,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -24,12 +26,19 @@ jobs:
           cache: true
       - uses: dtolnay/rust-toolchain@stable
         with:
+          components: rustfmt, clippy
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
       - name: Install Android SDK packages
         run: |
           SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+      - name: Verify tag and main history
+        run: |
+          python tool/verify_release_tag.py --tag "$GITHUB_REF_NAME" --pubspec pubspec.yaml
+          git fetch origin main
+          TAG_COMMIT="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          git merge-base --is-ancestor "$TAG_COMMIT" origin/main
       - name: Configure signing
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -38,7 +47,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           test -n "$KEYSTORE_BASE64"
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/release.jks
+          test -n "$STORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/release.jks
+          test -s android/release.jks
+          keytool -list -keystore android/release.jks \
+            -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null
           cat > android/key.properties <<EOF
           storeFile=../release.jks
           storePassword=$STORE_PASSWORD
@@ -47,29 +62,72 @@ jobs:
           EOF
       - run: flutter pub get
       - run: python -m pip install -r tool/icon-requirements.txt
-      - run: python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources
+      - run: python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources tool.test_verify_release_tag
       - run: python tool/verify_launcher_icon_resources.py
+      - name: Check Dart formatting
+        run: dart format --output=none --set-exit-if-changed lib test pigeons packages/sitemark_system_api/lib
+      - name: Check generated system bridge
+        run: |
+          dart run pigeon --input pigeons/system_api.dart
+          dart format packages/sitemark_system_api/lib/src/system_api.g.dart
+          git diff --exit-code -- \
+            packages/sitemark_system_api/lib/src/system_api.g.dart \
+            packages/sitemark_system_api/android/src/main/kotlin/io/github/wikg1018/sitemark/system/SystemApi.g.kt
       - run: flutter analyze
       - run: flutter test
+      - run: cargo fmt --manifest-path rust/Cargo.toml --check
+      - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path rust/Cargo.toml
       - run: ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest
       - name: Build signed APKs
+        env:
+          ORG_GRADLE_PROJECT_requireReleaseSigning: 'true'
         run: |
           mkdir -p dist
           flutter build apk --release --split-per-abi
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/sitemark-${GITHUB_REF_NAME}-arm64.apk
           flutter build apk --release
           cp build/app/outputs/flutter-apk/app-release.apk dist/sitemark-${GITHUB_REF_NAME}-universal.apk
+      - name: Verify APK signatures and metadata
+        run: |
+          BUILD_TOOLS="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools/36.0.0"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+          AAPT2="$BUILD_TOOLS/aapt2"
+          ARM64="dist/sitemark-${GITHUB_REF_NAME}-arm64.apk"
+          UNIVERSAL="dist/sitemark-${GITHUB_REF_NAME}-universal.apk"
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          PUBSPEC_VERSION="$(awk '$1 == "version:" { print $2 }' pubspec.yaml)"
+          VERSION_CODE="${PUBSPEC_VERSION#*+}"
+          for APK in "$ARM64" "$UNIVERSAL"; do
+            "$APKSIGNER" verify --verbose --print-certs "$APK"
+            BADGING="$($AAPT2 dump badging "$APK")"
+            grep -Fq "package: name='io.github.wikg1018.sitemark' versionCode='$VERSION_CODE' versionName='$VERSION_NAME'" <<<"$BADGING"
+            grep -Fxq "minSdkVersion:'31'" <<<"$BADGING"
+            grep -Fxq "targetSdkVersion:'36'" <<<"$BADGING"
+            PERMISSIONS="$($AAPT2 dump permissions "$APK")"
+            for FORBIDDEN in \
+              android.permission.INTERNET \
+              android.permission.CAMERA \
+              android.permission.ACCESS_BACKGROUND_LOCATION \
+              android.permission.READ_MEDIA_IMAGES; do
+              if grep -Fq "$FORBIDDEN" <<<"$PERMISSIONS"; then
+                echo "Forbidden permission in $APK: $FORBIDDEN" >&2
+                exit 1
+              fi
+            done
+          done
+          ARM64_BADGING="$($AAPT2 dump badging "$ARM64")"
+          UNIVERSAL_BADGING="$($AAPT2 dump badging "$UNIVERSAL")"
+          grep -Fxq "native-code: 'arm64-v8a'" <<<"$ARM64_BADGING"
+          for ABI in arm64-v8a armeabi-v7a x86_64; do
+            grep -Fq "'$ABI'" <<<"$UNIVERSAL_BADGING"
+          done
+          ARM64_CERT="$($APKSIGNER verify --print-certs "$ARM64" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          UNIVERSAL_CERT="$($APKSIGNER verify --print-certs "$UNIVERSAL" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          test -n "$ARM64_CERT"
+          test "$ARM64_CERT" = "$UNIVERSAL_CERT"
           cd dist
           sha256sum *.apk > SHA256SUMS.txt
-      - name: Verify forbidden release permissions
-        run: |
-          MANIFEST=build/app/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml
-          test -f "$MANIFEST"
-          ! grep -q 'android.permission.INTERNET' "$MANIFEST"
-          ! grep -q 'android.permission.CAMERA' "$MANIFEST"
-          ! grep -q 'ACCESS_BACKGROUND_LOCATION' "$MANIFEST"
-          ! grep -q 'READ_MEDIA_IMAGES' "$MANIFEST"
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

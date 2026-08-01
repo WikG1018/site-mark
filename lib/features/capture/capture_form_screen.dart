@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
@@ -232,6 +233,23 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
               duration: const Duration(seconds: 2),
             ),
           );
+      case CaptureWorkflowOutcome.delayed:
+        try {
+          await ref.read(captureFormDraftStoreProvider).clear(widget.projectId);
+        } catch (_) {
+          // The durable capture is authoritative; a stale draft is harmless.
+        }
+        if (!mounted) return;
+        _notesController.clear();
+        setState(() => _working = false);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(strings.captureQueueDelayedContinue),
+              duration: const Duration(seconds: 4),
+            ),
+          );
       case CaptureWorkflowOutcome.cancelled:
         // The camera was dismissed without a photo; stay on the form and
         // re-enable the button without surfacing a confirmation.
@@ -241,7 +259,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${strings.captureFailed}: ${result.errorMessage ?? ''}',
+              '${strings.captureFailed}: '
+              '${strings.captureFailureMessage(result.failureCode ?? CaptureFailureCode.unexpected)}',
             ),
           ),
         );

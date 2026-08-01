@@ -38,6 +38,7 @@ void main() {
       recoverCamera: () async => events.add('camera'),
       resolveLocations: () async => events.add('location'),
       reconcileQueue: () async => events.add('queue'),
+      cleanupInterruptedExports: () async => events.add('exports'),
       cleanupInterruptedImports: () async => events.add('imports'),
       cleanupInterruptedBundleRestores: () async {},
       cleanupInterruptedProjectDeletions: () async {},
@@ -54,7 +55,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(events, ['imports', 'camera', 'location', 'queue']);
+    expect(events, ['exports', 'imports', 'camera', 'location', 'queue']);
     await disposeApp(tester);
   });
 
@@ -355,10 +356,13 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.archive_outlined));
     await tester.pumpAndSettle();
-    expect(find.text('导出项目资料'), findsOneWidget);
-    await tester.tap(find.text('生成并分享'));
+    expect(find.text('备份项目'), findsOneWidget);
+    expect(find.text('已选择 1 个项目'), findsOneWidget);
+    expect(find.text('东区厂房改造'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    expect(share.lastPath, '/exports/project-1.zip');
+    expect(find.text('拍摄记录'), findsOneWidget);
 
     await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();

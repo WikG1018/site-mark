@@ -34,8 +34,17 @@ jobs:
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
       - run: flutter pub get
       - run: python -m pip install -r tool/icon-requirements.txt
-      - run: python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources
+      - run: python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources tool.test_verify_release_tag
       - run: python tool/verify_launcher_icon_resources.py
+      - name: Check Dart formatting
+        run: dart format --output=none --set-exit-if-changed lib test pigeons packages/sitemark_system_api/lib
+      - name: Check generated system bridge
+        run: |
+          dart run pigeon --input pigeons/system_api.dart
+          dart format packages/sitemark_system_api/lib/src/system_api.g.dart
+          git diff --exit-code -- \
+            packages/sitemark_system_api/lib/src/system_api.g.dart \
+            packages/sitemark_system_api/android/src/main/kotlin/io/github/wikg1018/sitemark/system/SystemApi.g.kt
       - run: flutter analyze
       - run: flutter test
       - run: cargo fmt --manifest-path rust/Cargo.toml --check
@@ -43,6 +52,8 @@ jobs:
       - run: cargo test --manifest-path rust/Cargo.toml
       - run: ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest
       - run: flutter build apk --debug
+      - name: Build unsigned release variant
+        run: flutter build apk --release
       - uses: actions/upload-artifact@v6
         with:
           name: sitemark-debug-apk

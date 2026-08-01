@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
@@ -238,7 +239,9 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                     if (capture.failureReason != null) ...[
                       const SizedBox(height: 4),
                       Text(
-                        capture.failureReason!,
+                        AppStrings.of(context).captureFailureMessage(
+                          CaptureFailureCode.fromStorage(capture.failureReason),
+                        ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

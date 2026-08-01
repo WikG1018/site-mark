@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
@@ -166,6 +167,10 @@ void main() {
     final record = await database.captureById('capture-1');
     expect(record?.status, CaptureStatus.failed);
     expect(record?.processingAttempts, 3);
+    expect(
+      record?.failureReason,
+      CaptureFailureCode.processingFailed.storageCode,
+    );
   });
 
   test(
@@ -240,12 +245,13 @@ void main() {
   });
 
   test(
-    'pending location resolution returns retry without incrementing attempts',
+    'pending location resolution defers without incrementing attempts',
     () async {
       // A capture whose location source is still pending must not consume the
       // render budget. The coordinator enqueues the capture again once the
       // location is resolved or marked unavailable, so the processor returns
-      // `retry` without touching the attempt counter.
+      // `deferred` without touching the attempt counter. The WorkManager task
+      // itself succeeds; the location coordinator registers a new wake-up.
       await database.createPendingCapture(
         id: 'capture-1',
         projectId: 'project-1',
@@ -263,7 +269,7 @@ void main() {
 
       final result = await processor.process('capture-1');
 
-      expect(result, CaptureProcessResult.retry);
+      expect(result, CaptureProcessResult.deferred);
       final record = await database.captureById('capture-1');
       expect(record?.processingAttempts, 0);
       expect(record?.status, CaptureStatus.captured);
@@ -320,7 +326,10 @@ void main() {
     expect(result, CaptureProcessResult.failed);
     final record = await database.captureById('capture-1');
     expect(record?.status, CaptureStatus.failed);
-    expect(record?.failureReason, isNotNull);
+    expect(
+      record?.failureReason,
+      CaptureFailureCode.originalModified.storageCode,
+    );
     expect(platform.publishedNames, isEmpty);
   });
 
@@ -369,7 +378,10 @@ void main() {
       final record = await database.captureById('capture-1');
       expect(record?.status, CaptureStatus.failed);
       expect(record?.processingAttempts, 1);
-      expect(record?.failureReason, isNotNull);
+      expect(
+        record?.failureReason,
+        CaptureFailureCode.originalMissing.storageCode,
+      );
       expect(platform.publishedNames, isEmpty);
     },
   );
@@ -413,6 +425,10 @@ void main() {
       (await database.captureById('capture-1'))?.status,
       CaptureStatus.failed,
     );
+    expect(
+      (await database.captureById('capture-1'))?.failureReason,
+      CaptureFailureCode.originalMissing.storageCode,
+    );
   });
 
   test('invalid-data Rust hash error fails immediately', () async {
@@ -426,6 +442,10 @@ void main() {
     expect(
       (await database.captureById('capture-1'))?.status,
       CaptureStatus.failed,
+    );
+    expect(
+      (await database.captureById('capture-1'))?.failureReason,
+      CaptureFailureCode.processingFailed.storageCode,
     );
   });
 

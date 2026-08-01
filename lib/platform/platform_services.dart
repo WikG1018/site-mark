@@ -389,9 +389,13 @@ class AppSelectionExportPaths implements SelectionExportPaths {
 }
 
 abstract interface class ProjectBundlePaths {
-  Future<String> backupZipPath();
+  Future<String> backupZipPath(String operationId);
+
+  Future<String> backupStagingArchivePath(String stagingDirectory);
 
   Future<String> exportStagingDirectory(String bundleId);
+
+  Future<List<String>> exportStagingDirectories();
 
   Future<String> restoreStagingDirectory(String bundleId);
 
@@ -410,13 +414,20 @@ class AppProjectBundlePaths implements ProjectBundlePaths {
   final DateTime Function() _clock;
 
   @override
-  Future<String> backupZipPath() async {
+  Future<String> backupZipPath(String operationId) async {
     final root = await _documentsDirectory();
     final exports = Directory('${root.path}${Platform.pathSeparator}exports');
     await exports.create(recursive: true);
     final timestamp = _clock().toUtc().millisecondsSinceEpoch;
+    final safeId = operationId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
     return '${exports.path}${Platform.pathSeparator}'
-        'sitemark-backup-$timestamp.zip';
+        'sitemark-backup-$timestamp-$safeId.zip';
+  }
+
+  @override
+  Future<String> backupStagingArchivePath(String stagingDirectory) async {
+    return '$stagingDirectory${Platform.pathSeparator}'
+        'sitemark-backup.tmp.zip';
   }
 
   @override
@@ -424,6 +435,24 @@ class AppProjectBundlePaths implements ProjectBundlePaths {
     final path = await _stagingPath('bundle-export', bundleId);
     await Directory(path).create(recursive: true);
     return path;
+  }
+
+  @override
+  Future<List<String>> exportStagingDirectories() async {
+    final root = await _documentsDirectory();
+    final imports = Directory('${root.path}${Platform.pathSeparator}imports');
+    if (!await imports.exists()) return const [];
+    final directories = <String>[];
+    await for (final entity in imports.list(followLinks: false)) {
+      if (entity is Directory &&
+          entity.uri.pathSegments
+              .where((segment) => segment.isNotEmpty)
+              .last
+              .startsWith('bundle-export-')) {
+        directories.add(entity.path);
+      }
+    }
+    return directories;
   }
 
   @override
@@ -455,12 +484,24 @@ class AppProjectBundlePaths implements ProjectBundlePaths {
 }
 
 abstract interface class ProjectBundleFileSystem {
+  Future<void> commitFile(String sourcePath, String destinationPath);
+
   Future<void> ensureDirectory(String path);
 
   Future<void> deleteTree(String path);
 }
 
 class DartProjectBundleFileSystem implements ProjectBundleFileSystem {
+  @override
+  Future<void> commitFile(String sourcePath, String destinationPath) async {
+    final destination = File(destinationPath);
+    if (await destination.exists()) {
+      throw StateError('Backup destination already exists');
+    }
+    await destination.parent.create(recursive: true);
+    await File(sourcePath).rename(destinationPath);
+  }
+
   @override
   Future<void> ensureDirectory(String path) {
     return Directory(path).create(recursive: true);
@@ -477,6 +518,23 @@ class DartProjectBundleFileSystem implements ProjectBundleFileSystem {
 
 abstract interface class ShareFileService {
   Future<void> shareFile(String path);
+}
+
+abstract interface class ArchiveSaveService {
+  Future<ArchiveSaveOutcome> saveArchive(String sourcePath);
+}
+
+class PigeonArchiveSaveService implements ArchiveSaveService {
+  PigeonArchiveSaveService({SiteMarkSystemApi? api})
+    : _api = api ?? SiteMarkSystemApi();
+
+  final SiteMarkSystemApi _api;
+
+  @override
+  Future<ArchiveSaveOutcome> saveArchive(String sourcePath) {
+    final suggestedName = File(sourcePath).uri.pathSegments.last;
+    return _api.saveArchive(sourcePath, suggestedName);
+  }
 }
 
 class SystemShareFileService implements ShareFileService {

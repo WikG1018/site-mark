@@ -92,31 +92,6 @@ class ProjectBackupService {
         ProjectBackupPreflightFailure.failedRequiresConfirmation,
       );
     }
-    if (projectIds.length == 1) {
-      final projectSnapshot = snapshot.projects.single;
-      final result = await projectExporter.exportProject(
-        projectId: projectIds.single,
-        includeOriginals: includeOriginals,
-        snapshotAt: snapshot.capturedAt,
-        omittedFailedCount: projectSnapshot.failedCount,
-      );
-      onProgress?.call(1, 1);
-      _recordBackup(
-        DiagnosticOutcome.success,
-        projectSnapshot.failedCount == 0
-            ? DiagnosticCode.none
-            : DiagnosticCode.failedRecordsOmitted,
-        1,
-        stopwatch.elapsedMilliseconds,
-      );
-      return ProjectBackupResult(
-        kind: ProjectBackupKind.singleProject,
-        outputZipPath: result.outputZipPath,
-        projectCount: 1,
-        omittedFailedCount: snapshot.failedCount,
-      );
-    }
-
     final projects = <Project>[];
     for (final projectId in projectIds) {
       final project = await database.projectById(projectId);
@@ -126,10 +101,42 @@ class ProjectBackupService {
       projects.add(project);
     }
 
-    final bundleId = _idGenerator();
-    final stagingDirectory = await paths.exportStagingDirectory(bundleId);
+    final operationId = _idGenerator();
+    final stagingDirectory = await paths.exportStagingDirectory(operationId);
     final totalSteps = projectIds.length + 1;
     try {
+      final finalOutputPath = await paths.backupZipPath(operationId);
+      if (projectIds.length == 1) {
+        final projectSnapshot = snapshot.projects.single;
+        final stagedArchivePath = await paths.projectArchivePath(
+          stagingDirectory,
+          projectIds.single,
+        );
+        await projectExporter.exportProject(
+          projectId: projectIds.single,
+          includeOriginals: includeOriginals,
+          outputZipPath: stagedArchivePath,
+          snapshotAt: snapshot.capturedAt,
+          omittedFailedCount: projectSnapshot.failedCount,
+        );
+        await files.commitFile(stagedArchivePath, finalOutputPath);
+        onProgress?.call(1, 1);
+        _recordBackup(
+          DiagnosticOutcome.success,
+          projectSnapshot.failedCount == 0
+              ? DiagnosticCode.none
+              : DiagnosticCode.failedRecordsOmitted,
+          1,
+          stopwatch.elapsedMilliseconds,
+        );
+        return ProjectBackupResult(
+          kind: ProjectBackupKind.singleProject,
+          outputZipPath: finalOutputPath,
+          projectCount: 1,
+          omittedFailedCount: snapshot.failedCount,
+        );
+      }
+
       final sources = <rust.ProjectBundleSource>[];
       for (var index = 0; index < projects.length; index++) {
         final project = projects[index];
@@ -153,13 +160,16 @@ class ProjectBackupService {
         );
         onProgress?.call(index + 1, totalSteps);
       }
-      final outputPath = await paths.backupZipPath();
-      final result = await bundles.exportBundle(
+      final stagedBundlePath = await paths.backupStagingArchivePath(
+        stagingDirectory,
+      );
+      await bundles.exportBundle(
         rust.ExportProjectBundleRequest(
-          outputZipPath: outputPath,
+          outputZipPath: stagedBundlePath,
           projects: sources,
         ),
       );
+      await files.commitFile(stagedBundlePath, finalOutputPath);
       onProgress?.call(totalSteps, totalSteps);
       _recordBackup(
         DiagnosticOutcome.success,
@@ -171,7 +181,7 @@ class ProjectBackupService {
       );
       return ProjectBackupResult(
         kind: ProjectBackupKind.bundle,
-        outputZipPath: result.outputZipPath,
+        outputZipPath: finalOutputPath,
         projectCount: projects.length,
         omittedFailedCount: snapshot.failedCount,
       );
@@ -181,6 +191,22 @@ class ProjectBackupService {
       } catch (_) {
         // The final archive is independent of its temporary inner ZIPs.
       }
+    }
+  }
+
+  Future<void> cleanupInterruptedExports() async {
+    Object? firstFailure;
+    StackTrace? firstStackTrace;
+    for (final directory in await paths.exportStagingDirectories()) {
+      try {
+        await files.deleteTree(directory);
+      } catch (error, stackTrace) {
+        firstFailure ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+    if (firstFailure != null) {
+      Error.throwWithStackTrace(firstFailure, firstStackTrace!);
     }
   }
 

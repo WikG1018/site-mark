@@ -74,10 +74,7 @@ void main() {
       const Duration(milliseconds: 200),
     );
     await tester.pumpAndSettle();
-    expect(
-      (await database.getAppSettings()).defaultWatermarkFontScale,
-      1.60,
-    );
+    expect((await database.getAppSettings()).defaultWatermarkFontScale, 1.60);
   });
 
   testWidgets('accent swatch selection persists', (tester) async {

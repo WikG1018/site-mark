@@ -45,6 +45,8 @@ class AndroidSystemApi(
     private var activity: Activity? = null
 
     private var cameraCallback: ((Result<CameraCaptureResult>) -> Unit)? = null
+    private var archiveSaveCallback: ((Result<ArchiveSaveOutcome>) -> Unit)? = null
+    private var archiveSaveSource: File? = null
     private val locationCallbacks = mutableListOf<(Result<LocationResult>) -> Unit>()
     private var locationCancellation: CancellationSignal? = null
     private var locationTimeout: Runnable? = null
@@ -364,6 +366,70 @@ class AndroidSystemApi(
         }
     }
 
+    override fun saveArchive(
+        sourcePath: String,
+        suggestedName: String,
+        callback: (Result<ArchiveSaveOutcome>) -> Unit,
+    ) {
+        if (archiveSaveCallback != null) {
+            callback(Result.failure(IllegalStateException("A backup save is already active")))
+            return
+        }
+        val foreground = activity
+        if (foreground == null) {
+            callback(Result.failure(IllegalStateException("Saving a backup requires a foreground activity")))
+            return
+        }
+        val source = runCatching {
+            ArchiveSavePolicy.validateSource(sourcePath, context.dataDir)
+        }.getOrElse { error ->
+            callback(Result.failure(error))
+            return
+        }
+        val safeName = runCatching {
+            ArchiveSavePolicy.normalizeSuggestedName(suggestedName)
+        }.getOrElse { error ->
+            callback(Result.failure(error))
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/zip"
+            putExtra(Intent.EXTRA_TITLE, safeName)
+        }
+        archiveSaveCallback = callback
+        archiveSaveSource = source
+        try {
+            foreground.startActivityForResult(intent, REQUEST_ARCHIVE_SAVE)
+        } catch (error: Throwable) {
+            archiveSaveCallback = null
+            archiveSaveSource = null
+            callback(Result.failure(error))
+        }
+    }
+
+    fun onArchiveSaveActivityResult(resultCode: Int, data: Intent?) {
+        val callback = archiveSaveCallback ?: return
+        val source = archiveSaveSource
+        archiveSaveCallback = null
+        archiveSaveSource = null
+        val destination = data?.data
+        if (resultCode != Activity.RESULT_OK || destination == null) {
+            callback(Result.success(ArchiveSaveOutcome.CANCELLED))
+            return
+        }
+        ioExecutor.execute {
+            val result = runCatching {
+                requireNotNull(source) { "Backup source is unavailable" }
+                context.contentResolver.openOutputStream(destination, "w")?.let { output ->
+                    ArchiveSavePolicy.copy(source, output)
+                } ?: error("Unable to open the selected backup destination")
+                ArchiveSaveOutcome.SAVED
+            }
+            mainHandler.post { callback(result) }
+        }
+    }
+
     private fun publishJpegInternal(sourcePath: String, displayName: String): MediaPublishResult {
         val source = validatedPrivateFile(sourcePath)
         val safeName = normalizedJpegName(displayName)
@@ -424,6 +490,8 @@ class AndroidSystemApi(
     fun dispose() {
         locationCancellation?.cancel()
         locationTimeout?.let(mainHandler::removeCallbacks)
+        archiveSaveCallback = null
+        archiveSaveSource = null
         ioExecutor.shutdown()
     }
 
@@ -496,6 +564,7 @@ class AndroidSystemApi(
     companion object {
         const val REQUEST_CAMERA_CAPTURE = 41001
         const val REQUEST_LOCATION_PERMISSION = 41002
+        const val REQUEST_ARCHIVE_SAVE = 41003
         private const val DEFAULT_LOCATION_TIMEOUT_MILLIS = 10_000L
         private const val PREFERENCES = "sitemark_capture_recovery"
         private const val KEY_CAPTURE_ID = "capture_id"

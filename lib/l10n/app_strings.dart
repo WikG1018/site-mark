@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/domain/app_links.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 
 class AppStrings {
   const AppStrings(this.locale);
@@ -102,9 +103,38 @@ class AppStrings {
   String get waitingForProcessing => _english ? 'Waiting' : '等待处理';
   String get rendering => _english ? 'Rendering watermark' : '生成水印';
   String get captureFailed => _english ? 'Capture failed' : '拍摄失败';
+  String captureFailureMessage(CaptureFailureCode code) => switch (code) {
+    CaptureFailureCode.cameraUnavailable =>
+      _english
+          ? 'The system camera is unavailable. Check the camera app and try again.'
+          : '系统相机暂不可用，请检查相机应用后重试',
+    CaptureFailureCode.queueUnavailable =>
+      _english
+          ? 'The photo is safe. Background processing will retry automatically.'
+          : '照片已安全保留，后台处理会自动重试',
+    CaptureFailureCode.originalMissing =>
+      _english
+          ? 'The original is missing, so the watermarked photo cannot be created.'
+          : '原图已缺失，无法生成水印照片',
+    CaptureFailureCode.originalModified =>
+      _english
+          ? 'The original has changed. Processing stopped to protect the record.'
+          : '原图已发生变化，为保护工程记录已停止处理',
+    CaptureFailureCode.processingFailed =>
+      _english
+          ? 'Photo processing failed. Keep the original and try processing again.'
+          : '照片处理失败，请保留原图并重新处理',
+    CaptureFailureCode.unexpected =>
+      _english
+          ? 'The photo could not be processed. Please try again.'
+          : '照片处理失败，请重试',
+  };
   String get captureQueuedContinue => _english
       ? 'Photo queued for background processing. Continue shooting.'
       : '照片已加入后台处理，可继续拍摄';
+  String get captureQueueDelayedContinue => _english
+      ? 'Photo saved. Background processing is delayed and will retry automatically; you can continue shooting.'
+      : '照片已安全保留，后台处理启动延迟并会自动重试，可继续拍摄';
   String get exportProject => _english ? 'Export project' : '导出项目';
   String get exportProjectData => _english ? 'Export project data' : '导出项目资料';
   String get includeOriginals =>
@@ -381,6 +411,22 @@ class AppStrings {
   String get backupComplete => _english
       ? 'Backup created. Choose where to share or save it.'
       : '备份已生成，请选择分享或保存位置';
+  String get backupSaved => _english ? 'Backup saved' : '备份已保存';
+  String backupSavedWithOmissions(int count) => _english
+      ? 'Backup saved; $count failed photo(s) were omitted as confirmed'
+      : '备份已保存，已按你的选择跳过 $count 张失败记录';
+  String get backupGeneratedNotSaved => _english
+      ? 'Backup created, but not yet saved to the selected location'
+      : '备份文件已生成，但尚未保存到所选位置';
+  String get backupSaveFailed => _english
+      ? 'Backup created, but it could not be saved. Try again or share it.'
+      : '备份文件已生成，但保存失败；可再次保存或改用分享';
+  String get saveAgain => _english ? 'Save again' : '再次保存';
+  String get shareBackup => _english ? 'Share' : '分享';
+  String get backupShared => _english ? 'Backup shared' : '备份已分享';
+  String get backupShareFailed => _english
+      ? 'Could not share the backup. You can try again.'
+      : '无法分享备份，请重试';
   String get backupFailedFriendly =>
       _english ? 'Could not create the backup' : '无法生成备份';
   String get chooseRestoreZip => _english ? 'Choose backup ZIP' : '选择备份 ZIP';

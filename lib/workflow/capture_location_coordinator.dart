@@ -22,22 +22,41 @@ final class CaptureLocationCoordinator {
     required this.database,
     required this.platform,
     required this.scheduler,
+    this.retryDelays = const [
+      Duration(milliseconds: 500),
+      Duration(seconds: 2),
+    ],
   });
 
   final AppDatabase database;
   final PlatformServices platform;
   final CaptureBackgroundScheduler scheduler;
+  final List<Duration> retryDelays;
 
   /// Fire-and-forgets [resolve] with `enqueue: true`. The caller (the capture
   /// button path) never awaits location, EXIF, or enqueue completion.
   void begin(String captureId, {Future<LocationResult>? fallback}) {
     unawaited(
-      resolve(
+      _resolveAndEnqueueWithRetry(
         captureId,
         fallback: fallback,
-        enqueue: true,
       ).catchError((Object _) {}),
     );
+  }
+
+  Future<void> _resolveAndEnqueueWithRetry(
+    String captureId, {
+    Future<LocationResult>? fallback,
+  }) async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        await resolve(captureId, fallback: fallback, enqueue: true);
+        return;
+      } catch (_) {
+        if (attempt >= retryDelays.length) rethrow;
+        await Future<void>.delayed(retryDelays[attempt]);
+      }
+    }
   }
 
   /// Resolves the location source for [captureId] and, when [enqueue] is true,
@@ -51,28 +70,30 @@ final class CaptureLocationCoordinator {
     required bool enqueue,
   }) async {
     final record = await database.captureById(captureId);
-    if (record == null || record.locationResolution != 'pending') return;
-    try {
-      final metadata = await platform.inspectImage(record.originalPath);
-      if (_validGps(metadata.latitude, metadata.longitude)) {
-        await database.resolveCaptureLocation(
-          captureId: captureId,
-          resolution: 'resolved',
-          outcome: 'exif',
-          latitude: metadata.latitude,
-          longitude: metadata.longitude,
-        );
-      } else {
+    if (record == null) return;
+    if (record.locationResolution == 'pending') {
+      try {
+        final metadata = await platform.inspectImage(record.originalPath);
+        if (_validGps(metadata.latitude, metadata.longitude)) {
+          await database.resolveCaptureLocation(
+            captureId: captureId,
+            resolution: 'resolved',
+            outcome: 'exif',
+            latitude: metadata.latitude,
+            longitude: metadata.longitude,
+          );
+        } else {
+          await _persistFallback(
+            captureId,
+            fallback == null ? null : await fallback,
+          );
+        }
+      } catch (_) {
         await _persistFallback(
           captureId,
           fallback == null ? null : await fallback,
         );
       }
-    } catch (_) {
-      await _persistFallback(
-        captureId,
-        fallback == null ? null : await fallback,
-      );
     }
     if (enqueue) await scheduler.enqueue(captureId);
   }

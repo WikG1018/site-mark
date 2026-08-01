@@ -5,6 +5,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_backup_preflight.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 typedef ProjectBackupExport =
     Future<ProjectBackupResult> Function({
@@ -14,15 +15,25 @@ typedef ProjectBackupExport =
       bool allowFailedOmissions,
     });
 
+class ProjectBackupSelectionArguments {
+  const ProjectBackupSelectionArguments({this.initialProjectIds = const {}});
+
+  final Set<String> initialProjectIds;
+}
+
 class ProjectBackupSelectionScreen extends ConsumerStatefulWidget {
   const ProjectBackupSelectionScreen({
     super.key,
     this.exportProjects,
+    this.saveArchive,
     this.shareFile,
+    this.initialProjectIds = const {},
   });
 
   final ProjectBackupExport? exportProjects;
+  final Future<ArchiveSaveOutcome> Function(String path)? saveArchive;
   final Future<void> Function(String path)? shareFile;
+  final Set<String> initialProjectIds;
 
   @override
   ConsumerState<ProjectBackupSelectionScreen> createState() =>
@@ -31,8 +42,17 @@ class ProjectBackupSelectionScreen extends ConsumerStatefulWidget {
 
 class _ProjectBackupSelectionScreenState
     extends ConsumerState<ProjectBackupSelectionScreen> {
-  final Set<String> _selectedIds = {};
+  late final Set<String> _selectedIds;
   bool _submitting = false;
+  bool _saving = false;
+  bool _sharing = false;
+  ProjectBackupResult? _lastBackup;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIds = {...widget.initialProjectIds};
+  }
 
   void _toggleAll(List<Project> projects) {
     setState(() {
@@ -143,7 +163,7 @@ class _ProjectBackupSelectionScreenState
     );
 
     Object? failure;
-    var omittedFailedCount = 0;
+    ProjectBackupResult? result;
     try {
       final export =
           widget.exportProjects ??
@@ -160,13 +180,67 @@ class _ProjectBackupSelectionScreenState
                 onProgress: onProgress,
                 allowFailedOmissions: allowFailedOmissions,
               );
-      final result = await export(
+      result = await export(
         projectIds: _selectedIds.toList(growable: false),
         includeOriginals: includeOriginals,
         onProgress: (completed, total) => progress.value = (completed, total),
         allowFailedOmissions: allowFailedOmissions,
       );
-      omittedFailedCount = result.omittedFailedCount;
+    } catch (error) {
+      failure = error;
+    }
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+      setState(() {
+        _submitting = false;
+        if (result != null) _lastBackup = result;
+      });
+    }
+    progress.dispose();
+    if (!mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_describeBackupError(strings, failure))),
+      );
+      return;
+    }
+    await _saveBackup(result!);
+  }
+
+  Future<void> _saveBackup(ProjectBackupResult result) async {
+    if (_saving) return;
+    final strings = AppStrings.of(context);
+    setState(() => _saving = true);
+    ArchiveSaveOutcome? outcome;
+    Object? failure;
+    try {
+      final save =
+          widget.saveArchive ??
+          (path) => ref.read(archiveSaveServiceProvider).saveArchive(path);
+      outcome = await save(result.outputZipPath);
+    } catch (error) {
+      failure = error;
+    }
+    if (!mounted) return;
+    setState(() => _saving = false);
+    final message = failure != null
+        ? strings.backupSaveFailed
+        : outcome == ArchiveSaveOutcome.saved
+        ? result.omittedFailedCount == 0
+              ? strings.backupSaved
+              : strings.backupSavedWithOmissions(result.omittedFailedCount)
+        : strings.backupGeneratedNotSaved;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _shareBackup(ProjectBackupResult result) async {
+    if (_sharing) return;
+    final strings = AppStrings.of(context);
+    setState(() => _sharing = true);
+    Object? failure;
+    try {
       final share =
           widget.shareFile ??
           (path) => ref.read(shareFileServiceProvider).shareFile(path);
@@ -174,22 +248,18 @@ class _ProjectBackupSelectionScreenState
     } catch (error) {
       failure = error;
     }
-    if (mounted) {
-      Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            failure == null
-                ? omittedFailedCount == 0
-                      ? strings.backupComplete
-                      : '备份完成，已按你的选择跳过 $omittedFailedCount 张失败记录'
-                : _describeBackupError(strings, failure),
-          ),
+    if (!mounted) return;
+    setState(() => _sharing = false);
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.removeCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failure == null ? strings.backupShared : strings.backupShareFailed,
         ),
-      );
-      setState(() => _submitting = false);
-    }
-    progress.dispose();
+      ),
+    );
   }
 
   @override
@@ -266,10 +336,46 @@ class _ProjectBackupSelectionScreenState
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.all(16),
-        child: FilledButton(
-          key: const Key('backup-continue'),
-          onPressed: _selectedIds.isEmpty || _submitting ? null : _startBackup,
-          child: Text(strings.continueLabel),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilledButton(
+              key: const Key('backup-continue'),
+              onPressed:
+                  _selectedIds.isEmpty || _submitting || _saving || _sharing
+                  ? null
+                  : _startBackup,
+              child: Text(strings.continueLabel),
+            ),
+            if (_lastBackup case final result?) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const Key('backup-share'),
+                      onPressed: _submitting || _saving || _sharing
+                          ? null
+                          : () => _shareBackup(result),
+                      icon: const Icon(Icons.share_outlined),
+                      label: Text(strings.shareBackup),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.tonalIcon(
+                      key: const Key('backup-save-again'),
+                      onPressed: _submitting || _saving || _sharing
+                          ? null
+                          : () => _saveBackup(result),
+                      icon: const Icon(Icons.save_alt_outlined),
+                      label: Text(strings.saveAgain),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
       ),
     );
