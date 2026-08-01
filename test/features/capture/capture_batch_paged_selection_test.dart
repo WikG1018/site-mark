@@ -219,6 +219,85 @@ void main() {
     },
   );
 
+  testWidgets('full toggle clears a manually complete all-records selection', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final source = _ControlledCaptureQuerySource(
+      rows: List.generate(50, _summary),
+      selectableSnapshot: const CaptureSelectionSnapshot(
+        ids: {'capture-0'},
+        allReady: true,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _localized(
+        database: database,
+        home: AllCapturesScreen(querySource: source),
+      ),
+    );
+    await _pumpUi(tester);
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await _pumpUi(tester);
+    await tester.tap(find.byType(Checkbox).first);
+    await _pumpUi(tester);
+    expect(find.text('已选 1 张'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await _pumpUi(tester);
+
+    expect(source.selectableQueries, hasLength(1));
+    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    await _unmount(tester);
+  });
+
+  testWidgets('all-records full toggle refreshes changed query membership', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final source =
+        _ControlledCaptureQuerySource(rows: List.generate(50, _summary))
+          ..selectable.addAll([
+            () => Future.value(
+              CaptureSelectionSnapshot(
+                ids: List.generate(120, (index) => 'capture-$index').toSet(),
+                allReady: true,
+              ),
+            ),
+            () => Future.value(
+              CaptureSelectionSnapshot(
+                ids: List.generate(121, (index) => 'capture-$index').toSet(),
+                allReady: true,
+              ),
+            ),
+          ]);
+
+    await tester.pumpWidget(
+      _localized(
+        database: database,
+        home: AllCapturesScreen(querySource: source),
+      ),
+    );
+    await _pumpUi(tester);
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await _pumpUi(tester);
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await _pumpUi(tester);
+    expect(find.text('已选 120 张'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await _pumpUi(tester);
+
+    expect(source.selectableQueries, hasLength(2));
+    expect(find.text('已选 121 张'), findsOneWidget);
+    await _unmount(tester);
+  });
+
   testWidgets('project detail full selection includes unloaded IDs', (
     tester,
   ) async {
@@ -248,6 +327,12 @@ void main() {
     expect(source.selectableQueries.single.filter.projectId, 'project-1');
     expect(find.text('已选 120 张'), findsOneWidget);
     expect(_actionButton(tester, Icons.archive_outlined).onPressed, isNotNull);
+
+    await tester.tap(find.byKey(const Key('select-all-captures')));
+    await _pumpUi(tester);
+
+    expect(source.selectableQueries, hasLength(2));
+    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
     await _unmount(tester);
   });
 

@@ -423,6 +423,70 @@ void main() {
     await disposeTree(tester);
   });
 
+  testWidgets('delete executes the exact selection confirmed by the user', (
+    tester,
+  ) async {
+    final deleteGate = Completer<CaptureActionResult>();
+    final media = _RecordingDeleteMediaService(
+      database: database,
+      result: deleteGate.future,
+    );
+    final controller = CaptureSelectionController()
+      ..enter()
+      ..replaceAll(const ['capture-0'], allReady: true);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          bottomNavigationBar: CaptureBatchActionBar(
+            controller: controller,
+            mediaService: media,
+            exportService: buildTestExportService(database),
+            shareService: _TestShareService(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.delete_outline));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 张照片'), findsOneWidget);
+
+    controller.replaceAll(
+      List.generate(120, (index) => 'capture-$index'),
+      allReady: false,
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(media.deleteCalls, [
+      ['capture-0'],
+    ]);
+    expect(find.text('正在处理 0/1'), findsOneWidget);
+
+    deleteGate.complete(
+      const CaptureActionResult(
+        succeededIds: ['capture-0'],
+        skippedIds: [],
+        failures: {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('成功 1，跳过 0，失败 0'), findsOneWidget);
+    await disposeTree(tester);
+  });
+
   // ─── Test 6: 骨架屏存在性 ──────────────────────────────────────────────
   testWidgets(
     'Skeletonizer pattern shows placeholder before stream data arrives',
@@ -595,4 +659,22 @@ class _TestSelectionExportPaths implements SelectionExportPaths {
 class _TestShareService implements ShareFileService {
   @override
   Future<void> shareFile(String path) async {}
+}
+
+class _RecordingDeleteMediaService extends CaptureMediaService {
+  _RecordingDeleteMediaService({required super.database, required this.result})
+    : super(
+        platform: _TestPlatform(),
+        outputPaths: _TestOutputPaths(),
+        files: _TestFileStore(),
+      );
+
+  final Future<CaptureActionResult> result;
+  final List<List<String>> deleteCalls = [];
+
+  @override
+  Future<CaptureActionResult> deleteAll(List<String> captureIds) {
+    deleteCalls.add(List.unmodifiable(captureIds));
+    return result;
+  }
 }

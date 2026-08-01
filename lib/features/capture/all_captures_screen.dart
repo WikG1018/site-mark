@@ -141,11 +141,6 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
 
   Future<void> _toggleSelectAll() async {
     if (!_selectionController.editing || _selectAllLoading) return;
-    if (_allQuerySelected) {
-      _invalidateSelectionRequests();
-      _selectionController.replaceAll(const [], allReady: false);
-      return;
-    }
     final generation = ++_selectionGeneration;
     final query = _query;
     setState(() => _selectAllLoading = true);
@@ -153,11 +148,11 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
       final snapshot = await _querySource.loadSelectable(query);
       if (!mounted || generation != _selectionGeneration) return;
       _selectAllLoading = false;
-      _allQuerySelected = snapshot.ids.isNotEmpty;
-      _selectionController.replaceAll(
-        snapshot.ids,
-        allReady: snapshot.allReady,
-      );
+      _selectionController.toggleAllSnapshot(snapshot);
+      _allQuerySelected =
+          snapshot.ids.isNotEmpty &&
+          _selectionController.selectedIds.length == snapshot.ids.length &&
+          snapshot.ids.every(_selectionController.selectedIds.contains);
     } catch (_) {
       if (!mounted || generation != _selectionGeneration) return;
       setState(() => _selectAllLoading = false);

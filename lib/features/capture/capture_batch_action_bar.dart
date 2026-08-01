@@ -39,6 +39,7 @@ class CaptureBatchActionBar extends StatefulWidget {
 
 class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   bool _busy = false;
+  bool _exporting = false;
   int _completed = 0;
   int _total = 0;
 
@@ -64,6 +65,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() {
       _busy = true;
+      _exporting = false;
       _completed = 0;
       _total = ids.length;
     });
@@ -89,6 +91,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
       if (mounted) {
         setState(() {
           _busy = false;
+          _exporting = false;
           _completed = 0;
           _total = 0;
         });
@@ -154,6 +157,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() {
       _busy = true;
+      _exporting = true;
       _completed = 0;
       _total = 1;
     });
@@ -174,6 +178,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
       if (mounted) {
         setState(() {
           _busy = false;
+          _exporting = false;
           _completed = 0;
           _total = 0;
         });
@@ -241,6 +246,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     await _runWithProgress(
       strings.deleteAll,
       (ids) => widget.mediaService.deleteAll(ids),
+      overrideIds: ids,
     );
     widget.controller.exit();
   }
@@ -254,7 +260,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         final ids = _selectedIds;
         final empty = ids.isEmpty;
         final ready = widget.controller.allSelectedReady;
-        final exporting = _busy && _total == 1;
+        final exporting = _exporting;
         return BottomAppBar(
           key: const Key('batch-action-bar'),
           height: _busy ? 136 : 104,
