@@ -5,7 +5,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/data/capture_query_repository.dart';
+import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/features/capture/capture_photo_hero.dart';
@@ -78,6 +81,29 @@ class _ThrowingOutputPaths implements CaptureOutputPaths {
   @override
   Future<String> renderedPhotoPath(String captureId) =>
       Future.error(StateError('rendered path unavailable'));
+}
+
+final class _AdjacentQuerySource implements CaptureQuerySource {
+  final Completer<List<CaptureSummary>> newer = Completer();
+  final Completer<List<CaptureSummary>> older = Completer();
+  final List<
+    ({CaptureListQuery query, CapturePageCursor cursor, bool newer, int limit})
+  >
+  calls = [];
+
+  @override
+  Future<List<CaptureSummary>> loadAdjacent(
+    CaptureListQuery query,
+    CapturePageCursor cursor, {
+    required bool newer,
+    int limit = 10,
+  }) {
+    calls.add((query: query, cursor: cursor, newer: newer, limit: limit));
+    return newer ? this.newer.future : older.future;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 CaptureRecord _record({
@@ -428,78 +454,99 @@ void main() {
     expect(fullscreenImage.image, isNot(isA<ResizeImage>()));
   });
 
-  testWidgets(
-    'fullscreen siblings use each capture best available image and current index',
-    (tester) async {
-      final current = _record(id: 'capture-1', status: CaptureStatus.ready);
-      final renderedSibling = _record(
-        id: 'capture-2',
-        status: CaptureStatus.ready,
-      );
-      final originalSibling = _record(
-        id: 'capture-3',
-        status: CaptureStatus.failed,
-      );
+  testWidgets('fullscreen opens current-only then loads adjacent query pages', (
+    tester,
+  ) async {
+    final current = _record(id: 'capture-1', status: CaptureStatus.ready);
+    final renderedSibling = _record(
+      id: 'capture-2',
+      status: CaptureStatus.ready,
+    );
+    final originalSibling = _record(
+      id: 'capture-3',
+      status: CaptureStatus.failed,
+    );
+    final source = _AdjacentQuerySource();
+    const query = CaptureListQuery(searchText: '风管');
+    final cursor = (
+      sortTime: current.capturedAt ?? current.createdAt,
+      id: current.id,
+    );
 
-      await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            locale: const Locale('zh'),
-            supportedLocales: AppStrings.supportedLocales,
-            localizationsDelegates: const [
-              AppStrings.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            home: Scaffold(
-              body: Center(
-                child: SizedBox(
-                  width: 320,
-                  height: 240,
-                  child: CaptureImagePreview(
-                    capture: current,
-                    outputPaths: _FakeOutputPaths(),
-                    siblingCaptures: [
-                      renderedSibling,
-                      current,
-                      originalSibling,
-                    ],
-                    fileExists: (path) {
-                      return path == '/private/rendered/capture-1.jpg' ||
-                          path == '/private/rendered/capture-2.jpg' ||
-                          path == '/private/capture-3.jpg';
-                    },
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 320,
+                height: 240,
+                child: CaptureImagePreview(
+                  capture: current,
+                  outputPaths: _FakeOutputPaths(),
+                  navigationContext: CaptureNavigationContext(
+                    query: query,
+                    cursor: cursor,
                   ),
+                  querySource: source,
+                  fileExists: (path) {
+                    return path == '/private/rendered/capture-1.jpg' ||
+                        path == '/private/rendered/capture-2.jpg' ||
+                        path == '/private/capture-3.jpg';
+                  },
                 ),
               ),
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      tester
-          .widget<GestureDetector>(
-            find.byKey(const Key('capture-image-open-capture-1')),
-          )
-          .onTap!();
-      await tester.pumpAndSettle();
+    tester
+        .widget<GestureDetector>(
+          find.byKey(const Key('capture-image-open-capture-1')),
+        )
+        .onTap!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
 
-      final viewer = tester.widget<CaptureFullscreenScreen>(
-        find.byType(CaptureFullscreenScreen),
-      );
-      expect(
-        await Future.wait(viewer.photos.map((photo) => photo.resolvePath())),
-        [
-          '/private/rendered/capture-2.jpg',
-          '/private/rendered/capture-1.jpg',
-          '/private/capture-3.jpg',
-        ],
-      );
-      expect(viewer.initialIndex, 1);
-    },
-  );
+    final viewer = tester.widget<CaptureFullscreenScreen>(
+      find.byType(CaptureFullscreenScreen),
+    );
+    expect(viewer.sequence, isNotNull);
+    expect(viewer.photos.map((photo) => photo.id), ['capture-1']);
+    expect(source.calls, hasLength(2));
+    expect(source.calls.every((call) => call.query == query), isTrue);
+    expect(source.calls.every((call) => call.cursor == cursor), isTrue);
+    expect(source.calls.every((call) => call.limit == 10), isTrue);
+
+    source.newer.complete([]);
+    source.older.complete([
+      CaptureSummary(capture: renderedSibling, projectName: '项目'),
+      CaptureSummary(capture: originalSibling, projectName: '项目'),
+    ]);
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      await Future.wait(viewer.photos.map((photo) => photo.resolvePath())),
+      [
+        '/private/rendered/capture-1.jpg',
+        '/private/rendered/capture-2.jpg',
+        '/private/capture-3.jpg',
+      ],
+    );
+    expect(viewer.initialIndex, 0);
+  });
 
   testWidgets('ready preview uses rendered image and rendering uses original', (
     tester,

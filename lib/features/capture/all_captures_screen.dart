@@ -12,6 +12,7 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_paged_list.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
@@ -342,7 +343,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   Widget _buildCaptureCard(
     BuildContext context,
     CaptureSummary summary,
-    List<CaptureSummary> visibleRows,
+    List<CaptureSummary> _,
   ) {
     final id = summary.capture.id;
     return CaptureRecordCard(
@@ -363,9 +364,13 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
         extra: CaptureDetailArguments(
           capture: summary.capture,
           initialImagePath: initialImagePath,
-          siblingCaptures: visibleRows
-              .map((row) => row.capture)
-              .toList(growable: false),
+          navigationContext: CaptureNavigationContext(
+            query: _pagerController.state.query,
+            cursor: (
+              sortTime: summary.capture.capturedAt ?? summary.capture.createdAt,
+              id: summary.capture.id,
+            ),
+          ),
         ),
       ),
     );

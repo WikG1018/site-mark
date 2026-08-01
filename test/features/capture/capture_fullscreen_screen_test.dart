@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
@@ -73,6 +75,372 @@ Future<void> doubleTapViewer(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('shows current immediately and prefetches both directions', (
+    tester,
+  ) async {
+    final newer = Completer<List<CaptureFullscreenPhoto>>();
+    final older = Completer<List<CaptureFullscreenPhoto>>();
+    final calls = <CaptureFullscreenDirection>[];
+    final sequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto.resolved(path: '/current.jpg'),
+      loader: (direction, anchorId) {
+        calls.add(direction);
+        expect(anchorId, '/current.jpg');
+        return direction == CaptureFullscreenDirection.newer
+            ? newer.future
+            : older.future;
+      },
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.sequence(sequence: sequence),
+        ),
+      ),
+    );
+
+    expect(sequence.photos.map((photo) => photo.id), ['/current.jpg']);
+    expect(
+      find.byKey(const Key('fullscreen-photo-id-/current.jpg')),
+      findsOneWidget,
+    );
+    expect(calls.toSet(), {
+      CaptureFullscreenDirection.newer,
+      CaptureFullscreenDirection.older,
+    });
+
+    newer.complete([]);
+    older.complete([]);
+    await tester.pump();
+  });
+
+  testWidgets('prepend preserves the exact visible page offset', (
+    tester,
+  ) async {
+    final newer = Completer<List<CaptureFullscreenPhoto>>();
+    final sequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto(
+        id: 'current',
+        initialPath: '/current.jpg',
+        resolvePath: () async => '/current.jpg',
+      ),
+      loader: (direction, anchorId) {
+        if (direction == CaptureFullscreenDirection.newer) {
+          return newer.future;
+        }
+        return Future.value([
+          for (var index = 0; index < 10; index++)
+            CaptureFullscreenPhoto.resolved(path: '/older-$index.jpg'),
+        ]);
+      },
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.sequence(sequence: sequence),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(sequence.photos.length, 11);
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(PageView)),
+    );
+    await gesture.moveBy(const Offset(-20, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(-200, 0));
+    await tester.pump();
+    final controller = tester
+        .widget<PageView>(find.byType(PageView))
+        .controller!;
+    final pageBefore = controller.page!;
+    expect(pageBefore, greaterThan(0));
+    expect(pageBefore, lessThan(1));
+
+    newer.complete([
+      CaptureFullscreenPhoto.resolved(path: '/newer-2.jpg'),
+      CaptureFullscreenPhoto.resolved(path: '/newer-1.jpg'),
+    ]);
+    await tester.pump();
+
+    expect(controller.page, closeTo(pageBefore + 2, 0.001));
+    expect(sequence.currentId, 'current');
+    expect(
+      find.byKey(const Key('fullscreen-photo-id-current')),
+      findsOneWidget,
+    );
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('an edge failure exposes only that edge retry', (tester) async {
+    var olderAttempts = 0;
+    final sequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto.resolved(path: '/current.jpg'),
+      loader: (direction, anchorId) async {
+        if (direction == CaptureFullscreenDirection.newer) return [];
+        olderAttempts++;
+        if (olderAttempts == 1) throw StateError('temporary failure');
+        return [CaptureFullscreenPhoto.resolved(path: '/older.jpg')];
+      },
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.sequence(sequence: sequence),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const Key('fullscreen-older-retry')), findsOneWidget);
+    expect(find.byKey(const Key('fullscreen-newer-retry')), findsNothing);
+    expect(sequence.photos.map((photo) => photo.id), ['/current.jpg']);
+
+    await tester.tap(find.byKey(const Key('fullscreen-older-retry')));
+    await tester.pump();
+    expect(olderAttempts, 2);
+    expect(sequence.photos.map((photo) => photo.id), [
+      '/current.jpg',
+      '/older.jpg',
+    ]);
+  });
+
+  testWidgets('requests another batch at two photos from the older edge', (
+    tester,
+  ) async {
+    final nextOlder = Completer<List<CaptureFullscreenPhoto>>();
+    var olderCalls = 0;
+    final anchors = <String>[];
+    final sequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto.resolved(path: '/current.jpg'),
+      loader: (direction, anchorId) {
+        if (direction == CaptureFullscreenDirection.newer) {
+          return Future.value([]);
+        }
+        olderCalls++;
+        anchors.add(anchorId);
+        if (olderCalls == 1) {
+          return Future.value([
+            for (var index = 0; index < 10; index++)
+              CaptureFullscreenPhoto.resolved(path: '/older-$index.jpg'),
+          ]);
+        }
+        return nextOlder.future;
+      },
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.sequence(sequence: sequence),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    final controller = tester
+        .widget<PageView>(find.byType(PageView))
+        .controller!;
+
+    controller.jumpToPage(7);
+    await tester.pump();
+    expect(olderCalls, 1);
+
+    controller.jumpToPage(8);
+    await tester.pump();
+    expect(olderCalls, 2);
+    expect(anchors.last, '/older-9.jpg');
+
+    controller.jumpToPage(9);
+    controller.jumpToPage(10);
+    await tester.pump();
+    expect(olderCalls, 2);
+
+    nextOlder.complete([]);
+    await tester.pump();
+  });
+
+  testWidgets('continues past a full batch of skipped adjacent rows', (
+    tester,
+  ) async {
+    var olderCalls = 0;
+    final sequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto(
+        id: 'current',
+        resolvePath: () async => '/current.jpg',
+      ),
+      loader: (direction, anchorId) async {
+        if (direction == CaptureFullscreenDirection.newer) return [];
+        olderCalls++;
+        if (olderCalls == 1) {
+          return [
+            for (var index = 0; index < 10; index++)
+              CaptureFullscreenPhoto(
+                id: 'deleted-$index',
+                includeInSequence: false,
+                resolvePath: () async => null,
+              ),
+          ];
+        }
+        return [CaptureFullscreenPhoto.resolved(path: '/older.jpg')];
+      },
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.sequence(sequence: sequence),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    expect(olderCalls, 2);
+    expect(sequence.photos.map((photo) => photo.id), ['current', '/older.jpg']);
+  });
+
+  testWidgets('replacing the sequence ignores the old query completion', (
+    tester,
+  ) async {
+    final oldNewer = Completer<List<CaptureFullscreenPhoto>>();
+    final oldOlder = Completer<List<CaptureFullscreenPhoto>>();
+    final oldSequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto(
+        id: 'old-current',
+        resolvePath: () async => '/old-current.jpg',
+      ),
+      loader: (direction, anchorId) =>
+          direction == CaptureFullscreenDirection.newer
+          ? oldNewer.future
+          : oldOlder.future,
+    );
+    final newSequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto(
+        id: 'new-current',
+        resolvePath: () async => '/new-current.jpg',
+      ),
+      loader: (direction, anchorId) async => [],
+    );
+    final selected = ValueNotifier(oldSequence);
+    addTearDown(selected.dispose);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ValueListenableBuilder<CaptureFullscreenSequence>(
+            valueListenable: selected,
+            builder: (context, sequence, _) => CaptureFullscreenScreen.sequence(
+              key: const Key('dynamic-viewer'),
+              sequence: sequence,
+            ),
+          ),
+        ),
+      ),
+    );
+    selected.value = newSequence;
+    await tester.pump();
+
+    oldNewer.complete([CaptureFullscreenPhoto.resolved(path: '/stale.jpg')]);
+    oldOlder.complete([]);
+    await tester.pump();
+
+    expect(oldSequence.photos.map((photo) => photo.id), ['old-current']);
+    expect(
+      find.byKey(const Key('fullscreen-photo-id-new-current')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('disposing the viewer ignores pending adjacent results', (
+    tester,
+  ) async {
+    final newer = Completer<List<CaptureFullscreenPhoto>>();
+    final older = Completer<List<CaptureFullscreenPhoto>>();
+    final sequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto(
+        id: 'current',
+        resolvePath: () async => '/current.jpg',
+      ),
+      loader: (direction, anchorId) =>
+          direction == CaptureFullscreenDirection.newer
+          ? newer.future
+          : older.future,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.sequence(sequence: sequence),
+        ),
+      ),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    newer.complete([CaptureFullscreenPhoto.resolved(path: '/stale.jpg')]);
+    older.complete([]);
+    await tester.pump();
+
+    expect(sequence.photos.map((photo) => photo.id), ['current']);
+  });
+
   testWidgets('cached detail preview remains behind full-resolution decode', (
     tester,
   ) async {

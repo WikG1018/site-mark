@@ -11,6 +11,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -216,7 +217,7 @@ void main() {
       // initState assertion. The route tree mirrors app.dart but with a
       // minimal capture-detail stub.
       CaptureRecord? pushedInitialCapture;
-      List<CaptureRecord>? pushedSiblingCaptures;
+      CaptureNavigationContext? pushedNavigationContext;
       final router = GoRouter(
         initialLocation: '/records',
         routes: [
@@ -237,7 +238,7 @@ void main() {
                     builder: (context, state) {
                       if (state.extra case CaptureDetailArguments arguments) {
                         pushedInitialCapture = arguments.capture;
-                        pushedSiblingCaptures = arguments.siblingCaptures;
+                        pushedNavigationContext = arguments.navigationContext;
                       }
                       return Scaffold(
                         appBar: AppBar(title: const Text('记录详情')),
@@ -281,9 +282,8 @@ void main() {
       // Verify we're on the capture detail screen.
       expect(find.text('记录详情'), findsOneWidget);
       expect(pushedInitialCapture?.id, 'capture-1');
-      expect(pushedSiblingCaptures?.map((capture) => capture.id), [
-        'capture-1',
-      ]);
+      expect(pushedNavigationContext?.query.searchText, isEmpty);
+      expect(pushedNavigationContext?.cursor.id, 'capture-1');
 
       // Pop back via the AppBar back button.
       await tester.tap(find.byType(BackButton));

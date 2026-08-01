@@ -13,6 +13,7 @@ import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
+import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_paged_list.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
@@ -513,7 +514,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             ),
           ),
       ],
-      itemBuilder: (context, summary, visibleRows) {
+      itemBuilder: (context, summary, _) {
         final id = summary.capture.id;
         return CaptureRecordCard(
           key: ValueKey(id),
@@ -532,9 +533,14 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             extra: CaptureDetailArguments(
               capture: summary.capture,
               initialImagePath: initialImagePath,
-              siblingCaptures: visibleRows
-                  .map((row) => row.capture)
-                  .toList(growable: false),
+              navigationContext: CaptureNavigationContext(
+                query: _pagerController.state.query,
+                cursor: (
+                  sortTime:
+                      summary.capture.capturedAt ?? summary.capture.createdAt,
+                  id: summary.capture.id,
+                ),
+              ),
             ),
           ),
         );
