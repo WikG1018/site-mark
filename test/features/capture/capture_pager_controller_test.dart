@@ -214,6 +214,33 @@ void main() {
     },
   );
 
+  test('a replayed newest cursor starts only one at-top refresh', () async {
+    final source = _ControlledCaptureQuerySource(
+      replayNewestOnListen: true,
+      maxNewestReplays: 1,
+    );
+    addTearDown(source.dispose);
+    final controller = CapturePagerController(source);
+    addTearDown(controller.dispose);
+    final first = controller.setQuery(const CaptureListQuery(searchText: 'q'));
+    final old = _summary('old', minute: 1);
+    source.completePage('q', _page([old], hasMore: false));
+    await first;
+    source.emitNewest('q', _cursor(old));
+
+    final newest = _summary('new', minute: 2);
+    source.emitNewest('q', _cursor(newest));
+    await Future<void>.delayed(Duration.zero);
+    expect(source.pageRequestCount, 2);
+    source.completePage('q', _page([newest], hasMore: false));
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.state.rows.single.capture.id, 'new');
+
+    source.emitNewest('q', _cursor(newest));
+    await Future<void>.delayed(Duration.zero);
+    expect(source.pageRequestCount, 2);
+  });
+
   test('a newer cursor at the top refreshes the first page', () async {
     final source = _ControlledCaptureQuerySource();
     addTearDown(source.dispose);
@@ -323,13 +350,21 @@ void main() {
 }
 
 final class _ControlledCaptureQuerySource implements CaptureQuerySource {
-  _ControlledCaptureQuerySource({this.deferCounts = false});
+  _ControlledCaptureQuerySource({
+    this.deferCounts = false,
+    this.replayNewestOnListen = false,
+    this.maxNewestReplays = 0,
+  });
 
   final bool deferCounts;
+  final bool replayNewestOnListen;
+  final int maxNewestReplays;
   final List<_PageRequest> _pageRequests = [];
   final List<_CountRequest> _countRequests = [];
   final Map<String, StreamController<CapturePageCursor?>> _newestControllers =
       {};
+  final Map<String, CapturePageCursor?> _newestValues = {};
+  int _newestReplayCount = 0;
 
   int get pageRequestCount => _pageRequests.length;
 
@@ -353,13 +388,29 @@ final class _ControlledCaptureQuerySource implements CaptureQuerySource {
   }
 
   @override
-  Stream<CapturePageCursor?> watchNewestCursor(CaptureListQuery query) =>
-      _newestControllers
-          .putIfAbsent(
-            query.searchText,
-            () => StreamController<CapturePageCursor?>.broadcast(),
-          )
-          .stream;
+  Stream<CapturePageCursor?> watchNewestCursor(CaptureListQuery query) {
+    final searchText = query.searchText;
+    final source = _newestControllers
+        .putIfAbsent(
+          searchText,
+          () => StreamController<CapturePageCursor?>.broadcast(),
+        )
+        .stream;
+    if (!replayNewestOnListen) return source;
+    return Stream.multi((listener) {
+      final subscription = source.listen(
+        listener.addSync,
+        onError: listener.addErrorSync,
+        onDone: listener.closeSync,
+      );
+      listener.onCancel = subscription.cancel;
+      final current = _newestValues[searchText];
+      if (current != null && _newestReplayCount < maxNewestReplays) {
+        _newestReplayCount++;
+        listener.addSync(current);
+      }
+    }, isBroadcast: true);
+  }
 
   void completePage(String searchText, CapturePage page, {String? afterId}) {
     _pageRequest(searchText, afterId).completer.complete(page);
@@ -381,6 +432,7 @@ final class _ControlledCaptureQuerySource implements CaptureQuerySource {
   }
 
   void emitNewest(String searchText, CapturePageCursor? cursor) {
+    _newestValues[searchText] = cursor;
     _newestControllers[searchText]?.add(cursor);
   }
 

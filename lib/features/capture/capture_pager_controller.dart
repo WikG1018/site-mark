@@ -82,6 +82,7 @@ final class CapturePagerController extends ChangeNotifier {
   CapturePageCursor? _newestCursor;
   CapturePageCursor? _observedNewestCursor;
   StreamSubscription<CapturePageCursor?>? _newestSubscription;
+  CaptureListQuery? _watchedQuery;
 
   /// Replaces the active query. Results started by any earlier generation are
   /// ignored when they eventually settle.
@@ -93,7 +94,7 @@ final class CapturePagerController extends ChangeNotifier {
     _observedNewestCursor = null;
     _state = CapturePagerState(query: query, initialLoading: true);
     _emit();
-    _watchNewestCursor(query, generation);
+    _watchNewestCursor(query);
     unawaited(_loadCount(query, generation));
     return _loadFirstPage(query, generation, replaceRows: true);
   }
@@ -111,7 +112,7 @@ final class CapturePagerController extends ChangeNotifier {
       nextPageError: null,
     );
     _emit();
-    _watchNewestCursor(query, generation);
+    _watchNewestCursor(query);
     unawaited(_loadCount(query, generation));
     return _loadFirstPage(query, generation, replaceRows: true);
   }
@@ -174,16 +175,23 @@ final class CapturePagerController extends ChangeNotifier {
     _emit();
   }
 
-  void _watchNewestCursor(CaptureListQuery query, int generation) {
+  void _watchNewestCursor(CaptureListQuery query) {
+    if (identical(_watchedQuery, query) && _newestSubscription != null) {
+      return;
+    }
     final previous = _newestSubscription;
-    _newestSubscription = _source.watchNewestCursor(query).listen((cursor) {
-      _handleNewestCursor(cursor, generation);
-    });
+    _watchedQuery = null;
+    _newestSubscription = null;
     if (previous != null) unawaited(previous.cancel());
+    _watchedQuery = query;
+    _newestSubscription = _source.watchNewestCursor(query).listen((cursor) {
+      if (_disposed || !identical(_watchedQuery, query)) return;
+      _handleNewestCursor(cursor);
+    });
   }
 
-  void _handleNewestCursor(CapturePageCursor? cursor, int generation) {
-    if (!_isCurrent(generation) || cursor == null) return;
+  void _handleNewestCursor(CapturePageCursor? cursor) {
+    if (_disposed || cursor == null) return;
     _observedNewestCursor = cursor;
     final current = _newestCursor;
     if (current == null) {
@@ -232,7 +240,7 @@ final class CapturePagerController extends ChangeNotifier {
       final observed = _observedNewestCursor;
       if (observed != null &&
           (_newestCursor == null || _isNewer(observed, _newestCursor!))) {
-        _handleNewestCursor(observed, generation);
+        _handleNewestCursor(observed);
       }
     } catch (error) {
       if (!_isCurrent(generation)) return;
@@ -286,6 +294,7 @@ final class CapturePagerController extends ChangeNotifier {
     _generation++;
     final subscription = _newestSubscription;
     _newestSubscription = null;
+    _watchedQuery = null;
     if (subscription != null) unawaited(subscription.cancel());
     super.dispose();
   }
