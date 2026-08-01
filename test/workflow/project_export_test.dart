@@ -1,6 +1,9 @@
+import 'package:drift/drift.dart'
+    show ApplyInterceptor, QueryExecutor, QueryInterceptor, Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
@@ -145,6 +148,65 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  test(
+    'exportSelection loads 1200 selected captures in bounded queries',
+    () async {
+      final variableGuard = _LegacySqliteVariableGuard();
+      final database = AppDatabase.forTesting(
+        NativeDatabase.memory().interceptWith(variableGuard),
+      );
+      addTearDown(database.close);
+      await database.createProject(id: 'project-a', name: '东区厂房改造');
+      final ids = List.generate(1200, (index) => 'capture-$index');
+      await database.batch((batch) {
+        batch.insertAll(database.captureRecords, [
+          for (var index = 0; index < ids.length; index++)
+            CaptureRecordsCompanion.insert(
+              id: ids[index],
+              projectId: 'project-a',
+              photoNumber: Value('SM-20260716-${index + 1}'),
+              workLocation: 'A 区',
+              workContent: '风管检查',
+              photographer: '张工',
+              originalPath: '/private/${ids[index]}.jpg',
+              publishedUri: Value('content://media/${ids[index]}'),
+              originalSha256: const Value(
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+              ),
+              status: CaptureStatus.ready,
+              createdAt: DateTime(2026, 7, 16).add(Duration(seconds: index)),
+              capturedAt: Value(
+                DateTime(2026, 7, 16).add(Duration(seconds: index)),
+              ),
+              watermarkLocaleCode: const Value('zh'),
+              locationResolution: const Value('resolved'),
+            ),
+        ]);
+      });
+      final images = _ExportImagePipeline();
+      final service = ProjectExportService(
+        database: database,
+        images: images,
+        capturePaths: _ExportCapturePaths(),
+        exportPaths: _ExportOutputPaths(),
+        selectionExportPaths: _SelectionOutputPaths(),
+      );
+
+      final result = await service.exportSelection(
+        captureIds: ids,
+        includeOriginals: false,
+      );
+
+      expect(result.photoCount, 1200);
+      expect(images.selectionRequest?.projects.single.photos, hasLength(1200));
+      expect(variableGuard.multiVariableSelects, hasLength(greaterThan(1)));
+      expect(
+        variableGuard.multiVariableSelects,
+        everyElement(lessThanOrEqualTo(999)),
+      );
+    },
+  );
 }
 
 Future<void> _seedReadyCapture({
@@ -238,4 +300,21 @@ class _ExportOutputPaths implements ProjectExportPaths {
 class _SelectionOutputPaths implements SelectionExportPaths {
   @override
   Future<String> selectionZipPath() async => '/exports/sitemark-selection.zip';
+}
+
+class _LegacySqliteVariableGuard extends QueryInterceptor {
+  final List<int> multiVariableSelects = [];
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    if (args.length > 1) multiVariableSelects.add(args.length);
+    if (args.length > 999) {
+      throw StateError('too many SQL variables: ${args.length}');
+    }
+    return super.runSelect(executor, statement, args);
+  }
 }

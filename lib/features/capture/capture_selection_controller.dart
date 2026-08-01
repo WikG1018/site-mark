@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:sitemark/data/capture_query_repository.dart';
 
 /// Selection state shared by capture list edit modes.
 ///
@@ -10,10 +11,16 @@ import 'package:flutter/foundation.dart';
 class CaptureSelectionController extends ChangeNotifier {
   bool _editing = false;
   final Set<String> _selectedIds = <String>{};
+  bool _allSelectedReady = false;
 
   bool get editing => _editing;
 
   Set<String> get selectedIds => Set<String>.unmodifiable(_selectedIds);
+
+  /// Whether the latest complete qualification found every selected capture
+  /// eligible and ready. Individual selection changes invalidate this value
+  /// until the host finishes a fresh `inspectSelection` request.
+  bool get allSelectedReady => _selectedIds.isNotEmpty && _allSelectedReady;
 
   /// Enters selection mode. Idempotent: calling while already editing does
   /// not clear the existing selection.
@@ -28,6 +35,7 @@ class CaptureSelectionController extends ChangeNotifier {
   void enterWithSelection(String id) {
     _editing = true;
     _selectedIds.add(id);
+    _allSelectedReady = false;
     notifyListeners();
   }
 
@@ -35,6 +43,7 @@ class CaptureSelectionController extends ChangeNotifier {
   void exit() {
     _editing = false;
     _selectedIds.clear();
+    _allSelectedReady = false;
     notifyListeners();
   }
 
@@ -43,15 +52,23 @@ class CaptureSelectionController extends ChangeNotifier {
     if (!_selectedIds.add(id)) {
       _selectedIds.remove(id);
     }
+    _allSelectedReady = false;
     notifyListeners();
   }
 
   /// Replaces the selection with [ids]. Intended for "select all" on the
   /// currently-visible eligible rows.
   void selectAll(Iterable<String> ids) {
+    replaceAll(ids, allReady: false);
+  }
+
+  /// Replaces the complete selection, including IDs that are not loaded in
+  /// the current page, and records the matching readiness qualification.
+  void replaceAll(Iterable<String> ids, {required bool allReady}) {
     _selectedIds
       ..clear()
       ..addAll(ids);
+    _allSelectedReady = _selectedIds.isNotEmpty && allReady;
     notifyListeners();
   }
 
@@ -67,19 +84,31 @@ class CaptureSelectionController extends ChangeNotifier {
   void toggleAll(Iterable<String> eligibleIds) {
     final eligible = eligibleIds.toSet();
     if (allSelected(eligible)) {
-      _selectedIds.clear();
+      replaceAll(const [], allReady: false);
     } else {
-      _selectedIds
-        ..clear()
-        ..addAll(eligible);
+      replaceAll(eligible, allReady: false);
     }
-    notifyListeners();
+  }
+
+  /// Applies a query-wide selectable snapshot, or clears when the same full
+  /// result set is already selected.
+  void toggleAllSnapshot(CaptureSelectionSnapshot snapshot) {
+    final alreadySelected =
+        snapshot.ids.isNotEmpty &&
+        _selectedIds.length == snapshot.ids.length &&
+        snapshot.ids.every(_selectedIds.contains);
+    if (alreadySelected) {
+      replaceAll(const [], allReady: false);
+    } else {
+      replaceAll(snapshot.ids, allReady: snapshot.allReady);
+    }
   }
 
   /// Clears selected IDs after a filter change while keeping the editing
   /// session open. Hidden rows must not stay selected.
   void clearForFilterChange() {
     _selectedIds.clear();
+    _allSelectedReady = false;
     notifyListeners();
   }
 }

@@ -37,13 +37,14 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   bool _searching = false;
   CaptureDateOptions _dateOptions = const CaptureDateOptions();
   int _dateOptionsGeneration = 0;
+  int _selectionGeneration = 0;
+  bool _selectAllLoading = false;
+  bool _allQuerySelected = false;
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
   late final Stream<List<Project>> _projectsStream;
   late final CaptureQuerySource _querySource;
   late final CapturePagerController _pagerController;
-  List<CaptureSummary> _latestCaptures = const [];
-
   CaptureListQuery get _query =>
       CaptureListQuery(filter: _filter, searchText: _searchText);
 
@@ -65,12 +66,20 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   }
 
   void _onSelectionChanged() {
+    if (!_selectionController.editing) {
+      _selectionGeneration++;
+      _selectAllLoading = false;
+      _allQuerySelected = false;
+    } else if (_selectionController.selectedIds.isEmpty) {
+      _allQuerySelected = false;
+    }
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     _dateOptionsGeneration++;
+    _selectionGeneration++;
     _pagerController.removeListener(_onPagerChanged);
     _pagerController.dispose();
     _selectionController.removeListener(_onSelectionChanged);
@@ -97,12 +106,14 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   }
 
   void _onFilterChanged(CaptureFilter next) {
+    _invalidateSelectionRequests();
     setState(() => _filter = next);
     _selectionController.clearForFilterChange();
     _startQuery();
   }
 
   void _onSearchChanged(String value) {
+    _invalidateSelectionRequests();
     _searchText = value;
     _selectionController.clearForFilterChange();
     _startQuery();
@@ -110,6 +121,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
 
   void _exitSearch() {
     final clearQuery = _searchText.isNotEmpty;
+    _invalidateSelectionRequests();
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _searching = false;
@@ -121,15 +133,74 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     }
   }
 
-  List<String> _selectableIds(List<CaptureSummary> captures) {
-    return captures
-        .where(
-          (summary) =>
-              summary.capture.status == CaptureStatus.ready ||
-              summary.capture.status == CaptureStatus.failed,
-        )
-        .map((summary) => summary.capture.id)
-        .toList(growable: false);
+  void _invalidateSelectionRequests() {
+    _selectionGeneration++;
+    _selectAllLoading = false;
+    _allQuerySelected = false;
+  }
+
+  Future<void> _toggleSelectAll() async {
+    if (!_selectionController.editing || _selectAllLoading) return;
+    if (_allQuerySelected) {
+      _invalidateSelectionRequests();
+      _selectionController.replaceAll(const [], allReady: false);
+      return;
+    }
+    final generation = ++_selectionGeneration;
+    final query = _query;
+    setState(() => _selectAllLoading = true);
+    try {
+      final snapshot = await _querySource.loadSelectable(query);
+      if (!mounted || generation != _selectionGeneration) return;
+      _selectAllLoading = false;
+      _allQuerySelected = snapshot.ids.isNotEmpty;
+      _selectionController.replaceAll(
+        snapshot.ids,
+        allReady: snapshot.allReady,
+      );
+    } catch (_) {
+      if (!mounted || generation != _selectionGeneration) return;
+      setState(() => _selectAllLoading = false);
+      _showSelectionRetry(() => unawaited(_toggleSelectAll()));
+    }
+  }
+
+  Future<void> _inspectSelection() async {
+    if (!_selectionController.editing) return;
+    final ids = _selectionController.selectedIds;
+    if (ids.isEmpty) return;
+    final generation = ++_selectionGeneration;
+    try {
+      final snapshot = await _querySource.inspectSelection(ids);
+      if (!mounted || generation != _selectionGeneration) return;
+      _selectionController.replaceAll(
+        snapshot.ids,
+        allReady: snapshot.allReady,
+      );
+    } catch (_) {
+      if (!mounted || generation != _selectionGeneration) return;
+      _showSelectionRetry(() => unawaited(_inspectSelection()));
+    }
+  }
+
+  void _showSelectionRetry(VoidCallback retry) {
+    final strings = AppStrings.of(context);
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text(strings.captureListLoadFailed),
+        action: SnackBarAction(label: strings.retry, onPressed: retry),
+      ),
+    );
+  }
+
+  void _toggleSelection(String id, bool selected) {
+    _invalidateSelectionRequests();
+    if (selected && !_selectionController.editing) {
+      _selectionController.enterWithSelection(id);
+    } else {
+      _selectionController.toggle(id);
+    }
+    unawaited(_inspectSelection());
   }
 
   bool get _hasActiveQuery =>
@@ -143,15 +214,14 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final editing = _selectionController.editing;
-    _latestCaptures = _pagerController.state.rows;
-    final allEligibleSelected = _selectionController.allSelected(
-      _selectableIds(_latestCaptures),
-    );
+    final allEligibleSelected =
+        _allQuerySelected && _selectionController.selectedIds.isNotEmpty;
     return PopScope(
       canPop: !editing && !_searching,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_selectionController.editing) {
+          _invalidateSelectionRequests();
           _selectionController.exit();
         } else if (_searching) {
           _exitSearch();
@@ -188,22 +258,27 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
             if (editing)
               IconButton(
                 key: const Key('select-all-captures'),
-                onPressed: () => _selectionController.toggleAll(
-                  _selectableIds(_latestCaptures),
-                ),
+                onPressed: _selectAllLoading ? null : _toggleSelectAll,
                 tooltip: allEligibleSelected
                     ? strings.deselectAll
                     : strings.selectAll,
-                icon: Icon(
-                  allEligibleSelected
-                      ? Icons.check_box_outline_blank
-                      : Icons.select_all_outlined,
-                ),
+                icon: _selectAllLoading
+                    ? const SizedBox.square(
+                        key: Key('select-all-progress'),
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        allEligibleSelected
+                            ? Icons.check_box_outline_blank
+                            : Icons.select_all_outlined,
+                      ),
               ),
             IconButton(
               key: const Key('edit-captures'),
               onPressed: () {
                 if (_selectionController.editing) {
+                  _invalidateSelectionRequests();
                   _selectionController.exit();
                 } else {
                   _selectionController.enter();
@@ -262,7 +337,6 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                   mediaService: ref.watch(captureMediaServiceProvider),
                   exportService: ref.watch(projectExportServiceProvider),
                   shareService: ref.watch(shareFileServiceProvider),
-                  summaries: _latestCaptures,
                 )
               : const SizedBox.shrink(key: Key('batch-bar-empty')),
         ),
@@ -287,11 +361,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
           summary.capture.status == CaptureStatus.ready ||
           summary.capture.status == CaptureStatus.failed,
       onSelectedChanged: (selected) {
-        if (selected && !_selectionController.editing) {
-          _selectionController.enterWithSelection(id);
-        } else {
-          _selectionController.toggle(id);
-        }
+        _toggleSelection(id, selected);
       },
       onTap: (initialImagePath) => context.push(
         '/projects/${summary.capture.projectId}/captures/$id',

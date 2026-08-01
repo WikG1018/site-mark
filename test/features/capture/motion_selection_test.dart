@@ -313,11 +313,7 @@ void main() {
       );
       final controller = CaptureSelectionController()
         ..enter()
-        ..selectAll(['capture-1']);
-      final capture = await database.captureById('capture-1');
-      final summaries = [
-        CaptureSummary(capture: capture!, projectName: '东区厂房改造'),
-      ];
+        ..replaceAll(['capture-1'], allReady: true);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -335,7 +331,6 @@ void main() {
               mediaService: media,
               exportService: buildTestExportService(database),
               shareService: _TestShareService(),
-              summaries: summaries,
             ),
           ),
         ),
@@ -387,11 +382,7 @@ void main() {
     );
     final controller = CaptureSelectionController()
       ..enter()
-      ..selectAll(['capture-1']);
-    final capture = await database.captureById('capture-1');
-    final summaries = [
-      CaptureSummary(capture: capture!, projectName: '东区厂房改造'),
-    ];
+      ..replaceAll(['capture-1'], allReady: true);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -409,7 +400,6 @@ void main() {
             mediaService: media,
             exportService: buildTestExportService(database),
             shareService: _TestShareService(),
-            summaries: summaries,
           ),
         ),
       ),

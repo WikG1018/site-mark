@@ -111,6 +111,7 @@ class CaptureRecords extends Table {
 @DriftDatabase(tables: [Projects, CaptureRecords, AppSettings])
 class AppDatabase extends _$AppDatabase {
   static const _defaultExternalRefreshInterval = Duration(seconds: 1);
+  static const _captureIdChunkSize = 900;
 
   final Duration externalRefreshInterval;
 
@@ -1064,13 +1065,27 @@ class AppDatabase extends _$AppDatabase {
 
   /// Returns captures matching any of the provided IDs, ordered by
   /// `createdAt` ascending. Returns an empty list for an empty input.
-  Future<List<CaptureRecord>> capturesByIds(Iterable<String> captureIds) {
+  Future<List<CaptureRecord>> capturesByIds(Iterable<String> captureIds) async {
     final ids = captureIds.toSet().toList(growable: false);
-    if (ids.isEmpty) return Future.value(const []);
-    return (select(captureRecords)
-          ..where((row) => row.id.isIn(ids))
-          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
-        .get();
+    if (ids.isEmpty) return const [];
+    final captures = <CaptureRecord>[];
+    for (var start = 0; start < ids.length; start += _captureIdChunkSize) {
+      final end = start + _captureIdChunkSize < ids.length
+          ? start + _captureIdChunkSize
+          : ids.length;
+      final chunk = ids.sublist(start, end);
+      captures.addAll(
+        await (select(captureRecords)
+              ..where((row) => row.id.isIn(chunk))
+              ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+            .get(),
+      );
+    }
+    captures.sort((left, right) {
+      final byCreatedAt = left.createdAt.compareTo(right.createdAt);
+      return byCreatedAt != 0 ? byCreatedAt : left.id.compareTo(right.id);
+    });
+    return captures;
   }
 
   /// Inserts a fully-restored capture row from a project backup archive,

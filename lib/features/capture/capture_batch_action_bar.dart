@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sitemark/data/app_database.dart';
-import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -28,18 +26,12 @@ class CaptureBatchActionBar extends StatefulWidget {
     required this.mediaService,
     required this.exportService,
     required this.shareService,
-    required this.summaries,
   });
 
   final CaptureSelectionController controller;
   final CaptureMediaService mediaService;
   final ProjectExportService exportService;
   final ShareFileService shareService;
-
-  /// Currently visible [CaptureSummary] rows from the host screen's filtered
-  /// list. Used to resolve each selected ID to its [CaptureStatus] synchronously
-  /// so the bar can disable export/republish when any row is not `ready`.
-  final List<CaptureSummary> summaries;
 
   @override
   State<CaptureBatchActionBar> createState() => _CaptureBatchActionBarState();
@@ -61,17 +53,6 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   }
 
   List<String> get _selectedIds => widget.controller.selectedIds.toList();
-
-  bool _allReady(List<String> ids) {
-    if (ids.isEmpty) return false;
-    final byId = {for (final s in widget.summaries) s.capture.id: s.capture};
-    for (final id in ids) {
-      final capture = byId[id];
-      if (capture == null) return false;
-      if (capture.status != CaptureStatus.ready) return false;
-    }
-    return true;
-  }
 
   Future<void> _runWithProgress(
     String snackbarTitle,
@@ -168,7 +149,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
 
   Future<void> _export() async {
     final ids = _selectedIds;
-    if (ids.isEmpty || !_allReady(ids)) return;
+    if (ids.isEmpty || !widget.controller.allSelectedReady) return;
     final strings = AppStrings.of(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() {
@@ -201,6 +182,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   }
 
   Future<void> _republish() async {
+    if (!widget.controller.allSelectedReady) return;
     final strings = AppStrings.of(context);
     await _runWithProgress(
       strings.saveToGallery,
@@ -271,14 +253,22 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
       builder: (context, _) {
         final ids = _selectedIds;
         final empty = ids.isEmpty;
-        final ready = _allReady(ids);
+        final ready = widget.controller.allSelectedReady;
         final exporting = _busy && _total == 1;
         return BottomAppBar(
           key: const Key('batch-action-bar'),
+          height: _busy ? 136 : 104,
           child: SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Text(
+                  strings.selectedCount(ids.length),
+                  key: const Key('batch-selected-count'),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                const SizedBox(height: 2),
                 if (_busy)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
