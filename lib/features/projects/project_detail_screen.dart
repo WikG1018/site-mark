@@ -190,6 +190,19 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         initialData: widget.initialProject,
         builder: (context, projectSnapshot) {
           final project = projectSnapshot.data;
+          final waitingForProject =
+              project == null &&
+              projectSnapshot.connectionState != ConnectionState.done;
+          final projectLoadFailed = project == null && projectSnapshot.hasError;
+          final projectMissing =
+              project == null && !waitingForProject && !projectLoadFailed;
+          final title =
+              project?.name ??
+              (projectLoadFailed
+                  ? strings.projectLoadFailed
+                  : projectMissing
+                  ? strings.projectNotFound
+                  : strings.appName);
           return Scaffold(
             appBar: AppBar(
               title: AnimatedSwitcher(
@@ -199,19 +212,16 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   alignment: Alignment.centerLeft,
                   children: [...previousChildren, ?currentChild],
                 ),
-                child: _searching
+                child: project != null && _searching
                     ? CaptureSearchField(
                         key: const ValueKey('capture-search-title'),
                         initialText: _searchText,
                         onChanged: _onSearchChanged,
                       )
-                    : Text(
-                        project?.name ?? strings.appName,
-                        key: const ValueKey('capture-list-title'),
-                      ),
+                    : Text(title, key: const ValueKey('capture-list-title')),
               ),
               actions: [
-                if (!_searching && !editing)
+                if (project != null && !_searching && !editing)
                   IconButton(
                     key: const Key('search-captures'),
                     onPressed: () => setState(() => _searching = true),
@@ -277,7 +287,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     ],
                   ),
                 ],
-                if (editing)
+                if (project != null && editing)
                   IconButton(
                     key: const Key('select-all-captures'),
                     onPressed: () {
@@ -294,29 +304,42 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                           : Icons.select_all_outlined,
                     ),
                   ),
-                IconButton(
-                  key: const Key('edit-captures'),
-                  onPressed: () {
-                    if (_selectionController.editing) {
-                      _selectionController.exit();
-                    } else {
-                      _selectionController.enter();
-                    }
-                  },
-                  tooltip: editing ? strings.done : strings.editRecords,
-                  icon: AnimatedSwitcher(
-                    duration: AppMotion.durationOf(context, AppMotion.short4),
-                    child: Icon(
-                      editing ? Icons.done : Icons.edit_outlined,
-                      key: ValueKey(editing),
+                if (project != null)
+                  IconButton(
+                    key: const Key('edit-captures'),
+                    onPressed: () {
+                      if (_selectionController.editing) {
+                        _selectionController.exit();
+                      } else {
+                        _selectionController.enter();
+                      }
+                    },
+                    tooltip: editing ? strings.done : strings.editRecords,
+                    icon: AnimatedSwitcher(
+                      duration: AppMotion.durationOf(context, AppMotion.short4),
+                      child: Icon(
+                        editing ? Icons.done : Icons.edit_outlined,
+                        key: ValueKey(editing),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
-            body: project == null
-                ? const SizedBox.shrink()
-                : _projectCaptureList(context, strings, project, filter),
+            body: waitingForProject
+                ? _projectLoadingList(strings)
+                : projectLoadFailed
+                ? _ProjectUnavailableState(
+                    key: const Key('project-load-error'),
+                    icon: Icons.cloud_off_outlined,
+                    message: strings.projectLoadFailed,
+                  )
+                : projectMissing
+                ? _ProjectUnavailableState(
+                    key: const Key('project-not-found'),
+                    icon: Icons.folder_off_outlined,
+                    message: strings.projectNotFound,
+                  )
+                : _projectCaptureList(context, strings, project!, filter),
             bottomNavigationBar: AnimatedSwitcher(
               duration: AppMotion.durationOf(context, AppMotion.medium4),
               transitionBuilder: (child, animation) {
@@ -331,7 +354,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   child: FadeTransition(opacity: curved, child: child),
                 );
               },
-              child: editing && _selectionController.selectedIds.isNotEmpty
+              child:
+                  project != null &&
+                      editing &&
+                      _selectionController.selectedIds.isNotEmpty
                   ? CaptureBatchActionBar(
                       key: const Key('batch-bar'),
                       controller: _selectionController,
@@ -361,6 +387,19 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _projectLoadingList(AppStrings strings) {
+    return CapturePagedList(
+      controller: _pagerController,
+      source: _querySource,
+      emptyMessage: strings.noCaptures,
+      skeletonKey: const Key('project-capture-list-skeleton'),
+      contentKey: const Key('project-capture-list-content'),
+      skeletonItemCount: 4,
+      forceInitialLoading: true,
+      itemBuilder: (_, _, _) => const SizedBox.shrink(),
     );
   }
 
@@ -697,6 +736,42 @@ class _DeleteProjectDialogState extends State<_DeleteProjectDialog> {
                 : Text(strings.deleteProject),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProjectUnavailableState extends StatelessWidget {
+  const _ProjectUnavailableState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
       ),
     );
   }

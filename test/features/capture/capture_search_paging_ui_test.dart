@@ -207,6 +207,81 @@ void main() {
     },
   );
 
+  testWidgets(
+    'query change while scrolled keeps one scroll position and returns to top',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      final nextQueryPage = Completer<CapturePage>();
+      final source = _FakeCaptureQuerySource()
+        ..enqueue(
+          () =>
+              Future.value(_page(List.generate(50, _summary), hasMore: false)),
+        )
+        ..enqueue(() => nextQueryPage.future);
+      addTearDown(() {
+        unawaited(source.dispose());
+        unawaited(database.close());
+      });
+
+      await tester.pumpWidget(
+        _localized(
+          database: database,
+          home: AllCapturesScreen(querySource: source),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('capture-35')),
+        500,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(
+        tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position
+            .pixels,
+        greaterThan(0),
+      );
+
+      source.pageQueries.clear();
+      await tester.tap(find.byKey(const Key('search-captures')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('capture-search-field')),
+        '新查询',
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(source.pageQueries.single.searchText, '新查询');
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull);
+      expect(find.byType(CustomScrollView), findsOneWidget);
+      expect(find.byKey(const Key('capture-list-skeleton')), findsOneWidget);
+      expect(
+        tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position
+            .pixels,
+        0,
+      );
+
+      nextQueryPage.complete(
+        _page([_summary(99, workLocation: '新查询结果')], hasMore: false),
+      );
+      await _pumpUntil(
+        tester,
+        () => find.byKey(const ValueKey('capture-99')).evaluate().isNotEmpty,
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.byType(CustomScrollView), findsOneWidget);
+      expect(find.byKey(const ValueKey('capture-99')), findsOneWidget);
+      expect(find.byKey(const Key('capture-list-content')), findsOneWidget);
+
+      await _unmount(tester);
+    },
+  );
+
   testWidgets('project, date, and search compose into one repository query', (
     tester,
   ) async {
@@ -248,6 +323,127 @@ void main() {
 
     await _unmount(tester);
   });
+
+  testWidgets(
+    'project deep link shows a skeleton then an explicit missing state',
+    (tester) async {
+      final database = _ControlledProjectDatabase();
+      final source = _FakeCaptureQuerySource();
+      addTearDown(() {
+        unawaited(source.dispose());
+        unawaited(database.close());
+      });
+
+      await tester.pumpWidget(
+        _localized(
+          database: database,
+          home: ProjectDetailScreen(
+            projectId: 'missing-project',
+            querySource: source,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('project-capture-list-skeleton')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('search-captures')), findsNothing);
+      expect(find.byKey(const Key('edit-captures')), findsNothing);
+
+      database.projectLookup.complete(null);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-not-found')), findsOneWidget);
+      expect(find.text('项目不存在或已删除'), findsWidgets);
+      expect(
+        find.byKey(const Key('project-capture-list-skeleton')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('search-captures')), findsNothing);
+      expect(find.byKey(const Key('edit-captures')), findsNothing);
+      expect(find.byKey(const Key('project-actions')), findsNothing);
+
+      await _unmount(tester);
+    },
+  );
+
+  testWidgets('project lookup error shows an explicit localized state', (
+    tester,
+  ) async {
+    final database = _ControlledProjectDatabase();
+    final source = _FakeCaptureQuerySource();
+    addTearDown(() {
+      unawaited(source.dispose());
+      unawaited(database.close());
+    });
+
+    await tester.pumpWidget(
+      _localized(
+        database: database,
+        home: ProjectDetailScreen(
+          projectId: 'unavailable-project',
+          querySource: source,
+        ),
+      ),
+    );
+    await tester.pump();
+    database.projectLookup.completeError(StateError('lookup failed'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-load-error')), findsOneWidget);
+    expect(find.text('项目加载失败，请返回后重试'), findsWidgets);
+    expect(find.byKey(const Key('search-captures')), findsNothing);
+    expect(find.byKey(const Key('edit-captures')), findsNothing);
+
+    await _unmount(tester);
+  });
+
+  testWidgets(
+    'successful project deep link leaves loading for normal content',
+    (tester) async {
+      final database = _ControlledProjectDatabase();
+      final project = await database.createProject(
+        id: 'project-1',
+        name: '东区厂房改造',
+      );
+      final source = _FakeCaptureQuerySource(
+        defaultPage: _page([_summary(0)], hasMore: false),
+      );
+      addTearDown(() {
+        unawaited(source.dispose());
+        unawaited(database.close());
+      });
+
+      await tester.pumpWidget(
+        _localized(
+          database: database,
+          home: ProjectDetailScreen(
+            projectId: 'project-1',
+            querySource: source,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const Key('project-capture-list-skeleton')),
+        findsOneWidget,
+      );
+
+      database.projectLookup.complete(project);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-not-found')), findsNothing);
+      expect(find.byKey(const Key('project-load-error')), findsNothing);
+      expect(find.text('东区厂房改造'), findsWidgets);
+      expect(find.byKey(const ValueKey('capture-0')), findsOneWidget);
+      expect(find.byKey(const Key('search-captures')), findsOneWidget);
+      expect(find.byKey(const Key('edit-captures')), findsOneWidget);
+
+      await _unmount(tester);
+    },
+  );
 
   testWidgets('initial load uses a skeleton and does not wait for count', (
     tester,
@@ -549,4 +745,13 @@ final class _FakeCaptureQuerySource implements CaptureQuerySource {
     await newestCursors.close();
     await watchedRows.close();
   }
+}
+
+final class _ControlledProjectDatabase extends AppDatabase {
+  _ControlledProjectDatabase() : super.forTesting(NativeDatabase.memory());
+
+  final Completer<Project?> projectLookup = Completer<Project?>();
+
+  @override
+  Future<Project?> projectById(String projectId) => projectLookup.future;
 }
