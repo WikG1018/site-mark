@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
@@ -103,17 +104,20 @@ void main() {
     CaptureWorkflowResult? workflowResult,
     _WidgetTestPlatformServices? platformOverride,
     CaptureFormDraftStore? captureFormDraftStore,
+    CaptureBackgroundScheduler? schedulerOverride,
   }) async {
     final images = _WidgetTestImagePipeline();
     final share = _WidgetTestShareService();
     final platform = platformOverride ?? _WidgetTestPlatformServices();
     final outputPaths = _WidgetTestOutputPaths();
-    final scheduler = _InlineProcessingScheduler(
-      database: database,
-      platform: platform,
-      images: images,
-      outputPaths: outputPaths,
-    );
+    final scheduler =
+        schedulerOverride ??
+        _InlineProcessingScheduler(
+          database: database,
+          platform: platform,
+          images: images,
+          outputPaths: outputPaths,
+        );
     await tester.pumpWidget(
       MyApp(
         database: database,
@@ -454,6 +458,28 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('recent suggestion changes only its focused required field', (
+    tester,
+  ) async {
+    await seedReadyCapture(
+      workLocation: '历史部位',
+      workContent: '历史内容',
+      photographer: '历史拍摄人',
+    );
+    await openCaptureForm(tester);
+    await tester.enterText(find.byKey(const Key('notes')), '保留本张备注');
+
+    await tester.tap(find.byKey(const Key('work-location')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recent-suggestion-workLocation-0')));
+
+    expect(fieldText(tester, const Key('work-location')), '历史部位');
+    expect(fieldText(tester, const Key('work-content')), '历史内容');
+    expect(fieldText(tester, const Key('photographer')), '历史拍摄人');
+    expect(fieldText(tester, const Key('notes')), '保留本张备注');
+    await disposeApp(tester);
+  });
+
   testWidgets(
     'queued capture stays on form, clears notes, and re-enables button',
     (tester) async {
@@ -481,6 +507,46 @@ void main() {
       await disposeApp(tester);
     },
   );
+
+  testWidgets('delayed capture clears only notes and keeps required fields', (
+    tester,
+  ) async {
+    await seedReadyCapture();
+    await openCaptureForm(tester, schedulerOverride: _DelayedScheduler());
+    await tester.enterText(find.byKey(const Key('notes')), '本张备注');
+    await tester.tap(find.byKey(const Key('capture-button')));
+    await tester.pumpAndSettle();
+
+    expect(fieldText(tester, const Key('work-location')), 'A 区三层');
+    expect(fieldText(tester, const Key('work-content')), '风管安装检查');
+    expect(fieldText(tester, const Key('photographer')), '张工');
+    expect(fieldText(tester, const Key('notes')), '');
+    expect(find.text('照片已安全保留，后台处理启动延迟并会自动重试，可继续拍摄'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('cancelled camera does not create a recent suggestion source', (
+    tester,
+  ) async {
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    final platform = _WidgetTestPlatformServices()
+      ..cameraOutcome = CameraOutcome.cancelled;
+    await openCaptureForm(tester, platformOverride: platform);
+    await tester.enterText(find.byKey(const Key('work-location')), '取消部位');
+    await tester.enterText(find.byKey(const Key('work-content')), '取消内容');
+    await tester.enterText(find.byKey(const Key('photographer')), '取消拍摄人');
+    await tester.tap(find.byKey(const Key('capture-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      await database.recentCaptureSuggestions(
+        projectId: 'project-1',
+        field: CaptureSuggestionField.workLocation,
+      ),
+      isEmpty,
+    );
+    await disposeApp(tester);
+  });
 
   testWidgets('home opens all records with project and date filters', (
     tester,
@@ -863,6 +929,7 @@ class _FakeCompletionNotificationService
 
 class _WidgetTestPlatformServices implements PlatformServices {
   String? deletedUri;
+  CameraOutcome cameraOutcome = CameraOutcome.captured;
   LocationPermissionState permissionState = LocationPermissionState.granted;
   LocationPermissionState requestResult = LocationPermissionState.denied;
   int requestLocationPermissionCount = 0;
@@ -884,7 +951,7 @@ class _WidgetTestPlatformServices implements PlatformServices {
   @override
   Future<CameraCaptureResult> launchCamera(String captureId) async {
     return CameraCaptureResult(
-      outcome: CameraOutcome.captured,
+      outcome: cameraOutcome,
       outputPath: '/private/$captureId.jpg',
     );
   }
@@ -925,6 +992,28 @@ class _WidgetTestPlatformServices implements PlatformServices {
         fileSizeBytes: 0,
         mimeType: 'image/jpeg',
       );
+}
+
+class _DelayedScheduler implements CaptureBackgroundScheduler {
+  var _firstEnqueue = true;
+
+  @override
+  Future<void> enqueue(String captureId) {
+    if (_firstEnqueue) {
+      _firstEnqueue = false;
+      return Future.error(StateError('temporary scheduler failure'));
+    }
+    return Future.value();
+  }
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> reconcilePending() async {}
+
+  @override
+  Future<void> retry(String captureId) => enqueue(captureId);
 }
 
 class _WidgetTestImagePipeline implements ImagePipeline {

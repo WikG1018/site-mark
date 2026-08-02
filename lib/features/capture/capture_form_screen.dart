@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_template_rules.dart';
+import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
@@ -28,6 +30,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   final _contentController = TextEditingController();
   final _photographerController = TextEditingController();
   final _notesController = TextEditingController();
+  final _locationFocusNode = FocusNode();
+  final _contentFocusNode = FocusNode();
+  final _photographerFocusNode = FocusNode();
   bool _working = false;
 
   /// Detaches the KILL-persistence hook registered in [initState]. Null
@@ -148,6 +153,20 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     // Notes are intentionally left blank so stale review notes never carry over.
   }
 
+  Future<List<String>> _loadRecentSuggestions({
+    required String projectId,
+    required CaptureSuggestionField field,
+    required int limit,
+  }) {
+    return ref
+        .read(databaseProvider)
+        .recentCaptureSuggestions(
+          projectId: projectId,
+          field: field,
+          limit: limit,
+        );
+  }
+
   @override
   void dispose() {
     _killHookDetach?.call();
@@ -156,6 +175,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     _contentController.dispose();
     _photographerController.dispose();
     _notesController.dispose();
+    _locationFocusNode.dispose();
+    _contentFocusNode.dispose();
+    _photographerFocusNode.dispose();
     super.dispose();
   }
 
@@ -298,6 +320,11 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                           contentController: _contentController,
                           photographerController: _photographerController,
                           notesController: _notesController,
+                          locationFocusNode: _locationFocusNode,
+                          contentFocusNode: _contentFocusNode,
+                          photographerFocusNode: _photographerFocusNode,
+                          projectId: widget.projectId,
+                          loadSuggestions: _loadRecentSuggestions,
                           strings: strings,
                           working: _working,
                           onCapture: () => _capture(project),
@@ -329,6 +356,11 @@ class _CaptureFormBody extends StatelessWidget {
     required this.contentController,
     required this.photographerController,
     required this.notesController,
+    required this.locationFocusNode,
+    required this.contentFocusNode,
+    required this.photographerFocusNode,
+    required this.projectId,
+    required this.loadSuggestions,
     required this.strings,
     required this.working,
     required this.onCapture,
@@ -339,6 +371,11 @@ class _CaptureFormBody extends StatelessWidget {
   final TextEditingController contentController;
   final TextEditingController photographerController;
   final TextEditingController notesController;
+  final FocusNode locationFocusNode;
+  final FocusNode contentFocusNode;
+  final FocusNode photographerFocusNode;
+  final String projectId;
+  final CaptureRecentSuggestionsLoader loadSuggestions;
   final AppStrings strings;
   final bool working;
   final VoidCallback onCapture;
@@ -359,23 +396,47 @@ class _CaptureFormBody extends StatelessWidget {
         _RequiredField(
           fieldKey: const Key('work-location'),
           controller: locationController,
+          focusNode: locationFocusNode,
           label: strings.workLocation,
           error: strings.requiredField,
+          suggestions: CaptureRecentSuggestions(
+            projectId: projectId,
+            field: CaptureSuggestionField.workLocation,
+            controller: locationController,
+            focusNode: locationFocusNode,
+            load: loadSuggestions,
+          ),
         ),
         const SizedBox(height: 16),
         _RequiredField(
           fieldKey: const Key('work-content'),
           controller: contentController,
+          focusNode: contentFocusNode,
           label: strings.workContent,
           error: strings.requiredField,
           maxLines: 2,
+          suggestions: CaptureRecentSuggestions(
+            projectId: projectId,
+            field: CaptureSuggestionField.workContent,
+            controller: contentController,
+            focusNode: contentFocusNode,
+            load: loadSuggestions,
+          ),
         ),
         const SizedBox(height: 16),
         _RequiredField(
           fieldKey: const Key('photographer'),
           controller: photographerController,
+          focusNode: photographerFocusNode,
           label: strings.photographer,
           error: strings.requiredField,
+          suggestions: CaptureRecentSuggestions(
+            projectId: projectId,
+            field: CaptureSuggestionField.photographer,
+            controller: photographerController,
+            focusNode: photographerFocusNode,
+            load: loadSuggestions,
+          ),
         ),
         const SizedBox(height: 16),
         TextFormField(
@@ -437,26 +498,40 @@ class _RequiredField extends StatelessWidget {
   const _RequiredField({
     required this.fieldKey,
     required this.controller,
+    required this.focusNode,
     required this.label,
     required this.error,
+    required this.suggestions,
     this.maxLines = 1,
   });
 
   final Key fieldKey;
   final TextEditingController controller;
+  final FocusNode focusNode;
   final String label;
   final String error;
+  final Widget suggestions;
   final int maxLines;
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      key: fieldKey,
-      controller: controller,
-      maxLines: maxLines,
-      decoration: InputDecoration(labelText: label, alignLabelWithHint: true),
-      validator: (value) =>
-          value == null || value.trim().isEmpty ? error : null,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          key: fieldKey,
+          controller: controller,
+          focusNode: focusNode,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            labelText: label,
+            alignLabelWithHint: true,
+          ),
+          validator: (value) =>
+              value == null || value.trim().isEmpty ? error : null,
+        ),
+        suggestions,
+      ],
     );
   }
 }

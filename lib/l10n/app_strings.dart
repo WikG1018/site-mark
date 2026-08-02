@@ -93,6 +93,12 @@ class AppStrings {
   String get photographer => _english ? 'Photographer' : '拍摄人';
   String get notesOptional => _english ? 'Notes (optional)' : '备注（选填）';
   String get requiredField => _english ? 'This field is required' : '此项为必填';
+  String get recentlyUsed => _english ? 'Recently used' : '最近使用';
+  String get more => _english ? 'More' : '更多';
+  String get searchHistory => _english ? 'Search history' : '搜索历史';
+  String get noRecentSuggestions => _english ? 'No history' : '暂无历史';
+  String get suggestionsLoadFailed =>
+      _english ? 'Could not load suggestions' : '加载失败';
   String get openSystemCamera => _english ? 'Capture' : '拍摄';
   String get captureWorkflowHint => _english
       ? 'Capture will invoke the system camera. Watermarks are processed in the background. You can tap capture repeatedly; return to the project detail to view records as they finish.'
