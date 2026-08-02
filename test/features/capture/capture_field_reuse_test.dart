@@ -6,7 +6,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
+import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
@@ -15,6 +17,8 @@ import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/capture_location_coordinator.dart';
+import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
@@ -460,6 +464,150 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final outcome in [
+    CaptureWorkflowOutcome.queued,
+    CaptureWorkflowOutcome.delayed,
+  ]) {
+    testWidgets('stale ${outcome.name} clears only the origin project draft', (
+      tester,
+    ) async {
+      final rig = await _CaptureFormTestRig.create();
+      addTearDown(rig.dispose);
+      await rig.drafts.save(_draft('project-1', 'Old'));
+      await rig.drafts.save(_draft('project-2', 'Saved new'));
+      await rig.pump(tester);
+
+      final originalElement = tester.element(find.byType(CaptureFormScreen));
+      await rig.capture(tester);
+      expect(rig.workflow.drafts.single.projectId, 'project-1');
+
+      await rig.switchProject(tester, 'project-2');
+      expect(
+        identical(
+          originalElement,
+          tester.element(find.byType(CaptureFormScreen)),
+        ),
+        isTrue,
+      );
+      await rig.enterCurrentFields(tester, prefix: 'Edited new');
+
+      rig.workflow.complete(0, outcome);
+      await tester.pumpAndSettle();
+
+      expect(await rig.drafts.load('project-1'), isNull);
+      expect(
+        (await rig.drafts.load('project-2'))?.workLocation,
+        'Saved new location',
+      );
+      expect(
+        rig.fieldText(tester, const Key('work-location')),
+        'Edited new location',
+      );
+      expect(
+        rig.fieldText(tester, const Key('work-content')),
+        'Edited new content',
+      );
+      expect(
+        rig.fieldText(tester, const Key('photographer')),
+        'Edited new photographer',
+      );
+      expect(rig.fieldText(tester, const Key('notes')), 'Edited new notes');
+      expect(
+        find.text('Photo queued for background processing. Continue shooting.'),
+        findsNothing,
+      );
+      expect(
+        find.text(
+          'Photo saved. Background processing is delayed and will retry automatically; you can continue shooting.',
+        ),
+        findsNothing,
+      );
+    });
+  }
+
+  testWidgets('stale completion cannot finish a newer capture operation', (
+    tester,
+  ) async {
+    final rig = await _CaptureFormTestRig.create();
+    addTearDown(rig.dispose);
+    await rig.drafts.save(_draft('project-1', 'Old'));
+    await rig.drafts.save(_draft('project-2', 'New'));
+    await rig.pump(tester);
+
+    await rig.capture(tester);
+    await rig.switchProject(tester, 'project-2');
+    await rig.enterCurrentFields(tester, prefix: 'Project 2');
+    await rig.capture(tester);
+    expect(rig.workflow.drafts, hasLength(2));
+    expect(rig.workflow.drafts.last.projectId, 'project-2');
+    expect(rig.captureButton(tester).onPressed, isNull);
+    expect(find.byKey(const ValueKey('capture-button-busy')), findsOneWidget);
+
+    rig.workflow.complete(0, CaptureWorkflowOutcome.queued);
+    await tester.pump();
+
+    expect(rig.captureButton(tester).onPressed, isNull);
+    expect(find.byKey(const ValueKey('capture-button-busy')), findsOneWidget);
+    expect(rig.fieldText(tester, const Key('notes')), 'Project 2 notes');
+    expect(
+      find.text('Photo queued for background processing. Continue shooting.'),
+      findsNothing,
+    );
+
+    rig.workflow.complete(1, CaptureWorkflowOutcome.cancelled);
+    await tester.pumpAndSettle();
+
+    expect(rig.captureButton(tester).onPressed, isNotNull);
+    expect(find.byKey(const ValueKey('capture-button-idle')), findsOneWidget);
+    expect(rig.fieldText(tester, const Key('notes')), 'Project 2 notes');
+  });
+
+  for (final outcome in [
+    CaptureWorkflowOutcome.cancelled,
+    CaptureWorkflowOutcome.failed,
+  ]) {
+    testWidgets(
+      'stale ${outcome.name} leaves the replacement project unchanged',
+      (tester) async {
+        final rig = await _CaptureFormTestRig.create();
+        addTearDown(rig.dispose);
+        await rig.drafts.save(_draft('project-1', 'Old'));
+        await rig.drafts.save(_draft('project-2', 'New'));
+        await rig.pump(tester);
+
+        await rig.capture(tester);
+        await rig.switchProject(tester, 'project-2');
+        await rig.enterCurrentFields(tester, prefix: 'Project 2');
+        await rig.capture(tester);
+
+        rig.workflow.complete(
+          0,
+          outcome,
+          failureCode: outcome == CaptureWorkflowOutcome.failed
+              ? CaptureFailureCode.cameraUnavailable
+              : null,
+        );
+        await tester.pump();
+
+        expect(rig.captureButton(tester).onPressed, isNull);
+        expect(
+          find.byKey(const ValueKey('capture-button-busy')),
+          findsOneWidget,
+        );
+        expect(
+          rig.fieldText(tester, const Key('work-location')),
+          'Project 2 location',
+        );
+        expect(rig.fieldText(tester, const Key('notes')), 'Project 2 notes');
+        expect(find.textContaining('Capture failed'), findsNothing);
+
+        rig.workflow.complete(1, CaptureWorkflowOutcome.cancelled);
+        await tester.pumpAndSettle();
+        expect(rig.captureButton(tester).onPressed, isNotNull);
+      },
+    );
+  }
+
   testWidgets('same CaptureFormScreen state isolates a replacement project', (
     tester,
   ) async {
@@ -609,4 +757,182 @@ class _FormPlatform implements PlatformServices {
   @override
   Future<LocationPermissionState> requestLocationPermission() async =>
       LocationPermissionState.granted;
+}
+
+CaptureFormDraftSnapshot _draft(String projectId, String prefix) {
+  return CaptureFormDraftSnapshot(
+    projectId: projectId,
+    workLocation: '$prefix location',
+    workContent: '$prefix content',
+    photographer: '$prefix photographer',
+    notes: '$prefix notes',
+  );
+}
+
+class _CaptureFormTestRig {
+  _CaptureFormTestRig._({
+    required this.database,
+    required this.platform,
+    required this.workflow,
+  });
+
+  static Future<_CaptureFormTestRig> create() async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    await database.createProject(id: 'project-1', name: 'Old project');
+    await database.createProject(id: 'project-2', name: 'New project');
+    final platform = _FormPlatform();
+    return _CaptureFormTestRig._(
+      database: database,
+      platform: platform,
+      workflow: _ControlledCaptureWorkflow(
+        database: database,
+        platform: platform,
+      ),
+    );
+  }
+
+  final AppDatabase database;
+  final _FormPlatform platform;
+  final _ControlledCaptureWorkflow workflow;
+  final drafts = MemoryCaptureFormDraftStore();
+  final memory = MemoryPressureController();
+  final projectId = ValueNotifier<String>('project-1');
+
+  Future<void> pump(WidgetTester tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          captureFormDraftStoreProvider.overrideWithValue(drafts),
+          memoryPressureControllerProvider.overrideWithValue(memory),
+          platformServicesProvider.overrideWithValue(platform),
+          captureWorkflowProvider.overrideWithValue(workflow),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          home: ValueListenableBuilder<String>(
+            valueListenable: projectId,
+            builder: (context, value, child) {
+              return CaptureFormScreen(projectId: value);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> switchProject(WidgetTester tester, String value) async {
+    projectId.value = value;
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> enterCurrentFields(
+    WidgetTester tester, {
+    required String prefix,
+  }) async {
+    await tester.enterText(
+      find.byKey(const Key('work-location')),
+      '$prefix location',
+    );
+    await tester.enterText(
+      find.byKey(const Key('work-content')),
+      '$prefix content',
+    );
+    await tester.enterText(
+      find.byKey(const Key('photographer')),
+      '$prefix photographer',
+    );
+    await tester.enterText(find.byKey(const Key('notes')), '$prefix notes');
+  }
+
+  Future<void> capture(WidgetTester tester) async {
+    final button = find.byKey(const Key('capture-button'));
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button.hitTestable());
+    await tester.pump();
+  }
+
+  FilledButton captureButton(WidgetTester tester) {
+    return tester.widget<FilledButton>(find.byKey(const Key('capture-button')));
+  }
+
+  String fieldText(WidgetTester tester, Key key) {
+    return tester.widget<TextFormField>(find.byKey(key)).controller!.text;
+  }
+
+  Future<void> dispose() async {
+    projectId.dispose();
+    await database.close();
+  }
+}
+
+class _ControlledCaptureWorkflow extends CaptureWorkflow {
+  factory _ControlledCaptureWorkflow({
+    required AppDatabase database,
+    required PlatformServices platform,
+  }) {
+    return _ControlledCaptureWorkflow._(
+      database: database,
+      platform: platform,
+      scheduler: _NoopCaptureScheduler(),
+      images: RustImagePipeline(),
+      outputPaths: AppCaptureOutputPaths(),
+      locationCoordinator: CaptureLocationCoordinator(
+        database: database,
+        platform: platform,
+        scheduler: _NoopCaptureScheduler(),
+      ),
+    );
+  }
+
+  _ControlledCaptureWorkflow._({
+    required super.database,
+    required super.platform,
+    required super.scheduler,
+    required super.images,
+    required super.outputPaths,
+    required super.locationCoordinator,
+  });
+
+  final List<CaptureDraft> drafts = [];
+  final List<Completer<CaptureWorkflowResult>> _results = [];
+
+  @override
+  Future<CaptureWorkflowResult> capture(CaptureDraft draft) {
+    drafts.add(draft);
+    final result = Completer<CaptureWorkflowResult>();
+    _results.add(result);
+    return result.future;
+  }
+
+  void complete(
+    int index,
+    CaptureWorkflowOutcome outcome, {
+    CaptureFailureCode? failureCode,
+  }) {
+    _results[index].complete(
+      CaptureWorkflowResult(outcome: outcome, failureCode: failureCode),
+    );
+  }
+}
+
+class _NoopCaptureScheduler implements CaptureBackgroundScheduler {
+  @override
+  Future<void> enqueue(String captureId) async {}
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> reconcilePending() async {}
+
+  @override
+  Future<void> retry(String captureId) async {}
 }
