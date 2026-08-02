@@ -45,17 +45,52 @@ class ProjectBackupExportException implements Exception {
   String toString() => 'Project backup export failed for "$projectName"';
 }
 
+enum StorageFailurePlatform { windows, posix, unknown }
+
+StorageFailurePlatform storageFailurePlatformForOperatingSystem(
+  String operatingSystem,
+) {
+  return switch (operatingSystem.toLowerCase()) {
+    'windows' => StorageFailurePlatform.windows,
+    'android' || 'linux' || 'macos' || 'ios' => StorageFailurePlatform.posix,
+    _ => StorageFailurePlatform.unknown,
+  };
+}
+
 bool isInsufficientStorageFailure(Object error) {
+  return isInsufficientStorageFailureForPlatform(
+    error,
+    platform: storageFailurePlatformForOperatingSystem(
+      Platform.operatingSystem,
+    ),
+  );
+}
+
+bool isInsufficientStorageFailureForPlatform(
+  Object error, {
+  required StorageFailurePlatform platform,
+}) {
   if (error is ProjectBackupExportException) {
-    return isInsufficientStorageFailure(error.cause);
+    return isInsufficientStorageFailureForPlatform(
+      error.cause,
+      platform: platform,
+    );
   }
   final osError = switch (error) {
     FileSystemException(:final osError) => osError,
     OSError value => value,
     _ => null,
   };
-  if (osError != null && {28, 39, 112}.contains(osError.errorCode)) {
-    return true;
+  if (osError != null) {
+    final errorCode = osError.errorCode;
+    final codeMeansNoSpace = switch (platform) {
+      // ERROR_HANDLE_DISK_FULL / ERROR_DISK_FULL.
+      StorageFailurePlatform.windows => errorCode == 39 || errorCode == 112,
+      // POSIX ENOSPC on Android, Linux, macOS, and iOS.
+      StorageFailurePlatform.posix => errorCode == 28,
+      StorageFailurePlatform.unknown => false,
+    };
+    if (codeMeansNoSpace) return true;
   }
   final message = error.toString().toLowerCase();
   return message.contains('no space') ||
