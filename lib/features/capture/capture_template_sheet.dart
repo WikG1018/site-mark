@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -30,22 +32,32 @@ class CaptureRequiredFieldsSnapshot {
 
 class CaptureTemplateSheetController {
   Route<Object?>? _route;
+  bool _dismissed = false;
 
-  void _attach(Route<Object?> route) => _route = route;
+  void _attach(Route<Object?> route) {
+    if (_dismissed) {
+      _removeWhenSafe(route);
+      return;
+    }
+    _route = route;
+  }
 
   void _detach() => _route = null;
 
   void dismiss() {
+    if (_dismissed) return;
+    _dismissed = true;
     final route = _route;
-    final navigator = route?.navigator;
-    if (route == null ||
-        navigator == null ||
-        !navigator.mounted ||
-        !route.isActive) {
-      return;
-    }
     _route = null;
-    navigator.removeRoute(route);
+    if (route != null) _removeWhenSafe(route);
+  }
+
+  void _removeWhenSafe(Route<Object?> route) {
+    scheduleMicrotask(() {
+      final navigator = route.navigator;
+      if (navigator == null || !navigator.mounted || !route.isActive) return;
+      navigator.removeRoute(route);
+    });
   }
 }
 

@@ -1298,6 +1298,112 @@ void main() {
     },
   );
 
+  testWidgets(
+    'project replacement before the sheet first frame discards the old sheet',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      final service = _CrudTemplateService(rig.database);
+      rig.templateService = service;
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await service.close();
+        await rig.dispose();
+      });
+      await service.create(
+        projectId: 'project-1',
+        name: 'Project one template',
+        workLocation: 'One location',
+        workContent: 'One content',
+        photographer: 'One photographer',
+      );
+      await service.create(
+        projectId: 'project-2',
+        name: 'Project two template',
+        workLocation: 'Two location',
+        workContent: 'Two content',
+        photographer: 'Two photographer',
+      );
+      await rig.pump(tester);
+
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      rig.projectId.value = 'project-2';
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+      expect(find.byType(CaptureFormScreen), findsOneWidget);
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Project two template'), findsOneWidget);
+      expect(find.text('Project one template'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'disposing the capture form before the sheet first frame leaves no modal',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      final service = _CrudTemplateService(rig.database);
+      rig.templateService = service;
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await service.close();
+        await rig.dispose();
+      });
+      await rig.pump(tester);
+
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      rig.showForm.value = false;
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('capture-form-replacement')), findsOneWidget);
+      expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('a late sheet removal never pops an unrelated route above it', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    final service = _CrudTemplateService(database);
+    final controller = CaptureTemplateSheetController();
+    final navigatorKey = GlobalKey<NavigatorState>();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await service.close();
+      await database.close();
+    });
+    await _pumpTemplateSheetHost(
+      tester,
+      service: service,
+      controller: controller,
+      navigatorKey: navigatorKey,
+    );
+
+    await tester.tap(find.byKey(const Key('open-template-sheet')));
+    controller.dismiss();
+    unawaited(
+      navigatorKey.currentState!.push<void>(
+        MaterialPageRoute<void>(
+          builder: (context) => const Scaffold(
+            body: Text('Unrelated route', key: Key('unrelated-route')),
+          ),
+        ),
+      ),
+    );
+    controller.dismiss();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('unrelated-route')), findsOneWidget);
+    expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+    navigatorKey.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('unrelated-route')), findsNothing);
+    expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+    expect(find.byKey(const Key('open-template-sheet')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final outcome in [
     CaptureWorkflowOutcome.queued,
     CaptureWorkflowOutcome.delayed,
@@ -1520,9 +1626,12 @@ Future<void> _pumpTemplateSheetHost(
   required CaptureTemplateService service,
   ValueChanged<CaptureRequiredFieldsSnapshot>? onSelected,
   MediaQueryData? mediaQuery,
+  CaptureTemplateSheetController? controller,
+  GlobalKey<NavigatorState>? navigatorKey,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      navigatorKey: navigatorKey,
       locale: const Locale('en'),
       builder: mediaQuery == null
           ? null
@@ -1552,6 +1661,7 @@ Future<void> _pumpTemplateSheetHost(
                   photographer: 'Current photographer',
                 ),
                 service: service,
+                controller: controller,
               );
               if (value != null) onSelected?.call(value);
             },
@@ -2061,6 +2171,7 @@ class _CaptureFormTestRig {
   final drafts = MemoryCaptureFormDraftStore();
   final memory = MemoryPressureController();
   final projectId = ValueNotifier<String>('project-1');
+  final showForm = ValueNotifier<bool>(true);
   CaptureTemplateService? templateService;
 
   Future<void> pump(WidgetTester tester) async {
@@ -2082,10 +2193,21 @@ class _CaptureFormTestRig {
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
           ],
-          home: ValueListenableBuilder<String>(
-            valueListenable: projectId,
-            builder: (context, value, child) {
-              return CaptureFormScreen(projectId: value);
+          home: ValueListenableBuilder<bool>(
+            valueListenable: showForm,
+            builder: (context, visible, child) {
+              if (!visible) {
+                return const Scaffold(
+                  key: Key('capture-form-replacement'),
+                  body: SizedBox.shrink(),
+                );
+              }
+              return ValueListenableBuilder<String>(
+                valueListenable: projectId,
+                builder: (context, value, child) {
+                  return CaptureFormScreen(projectId: value);
+                },
+              );
             },
           ),
         ),
@@ -2135,6 +2257,7 @@ class _CaptureFormTestRig {
   }
 
   Future<void> dispose() async {
+    showForm.dispose();
     projectId.dispose();
     await database.close();
   }
