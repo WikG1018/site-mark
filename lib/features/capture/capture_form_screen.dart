@@ -45,6 +45,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   /// changes; never recomputed on every [build].
   Future<_CaptureFormInit?>? _initFuture;
   var _initGeneration = 0;
+  var _captureOperation = 0;
 
   /// Cached location-permission view state. Loaded once during initialization
   /// and refreshed whenever the app returns to the foreground so the
@@ -139,6 +140,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.projectId == widget.projectId) return;
     _initGeneration++;
+    _captureOperation++;
     _locationController.clear();
     _contentController.clear();
     _photographerController.clear();
@@ -232,6 +234,14 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
 
   Future<void> _capture(Project project) async {
     if (!_formKey.currentState!.validate()) return;
+    final projectId = project.id;
+    final generation = _initGeneration;
+    final operation = ++_captureOperation;
+    bool isCurrent() =>
+        mounted &&
+        widget.projectId == projectId &&
+        _initGeneration == generation &&
+        _captureOperation == operation;
     setState(() => _working = true);
     final language = Localizations.localeOf(context).languageCode;
     final watermarkLocaleCode = language == 'en' ? 'en' : 'zh';
@@ -255,6 +265,15 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
           ),
         );
     if (!mounted) return;
+    if (!isCurrent()) {
+      if (result.outcome == CaptureWorkflowOutcome.queued ||
+          result.outcome == CaptureWorkflowOutcome.delayed) {
+        try {
+          await ref.read(captureFormDraftStoreProvider).clear(projectId);
+        } catch (_) {}
+      }
+      return;
+    }
     final strings = AppStrings.of(context);
     switch (result.outcome) {
       case CaptureWorkflowOutcome.queued:
@@ -262,11 +281,12 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         // next launch does not resurrect the just-submitted text. Best-effort:
         // a failure to clear must not block the capture confirmation flow.
         try {
-          await ref.read(captureFormDraftStoreProvider).clear(widget.projectId);
+          await ref.read(captureFormDraftStoreProvider).clear(projectId);
         } catch (_) {
           // Ignore: the snapshot will be overwritten on the next KILL.
         }
         if (!mounted) return;
+        if (!isCurrent()) return;
         // Stay on the form for consecutive shooting: clear only notes so the
         // retained location/content/photographer edits persist, re-enable the
         // button, and surface the background-queue confirmation. Replace any
@@ -283,11 +303,12 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
           );
       case CaptureWorkflowOutcome.delayed:
         try {
-          await ref.read(captureFormDraftStoreProvider).clear(widget.projectId);
+          await ref.read(captureFormDraftStoreProvider).clear(projectId);
         } catch (_) {
           // The durable capture is authoritative; a stale draft is harmless.
         }
         if (!mounted) return;
+        if (!isCurrent()) return;
         _notesController.clear();
         setState(() => _working = false);
         ScaffoldMessenger.of(context)
@@ -321,7 +342,10 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     return FutureBuilder<_CaptureFormInit?>(
       future: _initFuture,
       builder: (context, snapshot) {
-        final project = snapshot.data?.project;
+        final loadedProject = snapshot.data?.project;
+        final project = loadedProject?.id == widget.projectId
+            ? loadedProject
+            : null;
         final permission = _permissionState;
         final prompt = permission != null && permission.showExplanation
             ? LocationPermissionPrompt(

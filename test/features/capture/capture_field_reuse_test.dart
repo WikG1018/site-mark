@@ -506,18 +506,20 @@ void main() {
       ),
     );
     await tester.pump();
-    replaceProject(() => projectId = 'project-2');
-    await tester.pumpAndSettle();
-
-    expect(
-      tester
-          .widget<TextFormField>(find.byKey(const Key('work-location')))
-          .controller!
-          .text,
-      'New location',
-    );
     await database.releaseFirstProject();
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('capture-form')), findsOneWidget);
+
+    database.delaySecondProject = true;
+    replaceProject(() => projectId = 'project-2');
+    await tester.pump();
+
+    expect(find.byKey(const Key('capture-form')), findsNothing);
+    expect(find.byKey(const Key('capture-button')), findsNothing);
+
+    await database.releaseSecondProject();
+    await tester.pumpAndSettle();
+
     expect(
       tester
           .widget<TextFormField>(find.byKey(const Key('work-location')))
@@ -525,7 +527,6 @@ void main() {
           .text,
       'New location',
     );
-
     await memory.dispatch(MemoryPressureLevel.kill);
     expect((await drafts.load('project-2'))?.workLocation, 'New location');
     expect(await drafts.load('project-1'), isNull);
@@ -536,12 +537,17 @@ class _DelayedProjectDatabase extends AppDatabase {
   _DelayedProjectDatabase() : super.forTesting(NativeDatabase.memory());
 
   final Completer<Project?> _firstProject = Completer<Project?>();
+  final Completer<Project?> _secondProject = Completer<Project?>();
   var _delayFirstProject = true;
+  var delaySecondProject = false;
 
   @override
   Future<Project?> projectById(String projectId) {
     if (projectId == 'project-1' && _delayFirstProject) {
       return _firstProject.future;
+    }
+    if (projectId == 'project-2' && delaySecondProject) {
+      return _secondProject.future;
     }
     return super.projectById(projectId);
   }
@@ -549,6 +555,11 @@ class _DelayedProjectDatabase extends AppDatabase {
   Future<void> releaseFirstProject() async {
     _delayFirstProject = false;
     _firstProject.complete(await super.projectById('project-1'));
+  }
+
+  Future<void> releaseSecondProject() async {
+    delaySecondProject = false;
+    _secondProject.complete(await super.projectById('project-2'));
   }
 }
 
