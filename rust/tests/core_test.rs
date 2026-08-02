@@ -1039,6 +1039,42 @@ fn rejects_normalized_duplicate_template_names() {
 }
 
 #[test]
+fn archive_template_names_match_dart_two_stage_whitespace_and_key_rules() {
+    let directory = tempdir().unwrap();
+    let accepted = directory.path().join("dart-whitespace-contract.zip");
+    write_schema_v4_archive(
+        &accepted,
+        4,
+        vec![
+            valid_manifest_template("\u{0085}A\u{0085}B\u{0085}"),
+            valid_manifest_template("A B"),
+            valid_manifest_template("\u{200B}A\u{200B}B\u{200B}"),
+        ],
+    );
+    let preview = read_project_archive(accepted.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.templates[0].name, "A\u{0085}B");
+    assert_eq!(preview.templates[1].name, "A B");
+    assert_eq!(preview.templates[2].name, "\u{200B}A\u{200B}B\u{200B}");
+
+    assert_schema_v4_templates_rejected(
+        &directory,
+        "nel-trimmed-ascii-case-duplicate",
+        vec![
+            valid_manifest_template("\u{0085}ABC\u{0085}"),
+            valid_manifest_template("abc"),
+        ],
+    );
+    assert_schema_v4_templates_rejected(
+        &directory,
+        "feff-collapsed-duplicate",
+        vec![
+            valid_manifest_template("A\u{FEFF}B"),
+            valid_manifest_template("A B"),
+        ],
+    );
+}
+
+#[test]
 fn rejects_nul_in_every_archive_template_string() {
     let directory = tempdir().unwrap();
     for field in ["name", "work_location", "work_content", "photographer"] {
@@ -1061,6 +1097,69 @@ fn rejects_invalid_template_timestamps_and_future_schema_without_partial_preview
     write_schema_v4_archive(&future, 99, vec![valid_manifest_template("有效模板")]);
     let result = read_project_archive(future.to_string_lossy().into_owned());
     assert!(result.is_err(), "schema 99 unexpectedly returned a preview");
+}
+
+#[test]
+fn archive_template_timestamps_enforce_strict_calendar_time_and_offset_boundaries() {
+    let directory = tempdir().unwrap();
+    let month_ends = [
+        (1, 31),
+        (2, 28),
+        (3, 31),
+        (4, 30),
+        (5, 31),
+        (6, 30),
+        (7, 31),
+        (8, 31),
+        (9, 30),
+        (10, 31),
+        (11, 30),
+        (12, 31),
+    ];
+    let mut accepted = vec![
+        "2000-02-29 00:00:00 +00:00".to_string(),
+        "2026-12-31 23:59:59 +23:59".to_string(),
+    ];
+    let mut rejected = vec![
+        "1900-02-29 00:00:00 +00:00".to_string(),
+        "2026-02-29 00:00:00 +00:00".to_string(),
+        "2026-01-01 24:00:00 +00:00".to_string(),
+        "2026-01-01 23:60:00 +00:00".to_string(),
+        "2026-01-01 23:59:60 +00:00".to_string(),
+        "2026-01-01 00:00:00 +24:00".to_string(),
+        "2026-01-01 00:00:00 08:00".to_string(),
+        "2026-01-01 00:00:00 +08:00x".to_string(),
+        "２０２６-01-01 00:00:00 +08:00".to_string(),
+    ];
+    for (month, last_day) in month_ends {
+        accepted.push(format!("2026-{month:02}-{last_day:02} 12:34:56 -08:30"));
+        rejected.push(format!(
+            "2026-{month:02}-{:02} 12:34:56 -08:30",
+            last_day + 1
+        ));
+    }
+
+    for field in ["created_at", "updated_at"] {
+        for (index, timestamp) in accepted.iter().enumerate() {
+            let archive = directory
+                .path()
+                .join(format!("accepted-{field}-{index}.zip"));
+            let mut template = valid_manifest_template("有效模板");
+            template[field] = serde_json::json!(timestamp);
+            write_schema_v4_archive(&archive, 4, vec![template]);
+            let preview = read_project_archive(archive.to_string_lossy().into_owned()).unwrap();
+            assert_eq!(preview.templates.len(), 1, "{field}: {timestamp}");
+        }
+        for (index, timestamp) in rejected.iter().enumerate() {
+            let mut template = valid_manifest_template("有效模板");
+            template[field] = serde_json::json!(timestamp);
+            assert_schema_v4_templates_rejected(
+                &directory,
+                &format!("rejected-{field}-{index}"),
+                vec![template],
+            );
+        }
+    }
 }
 
 #[test]

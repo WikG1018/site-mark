@@ -1263,6 +1263,71 @@ mod archive_tests {
         // ZWNBSP / BOM (U+FEFF)
         assert!(safe_photo_number_component("A\u{FEFF}B").is_err());
     }
+
+    #[test]
+    fn dart_trim_and_regexp_whitespace_sets_are_distinct_and_explicit() {
+        for (character, dart_trim, dart_regexp) in [
+            ('\u{0009}', true, true),
+            ('\u{000A}', true, true),
+            ('\u{000B}', true, true),
+            ('\u{000C}', true, true),
+            ('\u{000D}', true, true),
+            ('\u{001C}', false, false),
+            ('\u{0020}', true, true),
+            ('\u{0085}', true, false),
+            ('\u{00A0}', true, true),
+            ('\u{1680}', true, true),
+            ('\u{180E}', false, false),
+            ('\u{2000}', true, true),
+            ('\u{200A}', true, true),
+            ('\u{200B}', false, false),
+            ('\u{2028}', true, true),
+            ('\u{2029}', true, true),
+            ('\u{202F}', true, true),
+            ('\u{205F}', true, true),
+            ('\u{3000}', true, true),
+            ('\u{FEFF}', true, true),
+        ] {
+            assert_eq!(
+                is_dart_trim_whitespace(character),
+                dart_trim,
+                "unexpected Dart trim classification for U+{:04X}",
+                character as u32
+            );
+            assert_eq!(
+                is_dart_regexp_whitespace(character),
+                dart_regexp,
+                "unexpected Dart RegExp whitespace classification for U+{:04X}",
+                character as u32
+            );
+        }
+    }
+
+    #[test]
+    fn template_name_normalization_matches_dart_two_stage_whitespace_behavior() {
+        for (input, normalized, key) in [
+            ("\u{0085}A\u{0085}B\u{0085}", "A\u{0085}B", "a\u{0085}b"),
+            ("\u{FEFF}A\u{FEFF}B\u{FEFF}", "A B", "a b"),
+            (
+                "\u{200B}A\u{200B}B\u{200B}",
+                "\u{200B}A\u{200B}B\u{200B}",
+                "\u{200B}a\u{200B}b\u{200B}",
+            ),
+            (
+                " \t\r\n\u{000C}A \t\r\n\u{000C}B \t\r\n\u{000C}",
+                "A B",
+                "a b",
+            ),
+            (
+                "\u{00A0}A\u{1680}\u{2028}\u{202F}\u{205F}\u{3000}B\u{00A0}",
+                "A B",
+                "a b",
+            ),
+        ] {
+            assert_eq!(normalized_template_name(input), normalized);
+            assert_eq!(template_name_key(input), key);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1493,22 +1558,58 @@ fn is_valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.chars().all(|character| character.is_ascii_hexdigit())
 }
 
-fn is_template_whitespace(character: char) -> bool {
-    character.is_whitespace() || character == '\u{FEFF}'
+/// The explicit set recognized by the repository's current Dart SDK
+/// `String.trim()`. It intentionally includes U+0085.
+fn is_dart_trim_whitespace(character: char) -> bool {
+    matches!(
+        character,
+        '\u{0009}'..='\u{000D}'
+            | '\u{0020}'
+            | '\u{0085}'
+            | '\u{00A0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200A}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{202F}'
+            | '\u{205F}'
+            | '\u{3000}'
+            | '\u{FEFF}'
+    )
+}
+
+/// The explicit set recognized by the repository's current Dart SDK
+/// ECMAScript `RegExp(r'\s')`. Unlike `trim`, it excludes U+0085.
+fn is_dart_regexp_whitespace(character: char) -> bool {
+    matches!(
+        character,
+        '\u{0009}'..='\u{000D}'
+            | '\u{0020}'
+            | '\u{00A0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200A}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{202F}'
+            | '\u{205F}'
+            | '\u{3000}'
+            | '\u{FEFF}'
+    )
 }
 
 fn normalized_template_name(value: &str) -> String {
+    let value = value.trim_matches(is_dart_trim_whitespace);
     let mut normalized = String::new();
-    let mut pending_space = false;
+    let mut in_whitespace = false;
     for character in value.chars() {
-        if is_template_whitespace(character) {
-            pending_space = !normalized.is_empty();
-        } else {
-            if pending_space {
+        if is_dart_regexp_whitespace(character) {
+            if !in_whitespace && !normalized.is_empty() {
                 normalized.push(' ');
-                pending_space = false;
             }
+            in_whitespace = true;
+        } else {
             normalized.push(character);
+            in_whitespace = false;
         }
     }
     normalized
@@ -1528,7 +1629,7 @@ fn template_name_key(value: &str) -> String {
 }
 
 fn trimmed_template_field(value: &str) -> &str {
-    value.trim_matches(is_template_whitespace)
+    value.trim_matches(is_dart_trim_whitespace)
 }
 
 fn parse_two_digits(bytes: &[u8], start: usize) -> Option<u32> {
