@@ -108,7 +108,31 @@ class CaptureRecords extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Projects, CaptureRecords, AppSettings])
+@DataClassName('CaptureTemplate')
+class CaptureTemplates extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  TextColumn get name => text().withLength(min: 1, max: 80)();
+  TextColumn get nameKey => text().withLength(min: 1, max: 80)();
+  TextColumn get workLocation => text().withLength(min: 1, max: 160)();
+  TextColumn get workContent => text().withLength(min: 1, max: 240)();
+  TextColumn get photographer => text().withLength(min: 1, max: 80)();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+    {projectId, nameKey},
+  ];
+}
+
+@DriftDatabase(
+  tables: [Projects, CaptureRecords, AppSettings, CaptureTemplates],
+)
 class AppDatabase extends _$AppDatabase {
   static const _defaultExternalRefreshInterval = Duration(seconds: 1);
   static const _captureIdChunkSize = 900;
@@ -145,7 +169,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -153,6 +177,7 @@ class AppDatabase extends _$AppDatabase {
       await migrator.createAll();
       await _createCaptureIndexes();
       await _createCaptureCursorIndexes();
+      await _createCaptureTemplateIndexes();
     },
     onUpgrade: (migrator, from, to) async {
       // When migrating from v2 directly to v4+, migrator.createTable creates
@@ -234,9 +259,14 @@ class AppDatabase extends _$AppDatabase {
       if (from < 9) {
         await _createCaptureCursorIndexes();
       }
+      if (from < 10) {
+        await migrator.createTable(captureTemplates);
+        await _createCaptureTemplateIndexes();
+      }
       await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON');
       await _ensureGlobalSettingsRow();
     },
   );
@@ -293,6 +323,13 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS capture_records_project_sort_cursor_idx '
       'ON captures (project_id, COALESCE(captured_at, created_at) DESC, id DESC)',
+    );
+  }
+
+  Future<void> _createCaptureTemplateIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_templates_project_updated_name_idx '
+      'ON capture_templates (project_id, updated_at DESC, name)',
     );
   }
 
