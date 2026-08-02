@@ -131,6 +131,15 @@ class CaptureTemplates extends Table {
   List<Set<Column<Object>>> get uniqueKeys => [
     {projectId, nameKey},
   ];
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (length(name) BETWEEN 1 AND 80)',
+    'CHECK (length(name_key) BETWEEN 1 AND 80)',
+    'CHECK (length(work_location) BETWEEN 1 AND 160)',
+    'CHECK (length(work_content) BETWEEN 1 AND 240)',
+    'CHECK (length(photographer) BETWEEN 1 AND 80)',
+  ];
 }
 
 @DriftDatabase(

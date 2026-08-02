@@ -147,6 +147,30 @@ Future<void> expectCaptureTemplateSchema(AppDatabase database) async {
     'create index capture_templates_project_updated_name_idx '
     'on capture_templates (project_id, updated_at desc, name)',
   );
+
+  final tableSql = await database
+      .customSelect(
+        "SELECT sql FROM sqlite_master WHERE name = 'capture_templates'",
+      )
+      .getSingle();
+  final normalizedTableSql = normalizedSql(tableSql.read<String>('sql'));
+  expect(normalizedTableSql, contains('check (length(name) between 1 and 80)'));
+  expect(
+    normalizedTableSql,
+    contains('check (length(name_key) between 1 and 80)'),
+  );
+  expect(
+    normalizedTableSql,
+    contains('check (length(work_location) between 1 and 160)'),
+  );
+  expect(
+    normalizedTableSql,
+    contains('check (length(work_content) between 1 and 240)'),
+  );
+  expect(
+    normalizedTableSql,
+    contains('check (length(photographer) between 1 and 80)'),
+  );
 }
 
 void main() {
@@ -377,6 +401,121 @@ void main() {
 
         expect(
           await templateDatabase.countCaptureTemplates('restoring-project'),
+          0,
+        );
+      },
+    );
+
+    test('SQLite scalar checks protect direct template writes', () async {
+      final emojiName = '\u{1F600}' * captureTemplateNameMaxLength;
+      await _insertTemplateBySql(
+        database,
+        id: 'emoji-template',
+        projectId: 'project-1',
+        name: emojiName,
+        nameKey: emojiName,
+      );
+      expect(await templateDatabase.countCaptureTemplates('project-1'), 1);
+
+      await expectLater(
+        _insertTemplateBySql(
+          database,
+          id: 'long-name',
+          projectId: 'project-1',
+          name: 'n' * (captureTemplateNameMaxLength + 1),
+          nameKey: 'long-name',
+        ),
+        throwsA(isA<Exception>()),
+      );
+      await expectLater(
+        _insertTemplateBySql(
+          database,
+          id: 'long-location',
+          projectId: 'project-1',
+          name: 'location limit',
+          nameKey: 'location limit',
+          workLocation: 'l' * (captureTemplateLocationMaxLength + 1),
+        ),
+        throwsA(isA<Exception>()),
+      );
+      await expectLater(
+        _insertTemplateBySql(
+          database,
+          id: 'long-content',
+          projectId: 'project-1',
+          name: 'content limit',
+          nameKey: 'content limit',
+          workContent: 'c' * (captureTemplateContentMaxLength + 1),
+        ),
+        throwsA(isA<Exception>()),
+      );
+      await expectLater(
+        _insertTemplateBySql(
+          database,
+          id: 'long-photographer',
+          projectId: 'project-1',
+          name: 'photographer limit',
+          nameKey: 'photographer limit',
+          photographer: 'p' * (captureTemplatePhotographerMaxLength + 1),
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      final ddl = await database
+          .customSelect(
+            "SELECT sql FROM sqlite_master WHERE name = 'capture_templates'",
+          )
+          .getSingle();
+      final normalized = normalizedSql(ddl.read<String>('sql'));
+      expect(normalized, contains('check (length(name) between 1 and 80)'));
+      expect(normalized, contains('check (length(name_key) between 1 and 80)'));
+      expect(
+        normalized,
+        contains('check (length(work_location) between 1 and 160)'),
+      );
+      expect(
+        normalized,
+        contains('check (length(work_content) between 1 and 240)'),
+      );
+      expect(
+        normalized,
+        contains('check (length(photographer) between 1 and 80)'),
+      );
+    });
+
+    test(
+      'restore batch rolls back when a later row exceeds scalar length',
+      () async {
+        await database.createProject(
+          id: 'restoring-length-project',
+          name: '恢复长度项目',
+          restoreOperationId: 'operation-1',
+        );
+        await expectLater(
+          templateDatabase.insertRestoredCaptureTemplates(
+            projectId: 'restoring-length-project',
+            restoreOperationId: 'operation-1',
+            templates: [
+              _templateCompanion(
+                id: 'valid-restored-row',
+                projectId: 'restoring-length-project',
+                name: '有效模板',
+                nameKey: '有效模板',
+              ),
+              _templateCompanion(
+                id: 'overlong-restored-row',
+                projectId: 'restoring-length-project',
+                name: 'n' * (captureTemplateNameMaxLength + 1),
+                nameKey: 'too-long-restored-name',
+              ),
+            ],
+          ),
+          throwsA(isA<Exception>()),
+        );
+        expect(
+          await templateDatabase.countCaptureTemplates(
+            'restoring-length-project',
+          ),
           0,
         );
       },
@@ -662,4 +801,25 @@ Future<void> _insertCapture(
           capturedAt: Value(capturedAt),
         ),
       );
+}
+
+Future<void> _insertTemplateBySql(
+  AppDatabase database, {
+  required String id,
+  required String projectId,
+  required String name,
+  required String nameKey,
+  String workLocation = 'A 区',
+  String workContent = '检查',
+  String photographer = '张工',
+}) {
+  return database.customStatement('''
+    INSERT INTO capture_templates (
+      id, project_id, name, name_key, work_location, work_content,
+      photographer, created_at, updated_at
+    ) VALUES (
+      '$id', '$projectId', '$name', '$nameKey', '$workLocation',
+      '$workContent', '$photographer', 1, 1
+    )
+  ''');
 }
