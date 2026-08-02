@@ -155,72 +155,80 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
     final strings = AppStrings.of(context);
     final visible = widget.focusNode.hasFocus;
     final suggestions = _suggestions ?? const <String>[];
+    final child = !visible
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _loading
+                ? const SizedBox(
+                    height: 24,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                : _error != null
+                ? Row(
+                    children: [
+                      Expanded(child: Text(strings.suggestionsLoadFailed)),
+                      TextButton(
+                        key: const Key('recent-suggestions-retry'),
+                        onPressed: () => _load(retry: true),
+                        child: Text(strings.retry),
+                      ),
+                    ],
+                  )
+                : suggestions.isEmpty
+                ? Text(
+                    strings.noRecentSuggestions,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        strings.recentlyUsed,
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                      ...suggestions
+                          .take(3)
+                          .indexed
+                          .map(
+                            (entry) => ActionChip(
+                              key: Key(
+                                'recent-suggestion-${widget.field.name}-${entry.$1}',
+                              ),
+                              label: Text(entry.$2),
+                              onPressed: () => _select(entry.$2),
+                            ),
+                          ),
+                      if (suggestions.length > 3)
+                        ActionChip(
+                          key: const Key('recent-suggestions-more'),
+                          label: Text(strings.more),
+                          onPressed: _showMore,
+                        ),
+                    ],
+                  ),
+          );
+    final duration = AppMotion.durationOf(context, AppMotion.short4);
+    if (duration == Duration.zero) {
+      return KeyedSubtree(
+        key: const Key('capture-recent-suggestions'),
+        child: child,
+      );
+    }
     return AnimatedSize(
       key: const Key('capture-recent-suggestions'),
-      duration: AppMotion.durationOf(context, AppMotion.short4),
+      duration: duration,
       curve: AppMotion.standard,
       alignment: Alignment.topCenter,
-      child: !visible
-          ? const SizedBox.shrink()
-          : Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: _loading
-                  ? const SizedBox(
-                      height: 24,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    )
-                  : _error != null
-                  ? Row(
-                      children: [
-                        Expanded(child: Text(strings.suggestionsLoadFailed)),
-                        TextButton(
-                          key: const Key('recent-suggestions-retry'),
-                          onPressed: () => _load(retry: true),
-                          child: Text(strings.retry),
-                        ),
-                      ],
-                    )
-                  : suggestions.isEmpty
-                  ? Text(
-                      strings.noRecentSuggestions,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    )
-                  : Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          strings.recentlyUsed,
-                          style: Theme.of(context).textTheme.labelMedium,
-                        ),
-                        ...suggestions
-                            .take(3)
-                            .indexed
-                            .map(
-                              (entry) => ActionChip(
-                                key: Key(
-                                  'recent-suggestion-${widget.field.name}-${entry.$1}',
-                                ),
-                                label: Text(entry.$2),
-                                onPressed: () => _select(entry.$2),
-                              ),
-                            ),
-                        if (suggestions.length > 3)
-                          ActionChip(
-                            key: const Key('recent-suggestions-more'),
-                            label: Text(strings.more),
-                            onPressed: _showMore,
-                          ),
-                      ],
-                    ),
-            ),
+      child: child,
     );
   }
 }

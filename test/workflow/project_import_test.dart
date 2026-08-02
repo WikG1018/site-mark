@@ -242,27 +242,90 @@ void main() {
     });
   }
 
-  for (final schemaVersion in [1, 2, 3]) {
-    test('v$schemaVersion restore keeps the template list empty', () async {
+  final archiveCompatibilityMatrix =
+      <
+        ({
+          String label,
+          int schemaVersion,
+          List<ArchivePhotoPreview> photos,
+          List<ArchiveCaptureTemplate> templates,
+        })
+      >[
+        (
+          label: 'v1 photos without templates',
+          schemaVersion: 1,
+          photos: _preview().photos,
+          templates: const [],
+        ),
+        (
+          label: 'v2 photos without templates',
+          schemaVersion: 2,
+          photos: _preview().photos,
+          templates: const [],
+        ),
+        (
+          label: 'v3 empty archive',
+          schemaVersion: 3,
+          photos: const [],
+          templates: const [],
+        ),
+        (
+          label: 'v4 empty archive',
+          schemaVersion: 4,
+          photos: const [],
+          templates: const [],
+        ),
+        (
+          label: 'v4 photos without templates',
+          schemaVersion: 4,
+          photos: _preview().photos,
+          templates: const [],
+        ),
+        (
+          label: 'v4 templates without photos',
+          schemaVersion: 4,
+          photos: const [],
+          templates: [_archiveTemplate(name: '模板单独恢复')],
+        ),
+        (
+          label: 'v4 photos with templates',
+          schemaVersion: 4,
+          photos: _preview().photos,
+          templates: [_archiveTemplate(name: '照片模板共同恢复')],
+        ),
+      ];
+  for (final archiveCase in archiveCompatibilityMatrix) {
+    test('archive compatibility matrix: ${archiveCase.label}', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
+      final images = _ImportImagePipeline(
+        _previewWithTemplates(
+          archiveCase.templates,
+          photos: archiveCase.photos,
+          schemaVersion: archiveCase.schemaVersion,
+        ),
+      );
       final service = _service(
         database: database,
-        images: _ImportImagePipeline(
-          _previewWithTemplates(const [], schemaVersion: schemaVersion),
-        ),
+        images: images,
         files: _RecordingFileStore(),
       );
 
       final result = await service.importProject(
-        zipPath: '/backups/v$schemaVersion.zip',
-        projectName: '旧版项目 $schemaVersion',
+        zipPath: '/backups/v${archiveCase.schemaVersion}.zip',
+        projectName: archiveCase.label,
       );
 
       expect(
         await database.captureTemplatesForProject(result.projectId),
-        isEmpty,
+        hasLength(archiveCase.templates.length),
       );
+      expect(
+        await database.capturesForProject(result.projectId),
+        hasLength(archiveCase.photos.length),
+      );
+      expect(images.extractRequests, hasLength(archiveCase.photos.length));
+      expect(await database.getAllProjectsInternal(), hasLength(1));
     });
   }
 

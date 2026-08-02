@@ -2213,6 +2213,12 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
             format!("unsupported schema version {}", manifest.schema_version),
         ));
     }
+    if manifest.schema_version < 4 && !manifest.templates.is_empty() {
+        return Err(invalid_data(
+            "validate manifest",
+            "capture templates require schema version 4",
+        ));
+    }
     if manifest.project_name.trim().is_empty() {
         return Err(invalid_data("validate manifest", "project name is empty"));
     }

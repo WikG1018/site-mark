@@ -581,6 +581,57 @@ fn write_schema_v4_archive(
     );
 }
 
+fn write_archive_matrix_fixture(
+    path: &std::path::Path,
+    schema_version: u32,
+    include_photo: bool,
+    templates: Vec<serde_json::Value>,
+) {
+    let photos = if include_photo {
+        serde_json::json!([{
+            "photo_number": "SM-20260801-001",
+            "original_sha256": "a".repeat(64),
+            "captured_at": "2026-08-01 09:30:00 +08:00",
+            "work_location": "A 区",
+            "work_content": "现场检查",
+            "photographer": "张工"
+        }])
+    } else {
+        serde_json::json!([])
+    };
+    let manifest = serde_json::json!({
+        "schema_version": schema_version,
+        "app": "SiteMark",
+        "project_id": format!("matrix-v{schema_version}"),
+        "project_name": format!("矩阵项目 v{schema_version}"),
+        "project_created_at": "2026-08-01T08:00:00+08:00",
+        "snapshot_at": "2026-08-03T13:00:00+08:00",
+        "omitted_processing_count": 0,
+        "omitted_failed_count": 0,
+        "includes_originals": false,
+        "watermark": {
+            "position": "bottomRight",
+            "opacity": 0.66,
+            "accent_color_argb": 0xff3366cc_u32,
+            "font_scale": 1.2,
+        },
+        "photos": photos,
+        "templates": templates,
+    });
+    let manifest_text = manifest.to_string();
+    if include_photo {
+        write_zip(
+            path,
+            &[
+                ("manifest.json", manifest_text.as_bytes()),
+                ("photos/SM-20260801-001.jpg", b"jpeg"),
+            ],
+        );
+    } else {
+        write_zip(path, &[("manifest.json", manifest_text.as_bytes())]);
+    }
+}
+
 fn assert_schema_v4_templates_rejected(
     directory: &tempfile::TempDir,
     case: &str,
@@ -630,6 +681,60 @@ fn reads_empty_schema_v3_project_without_templates() {
     assert!(!preview.is_partial);
     assert!(preview.photos.is_empty());
     assert!(preview.templates.is_empty());
+}
+
+#[test]
+fn archive_schema_photo_template_matrix_is_explicit() {
+    let directory = tempdir().unwrap();
+    for (case, schema_version, include_photo, include_template) in [
+        ("v1-photo", 1, true, false),
+        ("v2-photo", 2, true, false),
+        ("v3-empty", 3, false, false),
+        ("v4-empty", 4, false, false),
+        ("v4-photo", 4, true, false),
+        ("v4-template", 4, false, true),
+        ("v4-photo-template", 4, true, true),
+    ] {
+        let archive = directory.path().join(format!("{case}.zip"));
+        let templates = if include_template {
+            vec![valid_manifest_template("  日常   巡检  ")]
+        } else {
+            vec![]
+        };
+        write_archive_matrix_fixture(&archive, schema_version, include_photo, templates);
+        let preview = read_project_archive(archive.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(preview.schema_version, schema_version, "{case}");
+        assert_eq!(preview.photos.len(), usize::from(include_photo), "{case}");
+        assert_eq!(
+            preview.templates.len(),
+            usize::from(include_template),
+            "{case}"
+        );
+        if include_template {
+            assert_eq!(preview.templates[0].name, "日常 巡检", "{case}");
+        }
+    }
+}
+
+#[test]
+fn legacy_schemas_reject_template_payloads_during_inspection() {
+    let directory = tempdir().unwrap();
+    for schema_version in [1, 2, 3] {
+        let archive = directory
+            .path()
+            .join(format!("v{schema_version}-with-template.zip"));
+        write_archive_matrix_fixture(
+            &archive,
+            schema_version,
+            true,
+            vec![valid_manifest_template("日常巡检")],
+        );
+        let result = read_project_archive(archive.to_string_lossy().into_owned());
+        assert!(
+            result.is_err(),
+            "schema v{schema_version} unexpectedly exposed templates"
+        );
+    }
 }
 
 #[test]
@@ -893,7 +998,7 @@ fn exports_and_reads_schema_v4_capture_templates_without_database_ids() {
     let archive_path = directory.path().join("templates.zip");
     let templates = vec![
         ExportCaptureTemplate {
-            name: " 日常   巡检 ".to_string(),
+            name: "  日常   巡检  ".to_string(),
             work_location: "A 区三层".to_string(),
             work_content: "风管安装检查".to_string(),
             photographer: "张工".to_string(),
@@ -1023,7 +1128,7 @@ fn rejects_template_count_empty_values_and_unicode_scalar_overflow() {
 fn rejects_normalized_duplicate_template_names() {
     let directory = tempdir().unwrap();
     for (case, first, second) in [
-        ("collapsed-whitespace", "  日常 \t 巡检  ", "日常 巡检"),
+        ("collapsed-whitespace", "  日常   巡检  ", "日常 巡检"),
         ("ascii-case", "ABC", "abc"),
         ("mixed-script-ascii-case", "模板A", "模板a"),
     ] {

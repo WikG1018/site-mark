@@ -6,6 +6,8 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../support/capture_template_contract_fixtures.dart';
+
 QueryExecutor openV9AndUpgrade() {
   final db = sqlite3.openInMemory();
   db.execute('''
@@ -534,6 +536,80 @@ void main() {
       expect(normalized, contains('instr(name_key, char(0)) = 0'));
     });
 
+    test('SQLite locks the fixed cross-layer name contract fixtures', () async {
+      final accepted = <String>[];
+      for (final fixture in captureTemplateNameContractCases) {
+        final duplicate = fixture.input == 'abc' || fixture.input == '模板a';
+        final insert = _insertTemplateBySql(
+          database,
+          id: 'fixture-${accepted.length}-${fixture.label}',
+          projectId: 'project-1',
+          name: fixture.normalized,
+          nameKey: fixture.key,
+        );
+        if (duplicate) {
+          await expectLater(insert, throwsA(isA<Exception>()));
+        } else {
+          await insert;
+          accepted.add(fixture.normalized);
+        }
+      }
+      await _insertTemplateBySql(
+        database,
+        id: 'fixture-80-scalars',
+        projectId: 'project-1',
+        name: captureTemplate80Scalars,
+        nameKey: captureTemplate80Scalars,
+      );
+      await expectLater(
+        _insertTemplateBySql(
+          database,
+          id: 'fixture-81-scalars',
+          projectId: 'project-1',
+          name: captureTemplate81Scalars,
+          nameKey: captureTemplate81Scalars,
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      for (final fixture in captureTemplateNulFieldCases) {
+        await expectLater(
+          _insertTemplateBySql(
+            database,
+            id: 'fixture-nul-${fixture.label}',
+            projectId: 'project-1',
+            name: fixture.name,
+            nameKey: fixture.name,
+            workLocation: fixture.workLocation,
+            workContent: fixture.workContent,
+            photographer: fixture.photographer,
+          ),
+          throwsA(isA<Exception>()),
+        );
+      }
+
+      await _insertTemplateBySql(
+        database,
+        id: 'fixture-other-project-abc',
+        projectId: 'project-2',
+        name: 'abc',
+        nameKey: 'abc',
+      );
+      final projectOne = await templateDatabase.captureTemplatesForProject(
+        'project-1',
+      );
+      expect(projectOne.map((template) => template.name).toSet(), {
+        ...accepted,
+        captureTemplate80Scalars,
+      });
+      expect(
+        (await templateDatabase.captureTemplatesForProject(
+          'project-2',
+        )).single.name,
+        'abc',
+      );
+    });
+
     test(
       'restore batch rolls back when a later row exceeds scalar length',
       () async {
@@ -659,6 +735,63 @@ void main() {
         expect(suggestions, ['east zone']);
       },
     );
+
+    test('recent suggestion source status matrix is enum-exhaustive', () async {
+      const expectedEligibility = <CaptureStatus, bool>{
+        CaptureStatus.pendingCamera: false,
+        CaptureStatus.captured: true,
+        CaptureStatus.rendering: true,
+        CaptureStatus.ready: true,
+        CaptureStatus.failed: true,
+      };
+      expect(
+        CaptureStatus.values.toSet(),
+        expectedEligibility.keys.toSet(),
+        reason: 'A new CaptureStatus must receive an explicit suggestion rule',
+      );
+
+      final base = DateTime(2026, 8, 1, 9);
+      for (final (index, status) in CaptureStatus.values.indexed) {
+        await _insertCapture(
+          database,
+          id: 'status-${status.name}',
+          projectId: 'project-1',
+          workLocation: 'location-${status.name}',
+          workContent: 'content-${status.name}',
+          photographer: 'photographer-${status.name}',
+          status: status,
+          createdAt: base.add(Duration(minutes: index)),
+        );
+      }
+      await _insertCapture(
+        database,
+        id: 'status-other-project',
+        projectId: 'project-2',
+        workLocation: 'location-other-project',
+        workContent: 'content-other-project',
+        photographer: 'photographer-other-project',
+        status: CaptureStatus.ready,
+        createdAt: base.add(const Duration(hours: 1)),
+      );
+
+      for (final field in CaptureSuggestionField.values) {
+        final prefix = switch (field) {
+          CaptureSuggestionField.workLocation => 'location',
+          CaptureSuggestionField.workContent => 'content',
+          CaptureSuggestionField.photographer => 'photographer',
+        };
+        final suggestions = await templateDatabase.recentCaptureSuggestions(
+          projectId: 'project-1',
+          field: field,
+        );
+        expect(suggestions.toSet(), {
+          for (final entry in expectedEligibility.entries)
+            if (entry.value) '$prefix-${entry.key.name}',
+        }, reason: field.name);
+        expect(suggestions, isNot(contains('$prefix-pendingCamera')));
+        expect(suggestions, isNot(contains('$prefix-other-project')));
+      }
+    });
 
     test('recent suggestions validate their limit', () async {
       await expectLater(

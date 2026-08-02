@@ -4,6 +4,8 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/workflow/capture_template_service.dart';
 
+import '../support/capture_template_contract_fixtures.dart';
+
 void main() {
   group('CaptureTemplateService', () {
     late AppDatabase database;
@@ -56,6 +58,54 @@ void main() {
         );
       },
     );
+
+    test('uses the fixed cross-layer name and uniqueness fixtures', () async {
+      for (final fixture in captureTemplateNameContractCases) {
+        if (fixture.input == 'abc' || fixture.input == '模板a') {
+          await expectFailure(
+            () => service.create(
+              projectId: 'project-1',
+              name: fixture.input,
+              workLocation: 'A 区',
+              workContent: '检查',
+              photographer: '张工',
+            ),
+            CaptureTemplateFailure.duplicateName,
+          );
+          continue;
+        }
+        final created = await service.create(
+          projectId: 'project-1',
+          name: fixture.input,
+          workLocation: 'A 区',
+          workContent: '检查',
+          photographer: '张工',
+        );
+        expect(created.name, fixture.normalized, reason: fixture.label);
+        expect(created.nameKey, fixture.key, reason: fixture.label);
+      }
+
+      expect(
+        (await service.create(
+          projectId: 'project-1',
+          name: captureTemplate80Scalars,
+          workLocation: 'A 区',
+          workContent: '检查',
+          photographer: '张工',
+        )).name,
+        captureTemplate80Scalars,
+      );
+      await expectFailure(
+        () => service.create(
+          projectId: 'project-2',
+          name: captureTemplate81Scalars,
+          workLocation: 'A 区',
+          workContent: '检查',
+          photographer: '张工',
+        ),
+        CaptureTemplateFailure.nameTooLong,
+      );
+    });
 
     test('validates all editable template fields', () async {
       final tooLongName = 'x' * (captureTemplateNameMaxLength + 1);
@@ -147,46 +197,18 @@ void main() {
     });
 
     test('rejects NUL with a dedicated failure in create and rename', () async {
-      await expectFailure(
-        () => service.create(
-          projectId: 'project-1',
-          name: 'template\u0000name',
-          workLocation: 'A 区',
-          workContent: '检查',
-          photographer: '张工',
-        ),
-        CaptureTemplateFailure.invalidCharacter,
-      );
-      await expectFailure(
-        () => service.create(
-          projectId: 'project-1',
-          name: '模板',
-          workLocation: 'A\u0000区',
-          workContent: '检查',
-          photographer: '张工',
-        ),
-        CaptureTemplateFailure.invalidCharacter,
-      );
-      await expectFailure(
-        () => service.create(
-          projectId: 'project-1',
-          name: '模板',
-          workLocation: 'A 区',
-          workContent: '检\u0000查',
-          photographer: '张工',
-        ),
-        CaptureTemplateFailure.invalidCharacter,
-      );
-      await expectFailure(
-        () => service.create(
-          projectId: 'project-1',
-          name: '模板',
-          workLocation: 'A 区',
-          workContent: '检查',
-          photographer: '张\u0000工',
-        ),
-        CaptureTemplateFailure.invalidCharacter,
-      );
+      for (final fixture in captureTemplateNulFieldCases) {
+        await expectFailure(
+          () => service.create(
+            projectId: 'project-1',
+            name: fixture.name,
+            workLocation: fixture.workLocation,
+            workContent: fixture.workContent,
+            photographer: fixture.photographer,
+          ),
+          CaptureTemplateFailure.invalidCharacter,
+        );
+      }
       final template = await service.create(
         projectId: 'project-1',
         name: '可重命名模板',

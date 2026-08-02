@@ -1,11 +1,24 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 
+import '../support/capture_template_contract_fixtures.dart';
+
 void main() {
   test('normalizes template names and derives stable ASCII-only keys', () {
-    expect(normalizeCaptureTemplateName('  日常   巡检  '), '日常 巡检');
-    expect(captureTemplateNameKey('  AbC  '), 'abc');
-    expect(captureTemplateNameKey('模板A'), '模板a');
+    for (final fixture in captureTemplateNameContractCases) {
+      expect(
+        normalizeCaptureTemplateName(fixture.input),
+        fixture.normalized,
+        reason: fixture.label,
+      );
+      expect(
+        captureTemplateNameKey(fixture.input),
+        fixture.key,
+        reason: fixture.label,
+      );
+    }
+    expect(captureTemplate80Scalars.runes.length, 80);
+    expect(captureTemplate81Scalars.runes.length, 81);
   });
 
   test('locks Dart trim and RegExp whitespace sets used by template names', () {
@@ -47,9 +60,6 @@ void main() {
 
   test('normalizes edge whitespace before collapsing internal RegExp runs', () {
     for (final (input, normalized, key) in [
-      ('\u0085A\u0085B\u0085', 'A\u0085B', 'a\u0085b'),
-      ('\uFEFFA\uFEFFB\uFEFF', 'A B', 'a b'),
-      ('\u200BA\u200BB\u200B', '\u200BA\u200BB\u200B', '\u200Ba\u200Bb\u200B'),
       (' \t\r\n\u000CA \t\r\n\u000CB \t\r\n\u000C', 'A B', 'a b'),
       ('\u00A0A\u1680\u2028\u202F\u205F\u3000B\u00A0', 'A B', 'a b'),
     ]) {

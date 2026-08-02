@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -9,6 +10,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
@@ -25,6 +27,25 @@ import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
+  final lifecycleEnvironments =
+      <({String label, Locale locale, bool disableAnimations})>[
+        (
+          label: 'Chinese',
+          locale: const Locale('zh'),
+          disableAnimations: false,
+        ),
+        (
+          label: 'English',
+          locale: const Locale('en'),
+          disableAnimations: false,
+        ),
+        (
+          label: 'reduced motion',
+          locale: const Locale('zh'),
+          disableAnimations: true,
+        ),
+      ];
+
   Future<void> pumpSuggestions(
     WidgetTester tester, {
     required String projectId,
@@ -487,7 +508,7 @@ void main() {
     expect(find.byKey(const Key('capture-recent-suggestions')), findsOneWidget);
   });
 
-  testWidgets('uses zero duration when animations are disabled', (
+  testWidgets('skips size animation when animations are disabled', (
     tester,
   ) async {
     final controller = TextEditingController();
@@ -523,14 +544,8 @@ void main() {
       ),
     );
 
-    expect(
-      tester
-          .widget<AnimatedSize>(
-            find.byKey(const Key('capture-recent-suggestions')),
-          )
-          .duration,
-      Duration.zero,
-    );
+    expect(find.byKey(const Key('capture-recent-suggestions')), findsOneWidget);
+    expect(find.byType(AnimatedSize), findsNothing);
   });
 
   testWidgets('long suggestions do not overflow at 360dp', (tester) async {
@@ -1510,7 +1525,11 @@ void main() {
       'stale ${outcome.name} leaves the replacement project unchanged',
       (tester) async {
         final rig = await _CaptureFormTestRig.create();
-        addTearDown(rig.dispose);
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+          await rig.dispose();
+        });
         await rig.drafts.save(_draft('project-1', 'Old'));
         await rig.drafts.save(_draft('project-2', 'New'));
         await rig.pump(tester);
@@ -1619,6 +1638,188 @@ void main() {
     expect((await drafts.load('project-2'))?.workLocation, 'New location');
     expect(await drafts.load('project-1'), isNull);
   });
+
+  for (final environment in lifecycleEnvironments) {
+    testWidgets(
+      '${environment.label} restores a real KILL draft before recent-record prefill',
+      (tester) async {
+        final rig = await _CaptureFormTestRig.create();
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+          await rig.dispose();
+          await tester.pump();
+        });
+        rig.locale = environment.locale;
+        rig.disableAnimations = environment.disableAnimations;
+        await rig.seedCapturedRecord(
+          projectId: 'project-1',
+          id: 'draft-priority-history',
+          prefix: 'Older history',
+          notes: 'Older history notes',
+        );
+        await rig.seedCapturedRecord(
+          projectId: 'project-2',
+          id: 'recent-prefill-history',
+          prefix: 'Recent record',
+          notes: 'Must never carry forward',
+        );
+        await rig.pump(tester);
+        await rig.enterCurrentFields(tester, prefix: 'KILL draft');
+
+        await rig.memory.dispatch(MemoryPressureLevel.kill);
+        expect((await rig.drafts.load('project-1'))?.notes, 'KILL draft notes');
+        await rig.recreateForm(tester);
+
+        rig.expectFields(tester, prefix: 'KILL draft');
+        expect(rig.fieldText(tester, const Key('notes')), 'KILL draft notes');
+
+        await rig.switchProject(tester, 'project-2');
+        rig.expectFields(tester, prefix: 'Recent record');
+        expect(rig.fieldText(tester, const Key('notes')), isEmpty);
+      },
+    );
+
+    testWidgets(
+      '${environment.label} suggestions and consecutive templates preserve notes',
+      (tester) async {
+        final rig = await _CaptureFormTestRig.create();
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+          await rig.dispose();
+          await tester.pump();
+        });
+        rig.locale = environment.locale;
+        rig.disableAnimations = environment.disableAnimations;
+        await rig.seedCapturedRecord(
+          projectId: 'project-1',
+          id: 'suggestion-history',
+          prefix: 'Suggested',
+          notes: 'Old captured notes',
+        );
+        final service = CaptureTemplateService(database: rig.database);
+        rig.templateService = service;
+        await service.create(
+          projectId: 'project-1',
+          name: 'Template one',
+          workLocation: 'Template one location',
+          workContent: 'Template one content',
+          photographer: 'Template one photographer',
+        );
+        await service.create(
+          projectId: 'project-1',
+          name: 'Template two',
+          workLocation: 'Template two location',
+          workContent: 'Template two content',
+          photographer: 'Template two photographer',
+        );
+        await rig.drafts.save(_draft('project-1', 'Original'));
+        await rig.pump(tester);
+
+        await tester.tap(find.byKey(const Key('work-location')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const Key('recent-suggestion-workLocation-0')),
+        );
+        await tester.pump();
+        expect(
+          rig.fieldText(tester, const Key('work-location')),
+          'Suggested location',
+        );
+        expect(
+          rig.fieldText(tester, const Key('work-content')),
+          'Original content',
+        );
+        expect(
+          rig.fieldText(tester, const Key('photographer')),
+          'Original photographer',
+        );
+        expect(rig.fieldText(tester, const Key('notes')), 'Original notes');
+
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+        await _applyTemplateFromForm(tester, 'Template one');
+        expect(rig.fieldText(tester, const Key('notes')), 'Original notes');
+        await _applyTemplateFromForm(tester, 'Template two');
+        rig.expectFields(tester, prefix: 'Template two');
+        expect(rig.fieldText(tester, const Key('notes')), 'Original notes');
+      },
+    );
+
+    testWidgets(
+      '${environment.label} template Undo restores only required fields',
+      (tester) async {
+        final rig = await _CaptureFormTestRig.create();
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpAndSettle();
+          await rig.dispose();
+          await tester.pump();
+        });
+        rig.locale = environment.locale;
+        rig.disableAnimations = environment.disableAnimations;
+        final service = CaptureTemplateService(database: rig.database);
+        rig.templateService = service;
+        await service.create(
+          projectId: 'project-1',
+          name: 'Undo template',
+          workLocation: 'Undo template location',
+          workContent: 'Undo template content',
+          photographer: 'Undo template photographer',
+        );
+        await rig.drafts.save(_draft('project-1', 'Before Undo'));
+        await rig.pump(tester);
+
+        await _applyTemplateAndWaitForUndo(tester, 'Undo template');
+        rig.expectFields(tester, prefix: 'Undo template');
+        expect(rig.fieldText(tester, const Key('notes')), 'Before Undo notes');
+
+        await tester.tap(
+          find
+              .widgetWithText(
+                SnackBarAction,
+                AppStrings(environment.locale).undo,
+              )
+              .hitTestable(),
+        );
+        await tester.pumpAndSettle();
+        rig.expectFields(tester, prefix: 'Before Undo');
+        expect(rig.fieldText(tester, const Key('notes')), 'Before Undo notes');
+      },
+    );
+
+    for (final outcome in [
+      CaptureWorkflowOutcome.queued,
+      CaptureWorkflowOutcome.delayed,
+    ]) {
+      testWidgets(
+        '${environment.label} ${outcome.name} consecutive capture clears only notes',
+        (tester) async {
+          final rig = await _CaptureFormTestRig.create();
+          addTearDown(() async {
+            await tester.pumpWidget(const SizedBox.shrink());
+            await tester.pumpAndSettle();
+            await rig.dispose();
+            await tester.pump();
+          });
+          rig.locale = environment.locale;
+          rig.disableAnimations = environment.disableAnimations;
+          await rig.drafts.save(_draft('project-1', 'Consecutive'));
+          await rig.pump(tester);
+
+          await rig.capture(tester);
+          expect(rig.workflow.drafts.single.notes, 'Consecutive notes');
+          rig.workflow.complete(0, outcome);
+          await tester.pumpAndSettle();
+
+          rig.expectFields(tester, prefix: 'Consecutive');
+          expect(rig.fieldText(tester, const Key('notes')), isEmpty);
+          expect(await rig.drafts.load('project-1'), isNull);
+        },
+      );
+    }
+  }
 }
 
 Future<void> _pumpTemplateSheetHost(
@@ -1695,6 +1896,26 @@ Future<void> _applyTemplateFromForm(
   await tester.pumpAndSettle();
   await tester.tap(find.text(templateName));
   await tester.pumpAndSettle();
+}
+
+Future<void> _applyTemplateAndWaitForUndo(
+  WidgetTester tester,
+  String templateName,
+) async {
+  final button = find.byKey(const Key('capture-template-button'));
+  await tester.ensureVisible(button);
+  await tester.tap(button);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(templateName));
+  for (
+    var attempt = 0;
+    attempt < 20 &&
+        find.byType(SnackBarAction).hitTestable().evaluate().isEmpty;
+    attempt++
+  ) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  expect(find.byType(SnackBarAction).hitTestable(), findsOneWidget);
 }
 
 void _expectTemplateActionsDisabled(WidgetTester tester) {
@@ -2173,6 +2394,8 @@ class _CaptureFormTestRig {
   final projectId = ValueNotifier<String>('project-1');
   final showForm = ValueNotifier<bool>(true);
   CaptureTemplateService? templateService;
+  Locale locale = const Locale('en');
+  bool disableAnimations = false;
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -2187,12 +2410,20 @@ class _CaptureFormTestRig {
             captureTemplateServiceProvider.overrideWithValue(templateService!),
         ],
         child: MaterialApp(
-          locale: const Locale('en'),
+          locale: locale,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(disableAnimations: disableAnimations),
+            child: child!,
+          ),
           localizationsDelegates: const [
             AppStrings.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
           ],
+          supportedLocales: AppStrings.supportedLocales,
           home: ValueListenableBuilder<bool>(
             valueListenable: showForm,
             builder: (context, visible, child) {
@@ -2219,6 +2450,37 @@ class _CaptureFormTestRig {
   Future<void> switchProject(WidgetTester tester, String value) async {
     projectId.value = value;
     await tester.pumpAndSettle();
+  }
+
+  Future<void> recreateForm(WidgetTester tester) async {
+    showForm.value = false;
+    await tester.pumpAndSettle();
+    showForm.value = true;
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> seedCapturedRecord({
+    required String projectId,
+    required String id,
+    required String prefix,
+    required String notes,
+  }) async {
+    await database
+        .into(database.captureRecords)
+        .insert(
+          CaptureRecordsCompanion.insert(
+            id: id,
+            projectId: projectId,
+            workLocation: '$prefix location',
+            workContent: '$prefix content',
+            photographer: '$prefix photographer',
+            notes: Value(notes),
+            originalPath: '/private/$id.jpg',
+            status: CaptureStatus.ready,
+            createdAt: DateTime(2026, 8, 1, 9),
+            capturedAt: Value(DateTime(2026, 8, 1, 9, 1)),
+          ),
+        );
   }
 
   Future<void> enterCurrentFields(
@@ -2254,6 +2516,15 @@ class _CaptureFormTestRig {
 
   String fieldText(WidgetTester tester, Key key) {
     return tester.widget<TextFormField>(find.byKey(key)).controller!.text;
+  }
+
+  void expectFields(WidgetTester tester, {required String prefix}) {
+    expect(fieldText(tester, const Key('work-location')), '$prefix location');
+    expect(fieldText(tester, const Key('work-content')), '$prefix content');
+    expect(
+      fieldText(tester, const Key('photographer')),
+      '$prefix photographer',
+    );
   }
 
   Future<void> dispose() async {
