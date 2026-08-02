@@ -794,6 +794,121 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets(
+    'real service persists normalized create and keeps duplicate rename input',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await database.close();
+      });
+      await database.createProject(id: 'project-1', name: 'Project');
+      var nextId = 0;
+      final service = CaptureTemplateService(
+        database: database,
+        idGenerator: () => 'real-template-${nextId++}',
+      );
+      await service.create(
+        projectId: 'project-1',
+        name: 'Existing',
+        workLocation: 'Existing location',
+        workContent: 'Existing content',
+        photographer: 'Existing photographer',
+      );
+      await _pumpTemplateSheetHost(tester, service: service);
+      await _openTemplateSheet(tester);
+
+      await tester.tap(find.byKey(const Key('capture-template-create')));
+      await tester.pump(AppMotion.short4);
+      await tester.enterText(
+        find.byKey(const Key('capture-template-name')),
+        '  New   template  ',
+      );
+      await tester.enterText(
+        find.byKey(const Key('capture-template-work-location')),
+        '  New location  ',
+      );
+      await tester.enterText(
+        find.byKey(const Key('capture-template-work-content')),
+        '  New content  ',
+      );
+      await tester.enterText(
+        find.byKey(const Key('capture-template-photographer')),
+        '  New photographer  ',
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(
+        find.byKey(const Key('capture-template-save')).hitTestable(),
+      );
+      await _pumpUntilFound(tester, find.text('New template'));
+
+      final created = (await database.captureTemplatesForProject(
+        'project-1',
+      )).singleWhere((value) => value.id == 'real-template-1');
+      expect(created.name, 'New template');
+      expect(created.workLocation, 'New location');
+      expect(created.workContent, 'New content');
+      expect(created.photographer, 'New photographer');
+
+      await tester.tap(find.byKey(const Key('capture-template-create')));
+      await tester.pump(AppMotion.short4);
+      await tester.enterText(
+        find.byKey(const Key('capture-template-name')),
+        '  NEW   TEMPLATE ',
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(
+        find.byKey(const Key('capture-template-save')).hitTestable(),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.text('A template with this name already exists'),
+      );
+      expect(find.byKey(const Key('capture-template-sheet')), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('capture-template-name')))
+            .controller!
+            .text,
+        '  NEW   TEMPLATE ',
+      );
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pump(AppMotion.short4);
+      await tester.tap(
+        find.byKey(const Key('capture-template-rename-real-template-1')),
+      );
+      await tester.pump(AppMotion.short4);
+      await tester.enterText(
+        find.byKey(const Key('capture-template-rename-name')),
+        '  EXISTING  ',
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.tap(
+        find.byKey(const Key('capture-template-rename-save')).hitTestable(),
+      );
+      await _pumpUntilFound(
+        tester,
+        find.text('A template with this name already exists'),
+      );
+      expect(find.byKey(const Key('capture-template-sheet')), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const Key('capture-template-rename-name')),
+            )
+            .controller!
+            .text,
+        '  EXISTING  ',
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+    },
+  );
+
   testWidgets('delete explains scope and a failed write keeps sheet open', (
     tester,
   ) async {
@@ -819,6 +934,133 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byKey(const Key('capture-template-sheet')), findsOneWidget);
     expect(find.text('Could not delete template. Try again.'), findsOneWidget);
+  });
+
+  testWidgets('pending create disables every template action and system back', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    final service = _PendingTemplateService(database);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await service.close();
+      await database.close();
+    });
+    await _pumpTemplateSheetHost(tester, service: service);
+    await _openTemplateSheet(tester);
+    await tester.tap(find.byKey(const Key('capture-template-create')));
+    await tester.pump(AppMotion.short4);
+    await tester.enterText(
+      find.byKey(const Key('capture-template-name')),
+      'Pending create',
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(
+      find.byKey(const Key('capture-template-save')).hitTestable(),
+    );
+    await tester.pump();
+
+    expect(service.createCount, 1);
+    _expectTemplateActionsDisabled(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byKey(const Key('capture-template-sheet')), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('capture-template-save')),
+      warnIfMissed: false,
+    );
+    expect(service.createCount, 1);
+
+    service.completeCreate();
+    await tester.pumpAndSettle();
+    _expectTemplateActionsEnabled(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+  });
+
+  testWidgets('pending rename disables every template action and system back', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    final service = _PendingTemplateService(database);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await service.close();
+      await database.close();
+    });
+    await _pumpTemplateSheetHost(tester, service: service);
+    await _openTemplateSheet(tester);
+    await tester.tap(
+      find.byKey(const Key('capture-template-rename-template-1')),
+    );
+    await tester.pump(AppMotion.short4);
+    await tester.enterText(
+      find.byKey(const Key('capture-template-rename-name')),
+      'Pending rename',
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(
+      find.byKey(const Key('capture-template-rename-save')).hitTestable(),
+    );
+    await tester.pump();
+
+    expect(service.renameCount, 1);
+    _expectTemplateActionsDisabled(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byKey(const Key('capture-template-sheet')), findsOneWidget);
+    await tester.tap(
+      find.byKey(const Key('capture-template-rename-save')),
+      warnIfMissed: false,
+    );
+    expect(service.renameCount, 1);
+
+    service.completeRename();
+    await tester.pumpAndSettle();
+    _expectTemplateActionsEnabled(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('pending delete disables every template action and system back', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    final service = _PendingTemplateService(database);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await service.close();
+      await database.close();
+    });
+    await _pumpTemplateSheetHost(tester, service: service);
+    await _openTemplateSheet(tester);
+    await tester.tap(
+      find.byKey(const Key('capture-template-delete-template-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('capture-template-delete-confirm')));
+    await tester.pump();
+
+    expect(service.deleteCount, 1);
+    _expectTemplateActionsDisabled(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.byKey(const Key('capture-template-sheet')), findsOneWidget);
+    expect(service.deleteCount, 1);
+
+    service.completeDelete();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextButton>(find.byKey(const Key('capture-template-create')))
+          .onPressed,
+      isNotNull,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
   });
 
   testWidgets(
@@ -910,6 +1152,52 @@ void main() {
     },
   );
 
+  testWidgets(
+    'cancelling a reopened template sheet keeps the prior undo valid',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await rig.dispose();
+      });
+      final service = _CrudTemplateService(rig.database);
+      addTearDown(service.close);
+      rig.templateService = service;
+      await service.create(
+        projectId: 'project-1',
+        name: 'Applied template',
+        workLocation: 'Applied location',
+        workContent: 'Applied content',
+        photographer: 'Applied photographer',
+      );
+      await rig.drafts.save(_draft('project-1', 'Original'));
+      await rig.pump(tester);
+
+      await _applyTemplateFromForm(tester, 'Applied template');
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Undo'), findsOneWidget);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pump();
+      expect(
+        rig.fieldText(tester, const Key('work-location')),
+        'Original location',
+      );
+      expect(
+        rig.fieldText(tester, const Key('work-content')),
+        'Original content',
+      );
+      expect(
+        rig.fieldText(tester, const Key('photographer')),
+        'Original photographer',
+      );
+      expect(rig.fieldText(tester, const Key('notes')), 'Original notes');
+    },
+  );
+
   testWidgets('template result and undo cannot mutate a replacement project', (
     tester,
   ) async {
@@ -934,7 +1222,7 @@ void main() {
     expect(rig.fieldText(tester, const Key('notes')), 'New notes');
   });
 
-  testWidgets('an open old-project sheet cannot apply into a new project', (
+  testWidgets('closing an old-project sheet cannot mutate the new project', (
     tester,
   ) async {
     final rig = await _CaptureFormTestRig.create();
@@ -955,9 +1243,8 @@ void main() {
     await tester.pumpAndSettle();
     rig.projectId.value = 'project-2';
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Old project template'));
-    await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
     expect(rig.fieldText(tester, const Key('work-location')), 'New location');
     expect(rig.fieldText(tester, const Key('work-content')), 'New content');
     expect(
@@ -967,6 +1254,49 @@ void main() {
     expect(rig.fieldText(tester, const Key('notes')), 'New notes');
     expect(find.text('Template applied'), findsNothing);
   });
+
+  testWidgets(
+    'project replacement closes its old sheet and can open the new project sheet',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      final service = _CrudTemplateService(rig.database);
+      rig.templateService = service;
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await service.close();
+        await rig.dispose();
+      });
+      await service.create(
+        projectId: 'project-1',
+        name: 'Project one template',
+        workLocation: 'One location',
+        workContent: 'One content',
+        photographer: 'One photographer',
+      );
+      await service.create(
+        projectId: 'project-2',
+        name: 'Project two template',
+        workLocation: 'Two location',
+        workContent: 'Two content',
+        photographer: 'Two photographer',
+      );
+      await rig.pump(tester);
+
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Project one template'), findsOneWidget);
+
+      rig.projectId.value = 'project-2';
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+      expect(find.byType(CaptureFormScreen), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Project two template'), findsOneWidget);
+      expect(find.text('Project one template'), findsNothing);
+    },
+  );
 
   for (final outcome in [
     CaptureWorkflowOutcome.queued,
@@ -1238,6 +1568,13 @@ Future<void> _openTemplateSheet(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _pumpUntilFound(WidgetTester tester, Finder finder) async {
+  for (var attempt = 0; attempt < 20 && finder.evaluate().isEmpty; attempt++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  expect(finder, findsOneWidget);
+}
+
 Future<void> _applyTemplateFromForm(
   WidgetTester tester,
   String templateName,
@@ -1248,6 +1585,68 @@ Future<void> _applyTemplateFromForm(
   await tester.pumpAndSettle();
   await tester.tap(find.text(templateName));
   await tester.pumpAndSettle();
+}
+
+void _expectTemplateActionsDisabled(WidgetTester tester) {
+  expect(
+    tester
+        .widget<TextButton>(find.byKey(const Key('capture-template-create')))
+        .onPressed,
+    isNull,
+  );
+  expect(
+    tester
+        .widget<ListTile>(find.byKey(const Key('capture-template-template-1')))
+        .onTap,
+    isNull,
+  );
+  expect(
+    tester
+        .widget<IconButton>(
+          find.byKey(const Key('capture-template-rename-template-1')),
+        )
+        .onPressed,
+    isNull,
+  );
+  expect(
+    tester
+        .widget<IconButton>(
+          find.byKey(const Key('capture-template-delete-template-1')),
+        )
+        .onPressed,
+    isNull,
+  );
+}
+
+void _expectTemplateActionsEnabled(WidgetTester tester) {
+  expect(
+    tester
+        .widget<TextButton>(find.byKey(const Key('capture-template-create')))
+        .onPressed,
+    isNotNull,
+  );
+  expect(
+    tester
+        .widget<ListTile>(find.byKey(const Key('capture-template-template-1')))
+        .onTap,
+    isNotNull,
+  );
+  expect(
+    tester
+        .widget<IconButton>(
+          find.byKey(const Key('capture-template-rename-template-1')),
+        )
+        .onPressed,
+    isNotNull,
+  );
+  expect(
+    tester
+        .widget<IconButton>(
+          find.byKey(const Key('capture-template-delete-template-1')),
+        )
+        .onPressed,
+    isNotNull,
+  );
 }
 
 CaptureTemplate _template({
@@ -1387,8 +1786,13 @@ class _CrudTemplateService extends CaptureTemplateService {
 
   @override
   Stream<List<CaptureTemplate>> watch(String projectId) async* {
-    yield templates;
-    yield* _updates.stream;
+    List<CaptureTemplate> forProject(List<CaptureTemplate> values) => values
+        .where((value) => value.projectId == projectId)
+        .toList(growable: false);
+    yield forProject(templates);
+    await for (final update in _updates.stream) {
+      yield forProject(update);
+    }
   }
 
   @override
@@ -1425,6 +1829,118 @@ class _CrudTemplateService extends CaptureTemplateService {
     );
     _updates.add([...templates]);
   }
+
+  Future<void> close() => _updates.close();
+}
+
+class _PendingTemplateService extends CaptureTemplateService {
+  _PendingTemplateService(AppDatabase database) : super(database: database);
+
+  final _updates = StreamController<List<CaptureTemplate>>.broadcast();
+  final _createResult = Completer<void>();
+  final _renameResult = Completer<void>();
+  final _deleteResult = Completer<void>();
+  List<CaptureTemplate> _templates = [
+    _template(id: 'template-1', name: 'Template one'),
+  ];
+  var createCount = 0;
+  var renameCount = 0;
+  var deleteCount = 0;
+
+  String? _createProjectId;
+  String? _createName;
+  String? _createWorkLocation;
+  String? _createWorkContent;
+  String? _createPhotographer;
+  String? _renameTemplateId;
+  String? _renameName;
+
+  @override
+  Stream<List<CaptureTemplate>> watch(String projectId) async* {
+    yield _templates;
+    yield* _updates.stream;
+  }
+
+  @override
+  Future<CaptureTemplate> create({
+    required String projectId,
+    required String name,
+    required String workLocation,
+    required String workContent,
+    required String photographer,
+  }) async {
+    createCount++;
+    _createProjectId = projectId;
+    _createName = name;
+    _createWorkLocation = workLocation;
+    _createWorkContent = workContent;
+    _createPhotographer = photographer;
+    await _createResult.future;
+    final created = CaptureTemplate(
+      id: 'template-2',
+      projectId: _createProjectId!,
+      name: _createName!,
+      nameKey: _createName!.toLowerCase(),
+      workLocation: _createWorkLocation!,
+      workContent: _createWorkContent!,
+      photographer: _createPhotographer!,
+      createdAt: DateTime(2026, 8, 1, 1),
+      updatedAt: DateTime(2026, 8, 1, 1),
+    );
+    _templates = [created, ..._templates];
+    _updates.add(_templates);
+    return created;
+  }
+
+  @override
+  Future<CaptureTemplate> rename({
+    required String projectId,
+    required String templateId,
+    required String name,
+  }) async {
+    renameCount++;
+    _renameTemplateId = templateId;
+    _renameName = name;
+    await _renameResult.future;
+    final current = _templates.singleWhere(
+      (value) => value.id == _renameTemplateId,
+    );
+    final renamed = CaptureTemplate(
+      id: current.id,
+      projectId: current.projectId,
+      name: _renameName!,
+      nameKey: _renameName!.toLowerCase(),
+      workLocation: current.workLocation,
+      workContent: current.workContent,
+      photographer: current.photographer,
+      createdAt: current.createdAt,
+      updatedAt: DateTime(2026, 8, 1, 1),
+    );
+    _templates = [renamed];
+    _updates.add(_templates);
+    return renamed;
+  }
+
+  @override
+  Future<void> delete({
+    required String projectId,
+    required String templateId,
+  }) async {
+    deleteCount++;
+    await _deleteResult.future;
+    _templates = [
+      ..._templates.where(
+        (value) => value.projectId != projectId || value.id != templateId,
+      ),
+    ];
+    _updates.add(_templates);
+  }
+
+  void completeCreate() => _createResult.complete();
+
+  void completeRename() => _renameResult.complete();
+
+  void completeDelete() => _deleteResult.complete();
 
   Future<void> close() => _updates.close();
 }
@@ -1545,6 +2061,7 @@ class _CaptureFormTestRig {
   final drafts = MemoryCaptureFormDraftStore();
   final memory = MemoryPressureController();
   final projectId = ValueNotifier<String>('project-1');
+  CaptureTemplateService? templateService;
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -1555,6 +2072,8 @@ class _CaptureFormTestRig {
           memoryPressureControllerProvider.overrideWithValue(memory),
           platformServicesProvider.overrideWithValue(platform),
           captureWorkflowProvider.overrideWithValue(workflow),
+          if (templateService != null)
+            captureTemplateServiceProvider.overrideWithValue(templateService!),
         ],
         child: MaterialApp(
           locale: const Locale('en'),

@@ -49,6 +49,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   var _captureOperation = 0;
   var _templateOperation = 0;
   var _templateSheetOpen = false;
+  CaptureTemplateSheetController? _templateSheetController;
 
   /// Cached location-permission view state. Loaded once during initialization
   /// and refreshed whenever the app returns to the foreground so the
@@ -145,6 +146,10 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     _initGeneration++;
     _captureOperation++;
     _templateOperation++;
+    final oldTemplateSheet = _templateSheetController;
+    _templateSheetController = null;
+    _templateSheetOpen = false;
+    oldTemplateSheet?.dismiss();
     ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     _locationController.clear();
     _contentController.clear();
@@ -218,8 +223,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     if (_templateSheetOpen) return;
     final projectId = widget.projectId;
     final generation = _initGeneration;
-    final operation = ++_templateOperation;
     final previous = _requiredFieldsSnapshot();
+    final sheetController = CaptureTemplateSheetController();
+    _templateSheetController = sheetController;
     _templateSheetOpen = true;
     CaptureRequiredFieldsSnapshot? selected;
     try {
@@ -228,17 +234,21 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         projectId: projectId,
         current: previous,
         service: ref.read(captureTemplateServiceProvider),
+        controller: sheetController,
       );
     } finally {
-      _templateSheetOpen = false;
+      if (identical(_templateSheetController, sheetController)) {
+        _templateSheetController = null;
+        _templateSheetOpen = false;
+      }
     }
     if (!mounted ||
         selected == null ||
         widget.projectId != projectId ||
-        _initGeneration != generation ||
-        _templateOperation != operation) {
+        _initGeneration != generation) {
       return;
     }
+    final operation = ++_templateOperation;
     _applyRequiredFields(selected);
     final strings = AppStrings.of(context);
     ScaffoldMessenger.of(context)
@@ -264,6 +274,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
 
   @override
   void dispose() {
+    _templateSheetController?.dismiss();
+    _templateSheetController = null;
     _killHookDetach?.call();
     WidgetsBinding.instance.removeObserver(this);
     _locationController.dispose();

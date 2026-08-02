@@ -28,23 +28,51 @@ class CaptureRequiredFieldsSnapshot {
   int get hashCode => Object.hash(workLocation, workContent, photographer);
 }
 
+class CaptureTemplateSheetController {
+  Route<Object?>? _route;
+
+  void _attach(Route<Object?> route) => _route = route;
+
+  void _detach() => _route = null;
+
+  void dismiss() {
+    final route = _route;
+    final navigator = route?.navigator;
+    if (route == null ||
+        navigator == null ||
+        !navigator.mounted ||
+        !route.isActive) {
+      return;
+    }
+    _route = null;
+    navigator.removeRoute(route);
+  }
+}
+
 Future<CaptureRequiredFieldsSnapshot?> showCaptureTemplateSheet({
   required BuildContext context,
   required String projectId,
   required CaptureRequiredFieldsSnapshot current,
   required CaptureTemplateService service,
+  CaptureTemplateSheetController? controller,
 }) {
-  return showModalBottomSheet<CaptureRequiredFieldsSnapshot>(
+  final future = showModalBottomSheet<CaptureRequiredFieldsSnapshot>(
     context: context,
     useSafeArea: true,
     isScrollControlled: true,
-    showDragHandle: true,
-    builder: (context) => _CaptureTemplateSheet(
-      projectId: projectId,
-      current: current,
-      service: service,
-    ),
+    isDismissible: false,
+    enableDrag: false,
+    builder: (context) {
+      final route = ModalRoute.of(context);
+      if (route != null) controller?._attach(route);
+      return _CaptureTemplateSheet(
+        projectId: projectId,
+        current: current,
+        service: service,
+      );
+    },
   );
+  return future.whenComplete(() => controller?._detach());
 }
 
 class _CaptureTemplateSheet extends StatefulWidget {
@@ -96,6 +124,7 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
   }
 
   void _openCreate() {
+    if (_writing) return;
     setState(() {
       _editorMode = _TemplateEditorMode.create;
       _renaming = null;
@@ -108,6 +137,7 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
   }
 
   void _openRename(CaptureTemplate template) {
+    if (_writing) return;
     setState(() {
       _editorMode = _TemplateEditorMode.rename;
       _renaming = template;
@@ -171,6 +201,7 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
   }
 
   Future<void> _confirmDelete(CaptureTemplate template) async {
+    if (_writing) return;
     final strings = AppStrings.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -191,7 +222,10 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _error = null);
+    setState(() {
+      _writing = true;
+      _error = null;
+    });
     try {
       await widget.service.delete(
         projectId: widget.projectId,
@@ -203,6 +237,8 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = strings.captureTemplateDeleteFailed);
+    } finally {
+      if (mounted) setState(() => _writing = false);
     }
   }
 
@@ -234,6 +270,7 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
   }
 
   void _apply(CaptureTemplate template) {
+    if (_writing) return;
     Navigator.of(context).pop(
       CaptureRequiredFieldsSnapshot(
         workLocation: template.workLocation,
@@ -248,90 +285,94 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
     final strings = AppStrings.of(context);
     final duration = AppMotion.durationOf(context, AppMotion.short4);
     final viewInsets = MediaQuery.viewInsetsOf(context);
-    return AnimatedPadding(
-      key: const Key('capture-template-keyboard-padding'),
-      duration: duration,
-      curve: AppMotion.standard,
-      padding: EdgeInsets.only(bottom: viewInsets.bottom),
-      child: FractionallySizedBox(
-        heightFactor: 0.9,
-        child: Material(
-          key: const Key('capture-template-sheet'),
-          color: Theme.of(context).colorScheme.surface,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        strings.captureTemplates,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ),
-                    TextButton.icon(
-                      key: const Key('capture-template-create'),
-                      onPressed: _writing ? null : _openCreate,
-                      icon: const Icon(Icons.add),
-                      label: Text(strings.captureTemplateCreate),
-                    ),
-                  ],
-                ),
-              ),
-              AnimatedSize(
-                key: const Key('capture-template-editor-size'),
-                duration: duration,
-                curve: AppMotion.standard,
-                alignment: Alignment.topCenter,
-                child: _editorMode == null
-                    ? const SizedBox.shrink()
-                    : _TemplateEditor(
-                        mode: _editorMode!,
-                        nameController: _nameController,
-                        locationController: _locationController,
-                        contentController: _contentController,
-                        photographerController: _photographerController,
-                        error: _error,
-                        writing: _writing,
-                        onCancel: _closeEditor,
-                        onSave: _save,
-                      ),
-              ),
-              if (_editorMode == null && _error != null)
+    return PopScope(
+      canPop: !_writing,
+      child: AnimatedPadding(
+        key: const Key('capture-template-keyboard-padding'),
+        duration: duration,
+        curve: AppMotion.standard,
+        padding: EdgeInsets.only(bottom: viewInsets.bottom),
+        child: FractionallySizedBox(
+          heightFactor: 0.9,
+          child: Material(
+            key: const Key('capture-template-sheet'),
+            color: Theme.of(context).colorScheme.surface,
+            child: Column(
+              children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                  child: Text(
-                    _error!,
-                    key: const Key('capture-template-write-error'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          strings.captureTemplates,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      TextButton.icon(
+                        key: const Key('capture-template-create'),
+                        onPressed: _writing ? null : _openCreate,
+                        icon: const Icon(Icons.add),
+                        label: Text(strings.captureTemplateCreate),
+                      ),
+                    ],
                   ),
                 ),
-              Expanded(
-                child: StreamBuilder<List<CaptureTemplate>>(
-                  stream: _templates,
-                  builder: (context, snapshot) {
-                    final child = snapshot.hasError
-                        ? _TemplateLoadError(onRetry: () => setState(_reload))
-                        : snapshot.hasData
-                        ? _TemplateList(
-                            templates: snapshot.data!,
-                            onApply: _apply,
-                            onRename: _openRename,
-                            onDelete: _confirmDelete,
-                          )
-                        : const Center(child: CircularProgressIndicator());
-                    return AnimatedSwitcher(
-                      key: const Key('capture-template-switcher'),
-                      duration: duration,
-                      child: child,
-                    );
-                  },
+                AnimatedSize(
+                  key: const Key('capture-template-editor-size'),
+                  duration: duration,
+                  curve: AppMotion.standard,
+                  alignment: Alignment.topCenter,
+                  child: _editorMode == null
+                      ? const SizedBox.shrink()
+                      : _TemplateEditor(
+                          mode: _editorMode!,
+                          nameController: _nameController,
+                          locationController: _locationController,
+                          contentController: _contentController,
+                          photographerController: _photographerController,
+                          error: _error,
+                          writing: _writing,
+                          onCancel: _closeEditor,
+                          onSave: _save,
+                        ),
                 ),
-              ),
-            ],
+                if (_editorMode == null && _error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                    child: Text(
+                      _error!,
+                      key: const Key('capture-template-write-error'),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: StreamBuilder<List<CaptureTemplate>>(
+                    stream: _templates,
+                    builder: (context, snapshot) {
+                      final child = snapshot.hasError
+                          ? _TemplateLoadError(onRetry: () => setState(_reload))
+                          : snapshot.hasData
+                          ? _TemplateList(
+                              templates: snapshot.data!,
+                              enabled: !_writing,
+                              onApply: _apply,
+                              onRename: _openRename,
+                              onDelete: _confirmDelete,
+                            )
+                          : const Center(child: CircularProgressIndicator());
+                      return AnimatedSwitcher(
+                        key: const Key('capture-template-switcher'),
+                        duration: duration,
+                        child: child,
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -440,12 +481,14 @@ class _TemplateEditor extends StatelessWidget {
 class _TemplateList extends StatelessWidget {
   const _TemplateList({
     required this.templates,
+    required this.enabled,
     required this.onApply,
     required this.onRename,
     required this.onDelete,
   });
 
   final List<CaptureTemplate> templates;
+  final bool enabled;
   final ValueChanged<CaptureTemplate> onApply;
   final ValueChanged<CaptureTemplate> onRename;
   final ValueChanged<CaptureTemplate> onDelete;
@@ -472,7 +515,8 @@ class _TemplateList extends StatelessWidget {
         final template = ordered[index];
         return ListTile(
           key: Key('capture-template-${template.id}'),
-          onTap: () => onApply(template),
+          enabled: enabled,
+          onTap: enabled ? () => onApply(template) : null,
           title: Text(template.name),
           subtitle: Text(
             '${template.workLocation} · ${template.workContent} · '
@@ -486,13 +530,13 @@ class _TemplateList extends StatelessWidget {
               IconButton(
                 key: Key('capture-template-rename-${template.id}'),
                 tooltip: strings.captureTemplateRename,
-                onPressed: () => onRename(template),
+                onPressed: enabled ? () => onRename(template) : null,
                 icon: const Icon(Icons.edit_outlined),
               ),
               IconButton(
                 key: Key('capture-template-delete-${template.id}'),
                 tooltip: strings.deleteAction,
-                onPressed: () => onDelete(template),
+                onPressed: enabled ? () => onDelete(template) : null,
                 icon: const Icon(Icons.delete_outline),
               ),
             ],
