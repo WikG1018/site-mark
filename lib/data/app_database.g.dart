@@ -2867,7 +2867,7 @@ class $CaptureTemplatesTable extends CaptureTemplates
     false,
     additionalChecks: GeneratedColumn.checkTextLength(
       minTextLength: 1,
-      maxTextLength: 80,
+      maxTextLength: 160,
     ),
     type: DriftSqlType.string,
     requiredDuringInsert: true,
@@ -2882,7 +2882,7 @@ class $CaptureTemplatesTable extends CaptureTemplates
     false,
     additionalChecks: GeneratedColumn.checkTextLength(
       minTextLength: 1,
-      maxTextLength: 80,
+      maxTextLength: 160,
     ),
     type: DriftSqlType.string,
     requiredDuringInsert: true,
@@ -2897,7 +2897,7 @@ class $CaptureTemplatesTable extends CaptureTemplates
     false,
     additionalChecks: GeneratedColumn.checkTextLength(
       minTextLength: 1,
-      maxTextLength: 160,
+      maxTextLength: 320,
     ),
     type: DriftSqlType.string,
     requiredDuringInsert: true,
@@ -2912,7 +2912,7 @@ class $CaptureTemplatesTable extends CaptureTemplates
     false,
     additionalChecks: GeneratedColumn.checkTextLength(
       minTextLength: 1,
-      maxTextLength: 240,
+      maxTextLength: 480,
     ),
     type: DriftSqlType.string,
     requiredDuringInsert: true,
@@ -2927,7 +2927,7 @@ class $CaptureTemplatesTable extends CaptureTemplates
     false,
     additionalChecks: GeneratedColumn.checkTextLength(
       minTextLength: 1,
-      maxTextLength: 80,
+      maxTextLength: 160,
     ),
     type: DriftSqlType.string,
     requiredDuringInsert: true,

@@ -114,11 +114,13 @@ class CaptureTemplates extends Table {
   TextColumn get id => text()();
   TextColumn get projectId =>
       text().references(Projects, #id, onDelete: KeyAction.cascade)();
-  TextColumn get name => text().withLength(min: 1, max: 80)();
-  TextColumn get nameKey => text().withLength(min: 1, max: 80)();
-  TextColumn get workLocation => text().withLength(min: 1, max: 160)();
-  TextColumn get workContent => text().withLength(min: 1, max: 240)();
-  TextColumn get photographer => text().withLength(min: 1, max: 80)();
+  // Drift validates UTF-16 code units, while service rules use Unicode scalar
+  // values to match Rust `chars().count()`. A scalar may need two code units.
+  TextColumn get name => text().withLength(min: 1, max: 160)();
+  TextColumn get nameKey => text().withLength(min: 1, max: 160)();
+  TextColumn get workLocation => text().withLength(min: 1, max: 320)();
+  TextColumn get workContent => text().withLength(min: 1, max: 480)();
+  TextColumn get photographer => text().withLength(min: 1, max: 160)();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 

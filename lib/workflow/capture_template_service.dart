@@ -179,15 +179,16 @@ class CaptureTemplateService {
   }) {
     final normalized = value.trim();
     if (normalized.isEmpty) throw CaptureTemplateException(empty);
-    if (normalized.length > maximumLength) {
+    if (normalized.runes.length > maximumLength) {
       throw CaptureTemplateException(tooLong);
     }
     return normalized;
   }
 
   bool _isTemplateNameUniquenessViolation(Object error) {
-    final message = error.toString();
-    return message.contains('UNIQUE constraint failed') &&
-        message.contains('capture_templates');
+    return error.toString().contains(
+      'UNIQUE constraint failed: '
+      'capture_templates.project_id, capture_templates.name_key',
+    );
   }
 }

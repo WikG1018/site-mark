@@ -346,6 +346,43 @@ void main() {
     );
 
     test(
+      'restored template batch rolls back every row on a later conflict',
+      () async {
+        await database.createProject(
+          id: 'restoring-project',
+          name: '恢复中的项目',
+          restoreOperationId: 'operation-1',
+        );
+        final first = _templateCompanion(
+          id: 'restored-first',
+          projectId: 'restoring-project',
+          name: '模板一',
+          nameKey: 'same-key',
+        );
+        final conflictingSecond = _templateCompanion(
+          id: 'restored-second',
+          projectId: 'restoring-project',
+          name: '模板二',
+          nameKey: 'same-key',
+        );
+
+        await expectLater(
+          templateDatabase.insertRestoredCaptureTemplates(
+            projectId: 'restoring-project',
+            restoreOperationId: 'operation-1',
+            templates: [first, conflictingSecond],
+          ),
+          throwsA(isA<Exception>()),
+        );
+
+        expect(
+          await templateDatabase.countCaptureTemplates('restoring-project'),
+          0,
+        );
+      },
+    );
+
+    test(
       'recent suggestions use the latest visible text for each value',
       () async {
         final base = DateTime(2026, 8, 1, 9);
@@ -527,6 +564,33 @@ void main() {
         expect(locations, everyElement(isNotEmpty));
         expect(content, ['内容 B', '内容 A']);
         expect(photographers, ['工程師', '工程师']);
+      },
+    );
+
+    test(
+      'recent suggestions may return fewer than 20 after 200-row collapse',
+      () async {
+        final timestamp = DateTime(2026, 8, 1, 9);
+        for (var index = 0; index < 200; index++) {
+          await _insertCapture(
+            database,
+            id: 'collapse-$index',
+            projectId: 'project-1',
+            workLocation: index.isEven ? '  Same Value  ' : 'same value',
+            workContent: '内容$index',
+            photographer: '张工',
+            status: CaptureStatus.ready,
+            createdAt: timestamp.add(Duration(minutes: index)),
+          );
+        }
+
+        final suggestions = await templateDatabase.recentCaptureSuggestions(
+          projectId: 'project-1',
+          field: CaptureSuggestionField.workLocation,
+        );
+
+        expect(suggestions, ['same value']);
+        expect(suggestions.length, lessThan(20));
       },
     );
   });
