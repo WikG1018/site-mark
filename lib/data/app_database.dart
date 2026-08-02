@@ -3,6 +3,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:sitemark/data/conditional_polling_stream.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/photo_number.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
@@ -511,6 +512,151 @@ class AppDatabase extends _$AppDatabase {
           ..where((row) => row.projectId.equals(projectId))
           ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
         .get();
+  }
+
+  Stream<List<CaptureTemplate>> watchCaptureTemplates(String projectId) {
+    return (select(captureTemplates)
+          ..where((row) => row.projectId.equals(projectId))
+          ..orderBy([
+            (row) => OrderingTerm.desc(row.updatedAt),
+            (row) => OrderingTerm.asc(row.name),
+          ]))
+        .watch();
+  }
+
+  Future<List<CaptureTemplate>> captureTemplatesForProject(String projectId) {
+    return (select(captureTemplates)
+          ..where((row) => row.projectId.equals(projectId))
+          ..orderBy([
+            (row) => OrderingTerm.desc(row.updatedAt),
+            (row) => OrderingTerm.asc(row.name),
+          ]))
+        .get();
+  }
+
+  Future<int> countCaptureTemplates(String projectId) async {
+    final count = captureTemplates.id.count();
+    final row =
+        await (selectOnly(captureTemplates)
+              ..addColumns([count])
+              ..where(captureTemplates.projectId.equals(projectId)))
+            .getSingle();
+    return row.read(count) ?? 0;
+  }
+
+  Future<CaptureTemplate> insertCaptureTemplate(CaptureTemplatesCompanion row) {
+    return transaction(() => into(captureTemplates).insertReturning(row));
+  }
+
+  Future<CaptureTemplate> renameCaptureTemplate({
+    required String id,
+    required String projectId,
+    required String name,
+    required String nameKey,
+    required DateTime updatedAt,
+  }) {
+    return transaction(() async {
+      final updated =
+          await (update(captureTemplates)..where(
+                (row) => row.id.equals(id) & row.projectId.equals(projectId),
+              ))
+              .write(
+                CaptureTemplatesCompanion(
+                  name: Value(name),
+                  nameKey: Value(nameKey),
+                  updatedAt: Value(updatedAt),
+                ),
+              );
+      if (updated != 1) throw StateError('Capture template does not exist');
+      return (await (select(captureTemplates)..where(
+            (row) => row.id.equals(id) & row.projectId.equals(projectId),
+          ))
+          .getSingle());
+    });
+  }
+
+  Future<int> deleteCaptureTemplate({
+    required String id,
+    required String projectId,
+  }) {
+    return transaction(
+      () =>
+          (delete(captureTemplates)..where(
+                (row) => row.id.equals(id) & row.projectId.equals(projectId),
+              ))
+              .go(),
+    );
+  }
+
+  Future<void> insertRestoredCaptureTemplates({
+    required String projectId,
+    required String restoreOperationId,
+    required List<CaptureTemplatesCompanion> templates,
+  }) {
+    return transaction(() async {
+      final ownsRestore = await projectHasRestoreOwnership(
+        projectId: projectId,
+        operationId: restoreOperationId,
+      );
+      if (!ownsRestore) return;
+      for (final template in templates) {
+        await into(
+          captureTemplates,
+        ).insert(template.copyWith(projectId: Value(projectId)));
+      }
+    });
+  }
+
+  Future<List<String>> recentCaptureSuggestions({
+    required String projectId,
+    required CaptureSuggestionField field,
+    int limit = 20,
+  }) async {
+    if (limit < 1 || limit > 20) {
+      throw ArgumentError.value(
+        limit,
+        'limit',
+        'Expected a value from 1 to 20',
+      );
+    }
+    final candidates =
+        await (select(captureRecords)
+              ..where(
+                (row) =>
+                    row.projectId.equals(projectId) &
+                    row.status.equals(CaptureStatus.pendingCamera.name).not(),
+              )
+              ..orderBy([
+                (row) => OrderingTerm(
+                  expression: coalesce([row.capturedAt, row.createdAt]),
+                  mode: OrderingMode.desc,
+                ),
+                (row) => OrderingTerm.desc(row.id),
+              ])
+              ..limit(200))
+            .get();
+    final seen = <String>{};
+    final suggestions = <String>[];
+    for (final capture in candidates) {
+      final value = switch (field) {
+        CaptureSuggestionField.workLocation => capture.workLocation,
+        CaptureSuggestionField.workContent => capture.workContent,
+        CaptureSuggestionField.photographer => capture.photographer,
+      }.trim();
+      if (value.isEmpty || !seen.add(_asciiCaseInsensitiveKey(value))) continue;
+      suggestions.add(value);
+      if (suggestions.length == limit) break;
+    }
+    return suggestions;
+  }
+
+  String _asciiCaseInsensitiveKey(String value) {
+    return String.fromCharCodes(
+      value.codeUnits.map(
+        (codeUnit) =>
+            codeUnit >= 0x41 && codeUnit <= 0x5a ? codeUnit + 0x20 : codeUnit,
+      ),
+    );
   }
 
   Future<Project?> projectById(String projectId) {

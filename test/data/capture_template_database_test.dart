@@ -1,7 +1,9 @@
-import 'package:drift/drift.dart' show QueryExecutor;
+import 'package:drift/drift.dart' show QueryExecutor, Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 QueryExecutor openV9AndUpgrade() {
@@ -206,4 +208,394 @@ void main() {
       await expectCaptureTemplateSchema(database);
     },
   );
+
+  group('capture template database interface', () {
+    late AppDatabase database;
+    late AppDatabase templateDatabase;
+
+    setUp(() async {
+      database = AppDatabase.forTesting(NativeDatabase.memory());
+      templateDatabase = database;
+      await database.createProject(id: 'project-1', name: '东区厂房改造');
+      await database.createProject(id: 'project-2', name: '西区厂房改造');
+    });
+
+    tearDown(() => database.close());
+
+    test(
+      'reads templates newest-first and scopes names to their project',
+      () async {
+        final earlier = DateTime(2026, 8, 1, 9);
+        final later = earlier.add(const Duration(minutes: 1));
+        await _insertTemplate(
+          templateDatabase,
+          id: 'template-1',
+          projectId: 'project-1',
+          name: '日常巡检',
+          nameKey: '日常巡检',
+          updatedAt: earlier,
+        );
+        await _insertTemplate(
+          templateDatabase,
+          id: 'template-2',
+          projectId: 'project-1',
+          name: '专项检查',
+          nameKey: '专项检查',
+          updatedAt: later,
+        );
+        await _insertTemplate(
+          templateDatabase,
+          id: 'template-3',
+          projectId: 'project-2',
+          name: '日常巡检',
+          nameKey: '日常巡检',
+          updatedAt: later,
+        );
+
+        final templates = await templateDatabase.captureTemplatesForProject(
+          'project-1',
+        );
+
+        expect(templates.map((template) => template.id), [
+          'template-2',
+          'template-1',
+        ]);
+        expect(
+          (await templateDatabase.watchCaptureTemplates('project-1').first).map(
+            (template) => template.id,
+          ),
+          ['template-2', 'template-1'],
+        );
+        expect(await templateDatabase.countCaptureTemplates('project-1'), 2);
+      },
+    );
+
+    test(
+      'rename and delete require both template and project ownership',
+      () async {
+        final row = await _insertTemplate(
+          templateDatabase,
+          id: 'template-1',
+          projectId: 'project-1',
+          name: '日常巡检',
+          nameKey: '日常巡检',
+        );
+
+        final renamed = await templateDatabase.renameCaptureTemplate(
+          id: row.id,
+          projectId: 'project-1',
+          name: '专项检查',
+          nameKey: '专项检查',
+          updatedAt: DateTime(2026, 8, 1, 10),
+        );
+        expect(renamed.name, '专项检查');
+        expect(
+          await templateDatabase.deleteCaptureTemplate(
+            id: row.id,
+            projectId: 'project-2',
+          ),
+          0,
+        );
+        expect(
+          await templateDatabase.deleteCaptureTemplate(
+            id: row.id,
+            projectId: 'project-1',
+          ),
+          1,
+        );
+      },
+    );
+
+    test(
+      'restored template batches only insert for their owning operation',
+      () async {
+        await database.createProject(
+          id: 'restoring-project',
+          name: '恢复中的项目',
+          restoreOperationId: 'operation-1',
+        );
+        final rows = [
+          _templateCompanion(
+            id: 'restored-template',
+            projectId: 'restoring-project',
+            name: '恢复模板',
+            nameKey: '恢复模板',
+          ),
+        ];
+
+        await templateDatabase.insertRestoredCaptureTemplates(
+          projectId: 'restoring-project',
+          restoreOperationId: 'other-operation',
+          templates: rows,
+        );
+        expect(
+          await templateDatabase.countCaptureTemplates('restoring-project'),
+          0,
+        );
+
+        await templateDatabase.insertRestoredCaptureTemplates(
+          projectId: 'restoring-project',
+          restoreOperationId: 'operation-1',
+          templates: rows,
+        );
+        expect(
+          await templateDatabase.countCaptureTemplates('restoring-project'),
+          1,
+        );
+      },
+    );
+
+    test(
+      'recent suggestions use the latest visible text for each value',
+      () async {
+        final base = DateTime(2026, 8, 1, 9);
+        await _insertCapture(
+          database,
+          id: 'capture-older',
+          projectId: 'project-1',
+          workLocation: '  East Zone  ',
+          workContent: '旧内容',
+          photographer: '张工',
+          status: CaptureStatus.ready,
+          createdAt: base,
+        );
+        await _insertCapture(
+          database,
+          id: 'capture-newer',
+          projectId: 'project-1',
+          workLocation: 'east zone',
+          workContent: '新内容',
+          photographer: '李工',
+          status: CaptureStatus.failed,
+          createdAt: base,
+          capturedAt: base.add(const Duration(hours: 1)),
+        );
+        await _insertCapture(
+          database,
+          id: 'capture-pending',
+          projectId: 'project-1',
+          workLocation: '不应出现',
+          workContent: '不应出现',
+          photographer: '不应出现',
+          status: CaptureStatus.pendingCamera,
+          createdAt: base.add(const Duration(hours: 2)),
+        );
+        await _insertCapture(
+          database,
+          id: 'other-project',
+          projectId: 'project-2',
+          workLocation: '其他项目',
+          workContent: '其他项目',
+          photographer: '其他项目',
+          status: CaptureStatus.ready,
+          createdAt: base.add(const Duration(hours: 3)),
+        );
+
+        final suggestions = await templateDatabase.recentCaptureSuggestions(
+          projectId: 'project-1',
+          field: CaptureSuggestionField.workLocation,
+        );
+
+        expect(suggestions, ['east zone']);
+      },
+    );
+
+    test('recent suggestions validate their limit', () async {
+      await expectLater(
+        templateDatabase.recentCaptureSuggestions(
+          projectId: 'project-1',
+          field: CaptureSuggestionField.workLocation,
+          limit: 0,
+        ),
+        throwsArgumentError,
+      );
+      await expectLater(
+        templateDatabase.recentCaptureSuggestions(
+          projectId: 'project-1',
+          field: CaptureSuggestionField.workLocation,
+          limit: 21,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+      'project rename retains its templates and project deletion cascades',
+      () async {
+        await _insertTemplate(
+          templateDatabase,
+          id: 'template-1',
+          projectId: 'project-1',
+          name: '日常巡检',
+          nameKey: '日常巡检',
+        );
+
+        await database.renameProject(projectId: 'project-1', name: '新项目名称');
+        expect(
+          (await templateDatabase.captureTemplatesForProject(
+            'project-1',
+          )).single.name,
+          '日常巡检',
+        );
+
+        await database.customStatement(
+          "DELETE FROM projects WHERE id = 'project-1'",
+        );
+        expect(await templateDatabase.countCaptureTemplates('project-1'), 0);
+      },
+    );
+
+    test(
+      'recent suggestions cap, trim, tie-break, and map every field',
+      () async {
+        final timestamp = DateTime(2026, 8, 1, 9);
+        for (var index = 0; index < 21; index++) {
+          await _insertCapture(
+            database,
+            id: 'limit-$index',
+            projectId: 'project-1',
+            workLocation: 'Location $index',
+            workContent: 'Content $index',
+            photographer: 'Person $index',
+            status: CaptureStatus.ready,
+            createdAt: timestamp.add(Duration(minutes: index)),
+          );
+        }
+        await _insertCapture(
+          database,
+          id: 'tie-a',
+          projectId: 'project-1',
+          workLocation: ' alpha ',
+          workContent: '内容 A',
+          photographer: '工程师',
+          status: CaptureStatus.ready,
+          createdAt: timestamp.add(const Duration(hours: 1)),
+        );
+        await _insertCapture(
+          database,
+          id: 'tie-z',
+          projectId: 'project-1',
+          workLocation: 'Alpha',
+          workContent: '内容 B',
+          photographer: '工程師',
+          status: CaptureStatus.ready,
+          createdAt: timestamp.add(const Duration(hours: 1)),
+        );
+        await _insertCapture(
+          database,
+          id: 'blank-value',
+          projectId: 'project-1',
+          workLocation: '   ',
+          workContent: '   ',
+          photographer: '   ',
+          status: CaptureStatus.ready,
+          createdAt: timestamp.add(const Duration(hours: 2)),
+        );
+        await _insertCapture(
+          database,
+          id: 'deleted',
+          projectId: 'project-1',
+          workLocation: '已删除',
+          workContent: '已删除',
+          photographer: '已删除',
+          status: CaptureStatus.ready,
+          createdAt: timestamp.add(const Duration(hours: 3)),
+        );
+        await database.customStatement(
+          "DELETE FROM captures WHERE id = 'deleted'",
+        );
+
+        final locations = await templateDatabase.recentCaptureSuggestions(
+          projectId: 'project-1',
+          field: CaptureSuggestionField.workLocation,
+        );
+        final content = await templateDatabase.recentCaptureSuggestions(
+          projectId: 'project-1',
+          field: CaptureSuggestionField.workContent,
+          limit: 2,
+        );
+        final photographers = await templateDatabase.recentCaptureSuggestions(
+          projectId: 'project-1',
+          field: CaptureSuggestionField.photographer,
+          limit: 2,
+        );
+
+        expect(locations, hasLength(20));
+        expect(locations, contains('Alpha'));
+        expect(locations, isNot(contains('alpha')));
+        expect(locations, isNot(contains('已删除')));
+        expect(locations, everyElement(isNotEmpty));
+        expect(content, ['内容 B', '内容 A']);
+        expect(photographers, ['工程師', '工程师']);
+      },
+    );
+  });
+}
+
+CaptureTemplatesCompanion _templateCompanion({
+  required String id,
+  required String projectId,
+  required String name,
+  required String nameKey,
+  DateTime? updatedAt,
+}) {
+  final timestamp = updatedAt ?? DateTime(2026, 8, 1, 9);
+  return CaptureTemplatesCompanion.insert(
+    id: id,
+    projectId: projectId,
+    name: name,
+    nameKey: nameKey,
+    workLocation: 'A 区',
+    workContent: '检查',
+    photographer: '张工',
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  );
+}
+
+Future<CaptureTemplate> _insertTemplate(
+  AppDatabase database, {
+  required String id,
+  required String projectId,
+  required String name,
+  required String nameKey,
+  DateTime? updatedAt,
+}) {
+  return database.insertCaptureTemplate(
+    _templateCompanion(
+      id: id,
+      projectId: projectId,
+      name: name,
+      nameKey: nameKey,
+      updatedAt: updatedAt,
+    ),
+  );
+}
+
+Future<void> _insertCapture(
+  AppDatabase database, {
+  required String id,
+  required String projectId,
+  required String workLocation,
+  required String workContent,
+  required String photographer,
+  required CaptureStatus status,
+  required DateTime createdAt,
+  DateTime? capturedAt,
+}) {
+  return database
+      .into(database.captureRecords)
+      .insert(
+        CaptureRecordsCompanion.insert(
+          id: id,
+          projectId: projectId,
+          workLocation: workLocation,
+          workContent: workContent,
+          photographer: photographer,
+          originalPath: '/private/$id.jpg',
+          status: status,
+          createdAt: createdAt,
+          capturedAt: Value(capturedAt),
+        ),
+      );
 }
