@@ -7,6 +7,19 @@ import 'package:flutter/widgets.dart';
 class CaptureOwnedRouteController {
   Route<Object?>? _route;
   bool _dismissed = false;
+  final Set<VoidCallback> _dismissListeners = {};
+
+  void addDismissListener(VoidCallback listener) {
+    if (_dismissed) {
+      listener();
+      return;
+    }
+    _dismissListeners.add(listener);
+  }
+
+  void removeDismissListener(VoidCallback listener) {
+    _dismissListeners.remove(listener);
+  }
 
   void attach(Route<Object?> route) {
     if (_dismissed) {
@@ -21,6 +34,11 @@ class CaptureOwnedRouteController {
   void dismiss() {
     if (_dismissed) return;
     _dismissed = true;
+    final listeners = [..._dismissListeners];
+    _dismissListeners.clear();
+    for (final listener in listeners) {
+      listener();
+    }
     final route = _route;
     _route = null;
     if (route != null) _removeWhenSafe(route);

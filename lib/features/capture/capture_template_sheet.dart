@@ -54,6 +54,7 @@ Future<CaptureRequiredFieldsSnapshot?> showCaptureTemplateSheet({
         projectId: projectId,
         current: current,
         service: service,
+        routeController: controller,
       );
     },
   );
@@ -65,11 +66,13 @@ class _CaptureTemplateSheet extends StatefulWidget {
     required this.projectId,
     required this.current,
     required this.service,
+    required this.routeController,
   });
 
   final String projectId;
   final CaptureRequiredFieldsSnapshot current;
   final CaptureTemplateService service;
+  final CaptureTemplateSheetController? routeController;
 
   @override
   State<_CaptureTemplateSheet> createState() => _CaptureTemplateSheetState();
@@ -88,10 +91,13 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
   CaptureTemplate? _renaming;
   String? _error;
   bool _writing = false;
+  var _deleteDialogSession = 0;
+  CaptureOwnedRouteController? _deleteDialogController;
 
   @override
   void initState() {
     super.initState();
+    widget.routeController?.addDismissListener(_dismissDeleteDialog);
     _reload();
   }
 
@@ -101,11 +107,20 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
 
   @override
   void dispose() {
+    widget.routeController?.removeDismissListener(_dismissDeleteDialog);
+    _dismissDeleteDialog();
     _nameController.dispose();
     _locationController.dispose();
     _contentController.dispose();
     _photographerController.dispose();
     super.dispose();
+  }
+
+  void _dismissDeleteDialog() {
+    _deleteDialogSession++;
+    final controller = _deleteDialogController;
+    _deleteDialogController = null;
+    controller?.dismiss();
   }
 
   void _openCreate() {
@@ -186,30 +201,47 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
   }
 
   Future<void> _confirmDelete(CaptureTemplate template) async {
-    if (_writing) return;
+    if (_writing || _deleteDialogController != null) return;
     final strings = AppStrings.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      animationStyle: MediaQuery.disableAnimationsOf(context)
-          ? AnimationStyle.noAnimation
-          : null,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(strings.captureTemplateDeleteTitle),
-        content: Text(strings.captureTemplateDeleteNotice),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(strings.cancel),
-          ),
-          FilledButton(
-            key: const Key('capture-template-delete-confirm'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(strings.deleteAction),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    final session = ++_deleteDialogSession;
+    final routeController = CaptureOwnedRouteController();
+    _deleteDialogController = routeController;
+    bool? confirmed;
+    try {
+      confirmed = await showDialog<bool>(
+        context: context,
+        animationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : null,
+        builder: (dialogContext) {
+          final route = ModalRoute.of(dialogContext);
+          if (route != null) routeController.attach(route);
+          return AlertDialog(
+            title: Text(strings.captureTemplateDeleteTitle),
+            content: Text(strings.captureTemplateDeleteNotice),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(strings.cancel),
+              ),
+              FilledButton(
+                key: const Key('capture-template-delete-confirm'),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(strings.deleteAction),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      routeController.detach();
+      if (identical(_deleteDialogController, routeController)) {
+        _deleteDialogController = null;
+      }
+    }
+    if (confirmed != true || !mounted || _deleteDialogSession != session) {
+      return;
+    }
     setState(() {
       _writing = true;
       _error = null;

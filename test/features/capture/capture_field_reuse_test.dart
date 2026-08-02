@@ -1760,6 +1760,291 @@ void main() {
   );
 
   testWidgets(
+    'project replacement closes delete confirmation without deleting old template',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      final service = _CrudTemplateService(rig.database);
+      rig.templateService = service;
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await service.close();
+        await rig.dispose();
+      });
+      await service.create(
+        projectId: 'project-1',
+        name: 'Project one template',
+        workLocation: 'One location',
+        workContent: 'One content',
+        photographer: 'One photographer',
+      );
+      await service.create(
+        projectId: 'project-2',
+        name: 'Project two template',
+        workLocation: 'Two location',
+        workContent: 'Two content',
+        photographer: 'Two photographer',
+      );
+      await rig.pump(tester);
+
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('capture-template-delete-created-template')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('capture-template-delete-confirm')),
+        findsOneWidget,
+      );
+
+      rig.projectId.value = 'project-2';
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('capture-template-delete-confirm')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+      expect(service.deleteCount, 0);
+
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Project two template'), findsOneWidget);
+      expect(find.text('Project one template'), findsNothing);
+      expect(service.deleteCount, 0);
+    },
+  );
+
+  testWidgets(
+    'project replacement before delete confirmation first frame leaves no orphan',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      final service = _CrudTemplateService(rig.database);
+      rig.templateService = service;
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await service.close();
+        await rig.dispose();
+      });
+      await service.create(
+        projectId: 'project-1',
+        name: 'Project one template',
+        workLocation: 'One location',
+        workContent: 'One content',
+        photographer: 'One photographer',
+      );
+      await rig.pump(tester);
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('capture-template-delete-created-template')),
+      );
+      rig.projectId.value = 'project-2';
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('capture-template-delete-confirm')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+      expect(service.deleteCount, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'stale confirmed result cannot delete or change the new project editor',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      final service = _CrudTemplateService(rig.database);
+      rig.templateService = service;
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await service.close();
+        await rig.dispose();
+      });
+      await service.create(
+        projectId: 'project-1',
+        name: 'Project one template',
+        workLocation: 'One location',
+        workContent: 'One content',
+        photographer: 'One photographer',
+      );
+      await service.create(
+        projectId: 'project-2',
+        name: 'Project two template',
+        workLocation: 'Two location',
+        workContent: 'Two content',
+        photographer: 'Two photographer',
+      );
+      await rig.pump(tester);
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('capture-template-delete-created-template')),
+      );
+      await tester.pumpAndSettle();
+      final staleConfirm = tester
+          .widget<FilledButton>(
+            find.byKey(const Key('capture-template-delete-confirm')),
+          )
+          .onPressed!;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) => staleConfirm());
+      rig.projectId.value = 'project-2';
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(service.deleteCount, 0);
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('capture-template-create')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('capture-template-name')), findsOneWidget);
+      expect(find.text('Project two template'), findsOneWidget);
+      expect(find.text('Project one template'), findsNothing);
+      expect(service.deleteCount, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'form disposal before delete confirmation first frame leaves no orphan',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      final service = _CrudTemplateService(rig.database);
+      rig.templateService = service;
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await service.close();
+        await rig.dispose();
+      });
+      await service.create(
+        projectId: 'project-1',
+        name: 'Project one template',
+        workLocation: 'One location',
+        workContent: 'One content',
+        photographer: 'One photographer',
+      );
+      await rig.pump(tester);
+      await tester.tap(find.byKey(const Key('capture-template-button')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('capture-template-delete-created-template')),
+      );
+      rig.showForm.value = false;
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('capture-form-replacement')), findsOneWidget);
+      expect(
+        find.byKey(const Key('capture-template-delete-confirm')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+      expect(service.deleteCount, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'disposing a sheet removes its confirmation below an unrelated route only',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      final service = _CrudTemplateService(database);
+      final sheetController = CaptureTemplateSheetController();
+      final navigatorKey = GlobalKey<NavigatorState>();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await service.close();
+        await database.close();
+      });
+      await service.create(
+        projectId: 'project-1',
+        name: 'Template',
+        workLocation: 'Location',
+        workContent: 'Content',
+        photographer: 'Photographer',
+      );
+      await _pumpTemplateSheetHost(
+        tester,
+        service: service,
+        controller: sheetController,
+        navigatorKey: navigatorKey,
+      );
+      await _openTemplateSheet(tester);
+      await tester.tap(
+        find.byKey(const Key('capture-template-delete-created-template')),
+      );
+      await tester.pumpAndSettle();
+      unawaited(
+        navigatorKey.currentState!.push<void>(
+          MaterialPageRoute<void>(
+            builder: (context) => const Scaffold(
+              body: Text('Unrelated route', key: Key('unrelated-route')),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      sheetController.dismiss();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('unrelated-route')), findsOneWidget);
+      navigatorKey.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('unrelated-route')), findsNothing);
+      expect(
+        find.byKey(const Key('capture-template-delete-confirm')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+      expect(service.deleteCount, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('cancelled delete can reopen and confirm normally', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    final service = _CrudTemplateService(database);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await service.close();
+      await database.close();
+    });
+    await service.create(
+      projectId: 'project-1',
+      name: 'Template',
+      workLocation: 'Location',
+      workContent: 'Content',
+      photographer: 'Photographer',
+    );
+    await _pumpTemplateSheetHost(tester, service: service);
+    await _openTemplateSheet(tester);
+
+    final deleteButton = find.byKey(
+      const Key('capture-template-delete-created-template'),
+    );
+    await tester.tap(deleteButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('capture-template-sheet')), findsOneWidget);
+    expect(service.deleteCount, 0);
+
+    await tester.tap(deleteButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('capture-template-delete-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('capture-template-sheet')), findsOneWidget);
+    expect(service.deleteCount, 1);
+  });
+
+  testWidgets(
     'project replacement before the sheet first frame discards the old sheet',
     (tester) async {
       final rig = await _CaptureFormTestRig.create();
@@ -2575,6 +2860,7 @@ class _CrudTemplateService extends CaptureTemplateService {
 
   final _updates = StreamController<List<CaptureTemplate>>.broadcast();
   final List<CaptureTemplate> templates = [];
+  var deleteCount = 0;
 
   @override
   Stream<List<CaptureTemplate>> watch(String projectId) async* {
@@ -2616,6 +2902,7 @@ class _CrudTemplateService extends CaptureTemplateService {
     required String projectId,
     required String templateId,
   }) async {
+    deleteCount++;
     templates.removeWhere(
       (value) => value.projectId == projectId && value.id == templateId,
     );
