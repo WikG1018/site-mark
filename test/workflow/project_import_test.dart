@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart'
+    show ApplyInterceptor, QueryExecutor, QueryInterceptor;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -7,6 +9,7 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   test('v4 restore inserts templates with new UUIDs and exact values', () async {
@@ -200,6 +203,11 @@ void main() {
           templates: [_archiveTemplate(name: 'Night')],
           schemaVersion: 3,
         ),
+        (
+          label: 'a preview newer than schema v4',
+          templates: const [],
+          schemaVersion: 5,
+        ),
       ];
   for (final invalid in invalidTemplateCases) {
     test('rejects ${invalid.label} before creating a project', () async {
@@ -295,6 +303,213 @@ void main() {
       expect(await database.getAllCaptures(), isEmpty);
       expect(await database.select(database.captureTemplates).get(), isEmpty);
       expect(files.attemptedDeletes, hasLength(8));
+    },
+  );
+
+  test(
+    'second template failure removes real staged and final files plus marker',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'sitemark-template-real-rollback-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final documents = Directory(
+        '${root.path}${Platform.pathSeparator}documents',
+      );
+      final support = Directory('${root.path}${Platform.pathSeparator}support');
+      await documents.create(recursive: true);
+      await support.create(recursive: true);
+
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.customStatement('''
+        CREATE TRIGGER fail_second_real_restored_template
+        BEFORE INSERT ON capture_templates
+        WHEN NEW.name = '失败'
+        BEGIN
+          SELECT RAISE(ABORT, 'simulated second template failure');
+        END;
+      ''');
+      final images = _WritingImportImagePipeline(
+        _previewWithTemplates([
+          _archiveTemplate(name: '成功'),
+          _archiveTemplate(name: '失败'),
+        ], photos: _preview().photos),
+      );
+      final pendingStore = AppImportPendingStore(
+        documentsDirectory: () async => documents,
+      );
+      final service = ProjectImportService(
+        database: database,
+        images: images,
+        capturePaths: AppCaptureOutputPaths(
+          documentsDirectory: () async => documents,
+        ),
+        originalPaths: AppOriginalPhotoPaths(
+          supportDirectory: () async => support,
+        ),
+        fileStore: DartIoPrivateFileStore(),
+        stagingPaths: AppImportStagingPaths(
+          documentsDirectory: () async => documents,
+        ),
+        pendingStore: pendingStore,
+        committer: DartImportFileCommitter(),
+        clock: () => DateTime(2026, 7, 27, 12),
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/template-real-failure.zip',
+          projectName: '真实文件回滚项目',
+          projectId: 'real-file-rollback',
+        ),
+        throwsA(isA<InvalidArchiveException>()),
+      );
+
+      expect(images.extractRequests, hasLength(2));
+      for (final request in images.extractRequests) {
+        expect(await File(request.renderedDestination).exists(), isFalse);
+        if (request.originalDestination case final original?) {
+          expect(await File(original).exists(), isFalse);
+        }
+      }
+      expect(
+        await Directory(
+          '${documents.path}${Platform.pathSeparator}imports'
+          '${Platform.pathSeparator}staging-real-file-rollback',
+        ).exists(),
+        isFalse,
+      );
+      expect(
+        await _filesBelow(Directory('${documents.path}/rendered')),
+        isEmpty,
+      );
+      expect(
+        await _filesBelow(Directory('${support.path}/originals')),
+        isEmpty,
+      );
+      expect(await pendingStore.listPending(), isEmpty);
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.getAllCaptures(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
+    },
+  );
+
+  test(
+    'template insert IO failure propagates without archive relabeling',
+    () async {
+      final interceptor = _TemplateInsertIoFailure();
+      final database = AppDatabase.forTesting(
+        NativeDatabase.memory().interceptWith(interceptor),
+      );
+      addTearDown(database.close);
+      interceptor.enabled = true;
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(
+          _previewWithTemplates([_archiveTemplate(name: 'IO failure')]),
+        ),
+        files: _RecordingFileStore(),
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/template-io.zip',
+          projectName: '应保留 IO 错误',
+        ),
+        throwsA(same(interceptor.failure)),
+      );
+
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
+    },
+  );
+
+  test('lost restore ownership is a stable restore-state failure', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.customStatement('''
+      CREATE TRIGGER clear_restore_ownership_after_project_insert
+      AFTER INSERT ON projects
+      WHEN NEW.restore_operation_id IS NOT NULL
+      BEGIN
+        UPDATE projects
+        SET restore_operation_id = NULL
+        WHERE id = NEW.id;
+      END;
+    ''');
+    final pendingStore = _FakePendingStore();
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(
+        _previewWithTemplates([_archiveTemplate(name: 'Ownership')]),
+      ),
+      files: _RecordingFileStore(),
+      pendingStore: pendingStore,
+    );
+
+    await expectLater(
+      service.importProject(
+        zipPath: '/backups/template-ownership.zip',
+        projectName: '所有权竞态项目',
+      ),
+      throwsA(
+        isA<ProjectRestoreStateException>().having(
+          (error) => error.failure,
+          'failure',
+          ProjectRestoreStateFailure.ownershipLost,
+        ),
+      ),
+    );
+
+    expect(await database.getAllProjectsInternal(), hasLength(1));
+    expect(await database.select(database.captureTemplates).get(), isEmpty);
+    expect(pendingStore.pending, hasLength(1));
+  });
+
+  test(
+    'restored template count mismatch is a stable restore-state failure',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.customStatement('''
+      CREATE TRIGGER remove_first_restored_template
+      AFTER INSERT ON capture_templates
+      WHEN NEW.name = '第二条'
+      BEGIN
+        DELETE FROM capture_templates WHERE name = '第一条';
+      END;
+    ''');
+      final pendingStore = _FakePendingStore();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(
+          _previewWithTemplates([
+            _archiveTemplate(name: '第一条'),
+            _archiveTemplate(name: '第二条'),
+          ]),
+        ),
+        files: _RecordingFileStore(),
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/template-count-mismatch.zip',
+          projectName: '模板集合竞态项目',
+        ),
+        throwsA(
+          isA<ProjectRestoreStateException>().having(
+            (error) => error.failure,
+            'failure',
+            ProjectRestoreStateFailure.templateSetMismatch,
+          ),
+        ),
+      );
+
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
+      expect(pendingStore.pending, isEmpty);
     },
   );
 
@@ -1289,6 +1504,60 @@ class _ImportImagePipeline implements ImagePipeline {
   Future<String> sha256(String path) => throw UnimplementedError();
 }
 
+class _WritingImportImagePipeline implements ImagePipeline {
+  _WritingImportImagePipeline(this.preview);
+
+  final ProjectArchivePreview preview;
+  final extractRequests = <ExtractArchivePhotoRequest>[];
+
+  @override
+  Future<ProjectArchivePreview> readProjectArchive(String zipPath) async =>
+      preview;
+
+  @override
+  Future<ExtractedArchivePhoto> extractArchivePhoto(
+    ExtractArchivePhotoRequest request,
+  ) async {
+    extractRequests.add(request);
+    final rendered = File(request.renderedDestination);
+    await rendered.parent.create(recursive: true);
+    await rendered.writeAsBytes(const [1, 2, 3], flush: true);
+    if (request.originalDestination case final originalPath?) {
+      final original = File(originalPath);
+      await original.parent.create(recursive: true);
+      await original.writeAsBytes(const [4, 5, 6], flush: true);
+    }
+    return ExtractedArchivePhoto(
+      renderedPath: request.renderedDestination,
+      originalPath: request.originalDestination,
+    );
+  }
+
+  @override
+  Future<ExportProjectResult> export(ExportProjectRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<RenderPhotoResult> render(RenderPhotoRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> sha256(String path) => throw UnimplementedError();
+}
+
+Future<List<File>> _filesBelow(Directory directory) async {
+  if (!await directory.exists()) return const [];
+  final files = <File>[];
+  await for (final entity in directory.list(recursive: true)) {
+    if (entity is File) files.add(entity);
+  }
+  return files;
+}
+
 class _ImportCapturePaths implements CaptureOutputPaths {
   @override
   Future<String> renderedPhotoPath(String captureId) async =>
@@ -1382,6 +1651,26 @@ class _RecordingFileStore implements PrivateFileStore {
     }
     attemptedDeletes.add(path);
     deleted.add(path);
+  }
+}
+
+class _TemplateInsertIoFailure extends QueryInterceptor {
+  final failure = SqliteException(
+    extendedResultCode: SqlExtendedError.SQLITE_IOERR_WRITE,
+    message: 'simulated template database write failure',
+  );
+  bool enabled = false;
+
+  @override
+  Future<int> runInsert(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    if (enabled && statement.toLowerCase().contains('capture_templates')) {
+      throw failure;
+    }
+    return super.runInsert(executor, statement, args);
   }
 }
 

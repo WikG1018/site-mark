@@ -1,15 +1,21 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:drift/drift.dart'
+    show ApplyInterceptor, QueryExecutor, QueryInterceptor;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   test(
@@ -278,6 +284,106 @@ void main() {
         );
       },
     );
+
+    for (final projectIds in const [
+      ['p1'],
+      ['p1', 'p2'],
+    ]) {
+      test(
+        '${projectIds.length == 1 ? 'single' : 'multi'} project template read '
+        'failure identifies the exact project and never writes a bundle',
+        () async {
+          final failedProjectId = projectIds.last;
+          final interceptor = _ProjectTemplateReadFailure(failedProjectId);
+          final database = AppDatabase.forTesting(
+            NativeDatabase.memory().interceptWith(interceptor),
+          );
+          addTearDown(database.close);
+          await database.createProject(id: 'p1', name: '东区');
+          if (projectIds.length > 1) {
+            await database.createProject(id: 'p2', name: '西区');
+          }
+          interceptor.enabled = true;
+          final images = _RecordingProjectImagePipeline();
+          final bundles = _FakeBundlePipeline();
+          final files = _FakeBundleFiles();
+          final diagnosticRoot = await Directory.systemTemp.createTemp(
+            'sitemark-backup-diagnostics-',
+          );
+          addTearDown(() => diagnosticRoot.delete(recursive: true));
+          final diagnosticStore = DiagnosticEventStore(
+            directory: diagnosticRoot,
+          );
+          final service = ProjectBackupService(
+            projectExporter: ProjectExportService(
+              database: database,
+              images: images,
+              capturePaths: _BundleCapturePaths(),
+              exportPaths: _BundleProjectExportPaths(),
+              selectionExportPaths: _BundleSelectionPaths(),
+            ),
+            database: database,
+            bundles: bundles,
+            paths: _FakeBundlePaths(),
+            files: files,
+            diagnostics: DiagnosticRecorder(diagnosticStore),
+            idGenerator: () => 'bundle-template-read-failure',
+          );
+
+          ProjectBackupExportException? failure;
+          try {
+            await service.exportProjects(
+              projectIds: projectIds,
+              includeOriginals: false,
+            );
+          } catch (error) {
+            expect(error, isA<ProjectBackupExportException>());
+            failure = error as ProjectBackupExportException;
+          }
+
+          expect(failure, isNotNull);
+          expect(failure!.projectId, failedProjectId);
+          expect(failure.projectName, projectIds.length == 1 ? '东区' : '西区');
+          expect(failure.cause, same(interceptor.failure));
+          expect(failure.toString(), isNot(contains('private-template-value')));
+          expect(failure.toString(), isNot(contains(r'C:\private\database')));
+          expect(
+            images.requests.map((request) => request.projectId),
+            projectIds.length == 1 ? isEmpty : ['p1'],
+          );
+          expect(bundles.exportRequests, isEmpty);
+          expect(files.committedFiles, isEmpty);
+          expect(files.deletedTrees, [
+            '/imports/bundle-export-bundle-template-read-failure',
+          ]);
+
+          List<DiagnosticEvent> events = const [];
+          for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            events = await diagnosticStore.readRecent();
+          }
+          expect(events, hasLength(1));
+          final event = events.single;
+          expect(event.category, DiagnosticCategory.backup);
+          expect(event.outcome, DiagnosticOutcome.failed);
+          expect(event.code, DiagnosticCode.unexpected);
+          expect(event.count, 1);
+          expect(event.toJson().keys.toSet(), {
+            'timestamp',
+            'category',
+            'outcome',
+            'code',
+            'duration_ms',
+            'count',
+          });
+          final encoded = event.encode();
+          expect(encoded, isNot(contains('private-template-value')));
+          expect(encoded, isNot(contains(r'C:\private\database')));
+          expect(encoded, isNot(contains('东区')));
+          expect(encoded, isNot(contains('西区')));
+        },
+      );
+    }
 
     test('bundle export failure still cleans staging', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -715,6 +821,40 @@ void main() {
       expect(pending.items, isEmpty);
       expect(importer.markerSeenBeforeFirstImport, isTrue);
     });
+
+    test(
+      'restore-state failures are classified as general, not corrupted',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final importer = _FakeProjectImporter(
+          failSource: 'p1.zip',
+          importFailure: const ProjectRestoreStateException(
+            ProjectRestoreStateFailure.ownershipLost,
+          ),
+        );
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: importer,
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        await expectLater(
+          service.restorePrepared(
+            prepared: prepared,
+            projectNames: const {'p1': '东区', 'p2': '西区'},
+          ),
+          throwsA(
+            isA<ProjectBundleRestoreException>().having(
+              (error) => error.failure,
+              'failure',
+              ProjectBundleRestoreFailure.general,
+            ),
+          ),
+        );
+      },
+    );
 
     test(
       'item two ENOSPC keeps storage classification after rollback',
@@ -1659,6 +1799,33 @@ class _RecordingProjectImagePipeline implements ImagePipeline {
 
   @override
   Future<String> sha256(String path) => throw UnimplementedError();
+}
+
+class _ProjectTemplateReadFailure extends QueryInterceptor {
+  _ProjectTemplateReadFailure(this.projectId)
+    : failure = SqliteException(
+        extendedResultCode: SqlExtendedError.SQLITE_IOERR_READ,
+        message: 'private-template-value',
+        causingStatement: r'C:\private\database\sitemark.sqlite',
+      );
+
+  final String projectId;
+  final SqliteException failure;
+  bool enabled = false;
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    if (enabled &&
+        statement.toLowerCase().contains('capture_templates') &&
+        args.contains(projectId)) {
+      throw failure;
+    }
+    return super.runSelect(executor, statement, args);
+  }
 }
 
 class _BundleCapturePaths implements CaptureOutputPaths {

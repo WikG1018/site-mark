@@ -30,6 +30,21 @@ class ProjectBackupResult {
   final int omittedFailedCount;
 }
 
+class ProjectBackupExportException implements Exception {
+  const ProjectBackupExportException({
+    required this.projectId,
+    required this.projectName,
+    required this.cause,
+  });
+
+  final String projectId;
+  final String projectName;
+  final Object cause;
+
+  @override
+  String toString() => 'Project backup export failed for "$projectName"';
+}
+
 class ProjectBackupService {
   ProjectBackupService({
     required this.projectExporter,
@@ -112,12 +127,13 @@ class ProjectBackupService {
           stagingDirectory,
           projectIds.single,
         );
-        await projectExporter.exportProject(
-          projectId: projectIds.single,
+        await _exportProjectArchive(
+          project: projects.single,
           includeOriginals: includeOriginals,
           outputZipPath: stagedArchivePath,
           snapshotAt: snapshot.capturedAt,
           omittedFailedCount: projectSnapshot.failedCount,
+          stopwatch: stopwatch,
         );
         await files.commitFile(stagedArchivePath, finalOutputPath);
         onProgress?.call(1, 1);
@@ -144,12 +160,13 @@ class ProjectBackupService {
           stagingDirectory,
           project.id,
         );
-        await projectExporter.exportProject(
-          projectId: project.id,
+        await _exportProjectArchive(
+          project: project,
           includeOriginals: includeOriginals,
           outputZipPath: archivePath,
           snapshotAt: snapshot.capturedAt,
           omittedFailedCount: snapshot.projects[index].failedCount,
+          stopwatch: stopwatch,
         );
         sources.add(
           rust.ProjectBundleSource(
@@ -207,6 +224,40 @@ class ProjectBackupService {
     }
     if (firstFailure != null) {
       Error.throwWithStackTrace(firstFailure, firstStackTrace!);
+    }
+  }
+
+  Future<void> _exportProjectArchive({
+    required Project project,
+    required bool includeOriginals,
+    required String outputZipPath,
+    required DateTime snapshotAt,
+    required int omittedFailedCount,
+    required Stopwatch stopwatch,
+  }) async {
+    try {
+      await projectExporter.exportProject(
+        projectId: project.id,
+        includeOriginals: includeOriginals,
+        outputZipPath: outputZipPath,
+        snapshotAt: snapshotAt,
+        omittedFailedCount: omittedFailedCount,
+      );
+    } on Exception catch (error, stackTrace) {
+      _recordBackup(
+        DiagnosticOutcome.failed,
+        DiagnosticCode.unexpected,
+        1,
+        stopwatch.elapsedMilliseconds,
+      );
+      Error.throwWithStackTrace(
+        ProjectBackupExportException(
+          projectId: project.id,
+          projectName: project.name,
+          cause: error,
+        ),
+        stackTrace,
+      );
     }
   }
 
@@ -298,6 +349,9 @@ ProjectBundleRestoreFailure _classifyRestoreFailure(
   }
   if (error is ProjectNameConflictException) {
     return ProjectBundleRestoreFailure.nameConflict;
+  }
+  if (error is ProjectRestoreStateException) {
+    return ProjectBundleRestoreFailure.general;
   }
   if (error is InvalidArchiveException) {
     return ProjectBundleRestoreFailure.corrupted;

@@ -501,6 +501,9 @@ class AppStrings {
       : '无法分享备份，请重试';
   String get backupFailedFriendly =>
       _english ? 'Could not create the backup' : '无法生成备份';
+  String backupProjectFailed(String projectName) => _english
+      ? 'Could not back up "$projectName". Try again; if it still fails, select only this project and retry.'
+      : '无法备份项目“$projectName”。请重试；若仍失败，请单独选择该项目备份。';
   String get chooseRestoreZip => _english ? 'Choose backup ZIP' : '选择备份 ZIP';
   String get restorePickerFailed => _english
       ? 'Could not open the backup file picker. Please try again.'

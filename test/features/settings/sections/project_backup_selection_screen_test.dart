@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -216,6 +217,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(sharedPath, '/tmp/projects.zip');
     expect(find.text('备份已分享'), findsOneWidget);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('project export failure names only the failed project safely', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      initialProjectIds: const {'p2'},
+      exportProjects:
+          ({
+            required projectIds,
+            required includeOriginals,
+            onProgress,
+            allowFailedOmissions = false,
+          }) async => throw ProjectBackupExportException(
+            projectId: 'p2',
+            projectName: '二号项目',
+            cause: FileSystemException(
+              'private-template-value',
+              r'C:\private\database\sitemark.sqlite',
+            ),
+          ),
+    );
+
+    await tester.tap(find.byKey(const Key('backup-continue')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('exclude-private-originals')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('无法备份项目“二号项目”。请重试；若仍失败，请单独选择该项目备份。'), findsOneWidget);
+    expect(find.textContaining('private-template-value'), findsNothing);
+    expect(find.textContaining(r'C:\private\database'), findsNothing);
     await disposeScreen(tester);
   });
 }

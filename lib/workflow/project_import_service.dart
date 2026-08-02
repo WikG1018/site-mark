@@ -7,6 +7,7 @@ import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
+import 'package:sqlite3/sqlite3.dart';
 import 'package:uuid/uuid.dart';
 
 /// Outcome of a successful project backup restore.
@@ -35,6 +36,17 @@ class InvalidArchiveException implements Exception {
 
   @override
   String toString() => message;
+}
+
+enum ProjectRestoreStateFailure { ownershipLost, templateSetMismatch }
+
+class ProjectRestoreStateException implements Exception {
+  const ProjectRestoreStateException(this.failure);
+
+  final ProjectRestoreStateFailure failure;
+
+  @override
+  String toString() => 'Project restore state is inconsistent: ${failure.name}';
 }
 
 /// The project rows and files are committed, but the final visibility marker
@@ -588,19 +600,26 @@ class ProjectImportService implements ProjectArchiveImporter {
             for (final template in restoredTemplates) template.id.value,
           };
           if (!await database.projectHasRestoreOwnership(
-                projectId: targetProjectId,
-                operationId: operationId,
-              ) ||
-              inserted.length != restoredTemplates.length ||
-              inserted.any((template) => !expectedIds.contains(template.id))) {
-            throw const InvalidArchiveException(
-              'Capture templates could not be restored atomically',
+            projectId: targetProjectId,
+            operationId: operationId,
+          )) {
+            throw const ProjectRestoreStateException(
+              ProjectRestoreStateFailure.ownershipLost,
             );
           }
-        } on InvalidArchiveException {
+          if (inserted.length != restoredTemplates.length ||
+              inserted.any((template) => !expectedIds.contains(template.id))) {
+            throw const ProjectRestoreStateException(
+              ProjectRestoreStateFailure.templateSetMismatch,
+            );
+          }
+        } on SqliteException catch (error) {
+          if (error.resultCode == SqlError.SQLITE_CONSTRAINT) {
+            throw const InvalidArchiveException(
+              'Invalid capture template data',
+            );
+          }
           rethrow;
-        } catch (_) {
-          throw const InvalidArchiveException('Invalid capture template data');
         }
       }
 
@@ -768,6 +787,11 @@ class ProjectImportService implements ProjectArchiveImporter {
     required rust.ProjectArchivePreview preview,
     required String projectId,
   }) {
+    if (preview.schemaVersion < 1 || preview.schemaVersion > 4) {
+      throw const InvalidArchiveException(
+        'Unsupported project archive schema version',
+      );
+    }
     if (preview.schemaVersion < 4 && preview.templates.isNotEmpty) {
       throw const InvalidArchiveException(
         'Legacy project archives cannot contain capture templates',

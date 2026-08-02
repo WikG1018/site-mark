@@ -383,6 +383,9 @@ class _ProjectBackupSelectionScreenState
 }
 
 String _describeBackupError(AppStrings strings, Object error) {
+  if (error is ProjectBackupExportException) {
+    return strings.backupProjectFailed(error.projectName);
+  }
   if (_looksLikeInsufficientStorage(error)) {
     return strings.backupStorageInsufficient;
   }
