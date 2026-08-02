@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/features/capture/capture_owned_route_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/capture_template_service.dart';
@@ -30,36 +29,7 @@ class CaptureRequiredFieldsSnapshot {
   int get hashCode => Object.hash(workLocation, workContent, photographer);
 }
 
-class CaptureTemplateSheetController {
-  Route<Object?>? _route;
-  bool _dismissed = false;
-
-  void _attach(Route<Object?> route) {
-    if (_dismissed) {
-      _removeWhenSafe(route);
-      return;
-    }
-    _route = route;
-  }
-
-  void _detach() => _route = null;
-
-  void dismiss() {
-    if (_dismissed) return;
-    _dismissed = true;
-    final route = _route;
-    _route = null;
-    if (route != null) _removeWhenSafe(route);
-  }
-
-  void _removeWhenSafe(Route<Object?> route) {
-    scheduleMicrotask(() {
-      final navigator = route.navigator;
-      if (navigator == null || !navigator.mounted || !route.isActive) return;
-      navigator.removeRoute(route);
-    });
-  }
-}
+class CaptureTemplateSheetController extends CaptureOwnedRouteController {}
 
 Future<CaptureRequiredFieldsSnapshot?> showCaptureTemplateSheet({
   required BuildContext context,
@@ -74,9 +44,12 @@ Future<CaptureRequiredFieldsSnapshot?> showCaptureTemplateSheet({
     isScrollControlled: true,
     isDismissible: false,
     enableDrag: false,
+    sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null,
     builder: (context) {
       final route = ModalRoute.of(context);
-      if (route != null) controller?._attach(route);
+      if (route != null) controller?.attach(route);
       return _CaptureTemplateSheet(
         projectId: projectId,
         current: current,
@@ -84,7 +57,7 @@ Future<CaptureRequiredFieldsSnapshot?> showCaptureTemplateSheet({
       );
     },
   );
-  return future.whenComplete(() => controller?._detach());
+  return future.whenComplete(() => controller?.detach());
 }
 
 class _CaptureTemplateSheet extends StatefulWidget {
@@ -217,6 +190,9 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
     final strings = AppStrings.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (dialogContext) => AlertDialog(
         title: Text(strings.captureTemplateDeleteTitle),
         content: Text(strings.captureTemplateDeleteNotice),

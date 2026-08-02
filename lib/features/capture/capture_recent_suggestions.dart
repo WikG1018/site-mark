@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
+import 'package:sitemark/features/capture/capture_owned_route_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 
@@ -42,6 +43,8 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
   Object? _error;
   var _loading = false;
   var _request = 0;
+  var _historySession = 0;
+  CaptureOwnedRouteController? _historyController;
 
   String get _cacheKey => '${widget.projectId}\u0000${widget.field.name}';
 
@@ -59,6 +62,11 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
     final identityChanged =
         oldWidget.projectId != widget.projectId ||
         oldWidget.field != widget.field;
+    final historyIdentityChanged =
+        identityChanged ||
+        focusChanged ||
+        oldWidget.controller != widget.controller;
+    if (historyIdentityChanged) _dismissHistory();
     if (focusChanged) {
       oldWidget.focusNode.removeListener(_onFocusChanged);
       widget.focusNode.addListener(_onFocusChanged);
@@ -78,6 +86,7 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
 
   @override
   void dispose() {
+    _dismissHistory();
     widget.focusNode.removeListener(_onFocusChanged);
     super.dispose();
   }
@@ -136,18 +145,55 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
     );
   }
 
+  void _dismissHistory() {
+    _historySession++;
+    final controller = _historyController;
+    _historyController = null;
+    controller?.dismiss();
+  }
+
   Future<void> _showMore() async {
+    if (_historyController != null) return;
     final values = _suggestions ?? const <String>[];
-    await showDialog<void>(
-      context: context,
-      builder: (context) => _SuggestionHistoryDialog(
-        values: values,
-        onSelected: (value) {
-          _select(value);
-          Navigator.of(context).pop();
+    final originProjectId = widget.projectId;
+    final originField = widget.field;
+    final originController = widget.controller;
+    final originFocusNode = widget.focusNode;
+    final session = ++_historySession;
+    final routeController = CaptureOwnedRouteController();
+    _historyController = routeController;
+    String? selected;
+    try {
+      selected = await showDialog<String>(
+        context: context,
+        animationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : null,
+        builder: (dialogContext) {
+          final route = ModalRoute.of(dialogContext);
+          if (route != null) routeController.attach(route);
+          return _SuggestionHistoryDialog(
+            values: values,
+            onSelected: (value) => Navigator.of(dialogContext).pop(value),
+          );
         },
-      ),
-    );
+      );
+    } finally {
+      routeController.detach();
+      if (identical(_historyController, routeController)) {
+        _historyController = null;
+      }
+    }
+    if (!mounted ||
+        selected == null ||
+        _historySession != session ||
+        widget.projectId != originProjectId ||
+        widget.field != originField ||
+        widget.controller != originController ||
+        widget.focusNode != originFocusNode) {
+      return;
+    }
+    _select(selected);
   }
 
   @override

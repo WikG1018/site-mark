@@ -508,6 +508,282 @@ void main() {
     expect(find.byKey(const Key('capture-recent-suggestions')), findsOneWidget);
   });
 
+  testWidgets(
+    'same capture form state closes old project history before opening new history',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await rig.dispose();
+      });
+      await rig.drafts.save(_draft('project-1', 'Old'));
+      await rig.drafts.save(_draft('project-2', 'New'));
+      for (var index = 0; index < 4; index++) {
+        await rig.seedCapturedRecord(
+          projectId: 'project-1',
+          id: 'old-history-$index',
+          prefix: 'Old history $index',
+          notes: '',
+        );
+        await rig.seedCapturedRecord(
+          projectId: 'project-2',
+          id: 'new-history-$index',
+          prefix: 'New history $index',
+          notes: '',
+        );
+      }
+      await rig.pump(tester);
+
+      await tester.tap(find.byKey(const Key('work-location')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('recent-suggestions-search')),
+        findsOneWidget,
+      );
+
+      rig.projectId.value = 'project-2';
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('recent-suggestions-search')), findsNothing);
+      expect(rig.fieldText(tester, const Key('work-location')), 'New location');
+
+      await tester.tap(find.byKey(const Key('work-location')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New history 3 location'));
+      await tester.pumpAndSettle();
+
+      expect(
+        rig.fieldText(tester, const Key('work-location')),
+        'New history 3 location',
+      );
+      expect(find.text('Old history 3 location'), findsNothing);
+    },
+  );
+
+  testWidgets('stale history selection cannot write a replacement identity', (
+    tester,
+  ) async {
+    final oldController = TextEditingController(text: 'Old current');
+    final newController = TextEditingController(text: 'New current');
+    final oldFocus = FocusNode();
+    final newFocus = FocusNode();
+    var projectId = 'project-1';
+    var field = CaptureSuggestionField.workLocation;
+    var controller = oldController;
+    var focusNode = oldFocus;
+    late StateSetter rebuild;
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      oldController.dispose();
+      newController.dispose();
+      oldFocus.dispose();
+      newFocus.dispose();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return Scaffold(
+              body: Focus(
+                focusNode: focusNode,
+                child: CaptureRecentSuggestions(
+                  projectId: projectId,
+                  field: field,
+                  controller: controller,
+                  focusNode: focusNode,
+                  load:
+                      ({
+                        required projectId,
+                        required field,
+                        required limit,
+                      }) async => const [
+                        'Old one',
+                        'Old two',
+                        'Old three',
+                        'Old four',
+                      ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    oldFocus.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+    await tester.pumpAndSettle();
+    final staleTap = tester
+        .widget<ListTile>(find.widgetWithText(ListTile, 'Old four'))
+        .onTap!;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => staleTap());
+    rebuild(() {
+      projectId = 'project-2';
+      field = CaptureSuggestionField.photographer;
+      controller = newController;
+      focusNode = newFocus;
+    });
+    await tester.pump();
+    await tester.pump();
+
+    expect(newController.text, 'New current');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recent-suggestions-search')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('project change before history first frame leaves no orphan', (
+    tester,
+  ) async {
+    final rig = await _CaptureFormTestRig.create();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await rig.dispose();
+    });
+    await rig.drafts.save(_draft('project-1', 'Old'));
+    await rig.drafts.save(_draft('project-2', 'New'));
+    for (var index = 0; index < 4; index++) {
+      await rig.seedCapturedRecord(
+        projectId: 'project-1',
+        id: 'late-history-$index',
+        prefix: 'Late history $index',
+        notes: '',
+      );
+    }
+    await rig.pump(tester);
+    await tester.tap(find.byKey(const Key('work-location')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+    rig.projectId.value = 'project-2';
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('recent-suggestions-search')), findsNothing);
+    expect(rig.fieldText(tester, const Key('work-location')), 'New location');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('form disposal before history first frame leaves no orphan', (
+    tester,
+  ) async {
+    final rig = await _CaptureFormTestRig.create();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await rig.dispose();
+    });
+    for (var index = 0; index < 4; index++) {
+      await rig.seedCapturedRecord(
+        projectId: 'project-1',
+        id: 'dispose-history-$index',
+        prefix: 'Dispose history $index',
+        notes: '',
+      );
+    }
+    await rig.pump(tester);
+    await tester.tap(find.byKey(const Key('work-location')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+    rig.showForm.value = false;
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('capture-form-replacement')), findsOneWidget);
+    expect(find.byKey(const Key('recent-suggestions-search')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'field and focus identity change removes only its history below another route',
+    (tester) async {
+      final controller = TextEditingController();
+      final oldFocus = FocusNode();
+      final newFocus = FocusNode();
+      final navigatorKey = GlobalKey<NavigatorState>();
+      var field = CaptureSuggestionField.workLocation;
+      var focusNode = oldFocus;
+      late StateSetter rebuild;
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+        oldFocus.dispose();
+        newFocus.dispose();
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          locale: const Locale('en'),
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return Scaffold(
+                body: Focus(
+                  focusNode: focusNode,
+                  child: CaptureRecentSuggestions(
+                    projectId: 'project-1',
+                    field: field,
+                    controller: controller,
+                    focusNode: focusNode,
+                    load:
+                        ({
+                          required projectId,
+                          required field,
+                          required limit,
+                        }) async => const ['One', 'Two', 'Three', 'Four'],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      oldFocus.requestFocus();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+      await tester.pumpAndSettle();
+      unawaited(
+        navigatorKey.currentState!.push<void>(
+          MaterialPageRoute<void>(
+            builder: (context) => const Scaffold(
+              body: Text('Unrelated route', key: Key('unrelated-route')),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      rebuild(() {
+        field = CaptureSuggestionField.photographer;
+        focusNode = newFocus;
+      });
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('unrelated-route')), findsOneWidget);
+      navigatorKey.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('unrelated-route')), findsNothing);
+      expect(find.byKey(const Key('recent-suggestions-search')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('skips size animation when animations are disabled', (
     tester,
   ) async {
@@ -547,6 +823,79 @@ void main() {
     expect(find.byKey(const Key('capture-recent-suggestions')), findsOneWidget);
     expect(find.byType(AnimatedSize), findsNothing);
   });
+
+  testWidgets(
+    'history dialog route disables transitions only for reduced motion',
+    (tester) async {
+      for (final disableAnimations in [false, true]) {
+        final controller = TextEditingController();
+        final focusNode = FocusNode();
+        final navigatorKey = GlobalKey<NavigatorState>();
+        final observer = _RecordingNavigatorObserver();
+        await tester.pumpWidget(
+          MaterialApp(
+            navigatorKey: navigatorKey,
+            navigatorObservers: [observer],
+            locale: const Locale('en'),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(disableAnimations: disableAnimations),
+              child: child!,
+            ),
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            home: Scaffold(
+              body: Focus(
+                focusNode: focusNode,
+                child: CaptureRecentSuggestions(
+                  projectId: 'project-1',
+                  field: CaptureSuggestionField.workLocation,
+                  controller: controller,
+                  focusNode: focusNode,
+                  load:
+                      ({
+                        required projectId,
+                        required field,
+                        required limit,
+                      }) async => const ['One', 'Two', 'Three', 'Four'],
+                ),
+              ),
+            ),
+          ),
+        );
+        focusNode.requestFocus();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+        final route = observer.lastPopupRoute as TransitionRoute<dynamic>;
+        expect(
+          route.transitionDuration,
+          disableAnimations ? Duration.zero : isNot(Duration.zero),
+        );
+        expect(
+          route.reverseTransitionDuration,
+          disableAnimations ? Duration.zero : isNot(Duration.zero),
+        );
+        await tester.pump();
+        if (disableAnimations) {
+          expect(
+            find.byKey(const Key('recent-suggestions-search')).hitTestable(),
+            findsOneWidget,
+          );
+        }
+
+        navigatorKey.currentState!.removeRoute(route);
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+        focusNode.dispose();
+      }
+    },
+  );
 
   testWidgets('long suggestions do not overflow at 360dp', (tester) async {
     await tester.binding.setSurfaceSize(const Size(360, 800));
@@ -1121,6 +1470,103 @@ void main() {
       await tester.tap(find.text('Template one'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('capture-template-sheet')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'template sheet route disables transitions only for reduced motion',
+    (tester) async {
+      for (final disableAnimations in [false, true]) {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        final service = _DeleteFailureTemplateService(database);
+        final navigatorKey = GlobalKey<NavigatorState>();
+        final observer = _RecordingNavigatorObserver();
+        await _pumpTemplateSheetHost(
+          tester,
+          service: service,
+          mediaQuery: MediaQueryData(disableAnimations: disableAnimations),
+          navigatorKey: navigatorKey,
+          navigatorObserver: observer,
+        );
+
+        await tester.tap(find.byKey(const Key('open-template-sheet')));
+        final route = observer.lastPopupRoute as TransitionRoute<dynamic>;
+        expect(
+          route.transitionDuration,
+          disableAnimations ? Duration.zero : isNot(Duration.zero),
+        );
+        expect(
+          route.reverseTransitionDuration,
+          disableAnimations ? Duration.zero : isNot(Duration.zero),
+        );
+        await tester.pump();
+        if (disableAnimations) {
+          expect(
+            find.byKey(const Key('capture-template-sheet')).hitTestable(),
+            findsOneWidget,
+          );
+        }
+
+        navigatorKey.currentState!.removeRoute(route);
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await database.close();
+      }
+    },
+  );
+
+  testWidgets(
+    'template delete dialog route disables transitions only for reduced motion',
+    (tester) async {
+      for (final disableAnimations in [false, true]) {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        final service = _DeleteFailureTemplateService(database);
+        final navigatorKey = GlobalKey<NavigatorState>();
+        final observer = _RecordingNavigatorObserver();
+        await _pumpTemplateSheetHost(
+          tester,
+          service: service,
+          mediaQuery: MediaQueryData(disableAnimations: disableAnimations),
+          navigatorKey: navigatorKey,
+          navigatorObserver: observer,
+        );
+        await tester.tap(find.byKey(const Key('open-template-sheet')));
+        final sheetRoute = observer.lastPopupRoute as TransitionRoute<dynamic>;
+        await tester.pump();
+        await tester.pump(sheetRoute.transitionDuration);
+
+        final deleteButton = find.byKey(
+          const Key('capture-template-delete-template-1'),
+        );
+        await _pumpUntilFound(tester, deleteButton);
+        await tester.ensureVisible(deleteButton);
+        await tester.pump();
+        await tester.tap(deleteButton.hitTestable());
+        final deleteRoute = observer.lastPopupRoute as TransitionRoute<dynamic>;
+        expect(
+          deleteRoute.transitionDuration,
+          disableAnimations ? Duration.zero : isNot(Duration.zero),
+        );
+        expect(
+          deleteRoute.reverseTransitionDuration,
+          disableAnimations ? Duration.zero : isNot(Duration.zero),
+        );
+        await tester.pump();
+        if (disableAnimations) {
+          expect(
+            find
+                .byKey(const Key('capture-template-delete-confirm'))
+                .hitTestable(),
+            findsOneWidget,
+          );
+        }
+
+        navigatorKey.currentState!.removeRoute(deleteRoute);
+        navigatorKey.currentState!.removeRoute(sheetRoute);
+        await tester.pump();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await database.close();
+      }
     },
   );
 
@@ -1829,10 +2275,12 @@ Future<void> _pumpTemplateSheetHost(
   MediaQueryData? mediaQuery,
   CaptureTemplateSheetController? controller,
   GlobalKey<NavigatorState>? navigatorKey,
+  NavigatorObserver? navigatorObserver,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
       navigatorKey: navigatorKey,
+      navigatorObservers: [?navigatorObserver],
       locale: const Locale('en'),
       builder: mediaQuery == null
           ? null
@@ -1872,6 +2320,19 @@ Future<void> _pumpTemplateSheetHost(
       ),
     ),
   );
+}
+
+class _RecordingNavigatorObserver extends NavigatorObserver {
+  final List<Route<dynamic>> pushedRoutes = [];
+
+  Route<dynamic> get lastPopupRoute =>
+      pushedRoutes.lastWhere((route) => route is PopupRoute<dynamic>);
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushedRoutes.add(route);
+    super.didPush(route, previousRoute);
+  }
 }
 
 Future<void> _openTemplateSheet(WidgetTester tester) async {
