@@ -3,6 +3,7 @@ import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:uuid/uuid.dart';
 
 enum CaptureTemplateFailure {
+  invalidCharacter,
   emptyName,
   nameTooLong,
   emptyWorkLocation,
@@ -178,6 +179,11 @@ class CaptureTemplateService {
     required int maximumLength,
   }) {
     final normalized = value.trim();
+    if (normalized.contains('\u0000')) {
+      throw const CaptureTemplateException(
+        CaptureTemplateFailure.invalidCharacter,
+      );
+    }
     if (normalized.isEmpty) throw CaptureTemplateException(empty);
     if (normalized.runes.length > maximumLength) {
       throw CaptureTemplateException(tooLong);

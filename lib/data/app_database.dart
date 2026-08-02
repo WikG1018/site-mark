@@ -134,11 +134,14 @@ class CaptureTemplates extends Table {
 
   @override
   List<String> get customConstraints => const [
-    'CHECK (length(name) BETWEEN 1 AND 80)',
-    'CHECK (length(name_key) BETWEEN 1 AND 80)',
-    'CHECK (length(work_location) BETWEEN 1 AND 160)',
-    'CHECK (length(work_content) BETWEEN 1 AND 240)',
-    'CHECK (length(photographer) BETWEEN 1 AND 80)',
+    'CHECK (instr(name, char(0)) = 0 AND length(name) BETWEEN 1 AND 80)',
+    'CHECK (instr(name_key, char(0)) = 0 AND length(name_key) BETWEEN 1 AND 80)',
+    'CHECK (instr(work_location, char(0)) = 0 AND '
+        'length(work_location) BETWEEN 1 AND 160)',
+    'CHECK (instr(work_content, char(0)) = 0 AND '
+        'length(work_content) BETWEEN 1 AND 240)',
+    'CHECK (instr(photographer, char(0)) = 0 AND '
+        'length(photographer) BETWEEN 1 AND 80)',
   ];
 }
 

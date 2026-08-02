@@ -146,6 +146,64 @@ void main() {
       );
     });
 
+    test('rejects NUL with a dedicated failure in create and rename', () async {
+      await expectFailure(
+        () => service.create(
+          projectId: 'project-1',
+          name: 'template\u0000name',
+          workLocation: 'A 区',
+          workContent: '检查',
+          photographer: '张工',
+        ),
+        CaptureTemplateFailure.invalidCharacter,
+      );
+      await expectFailure(
+        () => service.create(
+          projectId: 'project-1',
+          name: '模板',
+          workLocation: 'A\u0000区',
+          workContent: '检查',
+          photographer: '张工',
+        ),
+        CaptureTemplateFailure.invalidCharacter,
+      );
+      await expectFailure(
+        () => service.create(
+          projectId: 'project-1',
+          name: '模板',
+          workLocation: 'A 区',
+          workContent: '检\u0000查',
+          photographer: '张工',
+        ),
+        CaptureTemplateFailure.invalidCharacter,
+      );
+      await expectFailure(
+        () => service.create(
+          projectId: 'project-1',
+          name: '模板',
+          workLocation: 'A 区',
+          workContent: '检查',
+          photographer: '张\u0000工',
+        ),
+        CaptureTemplateFailure.invalidCharacter,
+      );
+      final template = await service.create(
+        projectId: 'project-1',
+        name: '可重命名模板',
+        workLocation: 'A 区',
+        workContent: '检查',
+        photographer: '张工',
+      );
+      await expectFailure(
+        () => service.rename(
+          projectId: 'project-1',
+          templateId: template.id,
+          name: 'rename\u0000template',
+        ),
+        CaptureTemplateFailure.invalidCharacter,
+      );
+    });
+
     test('maps an insert uniqueness race to duplicateName', () async {
       final raceDatabase = _InterleavingInsertDatabase(NativeDatabase.memory());
       addTearDown(raceDatabase.close);

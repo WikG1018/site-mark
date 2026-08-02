@@ -154,22 +154,35 @@ Future<void> expectCaptureTemplateSchema(AppDatabase database) async {
       )
       .getSingle();
   final normalizedTableSql = normalizedSql(tableSql.read<String>('sql'));
-  expect(normalizedTableSql, contains('check (length(name) between 1 and 80)'));
   expect(
     normalizedTableSql,
-    contains('check (length(name_key) between 1 and 80)'),
+    contains(
+      'check (instr(name, char(0)) = 0 and length(name) between 1 and 80)',
+    ),
   );
   expect(
     normalizedTableSql,
-    contains('check (length(work_location) between 1 and 160)'),
+    contains(
+      'check (instr(name_key, char(0)) = 0 and length(name_key) between 1 and 80)',
+    ),
   );
   expect(
     normalizedTableSql,
-    contains('check (length(work_content) between 1 and 240)'),
+    contains(
+      'check (instr(work_location, char(0)) = 0 and length(work_location) between 1 and 160)',
+    ),
   );
   expect(
     normalizedTableSql,
-    contains('check (length(photographer) between 1 and 80)'),
+    contains(
+      'check (instr(work_content, char(0)) = 0 and length(work_content) between 1 and 240)',
+    ),
+  );
+  expect(
+    normalizedTableSql,
+    contains(
+      'check (instr(photographer, char(0)) = 0 and length(photographer) between 1 and 80)',
+    ),
   );
 }
 
@@ -430,6 +443,26 @@ void main() {
       await expectLater(
         _insertTemplateBySql(
           database,
+          id: 'nul-name-key',
+          projectId: 'project-1',
+          name: 'nul name key',
+          nameKey: 'a\u0000${'k' * captureTemplateNameMaxLength}',
+        ),
+        throwsA(isA<Exception>()),
+      );
+      await expectLater(
+        _insertTemplateBySql(
+          database,
+          id: 'nul-name',
+          projectId: 'project-1',
+          name: 'a\u0000${'n' * captureTemplateNameMaxLength}',
+          nameKey: 'nul-name',
+        ),
+        throwsA(isA<Exception>()),
+      );
+      await expectLater(
+        _insertTemplateBySql(
+          database,
           id: 'long-location',
           projectId: 'project-1',
           name: 'location limit',
@@ -467,20 +500,38 @@ void main() {
           )
           .getSingle();
       final normalized = normalizedSql(ddl.read<String>('sql'));
-      expect(normalized, contains('check (length(name) between 1 and 80)'));
-      expect(normalized, contains('check (length(name_key) between 1 and 80)'));
       expect(
         normalized,
-        contains('check (length(work_location) between 1 and 160)'),
+        contains(
+          'check (instr(name, char(0)) = 0 and length(name) between 1 and 80)',
+        ),
       );
       expect(
         normalized,
-        contains('check (length(work_content) between 1 and 240)'),
+        contains(
+          'check (instr(name_key, char(0)) = 0 and length(name_key) between 1 and 80)',
+        ),
       );
       expect(
         normalized,
-        contains('check (length(photographer) between 1 and 80)'),
+        contains(
+          'check (instr(work_location, char(0)) = 0 and length(work_location) between 1 and 160)',
+        ),
       );
+      expect(
+        normalized,
+        contains(
+          'check (instr(work_content, char(0)) = 0 and length(work_content) between 1 and 240)',
+        ),
+      );
+      expect(
+        normalized,
+        contains(
+          'check (instr(photographer, char(0)) = 0 and length(photographer) between 1 and 80)',
+        ),
+      );
+      expect(normalized, contains('instr(name, char(0)) = 0'));
+      expect(normalized, contains('instr(name_key, char(0)) = 0'));
     });
 
     test(
@@ -520,6 +571,39 @@ void main() {
         );
       },
     );
+
+    test('restore batch rolls back when a later row contains NUL', () async {
+      await database.createProject(
+        id: 'restoring-nul-project',
+        name: '恢复 NUL 项目',
+        restoreOperationId: 'operation-1',
+      );
+      await expectLater(
+        templateDatabase.insertRestoredCaptureTemplates(
+          projectId: 'restoring-nul-project',
+          restoreOperationId: 'operation-1',
+          templates: [
+            _templateCompanion(
+              id: 'valid-nul-restored-row',
+              projectId: 'restoring-nul-project',
+              name: '有效模板',
+              nameKey: '有效模板',
+            ),
+            _templateCompanion(
+              id: 'nul-restored-row',
+              projectId: 'restoring-nul-project',
+              name: 'a\u0000${'n' * captureTemplateNameMaxLength}',
+              nameKey: 'nul-restored-name',
+            ),
+          ],
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        await templateDatabase.countCaptureTemplates('restoring-nul-project'),
+        0,
+      );
+    });
 
     test(
       'recent suggestions use the latest visible text for each value',
@@ -813,13 +897,25 @@ Future<void> _insertTemplateBySql(
   String workContent = '检查',
   String photographer = '张工',
 }) {
-  return database.customStatement('''
+  return database.customStatement(
+    '''
     INSERT INTO capture_templates (
       id, project_id, name, name_key, work_location, work_content,
       photographer, created_at, updated_at
     ) VALUES (
-      '$id', '$projectId', '$name', '$nameKey', '$workLocation',
-      '$workContent', '$photographer', 1, 1
+      ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
-  ''');
+  ''',
+    [
+      id,
+      projectId,
+      name,
+      nameKey,
+      workLocation,
+      workContent,
+      photographer,
+      1,
+      1,
+    ],
+  );
 }
