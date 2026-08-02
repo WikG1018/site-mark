@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/app_links.dart';
@@ -110,6 +111,23 @@ void main() {
     await tester.pump();
     expect(find.text('无法打开浏览器'), findsOneWidget);
     expect(links.opened, [siteMarkRepositoryUri]);
+  });
+
+  testWidgets('about prefers successful package metadata over fallback', (
+    tester,
+  ) async {
+    PackageInfo.setMockInitialValues(
+      appName: 'SiteMark test',
+      packageName: 'io.github.wikg1018.sitemark.test',
+      version: '9.8.7',
+      buildNumber: '654',
+      buildSignature: 'test-signature',
+    );
+
+    await pumpScreen(tester, locale: const Locale('en'));
+
+    expect(find.text('9.8.7+654'), findsOneWidget);
+    expect(find.text('0.9.0+13'), findsNothing);
   });
 }
 
