@@ -24,6 +24,7 @@ void main() {
   Future<void> pumpScreen(
     WidgetTester tester, {
     ExternalLinkService? externalLinks,
+    Locale locale = const Locale('zh'),
   }) async {
     await database.getAppSettings();
     await tester.pumpWidget(
@@ -34,7 +35,7 @@ void main() {
             externalLinkServiceProvider.overrideWithValue(externalLinks),
         ],
         child: MaterialApp(
-          locale: const Locale('zh'),
+          locale: locale,
           supportedLocales: AppStrings.supportedLocales,
           localizationsDelegates: const [
             AppStrings.delegate,
@@ -49,12 +50,39 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('about section shows fallback version when PackageInfo fails', (
-    tester,
-  ) async {
-    await pumpScreen(tester);
-    expect(find.text('0.8.1+12'), findsOneWidget);
-  });
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('about section shows v0.9 fallback in ${locale.languageCode}', (
+      tester,
+    ) async {
+      await pumpScreen(tester, locale: locale);
+      expect(
+        find.text(locale.languageCode == 'en' ? 'Version' : '版本'),
+        findsOneWidget,
+      );
+      expect(find.text('0.9.0+13'), findsOneWidget);
+      expect(
+        find.text(
+          locale.languageCode == 'en'
+              ? 'No ads · No account · No cloud sync · '
+                    'No network permission · System camera'
+              : '无广告 · 无账号 · 无云同步 · 发布包无网络权限 · 调用系统相机',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          locale.languageCode == 'en'
+              ? 'The release APK requests no network permission; GitHub '
+                    'links open in an external browser. Foreground location '
+                    'is used only when requested, and a diagnostic bundle '
+                    'reaches the system share sheet only after confirmation.'
+              : '发布包不申请网络权限；GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，'
+                    '诊断包仅在用户确认后交给系统分享面板。',
+        ),
+        findsOneWidget,
+      );
+    });
+  }
 
   testWidgets('about shows and opens the full GitHub repository URL', (
     tester,

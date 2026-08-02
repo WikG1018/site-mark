@@ -8,8 +8,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 
 /// Fallback version/build used when [PackageInfo.fromPlatform] fails (e.g. in
 /// unit tests where no platform plugin is available).
-const _fallbackVersion = '0.8.1';
-const _fallbackBuild = '12';
+const _fallbackPackageInfo = (version: '0.9.0', buildNumber: '13');
 
 class AboutSectionScreen extends ConsumerStatefulWidget {
   const AboutSectionScreen({super.key});
@@ -19,8 +18,8 @@ class AboutSectionScreen extends ConsumerStatefulWidget {
 }
 
 class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
-  String _version = _fallbackVersion;
-  String _buildNumber = _fallbackBuild;
+  String _version = _fallbackPackageInfo.version;
+  String _buildNumber = _fallbackPackageInfo.buildNumber;
 
   @override
   void initState() {
@@ -33,9 +32,11 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
       final info = await PackageInfo.fromPlatform();
       if (!mounted) return;
       setState(() {
-        _version = info.version.isEmpty ? _fallbackVersion : info.version;
+        _version = info.version.isEmpty
+            ? _fallbackPackageInfo.version
+            : info.version;
         _buildNumber = info.buildNumber.isEmpty
-            ? _fallbackBuild
+            ? _fallbackPackageInfo.buildNumber
             : info.buildNumber;
       });
     } catch (_) {
