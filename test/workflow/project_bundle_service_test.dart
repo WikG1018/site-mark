@@ -173,6 +173,112 @@ void main() {
       },
     );
 
+    test(
+      'bundle exports each project with its own ordered template values',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.createProject(id: 'p1', name: '东区');
+        await database.createProject(id: 'p2', name: '西区');
+        await database.insertCaptureTemplate(
+          CaptureTemplatesCompanion.insert(
+            id: 'p1-old',
+            projectId: 'p1',
+            name: '东区早班',
+            nameKey: '东区早班',
+            workLocation: 'A 区',
+            workContent: '风管检查',
+            photographer: '张工',
+            createdAt: DateTime.utc(2026, 7, 14, 1),
+            updatedAt: DateTime.utc(2026, 7, 14, 2),
+          ),
+        );
+        await database.insertCaptureTemplate(
+          CaptureTemplatesCompanion.insert(
+            id: 'p1-new',
+            projectId: 'p1',
+            name: '东区晚班',
+            nameKey: '东区晚班',
+            workLocation: 'B 区',
+            workContent: '水压复核',
+            photographer: '李工',
+            createdAt: DateTime.utc(2026, 7, 15, 1),
+            updatedAt: DateTime.utc(2026, 7, 15, 2),
+          ),
+        );
+        await database.insertCaptureTemplate(
+          CaptureTemplatesCompanion.insert(
+            id: 'p2-only',
+            projectId: 'p2',
+            name: '西区班组',
+            nameKey: '西区班组',
+            workLocation: 'C 区',
+            workContent: '给水检查',
+            photographer: '王工',
+            createdAt: DateTime.utc(2026, 7, 16, 1),
+            updatedAt: DateTime.utc(2026, 7, 16, 2),
+          ),
+        );
+        final images = _RecordingProjectImagePipeline();
+        final exporter = ProjectExportService(
+          database: database,
+          images: images,
+          capturePaths: _BundleCapturePaths(),
+          exportPaths: _BundleProjectExportPaths(),
+          selectionExportPaths: _BundleSelectionPaths(),
+        );
+        final service = ProjectBackupService(
+          projectExporter: exporter,
+          database: database,
+          bundles: _FakeBundlePipeline(),
+          paths: _FakeBundlePaths(),
+          files: _FakeBundleFiles(),
+          idGenerator: () => 'bundle-templates',
+        );
+
+        await service.exportProjects(
+          projectIds: const ['p1', 'p2'],
+          includeOriginals: false,
+        );
+
+        expect(images.requests.map((request) => request.projectId), [
+          'p1',
+          'p2',
+        ]);
+        expect(
+          images.requests[0].templates
+              .map(
+                (template) => [
+                  template.name,
+                  template.workLocation,
+                  template.workContent,
+                  template.photographer,
+                ],
+              )
+              .toList(),
+          const [
+            ['东区晚班', 'B 区', '水压复核', '李工'],
+            ['东区早班', 'A 区', '风管检查', '张工'],
+          ],
+        );
+        expect(
+          images.requests[1].templates
+              .map(
+                (template) => [
+                  template.name,
+                  template.workLocation,
+                  template.workContent,
+                  template.photographer,
+                ],
+              )
+              .toList(),
+          const [
+            ['西区班组', 'C 区', '给水检查', '王工'],
+          ],
+        );
+      },
+    );
+
     test('bundle export failure still cleans staging', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -1516,6 +1622,60 @@ class _ExportCall {
   final String projectId;
   final bool includeOriginals;
   final String? outputZipPath;
+}
+
+class _RecordingProjectImagePipeline implements ImagePipeline {
+  final requests = <rust.ExportProjectRequest>[];
+
+  @override
+  Future<rust.ExportProjectResult> export(
+    rust.ExportProjectRequest request,
+  ) async {
+    requests.add(request);
+    return rust.ExportProjectResult(
+      outputZipPath: request.outputZipPath,
+      archiveSha256: 'c' * 64,
+      photoCount: request.photos.length,
+    );
+  }
+
+  @override
+  Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<rust.ExtractedArchivePhoto> extractArchivePhoto(
+    rust.ExtractArchivePhotoRequest request,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<rust.ExportProjectResult> exportSelection(
+    rust.ExportSelectionRequest request,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> sha256(String path) => throw UnimplementedError();
+}
+
+class _BundleCapturePaths implements CaptureOutputPaths {
+  @override
+  Future<String> renderedPhotoPath(String captureId) async =>
+      '/rendered/$captureId.jpg';
+}
+
+class _BundleProjectExportPaths implements ProjectExportPaths {
+  @override
+  Future<String> projectZipPath(String projectId) async =>
+      '/exports/$projectId.zip';
+}
+
+class _BundleSelectionPaths implements SelectionExportPaths {
+  @override
+  Future<String> selectionZipPath() async => '/exports/selection.zip';
 }
 
 class _FakeProjectExporter implements ProjectArchiveExporter {
