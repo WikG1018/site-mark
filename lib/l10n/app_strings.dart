@@ -99,6 +99,50 @@ class AppStrings {
   String get noRecentSuggestions => _english ? 'No history' : '暂无历史';
   String get suggestionsLoadFailed =>
       _english ? 'Could not load suggestions' : '加载失败';
+  String get captureTemplates => _english ? 'Templates' : '模板';
+  String get captureTemplateCreate => _english ? 'Save current' : '保存当前内容';
+  String get captureTemplateName => _english ? 'Template name' : '模板名称';
+  String get captureTemplateEmpty => _english ? 'No templates yet' : '暂无模板';
+  String get captureTemplateApplied => _english ? 'Template applied' : '已应用模板';
+  String get captureTemplateLoadFailed =>
+      _english ? 'Could not load templates' : '模板加载失败';
+  String get captureTemplateSaveFailed =>
+      _english ? 'Could not save template. Try again.' : '模板保存失败，请重试。';
+  String get captureTemplateRenameFailed =>
+      _english ? 'Could not rename template. Try again.' : '模板重命名失败，请重试。';
+  String get captureTemplateDeleteFailed =>
+      _english ? 'Could not delete template. Try again.' : '模板删除失败，请重试。';
+  String get captureTemplateDeleteTitle =>
+      _english ? 'Delete this template?' : '删除此模板？';
+  String get captureTemplateDeleteNotice => _english
+      ? 'Only this template will be deleted. Photos and the current form are not affected.'
+      : '只会删除此模板，不会影响照片或当前已填写的表单。';
+  String get captureTemplateRename => _english ? 'Rename' : '重命名';
+  String get captureTemplateEmptyName =>
+      _english ? 'Enter a template name' : '请输入模板名称';
+  String get captureTemplateNameTooLong =>
+      _english ? 'Template name is too long' : '模板名称过长';
+  String get captureTemplateEmptyWorkLocation =>
+      _english ? 'Work location is required' : '工程部位不能为空';
+  String get captureTemplateWorkLocationTooLong =>
+      _english ? 'Work location is too long' : '工程部位过长';
+  String get captureTemplateEmptyWorkContent =>
+      _english ? 'Work content is required' : '工作内容不能为空';
+  String get captureTemplateWorkContentTooLong =>
+      _english ? 'Work content is too long' : '工作内容过长';
+  String get captureTemplateEmptyPhotographer =>
+      _english ? 'Photographer is required' : '拍摄人不能为空';
+  String get captureTemplatePhotographerTooLong =>
+      _english ? 'Photographer is too long' : '拍摄人过长';
+  String get captureTemplateDuplicateName =>
+      _english ? 'A template with this name already exists' : '已存在同名模板';
+  String get captureTemplateLimitReached =>
+      _english ? 'This project already has 100 templates' : '此项目已达到 100 个模板上限';
+  String get captureTemplateInvalidCharacter => _english
+      ? 'Template text cannot contain unsupported characters'
+      : '模板文字包含不支持的字符';
+  String get captureTemplateNotFound =>
+      _english ? 'Template no longer exists' : '模板已不存在';
   String get openSystemCamera => _english ? 'Capture' : '拍摄';
   String get captureWorkflowHint => _english
       ? 'Capture will invoke the system camera. Watermarks are processed in the background. You can tap capture repeatedly; return to the project detail to view records as they finish.'

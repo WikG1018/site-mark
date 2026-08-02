@@ -44,6 +44,7 @@ import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark/workflow/app_storage_service.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
+import 'package:sitemark/workflow/capture_template_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
@@ -71,6 +72,10 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 
 final captureQueryRepositoryProvider = Provider<CaptureQueryRepository>((ref) {
   return CaptureQueryRepository(ref.watch(databaseProvider));
+});
+
+final captureTemplateServiceProvider = Provider<CaptureTemplateService>((ref) {
+  return CaptureTemplateService(database: ref.watch(databaseProvider));
 });
 
 class _DatabasePollingControl implements BackgroundWorkControl {

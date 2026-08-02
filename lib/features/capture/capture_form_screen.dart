@@ -6,6 +6,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
+import 'package:sitemark/features/capture/capture_template_sheet.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
@@ -46,6 +47,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   Future<_CaptureFormInit?>? _initFuture;
   var _initGeneration = 0;
   var _captureOperation = 0;
+  var _templateOperation = 0;
+  var _templateSheetOpen = false;
 
   /// Cached location-permission view state. Loaded once during initialization
   /// and refreshed whenever the app returns to the foreground so the
@@ -141,6 +144,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     if (oldWidget.projectId == widget.projectId) return;
     _initGeneration++;
     _captureOperation++;
+    _templateOperation++;
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     _locationController.clear();
     _contentController.clear();
     _photographerController.clear();
@@ -193,6 +198,68 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
           field: field,
           limit: limit,
         );
+  }
+
+  CaptureRequiredFieldsSnapshot _requiredFieldsSnapshot() {
+    return CaptureRequiredFieldsSnapshot(
+      workLocation: _locationController.text,
+      workContent: _contentController.text,
+      photographer: _photographerController.text,
+    );
+  }
+
+  void _applyRequiredFields(CaptureRequiredFieldsSnapshot snapshot) {
+    _locationController.text = snapshot.workLocation;
+    _contentController.text = snapshot.workContent;
+    _photographerController.text = snapshot.photographer;
+  }
+
+  Future<void> _openTemplates() async {
+    if (_templateSheetOpen) return;
+    final projectId = widget.projectId;
+    final generation = _initGeneration;
+    final operation = ++_templateOperation;
+    final previous = _requiredFieldsSnapshot();
+    _templateSheetOpen = true;
+    CaptureRequiredFieldsSnapshot? selected;
+    try {
+      selected = await showCaptureTemplateSheet(
+        context: context,
+        projectId: projectId,
+        current: previous,
+        service: ref.read(captureTemplateServiceProvider),
+      );
+    } finally {
+      _templateSheetOpen = false;
+    }
+    if (!mounted ||
+        selected == null ||
+        widget.projectId != projectId ||
+        _initGeneration != generation ||
+        _templateOperation != operation) {
+      return;
+    }
+    _applyRequiredFields(selected);
+    final strings = AppStrings.of(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(strings.captureTemplateApplied),
+          action: SnackBarAction(
+            label: strings.undo,
+            onPressed: () {
+              if (!mounted ||
+                  widget.projectId != projectId ||
+                  _initGeneration != generation ||
+                  _templateOperation != operation) {
+                return;
+              }
+              _applyRequiredFields(previous);
+            },
+          ),
+        ),
+      );
   }
 
   @override
@@ -377,6 +444,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                           loadSuggestions: _loadRecentSuggestions,
                           strings: strings,
                           working: _working,
+                          onTemplates: _openTemplates,
                           onCapture: () => _capture(project),
                           permissionPrompt: prompt,
                         ),
@@ -413,6 +481,7 @@ class _CaptureFormBody extends StatelessWidget {
     required this.loadSuggestions,
     required this.strings,
     required this.working,
+    required this.onTemplates,
     required this.onCapture,
     this.permissionPrompt,
   });
@@ -428,6 +497,7 @@ class _CaptureFormBody extends StatelessWidget {
   final CaptureRecentSuggestionsLoader loadSuggestions;
   final AppStrings strings;
   final bool working;
+  final VoidCallback onTemplates;
   final VoidCallback onCapture;
 
   /// Optional non-blocking location-permission card rendered at the top of the
@@ -443,6 +513,16 @@ class _CaptureFormBody extends StatelessWidget {
         // Always-mounted animated slot: the prompt expands/fades in and
         // collapses out without the form fields jumping.
         LocationPermissionPromptArea(prompt: permissionPrompt),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: OutlinedButton.icon(
+            key: const Key('capture-template-button'),
+            onPressed: onTemplates,
+            icon: const Icon(Icons.bookmarks_outlined, size: 18),
+            label: Text(strings.captureTemplates),
+          ),
+        ),
+        const SizedBox(height: 8),
         _RequiredField(
           fieldKey: const Key('work-location'),
           controller: locationController,
