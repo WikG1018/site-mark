@@ -328,6 +328,97 @@ void main() {
     },
   );
 
+  testWidgets('simultaneous focused node and identity replacement loads once', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    final oldFocus = FocusNode();
+    final idleFocus = FocusNode();
+    final newFocus = FocusNode();
+    final staleResult = Completer<List<String>>();
+    final newResult = Completer<List<String>>();
+    var projectId = 'project-old';
+    var field = CaptureSuggestionField.workLocation;
+    var selectedFocus = oldFocus;
+    var newLoadCount = 0;
+    late StateSetter rebuild;
+    addTearDown(() {
+      controller.dispose();
+      oldFocus.dispose();
+      idleFocus.dispose();
+      newFocus.dispose();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return Scaffold(
+              body: Column(
+                children: [
+                  Focus(focusNode: oldFocus, child: const SizedBox()),
+                  Focus(focusNode: idleFocus, child: const SizedBox()),
+                  Focus(focusNode: newFocus, child: const SizedBox()),
+                  CaptureRecentSuggestions(
+                    projectId: projectId,
+                    field: field,
+                    controller: controller,
+                    focusNode: selectedFocus,
+                    load:
+                        ({required projectId, required field, required limit}) {
+                          if (projectId == 'project-old') {
+                            return staleResult.future;
+                          }
+                          if (projectId == 'project-new' &&
+                              field == CaptureSuggestionField.photographer) {
+                            newLoadCount++;
+                            return newResult.future;
+                          }
+                          return Future.value(const <String>[]);
+                        },
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    oldFocus.requestFocus();
+    await tester.pump();
+
+    rebuild(() {
+      projectId = 'project-gap';
+      selectedFocus = idleFocus;
+    });
+    await tester.pump();
+
+    newFocus.requestFocus();
+    rebuild(() {
+      projectId = 'project-new';
+      field = CaptureSuggestionField.photographer;
+      selectedFocus = newFocus;
+    });
+    await tester.pump();
+
+    expect(newLoadCount, 1);
+    newResult.complete(['New identity value']);
+    await tester.pumpAndSettle();
+    staleResult.complete(['Stale identity value']);
+    await tester.pumpAndSettle();
+
+    expect(find.text('New identity value'), findsOneWidget);
+    expect(find.text('Stale identity value'), findsNothing);
+  });
+
   testWidgets('more selection closes history and changes only its controller', (
     tester,
   ) async {

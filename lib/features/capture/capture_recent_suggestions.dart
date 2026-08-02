@@ -55,20 +55,24 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
   @override
   void didUpdateWidget(covariant CaptureRecentSuggestions oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.focusNode != widget.focusNode) {
+    final focusChanged = oldWidget.focusNode != widget.focusNode;
+    final identityChanged =
+        oldWidget.projectId != widget.projectId ||
+        oldWidget.field != widget.field;
+    if (focusChanged) {
       oldWidget.focusNode.removeListener(_onFocusChanged);
       widget.focusNode.addListener(_onFocusChanged);
-      if (widget.focusNode.hasFocus) _loadIfNeeded();
     }
-    if (oldWidget.projectId != widget.projectId ||
-        oldWidget.field != widget.field) {
+    if (identityChanged) {
       // Invalidate any request for the old project/field before exposing the
       // cached value (or loading) for the new identity.
       _request++;
       _suggestions = _cache[_cacheKey];
       _error = null;
       _loading = false;
-      if (widget.focusNode.hasFocus) _loadIfNeeded();
+    }
+    if ((focusChanged || identityChanged) && widget.focusNode.hasFocus) {
+      _loadIfNeeded();
     }
   }
 
