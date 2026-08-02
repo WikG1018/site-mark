@@ -58,6 +58,7 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
     if (oldWidget.focusNode != widget.focusNode) {
       oldWidget.focusNode.removeListener(_onFocusChanged);
       widget.focusNode.addListener(_onFocusChanged);
+      if (widget.focusNode.hasFocus) _loadIfNeeded();
     }
     if (oldWidget.projectId != widget.projectId ||
         oldWidget.field != widget.field) {

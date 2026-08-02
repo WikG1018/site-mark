@@ -496,6 +496,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('capture-form')), findsOneWidget);
+      expect(fieldText(tester, const Key('work-location')), 'A 区三层');
+      expect(fieldText(tester, const Key('work-content')), '风管安装检查');
+      expect(fieldText(tester, const Key('photographer')), '张工');
       expect(fieldText(tester, const Key('notes')), '');
       expect(
         tester

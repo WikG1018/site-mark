@@ -44,6 +44,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   /// fields can be prefilled exactly once. Rebuilt only when [widget.projectId]
   /// changes; never recomputed on every [build].
   Future<_CaptureFormInit?>? _initFuture;
+  var _initGeneration = 0;
 
   /// Cached location-permission view state. Loaded once during initialization
   /// and refreshed whenever the app returns to the foreground so the
@@ -51,9 +52,13 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   /// system dialog or settings. `null` means the first load has not finished.
   LocationPermissionViewState? _permissionState;
 
-  Future<_CaptureFormInit?> _loadInit() async {
+  bool _isCurrentInit(String projectId, int generation) =>
+      mounted && widget.projectId == projectId && _initGeneration == generation;
+
+  Future<_CaptureFormInit?> _loadInit(String projectId, int generation) async {
     final database = ref.read(databaseProvider);
-    final project = await database.projectById(widget.projectId);
+    final project = await database.projectById(projectId);
+    if (!_isCurrentInit(projectId, generation)) return null;
     if (project == null) return null;
 
     // Check the KILL-persisted draft first. A KILL draft represents the
@@ -64,12 +69,11 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     // whether the project already has captured records.
     CaptureFormDraftSnapshot? snapshot;
     try {
-      snapshot = await ref
-          .read(captureFormDraftStoreProvider)
-          .load(widget.projectId);
+      snapshot = await ref.read(captureFormDraftStoreProvider).load(projectId);
     } catch (_) {
       snapshot = null;
     }
+    if (!_isCurrentInit(projectId, generation)) return null;
 
     if (snapshot != null) {
       // Restore the user's unsaved draft from the last KILL event.
@@ -80,7 +84,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     } else {
       // No KILL draft to restore; fall back to carry-forward fields from
       // the most recent captured record. Notes stay blank by design.
-      final draft = await database.latestCapturedDraft(widget.projectId);
+      final draft = await database.latestCapturedDraft(projectId);
+      if (!_isCurrentInit(projectId, generation)) return null;
       if (draft != null) {
         _applyCarryForward(draft);
       }
@@ -89,7 +94,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
 
     // A snapshot was restored; still load the latest draft so the caller
     // knows whether the project has history.
-    final draft = await database.latestCapturedDraft(widget.projectId);
+    final draft = await database.latestCapturedDraft(projectId);
+    if (!_isCurrentInit(projectId, generation)) return null;
     return _CaptureFormInit(project: project, draft: draft);
   }
 
@@ -109,6 +115,10 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     // MEMORY_KILL so the user does not lose what they typed when the OEM
     // reclaims the process. The hook reads the controllers synchronously
     // (cheap) and writes the snapshot to disk asynchronously.
+    _attachKillHook();
+  }
+
+  void _attachKillHook() {
     final store = ref.read(captureFormDraftStoreProvider);
     _killHookDetach = ref
         .read(memoryPressureControllerProvider)
@@ -125,9 +135,25 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   }
 
   @override
+  void didUpdateWidget(covariant CaptureFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId == widget.projectId) return;
+    _initGeneration++;
+    _locationController.clear();
+    _contentController.clear();
+    _photographerController.clear();
+    _notesController.clear();
+    _working = false;
+    _killHookDetach?.call();
+    _killHookDetach = null;
+    _attachKillHook();
+    _initFuture = _loadInit(widget.projectId, _initGeneration);
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _initFuture ??= _loadInit();
+    _initFuture ??= _loadInit(widget.projectId, _initGeneration);
     // Kick off the first permission load alongside the project init. Guarded
     // by the null cache so repeated rebuilds do not re-trigger the load.
     if (_permissionState == null) {

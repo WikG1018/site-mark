@@ -1,11 +1,21 @@
 import 'dart:async';
 
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/app.dart';
+import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
+import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/platform/capture_form_draft_store.dart';
+import 'package:sitemark/platform/memory_pressure_coordinator.dart';
+import 'package:sitemark/platform/memory_pressure_service.dart';
+import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
   Future<void> pumpSuggestions(
@@ -250,4 +260,342 @@ void main() {
     expect(find.text('New project value'), findsOneWidget);
     expect(find.text('Old project value'), findsNothing);
   });
+
+  testWidgets(
+    'replacing a focused focus node loads the new field immediately',
+    (tester) async {
+      final controller = TextEditingController();
+      final oldFocus = FocusNode();
+      final newFocus = FocusNode();
+      var useNewFocus = false;
+      var newLoadCount = 0;
+      late StateSetter rebuild;
+      addTearDown(() {
+        controller.dispose();
+        oldFocus.dispose();
+        newFocus.dispose();
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              final focusNode = useNewFocus ? newFocus : oldFocus;
+              return Scaffold(
+                body: Column(
+                  children: [
+                    Focus(focusNode: oldFocus, child: const SizedBox()),
+                    Focus(focusNode: newFocus, child: const SizedBox()),
+                    CaptureRecentSuggestions(
+                      projectId: 'project-1',
+                      field: CaptureSuggestionField.workLocation,
+                      controller: controller,
+                      focusNode: focusNode,
+                      load:
+                          ({
+                            required projectId,
+                            required field,
+                            required limit,
+                          }) {
+                            if (focusNode == newFocus) newLoadCount++;
+                            return Future.value(['New focused value']);
+                          },
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      newFocus.requestFocus();
+      rebuild(() => useNewFocus = true);
+      await tester.pumpAndSettle();
+
+      expect(newLoadCount, 1);
+      expect(find.text('New focused value'), findsOneWidget);
+    },
+  );
+
+  testWidgets('more selection closes history and changes only its controller', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'Before');
+    final notes = TextEditingController(text: 'Keep note');
+    final focusNode = FocusNode();
+    addTearDown(() {
+      controller.dispose();
+      notes.dispose();
+      focusNode.dispose();
+    });
+    await pumpSuggestions(
+      tester,
+      projectId: 'project-1',
+      controller: controller,
+      focusNode: focusNode,
+      load: ({required projectId, required field, required limit}) async => [
+        'One',
+        'Two',
+        'Three',
+        'Four',
+      ],
+    );
+    focusNode.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Four'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(controller.text, 'Four');
+    expect(notes.text, 'Keep note');
+  });
+
+  testWidgets('system back closes only the history dialog', (tester) async {
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    addTearDown(() {
+      controller.dispose();
+      focusNode.dispose();
+    });
+    await pumpSuggestions(
+      tester,
+      projectId: 'project-1',
+      controller: controller,
+      focusNode: focusNode,
+      load: ({required projectId, required field, required limit}) async => [
+        'One',
+        'Two',
+        'Three',
+        'Four',
+      ],
+    );
+    focusNode.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(const Key('capture-recent-suggestions')), findsOneWidget);
+  });
+
+  testWidgets('uses zero duration when animations are disabled', (
+    tester,
+  ) async {
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    addTearDown(() {
+      controller.dispose();
+      focusNode.dispose();
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Scaffold(
+            body: Focus(
+              focusNode: focusNode,
+              child: CaptureRecentSuggestions(
+                projectId: 'project-1',
+                field: CaptureSuggestionField.workLocation,
+                controller: controller,
+                focusNode: focusNode,
+                load: ({required projectId, required field, required limit}) =>
+                    Future.value(['Value']),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester
+          .widget<AnimatedSize>(
+            find.byKey(const Key('capture-recent-suggestions')),
+          )
+          .duration,
+      Duration.zero,
+    );
+  });
+
+  testWidgets('long suggestions do not overflow at 360dp', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final controller = TextEditingController();
+    final focusNode = FocusNode();
+    addTearDown(() {
+      controller.dispose();
+      focusNode.dispose();
+    });
+    await pumpSuggestions(
+      tester,
+      projectId: 'project-1',
+      controller: controller,
+      focusNode: focusNode,
+      load: ({required projectId, required field, required limit}) async =>
+          List.filled(4, 'Very long suggestion value for a narrow phone'),
+    );
+    focusNode.requestFocus();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recent-suggestions-more')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('same CaptureFormScreen state isolates a replacement project', (
+    tester,
+  ) async {
+    final database = _DelayedProjectDatabase();
+    final drafts = MemoryCaptureFormDraftStore();
+    final memory = MemoryPressureController();
+    await database.createProject(id: 'project-1', name: 'Old project');
+    await database.createProject(id: 'project-2', name: 'New project');
+    await drafts.save(
+      const CaptureFormDraftSnapshot(
+        projectId: 'project-2',
+        workLocation: 'New location',
+        workContent: 'New content',
+        photographer: 'New photographer',
+        notes: 'New notes',
+      ),
+    );
+    String projectId = 'project-1';
+    late StateSetter replaceProject;
+    addTearDown(database.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          captureFormDraftStoreProvider.overrideWithValue(drafts),
+          memoryPressureControllerProvider.overrideWithValue(memory),
+          platformServicesProvider.overrideWithValue(_FormPlatform()),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          home: StatefulBuilder(
+            builder: (context, setState) {
+              replaceProject = setState;
+              return CaptureFormScreen(projectId: projectId);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    replaceProject(() => projectId = 'project-2');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('work-location')))
+          .controller!
+          .text,
+      'New location',
+    );
+    await database.releaseFirstProject();
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('work-location')))
+          .controller!
+          .text,
+      'New location',
+    );
+
+    await memory.dispatch(MemoryPressureLevel.kill);
+    expect((await drafts.load('project-2'))?.workLocation, 'New location');
+    expect(await drafts.load('project-1'), isNull);
+  });
+}
+
+class _DelayedProjectDatabase extends AppDatabase {
+  _DelayedProjectDatabase() : super.forTesting(NativeDatabase.memory());
+
+  final Completer<Project?> _firstProject = Completer<Project?>();
+  var _delayFirstProject = true;
+
+  @override
+  Future<Project?> projectById(String projectId) {
+    if (projectId == 'project-1' && _delayFirstProject) {
+      return _firstProject.future;
+    }
+    return super.projectById(projectId);
+  }
+
+  Future<void> releaseFirstProject() async {
+    _delayFirstProject = false;
+    _firstProject.complete(await super.projectById('project-1'));
+  }
+}
+
+class _FormPlatform implements PlatformServices {
+  @override
+  Future<String> createCameraTarget(String captureId) async => '/$captureId';
+
+  @override
+  Future<void> deletePublishedImage(String contentUri) async {}
+
+  @override
+  Future<void> finishCameraCapture(String captureId, bool keepOriginal) async {}
+
+  @override
+  Future<LocationPermissionState> getLocationPermissionState() async =>
+      LocationPermissionState.granted;
+
+  @override
+  Future<ImageMetadataResult> inspectImage(String path) async =>
+      ImageMetadataResult(
+        width: 0,
+        height: 0,
+        fileSizeBytes: 0,
+        mimeType: 'image/jpeg',
+      );
+
+  @override
+  Future<CameraCaptureResult> launchCamera(String captureId) async =>
+      CameraCaptureResult(
+        outcome: CameraOutcome.cancelled,
+        outputPath: '/$captureId',
+      );
+
+  @override
+  Future<void> openApplicationSettings() async {}
+
+  @override
+  Future<String> publishJpeg(String sourcePath, String displayName) async => '';
+
+  @override
+  Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;
+
+  @override
+  Future<LocationResult> requestCurrentLocation(int timeoutMillis) async =>
+      LocationResult(outcome: LocationOutcome.unavailable);
+
+  @override
+  Future<LocationPermissionState> requestLocationPermission() async =>
+      LocationPermissionState.granted;
 }
