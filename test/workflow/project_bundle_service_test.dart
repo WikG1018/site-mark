@@ -385,6 +385,75 @@ void main() {
       );
     }
 
+    test(
+      'project ENOSPC records storage diagnostic without private context',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.createProject(id: 'p1', name: '私有项目名称');
+        final storageError = FileSystemException(
+          'private-template-value',
+          r'C:\private\database\sitemark.sqlite',
+          const OSError('No space left on device', 28),
+        );
+        final diagnosticRoot = await Directory.systemTemp.createTemp(
+          'sitemark-backup-storage-diagnostics-',
+        );
+        addTearDown(() => diagnosticRoot.delete(recursive: true));
+        final diagnosticStore = DiagnosticEventStore(directory: diagnosticRoot);
+        final service = ProjectBackupService(
+          projectExporter: _FakeProjectExporter(
+            failProjectId: 'p1',
+            failure: storageError,
+          ),
+          database: database,
+          bundles: _FakeBundlePipeline(),
+          paths: _FakeBundlePaths(),
+          files: _FakeBundleFiles(),
+          diagnostics: DiagnosticRecorder(diagnosticStore),
+          idGenerator: () => 'bundle-storage-failure',
+        );
+
+        await expectLater(
+          service.exportProjects(
+            projectIds: const ['p1'],
+            includeOriginals: false,
+          ),
+          throwsA(
+            isA<ProjectBackupExportException>().having(
+              (error) => error.cause,
+              'cause',
+              same(storageError),
+            ),
+          ),
+        );
+
+        List<DiagnosticEvent> events = const [];
+        for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          events = await diagnosticStore.readRecent();
+        }
+        expect(events, hasLength(1));
+        final event = events.single;
+        expect(event.category, DiagnosticCategory.backup);
+        expect(event.outcome, DiagnosticOutcome.failed);
+        expect(event.code, DiagnosticCode.insufficientStorage);
+        expect(event.count, 1);
+        expect(event.toJson().keys.toSet(), {
+          'timestamp',
+          'category',
+          'outcome',
+          'code',
+          'duration_ms',
+          'count',
+        });
+        final encoded = event.encode();
+        expect(encoded, isNot(contains('private-template-value')));
+        expect(encoded, isNot(contains(r'C:\private\database')));
+        expect(encoded, isNot(contains('私有项目名称')));
+      },
+    );
+
     test('bundle export failure still cleans staging', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -1846,9 +1915,10 @@ class _BundleSelectionPaths implements SelectionExportPaths {
 }
 
 class _FakeProjectExporter implements ProjectArchiveExporter {
-  _FakeProjectExporter({this.failProjectId});
+  _FakeProjectExporter({this.failProjectId, this.failure});
 
   final String? failProjectId;
+  final Object? failure;
   final requests = <_ExportCall>[];
 
   @override
@@ -1861,7 +1931,9 @@ class _FakeProjectExporter implements ProjectArchiveExporter {
     int omittedFailedCount = 0,
   }) async {
     requests.add(_ExportCall(projectId, includeOriginals, outputZipPath));
-    if (projectId == failProjectId) throw StateError('export failed');
+    if (projectId == failProjectId) {
+      throw failure ?? StateError('export failed');
+    }
     return rust.ExportProjectResult(
       outputZipPath: outputZipPath ?? '/exports/$projectId.zip',
       archiveSha256: 'c' * 64,

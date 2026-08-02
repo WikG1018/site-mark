@@ -45,6 +45,24 @@ class ProjectBackupExportException implements Exception {
   String toString() => 'Project backup export failed for "$projectName"';
 }
 
+bool isInsufficientStorageFailure(Object error) {
+  if (error is ProjectBackupExportException) {
+    return isInsufficientStorageFailure(error.cause);
+  }
+  final osError = switch (error) {
+    FileSystemException(:final osError) => osError,
+    OSError value => value,
+    _ => null,
+  };
+  if (osError != null && {28, 39, 112}.contains(osError.errorCode)) {
+    return true;
+  }
+  final message = error.toString().toLowerCase();
+  return message.contains('no space') ||
+      message.contains('disk full') ||
+      message.contains('enospc');
+}
+
 class ProjectBackupService {
   ProjectBackupService({
     required this.projectExporter,
@@ -244,20 +262,20 @@ class ProjectBackupService {
         omittedFailedCount: omittedFailedCount,
       );
     } on Exception catch (error, stackTrace) {
+      final failure = ProjectBackupExportException(
+        projectId: project.id,
+        projectName: project.name,
+        cause: error,
+      );
       _recordBackup(
         DiagnosticOutcome.failed,
-        DiagnosticCode.unexpected,
+        isInsufficientStorageFailure(failure)
+            ? DiagnosticCode.insufficientStorage
+            : DiagnosticCode.unexpected,
         1,
         stopwatch.elapsedMilliseconds,
       );
-      Error.throwWithStackTrace(
-        ProjectBackupExportException(
-          projectId: project.id,
-          projectName: project.name,
-          cause: error,
-        ),
-        stackTrace,
-      );
+      Error.throwWithStackTrace(failure, stackTrace);
     }
   }
 
@@ -356,12 +374,10 @@ ProjectBundleRestoreFailure _classifyRestoreFailure(
   if (error is InvalidArchiveException) {
     return ProjectBundleRestoreFailure.corrupted;
   }
-  final message = error.toString().toLowerCase();
-  if (message.contains('no space') ||
-      message.contains('disk full') ||
-      message.contains('enospc')) {
+  if (isInsufficientStorageFailure(error)) {
     return ProjectBundleRestoreFailure.insufficientStorage;
   }
+  final message = error.toString().toLowerCase();
   if (error is ImagePipelineException &&
       error.kind == ImagePipelineFailureKind.invalidData) {
     if (message.contains('selection archive')) {

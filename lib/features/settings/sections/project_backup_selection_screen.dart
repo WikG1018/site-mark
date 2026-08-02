@@ -383,18 +383,11 @@ class _ProjectBackupSelectionScreenState
 }
 
 String _describeBackupError(AppStrings strings, Object error) {
+  if (isInsufficientStorageFailure(error)) {
+    return strings.backupStorageInsufficient;
+  }
   if (error is ProjectBackupExportException) {
     return strings.backupProjectFailed(error.projectName);
   }
-  if (_looksLikeInsufficientStorage(error)) {
-    return strings.backupStorageInsufficient;
-  }
   return strings.backupFailedFriendly;
-}
-
-bool _looksLikeInsufficientStorage(Object error) {
-  final text = error.toString().toLowerCase();
-  return text.contains('no space') ||
-      text.contains('disk full') ||
-      text.contains('enospc');
 }
