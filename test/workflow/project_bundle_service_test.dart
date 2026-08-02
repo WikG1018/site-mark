@@ -1492,6 +1492,9 @@ rust.ProjectArchivePreview _archivePreview(String name) =>
     rust.ProjectArchivePreview(
       schemaVersion: 2,
       projectName: name,
+      omittedProcessingCount: 0,
+      omittedFailedCount: 0,
+      isPartial: false,
       includesOriginals: true,
       photos: [
         rust.ArchivePhotoPreview(
@@ -1504,6 +1507,7 @@ rust.ProjectArchivePreview _archivePreview(String name) =>
           photographer: '张工',
         ),
       ],
+      templates: const [],
     );
 
 class _ExportCall {

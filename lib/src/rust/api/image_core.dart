@@ -6,9 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `open_zip`, `read_project_bundle_manifest`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `tokenize`, `unix_time_millis`, `validate_project_bundle`, `validate_render_request`, `wrap_text`, `zip_failure`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestPhoto`, `ManifestWatermark`, `ProjectBundleManifestEntry`, `ProjectBundleManifest`, `ProjectManifestFile`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_leap_year`, `is_template_whitespace`, `is_valid_exported_timestamp`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `normalized_template_name`, `open_zip`, `parse_two_digits`, `read_project_bundle_manifest`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `template_name_key`, `tokenize`, `trimmed_template_field`, `unix_time_millis`, `validate_archive_templates`, `validate_project_bundle`, `validate_render_request`, `wrap_text`, `zip_failure`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestCaptureTemplate`, `ManifestPhoto`, `ManifestWatermark`, `ProjectBundleManifestEntry`, `ProjectBundleManifest`, `ProjectManifestFile`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<String> sha256File({required String path}) =>
     RustLib.instance.api.crateApiImageCoreSha256File(path: path);
@@ -56,7 +56,7 @@ Future<void> extractProjectBundleEntry({
 );
 
 /// Validates a backup ZIP and returns its restorable content. Only
-/// single-project archives (schema v1/v2) are restorable.
+/// single-project archives (schema v1-v4) are restorable.
 Future<ProjectArchivePreview> readProjectArchive({required String zipPath}) =>
     RustLib.instance.api.crateApiImageCoreReadProjectArchive(zipPath: zipPath);
 
@@ -70,6 +70,45 @@ Future<ExtractedArchivePhoto> extractArchivePhoto({
   required ExtractArchivePhotoRequest request,
 }) =>
     RustLib.instance.api.crateApiImageCoreExtractArchivePhoto(request: request);
+
+class ArchiveCaptureTemplate {
+  final String name;
+  final String workLocation;
+  final String workContent;
+  final String photographer;
+  final String createdAt;
+  final String updatedAt;
+
+  const ArchiveCaptureTemplate({
+    required this.name,
+    required this.workLocation,
+    required this.workContent,
+    required this.photographer,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      workLocation.hashCode ^
+      workContent.hashCode ^
+      photographer.hashCode ^
+      createdAt.hashCode ^
+      updatedAt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ArchiveCaptureTemplate &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          workLocation == other.workLocation &&
+          workContent == other.workContent &&
+          photographer == other.photographer &&
+          createdAt == other.createdAt &&
+          updatedAt == other.updatedAt;
+}
 
 /// One restorable photo entry from a project backup manifest.
 class ArchivePhotoPreview {
@@ -169,6 +208,45 @@ class ArchiveWatermarkSettings {
           opacity == other.opacity &&
           accentColorArgb == other.accentColorArgb &&
           fontScale == other.fontScale;
+}
+
+class ExportCaptureTemplate {
+  final String name;
+  final String workLocation;
+  final String workContent;
+  final String photographer;
+  final String createdAt;
+  final String updatedAt;
+
+  const ExportCaptureTemplate({
+    required this.name,
+    required this.workLocation,
+    required this.workContent,
+    required this.photographer,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      workLocation.hashCode ^
+      workContent.hashCode ^
+      photographer.hashCode ^
+      createdAt.hashCode ^
+      updatedAt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportCaptureTemplate &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          workLocation == other.workLocation &&
+          workContent == other.workContent &&
+          photographer == other.photographer &&
+          createdAt == other.createdAt &&
+          updatedAt == other.updatedAt;
 }
 
 class ExportPhotoRecord {
@@ -279,6 +357,7 @@ class ExportProjectRequest {
   final bool includeOriginals;
   final ExportWatermarkSettings watermark;
   final List<ExportPhotoRecord> photos;
+  final List<ExportCaptureTemplate> templates;
 
   const ExportProjectRequest({
     required this.projectId,
@@ -292,6 +371,7 @@ class ExportProjectRequest {
     required this.includeOriginals,
     required this.watermark,
     required this.photos,
+    required this.templates,
   });
 
   @override
@@ -306,7 +386,8 @@ class ExportProjectRequest {
       outputZipPath.hashCode ^
       includeOriginals.hashCode ^
       watermark.hashCode ^
-      photos.hashCode;
+      photos.hashCode ^
+      templates.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -323,7 +404,8 @@ class ExportProjectRequest {
           outputZipPath == other.outputZipPath &&
           includeOriginals == other.includeOriginals &&
           watermark == other.watermark &&
-          photos == other.photos;
+          photos == other.photos &&
+          templates == other.templates;
 }
 
 class ExportProjectResult {
@@ -521,6 +603,7 @@ class ProjectArchivePreview {
   final bool includesOriginals;
   final ArchiveWatermarkSettings? watermark;
   final List<ArchivePhotoPreview> photos;
+  final List<ArchiveCaptureTemplate> templates;
 
   const ProjectArchivePreview({
     required this.schemaVersion,
@@ -528,12 +611,13 @@ class ProjectArchivePreview {
     this.projectDescription,
     this.projectCreatedAt,
     this.snapshotAt,
-    this.omittedProcessingCount = 0,
-    this.omittedFailedCount = 0,
-    this.isPartial = false,
+    required this.omittedProcessingCount,
+    required this.omittedFailedCount,
+    required this.isPartial,
     required this.includesOriginals,
     this.watermark,
     required this.photos,
+    required this.templates,
   });
 
   @override
@@ -548,7 +632,8 @@ class ProjectArchivePreview {
       isPartial.hashCode ^
       includesOriginals.hashCode ^
       watermark.hashCode ^
-      photos.hashCode;
+      photos.hashCode ^
+      templates.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -565,7 +650,8 @@ class ProjectArchivePreview {
           isPartial == other.isPartial &&
           includesOriginals == other.includesOriginals &&
           watermark == other.watermark &&
-          photos == other.photos;
+          photos == other.photos &&
+          templates == other.templates;
 }
 
 class ProjectBundleEntryPreview {

@@ -5,8 +5,8 @@ use image::{ImageBuffer, Rgb};
 use sitemark_core::api::image_core::{
     export_project, export_project_bundle, export_selection, extract_archive_photo,
     extract_project_bundle_entry, read_project_archive, read_project_bundle, render_photo,
-    sha256_file, ExportPhotoRecord, ExportProjectBundleRequest, ExportProjectRequest,
-    ExportSelectionProject, ExportSelectionRequest, ExportWatermarkSettings,
+    sha256_file, ExportCaptureTemplate, ExportPhotoRecord, ExportProjectBundleRequest,
+    ExportProjectRequest, ExportSelectionProject, ExportSelectionRequest, ExportWatermarkSettings,
     ExtractArchivePhotoRequest, ExtractProjectBundleEntryRequest, ProjectBundleSource,
     RenderPhotoRequest, WatermarkPosition, MAX_BUNDLE_ENTRY_BYTES, MAX_BUNDLE_PROJECTS,
     MAX_BUNDLE_TOTAL_BYTES,
@@ -143,6 +143,7 @@ fn project_bundle_round_trip_and_hash_validation() {
     .unwrap();
 
     let preview = read_project_bundle(bundle_path.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.schema_version, 1);
     assert_eq!(preview.projects.len(), 1);
     assert_eq!(preview.projects[0].project_id, "project-1");
     assert_eq!(preview.projects[0].project_name, "东区");
@@ -499,6 +500,7 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
             accuracy_meters: Some(8.0),
             watermark_locale_code: Some("zh".to_string()),
         }],
+        templates: vec![],
     })
     .unwrap();
 
@@ -523,31 +525,101 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
         .unwrap()
         .read_to_string(&mut manifest)
         .unwrap();
-    assert!(manifest.contains("\"schema_version\": 3"));
+    assert!(manifest.contains("\"schema_version\": 4"));
     assert!(manifest.contains("\"watermark\""));
+    assert!(manifest.contains("\"templates\": []"));
+}
+
+fn valid_manifest_template(name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "name": name,
+        "work_location": "A 区三层",
+        "work_content": "风管安装检查",
+        "photographer": "张工",
+        "created_at": "2026-08-01 09:00:00 +08:00",
+        "updated_at": "2026-08-02 10:00:00 +08:00",
+    })
+}
+
+fn write_schema_v4_archive(
+    path: &std::path::Path,
+    schema_version: u32,
+    templates: Vec<serde_json::Value>,
+) {
+    let manifest = serde_json::json!({
+        "schema_version": schema_version,
+        "app": "SiteMark",
+        "project_id": "project-templates",
+        "project_name": "模板项目",
+        "project_created_at": "2026-08-01T08:00:00+08:00",
+        "snapshot_at": "2026-08-03T13:00:00+08:00",
+        "omitted_processing_count": 0,
+        "omitted_failed_count": 0,
+        "includes_originals": false,
+        "watermark": {
+            "position": "bottomRight",
+            "opacity": 0.66,
+            "accent_color_argb": 0xff3366cc_u32,
+            "font_scale": 1.2,
+        },
+        "photos": [{
+            "photo_number": "SM-20260801-001",
+            "original_sha256": "a".repeat(64),
+            "captured_at": "2026-08-01 09:30:00 +08:00",
+            "work_location": "A 区",
+            "work_content": "现场检查",
+            "photographer": "张工"
+        }],
+        "templates": templates,
+    });
+    write_zip(
+        path,
+        &[
+            ("manifest.json", manifest.to_string().as_bytes()),
+            ("photos/SM-20260801-001.jpg", b"jpeg"),
+        ],
+    );
+}
+
+fn assert_schema_v4_templates_rejected(
+    directory: &tempfile::TempDir,
+    case: &str,
+    templates: Vec<serde_json::Value>,
+) {
+    let archive_path = directory.path().join(format!("{case}.zip"));
+    write_schema_v4_archive(&archive_path, 4, templates);
+    let result = read_project_archive(archive_path.to_string_lossy().into_owned());
+    assert!(result.is_err(), "{case} unexpectedly returned a preview");
 }
 
 #[test]
-fn exports_and_reads_empty_schema_v3_project() {
+fn reads_empty_schema_v3_project_without_templates() {
     let directory = tempdir().unwrap();
     let archive_path = directory.path().join("empty-project.zip");
+    let manifest = serde_json::json!({
+        "schema_version": 3,
+        "app": "SiteMark",
+        "project_id": "empty-project",
+        "project_name": "空白项目",
+        "project_description": "仅有项目设置",
+        "project_created_at": "2026-07-30T08:00:00+08:00",
+        "snapshot_at": "2026-07-30T09:00:00+08:00",
+        "omitted_processing_count": 0,
+        "omitted_failed_count": 0,
+        "includes_originals": false,
+        "watermark": {
+            "position": "bottomRight",
+            "opacity": 0.66,
+            "accent_color_argb": 0xff3366cc_u32,
+            "font_scale": 1.2,
+        },
+        "photos": [],
+    });
+    write_zip(
+        &archive_path,
+        &[("manifest.json", manifest.to_string().as_bytes())],
+    );
 
-    let result = export_project(ExportProjectRequest {
-        project_id: "empty-project".to_string(),
-        project_name: "空白项目".to_string(),
-        project_description: Some("仅有项目设置".to_string()),
-        project_created_at: "2026-07-30T08:00:00+08:00".to_string(),
-        snapshot_at: "2026-07-30T09:00:00+08:00".to_string(),
-        omitted_processing_count: 0,
-        omitted_failed_count: 0,
-        output_zip_path: archive_path.to_string_lossy().into_owned(),
-        include_originals: false,
-        watermark: sample_watermark(),
-        photos: vec![],
-    })
-    .unwrap();
-
-    assert_eq!(result.photo_count, 0);
     let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
     assert_eq!(preview.schema_version, 3);
     assert_eq!(preview.project_description.as_deref(), Some("仅有项目设置"));
@@ -557,6 +629,7 @@ fn exports_and_reads_empty_schema_v3_project() {
     );
     assert!(!preview.is_partial);
     assert!(preview.photos.is_empty());
+    assert!(preview.templates.is_empty());
 }
 
 #[test]
@@ -734,7 +807,7 @@ fn rejects_path_navigation_in_project_id() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn restores_a_v3_project_archive_round_trip() {
+fn restores_a_v4_project_archive_round_trip() {
     let directory = tempdir().unwrap();
     let rendered = directory.path().join("rendered-source.jpg");
     let original = directory.path().join("original-source.jpg");
@@ -771,14 +844,16 @@ fn restores_a_v3_project_archive_round_trip() {
             accuracy_meters: Some(8.0),
             watermark_locale_code: Some("zh".to_string()),
         }],
+        templates: vec![],
     })
     .unwrap();
 
     let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
-    assert_eq!(preview.schema_version, 3);
+    assert_eq!(preview.schema_version, 4);
     assert_eq!(preview.project_name, "东区厂房改造");
     assert!(preview.includes_originals);
-    let watermark = preview.watermark.expect("v2 archives carry the watermark");
+    assert!(preview.templates.is_empty());
+    let watermark = preview.watermark.expect("archive carries the watermark");
     assert_eq!(watermark.position, "bottomRight");
     assert_eq!(watermark.accent_color_argb, 0xff3366cc);
     assert!((watermark.opacity - 0.66).abs() < f64::EPSILON);
@@ -810,6 +885,182 @@ fn restores_a_v3_project_archive_round_trip() {
         extracted.original_path.as_deref(),
         restored_original.to_str()
     );
+}
+
+#[test]
+fn exports_and_reads_schema_v4_capture_templates_without_database_ids() {
+    let directory = tempdir().unwrap();
+    let archive_path = directory.path().join("templates.zip");
+    let templates = vec![
+        ExportCaptureTemplate {
+            name: " 日常   巡检 ".to_string(),
+            work_location: "A 区三层".to_string(),
+            work_content: "风管安装检查".to_string(),
+            photographer: "张工".to_string(),
+            created_at: "2026-08-01 09:00:00 +08:00".to_string(),
+            updated_at: "2026-08-02 10:00:00 +08:00".to_string(),
+        },
+        ExportCaptureTemplate {
+            name: "收尾复验".to_string(),
+            work_location: "B 区屋面".to_string(),
+            work_content: "设备复验".to_string(),
+            photographer: "李工".to_string(),
+            created_at: "2026-08-01 11:00:00 +00:00".to_string(),
+            updated_at: "2026-08-03 12:00:00 +00:00".to_string(),
+        },
+    ];
+
+    export_project(ExportProjectRequest {
+        project_id: "project-templates".to_string(),
+        project_name: "模板项目".to_string(),
+        project_description: None,
+        project_created_at: "2026-08-01T08:00:00+08:00".to_string(),
+        snapshot_at: "2026-08-03T13:00:00+08:00".to_string(),
+        omitted_processing_count: 0,
+        omitted_failed_count: 0,
+        output_zip_path: archive_path.to_string_lossy().into_owned(),
+        include_originals: false,
+        watermark: sample_watermark(),
+        photos: vec![],
+        templates,
+    })
+    .unwrap();
+
+    let archive_file = fs::File::open(&archive_path).unwrap();
+    let mut archive = ZipArchive::new(archive_file).unwrap();
+    let mut manifest_text = String::new();
+    archive
+        .by_name("manifest.json")
+        .unwrap()
+        .read_to_string(&mut manifest_text)
+        .unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
+    assert_eq!(manifest["schema_version"], 4);
+    assert_eq!(manifest["templates"].as_array().unwrap().len(), 2);
+    assert!(manifest["templates"][0].get("id").is_none());
+    drop(archive);
+
+    let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.schema_version, 4);
+    assert_eq!(preview.templates.len(), 2);
+    assert_eq!(preview.templates[0].name, "日常 巡检");
+    assert_eq!(preview.templates[0].work_location, "A 区三层");
+    assert_eq!(preview.templates[0].work_content, "风管安装检查");
+    assert_eq!(preview.templates[0].photographer, "张工");
+    assert_eq!(
+        preview.templates[0].created_at,
+        "2026-08-01 09:00:00 +08:00"
+    );
+    assert_eq!(
+        preview.templates[0].updated_at,
+        "2026-08-02 10:00:00 +08:00"
+    );
+    assert_eq!(preview.templates[1].name, "收尾复验");
+}
+
+#[test]
+fn accepts_unicode_scalar_template_length_boundaries() {
+    let directory = tempdir().unwrap();
+    let archive_path = directory.path().join("unicode-boundaries.zip");
+    let mut template = valid_manifest_template(&"😀".repeat(80));
+    template["work_location"] = serde_json::json!("😀".repeat(160));
+    template["work_content"] = serde_json::json!("😀".repeat(240));
+    template["photographer"] = serde_json::json!("😀".repeat(80));
+    write_schema_v4_archive(&archive_path, 4, vec![template]);
+
+    let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.templates[0].name.chars().count(), 80);
+    assert_eq!(preview.templates[0].work_location.chars().count(), 160);
+    assert_eq!(preview.templates[0].work_content.chars().count(), 240);
+    assert_eq!(preview.templates[0].photographer.chars().count(), 80);
+}
+
+#[test]
+fn rejects_template_count_empty_values_and_unicode_scalar_overflow() {
+    let directory = tempdir().unwrap();
+    let hundred = directory.path().join("one-hundred-templates.zip");
+    write_schema_v4_archive(
+        &hundred,
+        4,
+        (0..100)
+            .map(|index| valid_manifest_template(&format!("模板 {index}")))
+            .collect(),
+    );
+    let preview = read_project_archive(hundred.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.templates.len(), 100);
+
+    assert_schema_v4_templates_rejected(
+        &directory,
+        "too-many-templates",
+        (0..101)
+            .map(|index| valid_manifest_template(&format!("模板 {index}")))
+            .collect(),
+    );
+
+    for field in ["name", "work_location", "work_content", "photographer"] {
+        let mut template = valid_manifest_template("有效模板");
+        template[field] = serde_json::json!(" \t\n ");
+        assert_schema_v4_templates_rejected(&directory, &format!("empty-{field}"), vec![template]);
+    }
+
+    for (field, value) in [
+        ("name", "😀".repeat(81)),
+        ("work_location", "😀".repeat(161)),
+        ("work_content", "😀".repeat(241)),
+        ("photographer", "😀".repeat(81)),
+    ] {
+        let mut template = valid_manifest_template("有效模板");
+        template[field] = serde_json::json!(value);
+        assert_schema_v4_templates_rejected(
+            &directory,
+            &format!("too-long-{field}"),
+            vec![template],
+        );
+    }
+}
+
+#[test]
+fn rejects_normalized_duplicate_template_names() {
+    let directory = tempdir().unwrap();
+    for (case, first, second) in [
+        ("collapsed-whitespace", "  日常 \t 巡检  ", "日常 巡检"),
+        ("ascii-case", "ABC", "abc"),
+        ("mixed-script-ascii-case", "模板A", "模板a"),
+    ] {
+        assert_schema_v4_templates_rejected(
+            &directory,
+            case,
+            vec![
+                valid_manifest_template(first),
+                valid_manifest_template(second),
+            ],
+        );
+    }
+}
+
+#[test]
+fn rejects_nul_in_every_archive_template_string() {
+    let directory = tempdir().unwrap();
+    for field in ["name", "work_location", "work_content", "photographer"] {
+        let mut template = valid_manifest_template("有效模板");
+        template[field] = serde_json::json!("前\0后");
+        assert_schema_v4_templates_rejected(&directory, &format!("nul-{field}"), vec![template]);
+    }
+}
+
+#[test]
+fn rejects_invalid_template_timestamps_and_future_schema_without_partial_preview() {
+    let directory = tempdir().unwrap();
+    for field in ["created_at", "updated_at"] {
+        let mut template = valid_manifest_template("有效模板");
+        template[field] = serde_json::json!("not-a-timestamp");
+        assert_schema_v4_templates_rejected(&directory, &format!("bad-{field}"), vec![template]);
+    }
+
+    let future = directory.path().join("schema-99-with-photo.zip");
+    write_schema_v4_archive(&future, 99, vec![valid_manifest_template("有效模板")]);
+    let result = read_project_archive(future.to_string_lossy().into_owned());
+    assert!(result.is_err(), "schema 99 unexpectedly returned a preview");
 }
 
 #[test]
@@ -852,6 +1103,47 @@ fn accepts_v1_manifests_without_restore_fields() {
     assert_eq!(photo.latitude, None);
     assert_eq!(photo.watermark_locale_code, None);
     assert_eq!(photo.notes.as_deref(), Some("v1 备注"));
+    assert!(preview.templates.is_empty());
+}
+
+#[test]
+fn accepts_v2_manifests_without_capture_templates() {
+    let directory = tempdir().unwrap();
+    let archive_path = directory.path().join("v2.zip");
+    let manifest = serde_json::json!({
+        "schema_version": 2,
+        "app": "SiteMark",
+        "project_id": "project-v2",
+        "project_name": "旧版 v2 导出",
+        "includes_originals": false,
+        "watermark": {
+            "position": "bottomLeft",
+            "opacity": 0.78,
+            "accent_color_argb": 0xff37c58b_u32,
+            "font_scale": 1.0,
+        },
+        "photos": [{
+            "photo_number": "SM-20260716-002",
+            "original_sha256": "b".repeat(64),
+            "captured_at": "2026-07-16 09:33:18 +08:00",
+            "work_location": "B 区",
+            "work_content": "设备检查",
+            "photographer": "李工"
+        }]
+    });
+    write_zip(
+        &archive_path,
+        &[
+            ("manifest.json", manifest.to_string().as_bytes()),
+            ("photos/SM-20260716-002.jpg", b"jpeg"),
+        ],
+    );
+
+    let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.schema_version, 2);
+    assert_eq!(preview.photos.len(), 1);
+    assert!(preview.watermark.is_some());
+    assert!(preview.templates.is_empty());
 }
 
 #[test]
@@ -1085,6 +1377,7 @@ fn build_restorable_zip(directory: &tempfile::TempDir) -> std::path::PathBuf {
             accuracy_meters: None,
             watermark_locale_code: None,
         }],
+        templates: vec![],
     })
     .unwrap();
     archive_path

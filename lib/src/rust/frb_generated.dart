@@ -515,6 +515,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ArchiveCaptureTemplate dco_decode_archive_capture_template(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return ArchiveCaptureTemplate(
+      name: dco_decode_String(arr[0]),
+      workLocation: dco_decode_String(arr[1]),
+      workContent: dco_decode_String(arr[2]),
+      photographer: dco_decode_String(arr[3]),
+      createdAt: dco_decode_String(arr[4]),
+      updatedAt: dco_decode_String(arr[5]),
+    );
+  }
+
+  @protected
   ArchivePhotoPreview dco_decode_archive_photo_preview(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -615,6 +631,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportCaptureTemplate dco_decode_export_capture_template(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return ExportCaptureTemplate(
+      name: dco_decode_String(arr[0]),
+      workLocation: dco_decode_String(arr[1]),
+      workContent: dco_decode_String(arr[2]),
+      photographer: dco_decode_String(arr[3]),
+      createdAt: dco_decode_String(arr[4]),
+      updatedAt: dco_decode_String(arr[5]),
+    );
+  }
+
+  @protected
   ExportPhotoRecord dco_decode_export_photo_record(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -657,8 +689,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ExportProjectRequest dco_decode_export_project_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return ExportProjectRequest(
       projectId: dco_decode_String(arr[0]),
       projectName: dco_decode_String(arr[1]),
@@ -671,6 +703,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       includeOriginals: dco_decode_bool(arr[8]),
       watermark: dco_decode_export_watermark_settings(arr[9]),
       photos: dco_decode_list_export_photo_record(arr[10]),
+      templates: dco_decode_list_export_capture_template(arr[11]),
     );
   }
 
@@ -782,10 +815,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ArchiveCaptureTemplate> dco_decode_list_archive_capture_template(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_archive_capture_template)
+        .toList();
+  }
+
+  @protected
   List<ArchivePhotoPreview> dco_decode_list_archive_photo_preview(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>)
         .map(dco_decode_archive_photo_preview)
+        .toList();
+  }
+
+  @protected
+  List<ExportCaptureTemplate> dco_decode_list_export_capture_template(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_export_capture_template)
         .toList();
   }
 
@@ -854,8 +907,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ProjectArchivePreview dco_decode_project_archive_preview(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 12)
+      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
     return ProjectArchivePreview(
       schemaVersion: dco_decode_u_32(arr[0]),
       projectName: dco_decode_String(arr[1]),
@@ -868,6 +921,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       includesOriginals: dco_decode_bool(arr[8]),
       watermark: dco_decode_opt_box_autoadd_archive_watermark_settings(arr[9]),
       photos: dco_decode_list_archive_photo_preview(arr[10]),
+      templates: dco_decode_list_archive_capture_template(arr[11]),
     );
   }
 
@@ -982,6 +1036,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
     return utf8.decoder.convert(inner);
+  }
+
+  @protected
+  ArchiveCaptureTemplate sse_decode_archive_capture_template(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_workLocation = sse_decode_String(deserializer);
+    var var_workContent = sse_decode_String(deserializer);
+    var var_photographer = sse_decode_String(deserializer);
+    var var_createdAt = sse_decode_String(deserializer);
+    var var_updatedAt = sse_decode_String(deserializer);
+    return ArchiveCaptureTemplate(
+      name: var_name,
+      workLocation: var_workLocation,
+      workContent: var_workContent,
+      photographer: var_photographer,
+      createdAt: var_createdAt,
+      updatedAt: var_updatedAt,
+    );
   }
 
   @protected
@@ -1108,6 +1183,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportCaptureTemplate sse_decode_export_capture_template(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_workLocation = sse_decode_String(deserializer);
+    var var_workContent = sse_decode_String(deserializer);
+    var var_photographer = sse_decode_String(deserializer);
+    var var_createdAt = sse_decode_String(deserializer);
+    var var_updatedAt = sse_decode_String(deserializer);
+    return ExportCaptureTemplate(
+      name: var_name,
+      workLocation: var_workLocation,
+      workContent: var_workContent,
+      photographer: var_photographer,
+      createdAt: var_createdAt,
+      updatedAt: var_updatedAt,
+    );
+  }
+
+  @protected
   ExportPhotoRecord sse_decode_export_photo_record(
     SseDeserializer deserializer,
   ) {
@@ -1175,6 +1271,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_includeOriginals = sse_decode_bool(deserializer);
     var var_watermark = sse_decode_export_watermark_settings(deserializer);
     var var_photos = sse_decode_list_export_photo_record(deserializer);
+    var var_templates = sse_decode_list_export_capture_template(deserializer);
     return ExportProjectRequest(
       projectId: var_projectId,
       projectName: var_projectName,
@@ -1187,6 +1284,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       includeOriginals: var_includeOriginals,
       watermark: var_watermark,
       photos: var_photos,
+      templates: var_templates,
     );
   }
 
@@ -1311,6 +1409,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ArchiveCaptureTemplate> sse_decode_list_archive_capture_template(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ArchiveCaptureTemplate>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_archive_capture_template(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<ArchivePhotoPreview> sse_decode_list_archive_photo_preview(
     SseDeserializer deserializer,
   ) {
@@ -1320,6 +1432,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <ArchivePhotoPreview>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_archive_photo_preview(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ExportCaptureTemplate> sse_decode_list_export_capture_template(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ExportCaptureTemplate>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_export_capture_template(deserializer));
     }
     return ans_;
   }
@@ -1441,6 +1567,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       deserializer,
     );
     var var_photos = sse_decode_list_archive_photo_preview(deserializer);
+    var var_templates = sse_decode_list_archive_capture_template(deserializer);
     return ProjectArchivePreview(
       schemaVersion: var_schemaVersion,
       projectName: var_projectName,
@@ -1453,6 +1580,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       includesOriginals: var_includesOriginals,
       watermark: var_watermark,
       photos: var_photos,
+      templates: var_templates,
     );
   }
 
@@ -1596,6 +1724,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_archive_capture_template(
+    ArchiveCaptureTemplate self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.workLocation, serializer);
+    sse_encode_String(self.workContent, serializer);
+    sse_encode_String(self.photographer, serializer);
+    sse_encode_String(self.createdAt, serializer);
+    sse_encode_String(self.updatedAt, serializer);
+  }
+
+  @protected
   void sse_encode_archive_photo_preview(
     ArchivePhotoPreview self,
     SseSerializer serializer,
@@ -1704,6 +1846,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_export_capture_template(
+    ExportCaptureTemplate self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.workLocation, serializer);
+    sse_encode_String(self.workContent, serializer);
+    sse_encode_String(self.photographer, serializer);
+    sse_encode_String(self.createdAt, serializer);
+    sse_encode_String(self.updatedAt, serializer);
+  }
+
+  @protected
   void sse_encode_export_photo_record(
     ExportPhotoRecord self,
     SseSerializer serializer,
@@ -1753,6 +1909,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.includeOriginals, serializer);
     sse_encode_export_watermark_settings(self.watermark, serializer);
     sse_encode_list_export_photo_record(self.photos, serializer);
+    sse_encode_list_export_capture_template(self.templates, serializer);
   }
 
   @protected
@@ -1846,6 +2003,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_archive_capture_template(
+    List<ArchiveCaptureTemplate> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_archive_capture_template(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_archive_photo_preview(
     List<ArchivePhotoPreview> self,
     SseSerializer serializer,
@@ -1854,6 +2023,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_archive_photo_preview(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_export_capture_template(
+    List<ExportCaptureTemplate> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_export_capture_template(item, serializer);
     }
   }
 
@@ -1968,6 +2149,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       serializer,
     );
     sse_encode_list_archive_photo_preview(self.photos, serializer);
+    sse_encode_list_archive_capture_template(self.templates, serializer);
   }
 
   @protected

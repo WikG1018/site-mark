@@ -85,6 +85,7 @@ class ProjectExportService implements ProjectArchiveExporter {
           fontScale: project.watermarkFontScale,
         ),
         photos: photos,
+        templates: const [],
       ),
     );
   }

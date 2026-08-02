@@ -255,6 +255,9 @@ void main() {
       final broken = ProjectArchivePreview(
         schemaVersion: 2,
         projectName: '东区厂房改造',
+        omittedProcessingCount: 0,
+        omittedFailedCount: 0,
+        isPartial: false,
         includesOriginals: false,
         photos: [
           ArchivePhotoPreview(
@@ -267,6 +270,7 @@ void main() {
             photographer: '张工',
           ),
         ],
+        templates: const [],
       );
       final images = _ImportImagePipeline(broken);
       final service = _service(
@@ -647,6 +651,9 @@ void main() {
     final preview = ProjectArchivePreview(
       schemaVersion: 1,
       projectName: '旧项目',
+      omittedProcessingCount: 0,
+      omittedFailedCount: 0,
+      isPartial: false,
       includesOriginals: false,
       photos: [
         ArchivePhotoPreview(
@@ -659,6 +666,7 @@ void main() {
           photographer: '李工',
         ),
       ],
+      templates: const [],
     );
     final service = _service(
       database: database,
@@ -743,6 +751,9 @@ ProjectArchivePreview _preview() {
   return ProjectArchivePreview(
     schemaVersion: 2,
     projectName: '东区厂房改造',
+    omittedProcessingCount: 0,
+    omittedFailedCount: 0,
+    isPartial: false,
     includesOriginals: true,
     watermark: const ArchiveWatermarkSettings(
       position: 'bottomRight',
@@ -776,6 +787,7 @@ ProjectArchivePreview _preview() {
         photographer: '张工',
       ),
     ],
+    templates: const [],
   );
 }
 

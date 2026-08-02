@@ -84,6 +84,16 @@ pub struct ExportWatermarkSettings {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportCaptureTemplate {
+    pub name: String,
+    pub work_location: String,
+    pub work_content: String,
+    pub photographer: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExportProjectRequest {
     pub project_id: String,
     pub project_name: String,
@@ -96,6 +106,7 @@ pub struct ExportProjectRequest {
     pub include_originals: bool,
     pub watermark: ExportWatermarkSettings,
     pub photos: Vec<ExportPhotoRecord>,
+    pub templates: Vec<ExportCaptureTemplate>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -178,6 +189,7 @@ struct ExportManifest<'a> {
     includes_originals: bool,
     watermark: &'a ExportWatermarkSettings,
     photos: &'a [ExportPhotoRecord],
+    templates: &'a [ExportCaptureTemplate],
 }
 
 #[derive(Serialize)]
@@ -365,11 +377,11 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         .write_all(&csv_bytes)
         .map_err(|error| io_failure("write CSV entry", error))?;
 
-    // Single-project exports are the restorable backup format: schema v3
+    // Single-project exports are the restorable backup format: schema v4
     // records the project watermark template and per-photo restore fields.
     // Selection archives intentionally stay at v1 and are not restorable.
     let manifest = serde_json::to_vec_pretty(&ExportManifest {
-        schema_version: 3,
+        schema_version: 4,
         app: "SiteMark",
         project_id: &request.project_id,
         project_name: &request.project_name,
@@ -381,6 +393,7 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         includes_originals: request.include_originals,
         watermark: &request.watermark,
         photos: &request.photos,
+        templates: &request.templates,
     })
     .map_err(|error| invalid_data("serialize manifest", error))?;
     archive
@@ -1325,6 +1338,16 @@ pub struct ArchiveWatermarkSettings {
     pub font_scale: f64,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ArchiveCaptureTemplate {
+    pub name: String,
+    pub work_location: String,
+    pub work_content: String,
+    pub photographer: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 /// Validated content of a restorable single-project backup ZIP.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProjectArchivePreview {
@@ -1339,6 +1362,7 @@ pub struct ProjectArchivePreview {
     pub includes_originals: bool,
     pub watermark: Option<ArchiveWatermarkSettings>,
     pub photos: Vec<ArchivePhotoPreview>,
+    pub templates: Vec<ArchiveCaptureTemplate>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1389,6 +1413,16 @@ struct ManifestPhoto {
 }
 
 #[derive(Deserialize)]
+struct ManifestCaptureTemplate {
+    name: String,
+    work_location: String,
+    work_content: String,
+    photographer: String,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Deserialize)]
 struct ProjectManifestFile {
     schema_version: u32,
     app: String,
@@ -1407,6 +1441,8 @@ struct ProjectManifestFile {
     #[serde(default)]
     watermark: Option<ManifestWatermark>,
     photos: Vec<ManifestPhoto>,
+    #[serde(default)]
+    templates: Vec<ManifestCaptureTemplate>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1433,6 +1469,11 @@ const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_ARCHIVE_PHOTOS: usize = 2000;
 const MAX_ENTRY_UNCOMPRESSED_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_TOTAL_UNCOMPRESSED_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+const MAX_CAPTURE_TEMPLATES_PER_PROJECT: usize = 100;
+const MAX_TEMPLATE_NAME_CHARS: usize = 80;
+const MAX_WORK_LOCATION_CHARS: usize = 160;
+const MAX_WORK_CONTENT_CHARS: usize = 240;
+const MAX_PHOTOGRAPHER_CHARS: usize = 80;
 
 fn open_zip(zip_path: &str) -> Result<zip::ZipArchive<BufReader<File>>, String> {
     let file =
@@ -1450,6 +1491,202 @@ fn unix_time_millis() -> String {
 
 fn is_valid_sha256(value: &str) -> bool {
     value.len() == 64 && value.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn is_template_whitespace(character: char) -> bool {
+    character.is_whitespace() || character == '\u{FEFF}'
+}
+
+fn normalized_template_name(value: &str) -> String {
+    let mut normalized = String::new();
+    let mut pending_space = false;
+    for character in value.chars() {
+        if is_template_whitespace(character) {
+            pending_space = !normalized.is_empty();
+        } else {
+            if pending_space {
+                normalized.push(' ');
+                pending_space = false;
+            }
+            normalized.push(character);
+        }
+    }
+    normalized
+}
+
+fn template_name_key(value: &str) -> String {
+    normalized_template_name(value)
+        .chars()
+        .map(|character| {
+            if character.is_ascii_uppercase() {
+                character.to_ascii_lowercase()
+            } else {
+                character
+            }
+        })
+        .collect()
+}
+
+fn trimmed_template_field(value: &str) -> &str {
+    value.trim_matches(is_template_whitespace)
+}
+
+fn parse_two_digits(bytes: &[u8], start: usize) -> Option<u32> {
+    let tens = bytes.get(start)?.checked_sub(b'0')?;
+    let ones = bytes.get(start + 1)?.checked_sub(b'0')?;
+    if tens > 9 || ones > 9 {
+        return None;
+    }
+    Some(u32::from(tens) * 10 + u32::from(ones))
+}
+
+fn is_leap_year(year: u32) -> bool {
+    year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
+}
+
+/// Matches the existing Dart archive timestamp parser's exported shape:
+/// `yyyy-MM-dd HH:mm:ss +/-HH:MM`.
+fn is_valid_exported_timestamp(value: &str) -> bool {
+    let value = trimmed_template_field(value);
+    let bytes = value.as_bytes();
+    if bytes.len() != 26
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b' '
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+        || bytes[19] != b' '
+        || !matches!(bytes[20], b'+' | b'-')
+        || bytes[23] != b':'
+    {
+        return false;
+    }
+    let Some(year) = value[..4].parse::<u32>().ok() else {
+        return false;
+    };
+    let Some(month) = parse_two_digits(bytes, 5) else {
+        return false;
+    };
+    let Some(day) = parse_two_digits(bytes, 8) else {
+        return false;
+    };
+    let Some(hour) = parse_two_digits(bytes, 11) else {
+        return false;
+    };
+    let Some(minute) = parse_two_digits(bytes, 14) else {
+        return false;
+    };
+    let Some(second) = parse_two_digits(bytes, 17) else {
+        return false;
+    };
+    let Some(offset_hour) = parse_two_digits(bytes, 21) else {
+        return false;
+    };
+    let Some(offset_minute) = parse_two_digits(bytes, 24) else {
+        return false;
+    };
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if is_leap_year(year) => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1..=days_in_month).contains(&day)
+        && hour <= 23
+        && minute <= 59
+        && second <= 59
+        && offset_hour <= 23
+        && offset_minute <= 59
+}
+
+fn validate_archive_templates(templates: &[ManifestCaptureTemplate]) -> Result<(), String> {
+    if templates.len() > MAX_CAPTURE_TEMPLATES_PER_PROJECT {
+        return Err(invalid_data(
+            "validate manifest",
+            format!(
+                "archive holds more than {MAX_CAPTURE_TEMPLATES_PER_PROJECT} capture templates"
+            ),
+        ));
+    }
+    let mut name_keys = std::collections::HashSet::new();
+    for template in templates {
+        for (label, value) in [
+            ("template name", template.name.as_str()),
+            ("template work location", template.work_location.as_str()),
+            ("template work content", template.work_content.as_str()),
+            ("template photographer", template.photographer.as_str()),
+        ] {
+            if value.contains('\0') {
+                return Err(invalid_data(
+                    "validate manifest",
+                    format!("{label} contains U+0000"),
+                ));
+            }
+        }
+
+        let normalized_name = normalized_template_name(&template.name);
+        if normalized_name.is_empty() {
+            return Err(invalid_data("validate manifest", "template name is empty"));
+        }
+        if normalized_name.chars().count() > MAX_TEMPLATE_NAME_CHARS {
+            return Err(invalid_data(
+                "validate manifest",
+                format!("template name exceeds {MAX_TEMPLATE_NAME_CHARS} characters"),
+            ));
+        }
+        for (label, value, maximum) in [
+            (
+                "template work location",
+                template.work_location.as_str(),
+                MAX_WORK_LOCATION_CHARS,
+            ),
+            (
+                "template work content",
+                template.work_content.as_str(),
+                MAX_WORK_CONTENT_CHARS,
+            ),
+            (
+                "template photographer",
+                template.photographer.as_str(),
+                MAX_PHOTOGRAPHER_CHARS,
+            ),
+        ] {
+            let value = trimmed_template_field(value);
+            if value.is_empty() {
+                return Err(invalid_data(
+                    "validate manifest",
+                    format!("{label} is empty"),
+                ));
+            }
+            if value.chars().count() > maximum {
+                return Err(invalid_data(
+                    "validate manifest",
+                    format!("{label} exceeds {maximum} characters"),
+                ));
+            }
+        }
+
+        let name_key = template_name_key(&template.name);
+        if !name_keys.insert(name_key) {
+            return Err(invalid_data(
+                "validate manifest",
+                format!("duplicate capture template name {normalized_name}"),
+            ));
+        }
+        for (label, value) in [
+            ("template created_at", template.created_at.as_str()),
+            ("template updated_at", template.updated_at.as_str()),
+        ] {
+            if !is_valid_exported_timestamp(value) {
+                return Err(invalid_data(
+                    "validate manifest",
+                    format!("invalid {label}"),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn expected_bundle_archive_path(project_id: &str) -> Result<String, String> {
@@ -1869,7 +2106,7 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
     if manifest.app != "SiteMark" {
         return Err(invalid_data("validate manifest", "not a SiteMark archive"));
     }
-    if !(1..=3).contains(&manifest.schema_version) {
+    if !(1..=4).contains(&manifest.schema_version) {
         return Err(invalid_data(
             "validate manifest",
             format!("unsupported schema version {}", manifest.schema_version),
@@ -1890,6 +2127,7 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
             format!("archive holds more than {MAX_ARCHIVE_PHOTOS} photos"),
         ));
     }
+    validate_archive_templates(&manifest.templates)?;
     let mut seen = std::collections::HashSet::new();
     for photo in &manifest.photos {
         safe_photo_number_component(&photo.photo_number)?;
@@ -2009,7 +2247,7 @@ fn extract_entry_to(
 }
 
 /// Validates a backup ZIP and returns its restorable content. Only
-/// single-project archives (schema v1/v2) are restorable.
+/// single-project archives (schema v1-v4) are restorable.
 pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, String> {
     let manifest = read_project_manifest(&zip_path)?;
     let mut archive = open_zip(&zip_path)?;
@@ -2047,6 +2285,18 @@ pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, S
             watermark_locale_code: photo.watermark_locale_code.clone(),
         });
     }
+    let templates = manifest
+        .templates
+        .into_iter()
+        .map(|template| ArchiveCaptureTemplate {
+            name: normalized_template_name(&template.name),
+            work_location: trimmed_template_field(&template.work_location).to_string(),
+            work_content: trimmed_template_field(&template.work_content).to_string(),
+            photographer: trimmed_template_field(&template.photographer).to_string(),
+            created_at: template.created_at,
+            updated_at: template.updated_at,
+        })
+        .collect();
     Ok(ProjectArchivePreview {
         schema_version: manifest.schema_version,
         project_name: manifest.project_name,
@@ -2066,6 +2316,7 @@ pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, S
                 font_scale: watermark.font_scale,
             }),
         photos,
+        templates,
     })
 }
 
