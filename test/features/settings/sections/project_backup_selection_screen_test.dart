@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
@@ -21,6 +22,16 @@ void main() {
     await database.createProject(id: 'p1', name: '一号项目');
     await database.createProject(id: 'p2', name: '二号项目');
     await database.createProject(id: 'p3', name: '三号项目');
+    await database.updateProjectLifecycleStatus(
+      projectId: 'p2',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.completed,
+    );
+    await database.updateProjectLifecycleStatus(
+      projectId: 'p3',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.archived,
+    );
   });
 
   tearDown(() => database.close());
@@ -80,6 +91,20 @@ void main() {
     await tester.pump();
     expect(find.text('已选择 0 个项目'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('lists projects in every lifecycle status with status labels', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    expect(find.text('一号项目'), findsOneWidget);
+    expect(find.text('二号项目'), findsOneWidget);
+    expect(find.text('三号项目'), findsOneWidget);
+    expect(find.byKey(const Key('backup-status-active')), findsOneWidget);
+    expect(find.byKey(const Key('backup-status-completed')), findsOneWidget);
+    expect(find.byKey(const Key('backup-status-archived')), findsOneWidget);
     await disposeScreen(tester);
   });
 
