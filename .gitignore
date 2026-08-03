@@ -37,3 +37,11 @@ Thumbs.db
 .env
 *.secret
 
+# IDE / AI agent
+.trae/
+.codex-remote-attachments/
+
+# Temporary diff / patch files
+*.patch
+pr18-*.json
+
