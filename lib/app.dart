@@ -51,6 +51,7 @@ import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
+import 'package:sitemark/workflow/project_lifecycle_service.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -76,6 +77,12 @@ final captureQueryRepositoryProvider = Provider<CaptureQueryRepository>((ref) {
 
 final captureTemplateServiceProvider = Provider<CaptureTemplateService>((ref) {
   return CaptureTemplateService(database: ref.watch(databaseProvider));
+});
+
+final projectLifecycleServiceProvider = Provider<ProjectLifecycleService>((
+  ref,
+) {
+  return ProjectLifecycleService(ref.watch(databaseProvider));
 });
 
 class _DatabasePollingControl implements BackgroundWorkControl {
