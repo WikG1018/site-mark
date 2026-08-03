@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -117,7 +115,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(freezeProjectList, isTrue);
 
-    unawaited(router.push('/projects/p-1/captures/c-1/edit'));
+    // ignore: unawaited_futures
+    router.push('/projects/p-1/captures/c-1/edit');
     await tester.pumpAndSettle();
     expect(freezeProjectList, isTrue);
   });
