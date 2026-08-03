@@ -5,6 +5,7 @@ import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/photo_number.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
@@ -30,6 +31,10 @@ class Projects extends Table {
   /// User-created and fully committed projects keep this null. Recovery may
   /// delete a project only when its durable marker carries the same token.
   TextColumn get restoreOperationId => text().nullable()();
+  TextColumn get lifecycleStatus => text()
+      .map(const ProjectLifecycleStatusConverter())
+      .withDefault(const Constant('active'))();
+  BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
   TextColumn get watermarkPosition =>
       text().withDefault(const Constant('bottomLeft'))();
   RealColumn get watermarkOpacity => real().withDefault(const Constant(0.78))();
@@ -184,7 +189,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -277,6 +282,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 10) {
         await migrator.createTable(captureTemplates);
         await _createCaptureTemplateIndexes();
+      }
+      if (from < 11) {
+        await migrator.addColumn(projects, projects.lifecycleStatus);
+        await migrator.addColumn(projects, projects.isPinned);
       }
       await _ensureGlobalSettingsRow();
     },
