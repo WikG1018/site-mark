@@ -683,7 +683,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     final service = ref.read(projectLifecycleServiceProvider);
     try {
       final preview = await service.preview(projectId, target);
-      if (preview.processingCount > 0) {
+      final requiresSettledCaptures = target != ProjectLifecycleStatus.active;
+      if (requiresSettledCaptures && preview.processingCount > 0) {
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -696,7 +697,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         return;
       }
       var confirmFailed = false;
-      if (preview.failedCount > 0) {
+      if (requiresSettledCaptures && preview.failedCount > 0) {
         if (!mounted) return;
         final confirmed = await showDialog<bool>(
           context: context,

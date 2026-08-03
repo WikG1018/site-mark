@@ -123,6 +123,28 @@ void main() {
     expect(completed.lifecycleStatus, ProjectLifecycleStatus.completed);
   });
 
+  test(
+    'reopening a project does not reconfirm existing failed captures',
+    () async {
+      await seedProject('reopen-failed');
+      await seedCapture('f1', 'reopen-failed', CaptureStatus.failed);
+      await database.updateProjectLifecycleStatus(
+        projectId: 'reopen-failed',
+        expectedStatus: ProjectLifecycleStatus.active,
+        targetStatus: ProjectLifecycleStatus.completed,
+      );
+
+      final preview = await service.preview(
+        'reopen-failed',
+        ProjectLifecycleStatus.active,
+      );
+      expect(preview.failedCount, 1);
+      final reopened = await service.transition(preview, confirmFailed: false);
+
+      expect(reopened.lifecycleStatus, ProjectLifecycleStatus.active);
+    },
+  );
+
   test('allows every legal lifecycle transition', () async {
     await seedProject('legal');
     Future<void> move(

@@ -25,6 +25,7 @@ Future<ProjectLifecycleStatus?> showProjectStatusFilterSheet(
             ),
             ListTile(
               key: const Key('project-status-active'),
+              selected: current == ProjectLifecycleStatus.active,
               title: Text(strings.projectStatusActive),
               trailing: current == ProjectLifecycleStatus.active
                   ? const Icon(Icons.check)
@@ -34,6 +35,7 @@ Future<ProjectLifecycleStatus?> showProjectStatusFilterSheet(
             ),
             ListTile(
               key: const Key('project-status-completed'),
+              selected: current == ProjectLifecycleStatus.completed,
               title: Text(strings.projectStatusCompleted),
               trailing: current == ProjectLifecycleStatus.completed
                   ? const Icon(Icons.check)
@@ -44,6 +46,7 @@ Future<ProjectLifecycleStatus?> showProjectStatusFilterSheet(
             ),
             ListTile(
               key: const Key('project-status-archived'),
+              selected: current == ProjectLifecycleStatus.archived,
               title: Text(strings.projectStatusArchived),
               trailing: current == ProjectLifecycleStatus.archived
                   ? const Icon(Icons.check)

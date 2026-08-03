@@ -25,6 +25,11 @@ class ProjectListScreen extends ConsumerStatefulWidget {
 class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
+  final _searchScrollController = ScrollController();
+  final _statusScrollControllers = <ProjectLifecycleStatus, ScrollController>{
+    for (final status in ProjectLifecycleStatus.values)
+      status: ScrollController(),
+  };
   bool _searching = false;
   String _query = '';
   late ProjectLifecycleStatus _status;
@@ -48,6 +53,10 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   void dispose() {
     _searchController.dispose();
     _searchFocus.dispose();
+    _searchScrollController.dispose();
+    for (final controller in _statusScrollControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -143,7 +152,8 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     final service = ref.read(projectLifecycleServiceProvider);
     try {
       final preview = await service.preview(projectId, target);
-      if (preview.processingCount > 0) {
+      final requiresSettledCaptures = target != ProjectLifecycleStatus.active;
+      if (requiresSettledCaptures && preview.processingCount > 0) {
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -156,7 +166,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
         return;
       }
       var confirmFailed = false;
-      if (preview.failedCount > 0) {
+      if (requiresSettledCaptures && preview.failedCount > 0) {
         if (!mounted) return;
         final confirmed = await showDialog<bool>(
           context: context,
@@ -214,6 +224,9 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     final strings = AppStrings.of(context);
     final database = ref.watch(databaseProvider);
     final searching = _searching && _query.trim().isNotEmpty;
+    final listController = searching
+        ? _searchScrollController
+        : _statusScrollControllers[_status]!;
     final stream = database.watchProjectSummaries(
       status: searching ? null : _status,
       search: searching ? _query : '',
@@ -315,6 +328,12 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
               return _EmptyState(strings: strings, status: _status);
             }
             return ListView.separated(
+              key: PageStorageKey<String>(
+                searching
+                    ? 'project-list-search'
+                    : 'project-list-${_status.name}',
+              ),
+              controller: listController,
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               itemCount: summaries.length,
               separatorBuilder: (_, _) => const SizedBox(height: 12),
@@ -323,7 +342,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                 return _ProjectSummaryCard(
                   summary: summary,
                   strings: strings,
-                  showStatusBadge: searching,
+                  showStatusBadge: true,
                   statusLabel: _statusLabel(
                     strings,
                     summary.project.lifecycleStatus,

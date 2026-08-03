@@ -195,6 +195,10 @@ void main() {
     tester,
   ) async {
     await pumpProjects(tester);
+    expect(
+      find.byKey(const Key('project-status-badge-active')),
+      findsNWidgets(3),
+    );
     await database.updateProjectLifecycleStatus(
       projectId: 'west',
       expectedStatus: ProjectLifecycleStatus.active,
@@ -245,12 +249,81 @@ void main() {
     await tester.tap(find.byKey(const Key('project-status-filter')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('project-status-active')), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const Key('project-status-active')))
+          .selected,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const Key('project-status-archived')))
+          .selected,
+      isFalse,
+    );
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('project-status-active')), findsNothing);
     expect(find.byKey(const Key('project-title')), findsOneWidget);
     expect(find.text('东区厂房改造'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('exiting search restores the active-filter scroll position', (
+    tester,
+  ) async {
+    database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final base = DateTime(2026, 8, 3, 8);
+    for (var index = 0; index < 30; index++) {
+      await database.createProject(
+        id: 'project-$index',
+        name: '项目${index.toString().padLeft(2, '0')}',
+        createdAt: base.add(Duration(minutes: index)),
+      );
+    }
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ProjectListScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('项目00'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('项目00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('search-projects')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('project-search-field')),
+      '项目29',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byType(Card), matching: find.text('项目29')),
+      findsOneWidget,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-search-field')), findsNothing);
+    expect(find.text('项目00'), findsOneWidget);
     await disposeApp(tester);
   });
 

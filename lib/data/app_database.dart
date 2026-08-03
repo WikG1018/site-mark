@@ -34,7 +34,10 @@ class Projects extends Table {
   TextColumn get restoreOperationId => text().nullable()();
   TextColumn get lifecycleStatus => text()
       .map(const ProjectLifecycleStatusConverter())
-      .withDefault(const Constant('active'))();
+      .customConstraint(
+        "NOT NULL DEFAULT 'active' CHECK (lifecycle_status IN "
+        "('active', 'completed', 'archived'))",
+      )();
   BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
   TextColumn get watermarkPosition =>
       text().withDefault(const Constant('bottomLeft'))();

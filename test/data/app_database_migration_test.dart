@@ -951,6 +951,24 @@ void main() {
     expect(project.isPinned, isFalse);
   });
 
+  test(
+    'v10 migration rejects lifecycle values outside the stable enum',
+    () async {
+      final database = AppDatabase.forTesting(openMigratedV10Fixture());
+      addTearDown(database.close);
+
+      await expectLater(
+        database.customStatement(
+          "UPDATE projects SET lifecycle_status = 'deleted' WHERE id = 'existing'",
+        ),
+        throwsA(isA<SqliteException>()),
+      );
+
+      final project = await database.projectById('existing');
+      expect(project?.lifecycleStatus, ProjectLifecycleStatus.active);
+    },
+  );
+
   test('fresh database defaults new projects to active unpinned', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);

@@ -108,12 +108,14 @@ final class ProjectLifecycleService {
       }
       _assertAllowed(project.lifecycleStatus, preview.targetStatus);
 
-      final counts = await _countStatuses(preview.projectId);
-      if (counts.processing > 0) {
-        throw ProjectLifecycleProcessingException(counts.processing);
-      }
-      if (counts.failed > 0 && !confirmFailed) {
-        throw ProjectLifecycleConfirmationRequiredException(counts.failed);
+      if (preview.targetStatus != ProjectLifecycleStatus.active) {
+        final counts = await _countStatuses(preview.projectId);
+        if (counts.processing > 0) {
+          throw ProjectLifecycleProcessingException(counts.processing);
+        }
+        if (counts.failed > 0 && !confirmFailed) {
+          throw ProjectLifecycleConfirmationRequiredException(counts.failed);
+        }
       }
 
       final updated = await _database.updateProjectLifecycleStatus(

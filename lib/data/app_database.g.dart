@@ -54,17 +54,16 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
       );
   @override
   late final GeneratedColumnWithTypeConverter<ProjectLifecycleStatus, String>
-  lifecycleStatus =
-      GeneratedColumn<String>(
-        'lifecycle_status',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-        defaultValue: const Constant('active'),
-      ).withConverter<ProjectLifecycleStatus>(
-        $ProjectsTable.$converterlifecycleStatus,
-      );
+  lifecycleStatus = GeneratedColumn<String>(
+    'lifecycle_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT \'active\' CHECK (lifecycle_status IN (\'active\', \'completed\', \'archived\'))',
+    defaultValue: const CustomExpression('\'active\''),
+  ).withConverter<ProjectLifecycleStatus>($ProjectsTable.$converterlifecycleStatus);
   static const VerificationMeta _isPinnedMeta = const VerificationMeta(
     'isPinned',
   );
