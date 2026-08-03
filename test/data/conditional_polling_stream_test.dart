@@ -108,8 +108,8 @@ void main() {
               status == CaptureStatus.captured ||
               status == CaptureStatus.rendering,
           pollInterval: const Duration(milliseconds: 5),
+        // ignore: unnecessary_lambdas
         ).listen((status) {
-          // ignore: unnecessary_lambdas
           emitted.add(status);
         });
 
