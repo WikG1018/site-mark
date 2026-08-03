@@ -42,6 +42,13 @@ Thumbs.db
 .codex-remote-attachments/
 
 # Temporary diff / patch files
-*.patch
-pr18-*.json
+/pr18.diff
+/pr18-diff-gh.patch
+/pr18-diff.patch
+/pr18-metadata-gh.json
+/pr18-metadata.json
+/pr18-status-now.json
+
+# Code review artifacts
+/docs/superpowers/reviews/
 

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:sitemark/shared/theme/accent_swatches.dart';
-
 /// Builds a light [ColorScheme] from [seedColor], optionally preferring a
 /// platform-supplied [dynamicColor] palette.
 ColorScheme _buildLightScheme(Color seedColor, {ColorScheme? dynamicColor}) {
