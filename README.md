@@ -10,11 +10,11 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-![Version](https://img.shields.io/badge/development-v0.9.0-orange)
+![Version](https://img.shields.io/badge/release-v0.9.0-176B55)
 
-**当前开发版本：v0.9.0**
+**当前版本：v0.9.0**
 
-**最新已发布版本：[`v0.8.0` 预发布版](https://github.com/WikG1018/site-mark/releases/tag/v0.8.0)**
+**最新发布版本：[`v0.9.0` 预发布版](https://github.com/WikG1018/site-mark/releases/tag/v0.9.0)**
 
 支持 Android 12（API 31）及以上系统。当前仍属于预发布阶段，适合个人工程记录和现场试用；重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
@@ -22,9 +22,9 @@ manufacturer camera experience.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v0.8.0-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v0.8.0/sitemark-v0.8.0-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v0.8.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v0.8.0/sitemark-v0.8.0-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v0.8.0/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v0.9.0-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v0.9.0/sitemark-v0.9.0-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v0.9.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v0.9.0/sitemark-v0.9.0-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v0.9.0/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -37,7 +37,7 @@ manufacturer camera experience.
 4. Debug APK 与正式版签名不同，通常不能直接覆盖安装。
 5. 如果 Android 提示签名冲突，不要直接卸载保存着重要数据的旧版本；先完成项目备份并确认备份文件已复制到应用目录之外。
 
-## v0.9.0 当前开发重点
+## v0.9.0 新增内容
 
 - **最近字段建议**：工程部位、工作内容和拍摄人可从当前项目的既有记录中选择；建议读取失败不会阻止手动填写或拍照。
 - **项目内命名模板**：保存和应用三个必填字段，支持重命名、删除与一次撤销；备注始终不进入模板，不同项目的模板互不共享。
@@ -229,7 +229,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 
 ## 质量基线
 
-当前开发版本的发布门禁包括：
+当前版本的发布门禁包括：
 
 - Flutter 单元与 Widget 全量测试；
 - Rust 单元与集成测试；
@@ -238,7 +238,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-只有推送版本标签并由 GitHub Actions 完成正式签名构建后，候选版本才会成为已发布版本。当前下载仍以 [GitHub Release v0.8.0](https://github.com/WikG1018/site-mark/releases/tag/v0.8.0) 的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。下载和校验请以 [GitHub Release v0.9.0](https://github.com/WikG1018/site-mark/releases/tag/v0.9.0) 中的实际资源为准。
 
 ## 本地构建
 
