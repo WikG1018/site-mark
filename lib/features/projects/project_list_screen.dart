@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:sitemark/app.dart';
-import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_summary.dart';
 import 'package:sitemark/features/projects/project_status_filter_sheet.dart';
@@ -158,6 +157,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
       }
       var confirmFailed = false;
       if (preview.failedCount > 0) {
+        if (!mounted) return;
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(

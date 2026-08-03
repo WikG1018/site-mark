@@ -7,7 +7,6 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/l10n/app_strings.dart';
-import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';

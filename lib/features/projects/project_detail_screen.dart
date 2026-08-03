@@ -697,6 +697,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       }
       var confirmFailed = false;
       if (preview.failedCount > 0) {
+        if (!mounted) return;
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(

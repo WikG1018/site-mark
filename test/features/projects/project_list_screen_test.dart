@@ -230,10 +230,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.descendant(
-        of: find.byType(Card),
-        matching: find.text('东区厂房改造'),
-      ),
+      find.descendant(of: find.byType(Card), matching: find.text('东区厂房改造')),
       findsOneWidget,
     );
     expect(
