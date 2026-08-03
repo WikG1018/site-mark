@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
@@ -197,7 +198,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('工程印记'), findsOneWidget);
-    expect(find.text('还没有项目'), findsOneWidget);
+    expect(find.text('暂无进行中的项目'), findsOneWidget);
     expect(find.text('新建项目'), findsOneWidget);
     await disposeApp(tester);
   });
@@ -224,7 +225,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('东区厂房改造'), findsOneWidget);
-    expect(find.text('还没有项目'), findsNothing);
+    expect(find.text('暂无进行中的项目'), findsNothing);
     await disposeApp(tester);
   });
 
@@ -240,7 +241,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('SiteMark'), findsOneWidget);
-    expect(find.text('No projects yet'), findsOneWidget);
+    expect(find.text('No active projects'), findsOneWidget);
     expect(find.text('New project'), findsOneWidget);
     await disposeApp(tester);
   });
@@ -734,6 +735,142 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('project-title')), findsOneWidget);
     expect(find.text('东区厂房更新'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('active project detail has capture button and no status banner', (
+    tester,
+  ) async {
+    await pumpAppWithRecords(tester);
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-status-banner')), findsNothing);
+    expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+    expect(find.byKey(const Key('edit-captures')), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets(
+    'completed project detail hides capture and reopens to allow capture',
+    (tester) async {
+      await seedReadyCapture();
+      await database.updateProjectLifecycleStatus(
+        projectId: 'project-1',
+        expectedStatus: ProjectLifecycleStatus.active,
+        targetStatus: ProjectLifecycleStatus.completed,
+      );
+      final images = _WidgetTestImagePipeline();
+      final share = _WidgetTestShareService();
+      final platform = _WidgetTestPlatformServices();
+      final outputPaths = _WidgetTestOutputPaths();
+      final scheduler = _InlineProcessingScheduler(
+        database: database,
+        platform: platform,
+        images: images,
+        outputPaths: outputPaths,
+      );
+      await tester.pumpWidget(
+        MyApp(
+          database: database,
+          initialLocale: const Locale('zh'),
+          platformServices: platform,
+          imagePipeline: images,
+          outputPaths: outputPaths,
+          projectExportPaths: _WidgetTestProjectExportPaths(),
+          shareService: share,
+          privateFileStore: _WidgetTestPrivateFileStore(),
+          backgroundScheduler: scheduler,
+          completionNotificationService: _FakeCompletionNotificationService(),
+          captureFormDraftStore: MemoryCaptureFormDraftStore(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('project-status-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-status-completed')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('东区厂房改造'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-status-banner')), findsOneWidget);
+      expect(find.textContaining('项目已完成'), findsOneWidget);
+      expect(find.byKey(const ValueKey('capture-fab')), findsNothing);
+      expect(find.byKey(const Key('edit-captures')), findsOneWidget);
+      expect(find.byType(CaptureRecordCard), findsWidgets);
+
+      await tester.tap(find.byKey(const Key('reopen-project')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-status-banner')), findsNothing);
+      expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+      expect(
+        (await database.projectById('project-1'))?.lifecycleStatus,
+        ProjectLifecycleStatus.active,
+      );
+      await disposeApp(tester);
+    },
+  );
+
+  testWidgets('archived project detail shows banner and restores via menu', (
+    tester,
+  ) async {
+    await seedReadyCapture();
+    await database.updateProjectLifecycleStatus(
+      projectId: 'project-1',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.archived,
+    );
+    final images = _WidgetTestImagePipeline();
+    final share = _WidgetTestShareService();
+    final platform = _WidgetTestPlatformServices();
+    final outputPaths = _WidgetTestOutputPaths();
+    final scheduler = _InlineProcessingScheduler(
+      database: database,
+      platform: platform,
+      images: images,
+      outputPaths: outputPaths,
+    );
+    await tester.pumpWidget(
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        platformServices: platform,
+        imagePipeline: images,
+        outputPaths: outputPaths,
+        projectExportPaths: _WidgetTestProjectExportPaths(),
+        shareService: share,
+        privateFileStore: _WidgetTestPrivateFileStore(),
+        backgroundScheduler: scheduler,
+        completionNotificationService: _FakeCompletionNotificationService(),
+        captureFormDraftStore: MemoryCaptureFormDraftStore(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('project-status-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-status-archived')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('东区厂房改造'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-status-banner')), findsOneWidget);
+    expect(find.textContaining('项目已归档'), findsOneWidget);
+    expect(find.byKey(const ValueKey('capture-fab')), findsNothing);
+    expect(find.byKey(const Key('edit-captures')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-lifecycle-project-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+    expect(
+      (await database.projectById('project-1'))?.lifecycleStatus,
+      ProjectLifecycleStatus.active,
+    );
     await disposeApp(tester);
   });
 

@@ -2,6 +2,7 @@ import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -180,6 +181,11 @@ class CaptureWorkflow {
           locationCoordinator.begin(captureId, fallback: locationFuture);
           return result;
       }
+    } on ProjectReadOnlyException {
+      if (originalPath != null) {
+        await platform.finishCameraCapture(captureId, false);
+      }
+      rethrow;
     } catch (error) {
       final record = await database.captureById(captureId);
       CaptureRecord? failed;

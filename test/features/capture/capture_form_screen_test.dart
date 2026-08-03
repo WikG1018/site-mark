@@ -1,7 +1,12 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
+import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/notification_service.dart';
@@ -143,6 +148,60 @@ void main() {
     expect(find.textContaining('vendor detail'), findsNothing);
     await disposeApp(tester);
   });
+
+  testWidgets(
+    'completed project deep-link capture form is read only and never opens camera',
+    (tester) async {
+      await database.createProject(id: 'completed', name: '已完成项目');
+      await database.updateProjectLifecycleStatus(
+        projectId: 'completed',
+        expectedStatus: ProjectLifecycleStatus.active,
+        targetStatus: ProjectLifecycleStatus.completed,
+      );
+      final platform = _CaptureFormPlatform(
+        permissionState: LocationPermissionState.denied,
+      );
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          platformServicesProvider.overrideWithValue(platform),
+          completionNotificationServiceProvider.overrideWithValue(
+            _NoOpCompletionNotificationService(),
+          ),
+          captureFormDraftStoreProvider.overrideWithValue(
+            MemoryCaptureFormDraftStore(),
+          ),
+          startupRecoveryEnabledProvider.overrideWithValue(false),
+        ],
+      );
+      addTearDown(container.dispose);
+      final router = container.read(routerProvider);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
+        ),
+      );
+      router.go('/projects/completed/capture');
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('capture-read-only')), findsOneWidget);
+      expect(find.textContaining('项目当前不可拍摄'), findsOneWidget);
+      expect(find.byKey(const Key('capture-button')), findsNothing);
+      expect(platform.launchCameraCount, 0);
+      await disposeApp(tester);
+    },
+  );
 }
 
 class _NoOpCompletionNotificationService
