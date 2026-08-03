@@ -1084,7 +1084,7 @@ ORDER BY
       ..where((row) => row.id.equals(captureId));
     return watchWithConditionalPolling(
       source: query.watchSingleOrNull(),
-      load: () => query.getSingleOrNull(),
+      load: query.getSingleOrNull,
       shouldPoll: (record) => record != null && _isProcessing(record.status),
       pollInterval: externalRefreshInterval,
       isPaused: () => _pollingPaused,

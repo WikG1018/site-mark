@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,7 +60,7 @@ Future<void> runProjectImportFlow(BuildContext context, WidgetRef ref) async {
 
   // 3. Restore, reporting per-photo progress.
   final progress = ValueNotifier<(int, int)>((0, preview.photos.length));
-  showDialog<void>(
+  unawaited(showDialog<void>(
     context: context,
     barrierDismissible: false,
     builder: (dialogContext) => PopScope(
@@ -79,7 +81,7 @@ Future<void> runProjectImportFlow(BuildContext context, WidgetRef ref) async {
         ),
       ),
     ),
-  );
+  ));
   ProjectImportResult? result;
   Object? failure;
   try {

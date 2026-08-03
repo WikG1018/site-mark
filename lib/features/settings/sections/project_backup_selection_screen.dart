@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
@@ -141,7 +143,7 @@ class _ProjectBackupSelectionScreenState
     setState(() => _submitting = true);
     final initialTotal = _selectedIds.length == 1 ? 1 : _selectedIds.length + 1;
     final progress = ValueNotifier<(int, int)>((0, initialTotal));
-    showDialog<void>(
+    unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => PopScope(
@@ -161,7 +163,7 @@ class _ProjectBackupSelectionScreenState
           ),
         ),
       ),
-    );
+    ));
 
     Object? failure;
     ProjectBackupResult? result;

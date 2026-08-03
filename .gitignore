@@ -52,3 +52,12 @@ Thumbs.db
 # Code review artifacts
 /docs/superpowers/reviews/
 
+# Temporary analysis/test output
+/analyze_out.txt
+/dart_ver.txt
+/dart_ver2.txt
+/flutter_analyze_output.txt
+/flutter_ver.txt
+/flutter_ver_err.txt
+/test_out.txt
+

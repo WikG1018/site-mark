@@ -207,7 +207,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: FilledButton.icon(
-                            onPressed: () => _retry(),
+                            onPressed: _retry,
                             icon: const Icon(Icons.refresh),
                             label: Text(strings.retryProcessing),
                           ),

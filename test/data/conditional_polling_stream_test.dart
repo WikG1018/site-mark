@@ -108,9 +108,7 @@ void main() {
               status == CaptureStatus.captured ||
               status == CaptureStatus.rendering,
           pollInterval: const Duration(milliseconds: 5),
-        ).listen((status) {
-          emitted.add(status);
-        });
+        ).listen(emitted.add);
 
     // Source emits captured → polling starts.
     source.add(CaptureStatus.captured);
