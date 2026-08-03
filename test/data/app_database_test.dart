@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 
 void main() {
@@ -1273,5 +1274,66 @@ void main() {
 
       await subscription.cancel();
     });
+  });
+
+  test('blocks pending captures on completed projects', () async {
+    await database.createProject(id: 'done', name: '已完成');
+    final completed = await database.updateProjectLifecycleStatus(
+      projectId: 'done',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.completed,
+    );
+    expect(completed!.lifecycleStatus, ProjectLifecycleStatus.completed);
+
+    await expectLater(
+      () => database.createPendingCapture(
+        id: 'blocked',
+        projectId: 'done',
+        originalPath: '/private/blocked.jpg',
+        workLocation: 'A 区',
+        workContent: '检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+      ),
+      throwsA(
+        isA<ProjectReadOnlyException>()
+            .having((error) => error.projectId, 'projectId', 'done')
+            .having(
+              (error) => error.status,
+              'status',
+              ProjectLifecycleStatus.completed,
+            ),
+      ),
+    );
+
+    expect(
+      await database.updateProjectLifecycleStatus(
+        projectId: 'done',
+        expectedStatus: ProjectLifecycleStatus.active,
+        targetStatus: ProjectLifecycleStatus.archived,
+      ),
+      isNull,
+    );
+    expect(
+      (await database.projectById('done'))!.lifecycleStatus,
+      ProjectLifecycleStatus.completed,
+    );
+  });
+
+  test('watchProjectById emits lifecycle updates', () async {
+    await database.createProject(id: 'watched', name: '监听项目');
+    final updates = StreamIterator(database.watchProjectById('watched'));
+    addTearDown(updates.cancel);
+
+    expect(await updates.moveNext(), isTrue);
+    expect(updates.current!.lifecycleStatus, ProjectLifecycleStatus.active);
+
+    await database.updateProjectLifecycleStatus(
+      projectId: 'watched',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.archived,
+    );
+    expect(await updates.moveNext(), isTrue);
+    expect(updates.current!.lifecycleStatus, ProjectLifecycleStatus.archived);
   });
 }

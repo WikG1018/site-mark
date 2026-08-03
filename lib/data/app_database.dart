@@ -7,6 +7,7 @@ import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/photo_number.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
+import 'package:sitemark/domain/project_summary.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 part 'app_database.g.dart';
@@ -408,6 +409,8 @@ class AppDatabase extends _$AppDatabase {
     int? watermarkAccentColorArgb,
     double? watermarkFontScale,
     String? restoreOperationId,
+    ProjectLifecycleStatus lifecycleStatus = ProjectLifecycleStatus.active,
+    bool isPinned = false,
     DateTime? createdAt,
   }) async {
     final timestamp = createdAt ?? DateTime.now();
@@ -446,12 +449,139 @@ class AppDatabase extends _$AppDatabase {
               ? const Value.absent()
               : Value(_validatedFontScale(watermarkFontScale)),
           restoreOperationId: Value(restoreOperationId),
+          lifecycleStatus: Value(lifecycleStatus),
+          isPinned: Value(isPinned),
           createdAt: timestamp,
           updatedAt: timestamp,
         ),
       );
     });
   }
+
+  Stream<List<ProjectSummary>> watchProjectSummaries({
+    ProjectLifecycleStatus? status,
+    String search = '',
+  }) {
+    final clauses = <String>['p.restore_operation_id IS NULL'];
+    final variables = <Variable<Object>>[];
+    if (status != null) {
+      clauses.add('p.lifecycle_status = ?');
+      variables.add(Variable<String>(status.name));
+    }
+    final trimmedSearch = search.trim();
+    if (trimmedSearch.isNotEmpty) {
+      clauses.add("LOWER(p.name) LIKE ? ESCAPE '\\'");
+      variables.add(
+        Variable<String>(
+          '%${_escapeLikeLiteral(trimmedSearch.toLowerCase())}%',
+        ),
+      );
+    }
+
+    final sql =
+        '''
+SELECT
+  p.id,
+  p.name,
+  p.description,
+  p.restore_operation_id,
+  p.lifecycle_status,
+  p.is_pinned,
+  p.watermark_position,
+  p.watermark_opacity,
+  p.watermark_accent_color_argb,
+  p.watermark_font_scale,
+  p.created_at,
+  p.updated_at,
+  COUNT(c.id) AS capture_count,
+  MAX(COALESCE(c.captured_at, c.created_at)) AS last_capture_at
+FROM projects AS p
+LEFT JOIN captures AS c
+  ON c.project_id = p.id
+  AND c.status != 'pendingCamera'
+WHERE ${clauses.join('\nAND ')}
+GROUP BY
+  p.id,
+  p.name,
+  p.description,
+  p.restore_operation_id,
+  p.lifecycle_status,
+  p.is_pinned,
+  p.watermark_position,
+  p.watermark_opacity,
+  p.watermark_accent_color_argb,
+  p.watermark_font_scale,
+  p.created_at,
+  p.updated_at
+ORDER BY
+  p.is_pinned DESC,
+  CASE WHEN last_capture_at IS NULL THEN 1 ELSE 0 END,
+  last_capture_at DESC,
+  p.created_at DESC,
+  p.id ASC
+''';
+
+    return customSelect(
+      sql,
+      variables: variables,
+      readsFrom: {projects, captureRecords},
+    ).watch().map(
+      (rows) => rows
+          .map(
+            (row) => ProjectSummary(
+              project: projects.map(row.data),
+              captureCount: row.read<int>('capture_count'),
+              lastCaptureAt: row.readNullable<DateTime>('last_capture_at'),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
+  Stream<Project?> watchProjectById(String projectId) {
+    return (select(
+      projects,
+    )..where((row) => row.id.equals(projectId))).watchSingleOrNull();
+  }
+
+  Future<void> setProjectPinned(String projectId, bool isPinned) async {
+    final updated =
+        await (update(projects)..where((row) => row.id.equals(projectId)))
+            .write(ProjectsCompanion(isPinned: Value(isPinned)));
+    if (updated != 1) {
+      throw StateError('Project does not exist');
+    }
+  }
+
+  Future<Project?> updateProjectLifecycleStatus({
+    required String projectId,
+    required ProjectLifecycleStatus expectedStatus,
+    required ProjectLifecycleStatus targetStatus,
+  }) {
+    return transaction(() async {
+      final updated =
+          await (update(projects)..where(
+                (row) =>
+                    row.id.equals(projectId) &
+                    row.lifecycleStatus.equalsValue(expectedStatus),
+              ))
+              .write(
+                ProjectsCompanion(
+                  lifecycleStatus: Value(targetStatus),
+                  updatedAt: Value(DateTime.now()),
+                ),
+              );
+      if (updated != 1) {
+        return null;
+      }
+      return projectById(projectId);
+    });
+  }
+
+  String _escapeLikeLiteral(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
 
   Stream<List<Project>> watchProjects() {
     return (select(projects)
@@ -501,26 +631,35 @@ class AppDatabase extends _$AppDatabase {
     if (!{'pending', 'resolved', 'unavailable'}.contains(locationResolution)) {
       throw ArgumentError.value(locationResolution, 'locationResolution');
     }
-    return into(captureRecords).insertReturning(
-      CaptureRecordsCompanion.insert(
-        id: id,
-        projectId: projectId,
-        workLocation: workLocation.trim(),
-        workContent: workContent.trim(),
-        photographer: photographer.trim(),
-        notes: Value(notes?.trim()),
-        originalPath: originalPath,
-        status: CaptureStatus.pendingCamera,
-        createdAt: createdAt ?? DateTime.now(),
-        latitude: Value(latitude),
-        longitude: Value(longitude),
-        accuracyMeters: Value(accuracyMeters),
-        address: Value(address),
-        locationOutcome: Value(locationOutcome),
-        watermarkLocaleCode: Value(watermarkLocaleCode),
-        locationResolution: Value(locationResolution),
-      ),
-    );
+    return transaction(() async {
+      final project = await projectById(projectId);
+      if (project == null) {
+        throw StateError('Project does not exist');
+      }
+      if (project.lifecycleStatus != ProjectLifecycleStatus.active) {
+        throw ProjectReadOnlyException(projectId, project.lifecycleStatus);
+      }
+      return into(captureRecords).insertReturning(
+        CaptureRecordsCompanion.insert(
+          id: id,
+          projectId: projectId,
+          workLocation: workLocation.trim(),
+          workContent: workContent.trim(),
+          photographer: photographer.trim(),
+          notes: Value(notes?.trim()),
+          originalPath: originalPath,
+          status: CaptureStatus.pendingCamera,
+          createdAt: createdAt ?? DateTime.now(),
+          latitude: Value(latitude),
+          longitude: Value(longitude),
+          accuracyMeters: Value(accuracyMeters),
+          address: Value(address),
+          locationOutcome: Value(locationOutcome),
+          watermarkLocaleCode: Value(watermarkLocaleCode),
+          locationResolution: Value(locationResolution),
+        ),
+      );
+    });
   }
 
   Stream<List<CaptureRecord>> watchCapturesForProject(String projectId) {
