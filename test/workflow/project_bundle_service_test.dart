@@ -6,6 +6,7 @@ import 'package:drift/drift.dart'
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
@@ -1811,6 +1812,8 @@ rust.ProjectArchivePreview _archivePreview(String name) =>
       omittedFailedCount: 0,
       isPartial: false,
       includesOriginals: true,
+      projectLifecycleStatus: 'active',
+      projectIsPinned: false,
       photos: [
         rust.ArchivePhotoPreview(
           photoNumber: '$name-SM-20260728-001',
@@ -2256,6 +2259,8 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
       projectName: projectName,
       photoCount: 1,
       restoredOriginals: 1,
+      lifecycleStatus: ProjectLifecycleStatus.active,
+      isPinned: false,
     );
   }
 }
@@ -2300,6 +2305,8 @@ class _DatabaseProjectImporter implements ProjectArchiveImporter {
       projectName: projectName,
       photoCount: 1,
       restoredOriginals: 1,
+      lifecycleStatus: ProjectLifecycleStatus.active,
+      isPinned: false,
     );
   }
 }

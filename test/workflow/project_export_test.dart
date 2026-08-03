@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
@@ -77,6 +78,34 @@ void main() {
       parseExportedTimestamp(templates[1].updatedAt)?.millisecondsSinceEpoch,
       DateTime.utc(2026, 7, 15, 9).millisecondsSinceEpoch,
     );
+  });
+
+  test('exports project lifecycle status and pin flag', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '归档项目');
+    await database.setProjectPinned('project-1', true);
+    await database.updateProjectLifecycleStatus(
+      projectId: 'project-1',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.archived,
+    );
+    final images = _ExportImagePipeline();
+    final service = ProjectExportService(
+      database: database,
+      images: images,
+      capturePaths: _ExportCapturePaths(),
+      exportPaths: _ExportOutputPaths(),
+      selectionExportPaths: _SelectionOutputPaths(),
+    );
+
+    await service.exportProject(
+      projectId: 'project-1',
+      includeOriginals: false,
+    );
+
+    expect(images.request?.projectLifecycleStatus, 'archived');
+    expect(images.request?.projectIsPinned, isTrue);
   });
 
   test('builds a project ZIP request from completed capture records', () async {

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
@@ -17,12 +18,16 @@ class ProjectImportResult {
     required this.projectName,
     required this.photoCount,
     required this.restoredOriginals,
+    required this.lifecycleStatus,
+    required this.isPinned,
   });
 
   final String projectId;
   final String projectName;
   final int photoCount;
   final int restoredOriginals;
+  final ProjectLifecycleStatus lifecycleStatus;
+  final bool isPinned;
 }
 
 /// Thrown when a backup archive is structurally valid but contains data that
@@ -490,6 +495,7 @@ class ProjectImportService implements ProjectArchiveImporter {
       preview: preview,
       projectId: targetProjectId,
     );
+    final lifecycle = _validatedLifecycle(preview);
 
     final watermark = preview.watermark;
     final stagingDir = await stagingPaths.stagingDirectory(targetProjectId);
@@ -557,6 +563,8 @@ class ProjectImportService implements ProjectArchiveImporter {
         watermarkAccentColorArgb: watermark?.accentColorArgb,
         watermarkFontScale: _validFontScale(watermark?.fontScale),
         restoreOperationId: operationId,
+        lifecycleStatus: lifecycle.status,
+        isPinned: lifecycle.isPinned,
       );
       pending = pending.withPhase(PendingImportPhase.ownsProject);
       await pendingStore.writePending(pending);
@@ -681,6 +689,8 @@ class ProjectImportService implements ProjectArchiveImporter {
       restoredOriginals: preview.photos
           .where((photo) => photo.hasOriginal)
           .length,
+      lifecycleStatus: lifecycle.status,
+      isPinned: lifecycle.isPinned,
     );
   }
 
@@ -783,11 +793,34 @@ class ProjectImportService implements ProjectArchiveImporter {
   static String _validLocale(String? value) =>
       value != null && {'zh', 'en'}.contains(value) ? value : 'zh';
 
+  ({ProjectLifecycleStatus status, bool isPinned}) _validatedLifecycle(
+    rust.ProjectArchivePreview preview,
+  ) {
+    if (preview.schemaVersion < 1 || preview.schemaVersion > 5) {
+      throw const InvalidArchiveException(
+        'Unsupported project archive schema version',
+      );
+    }
+    if (preview.schemaVersion < 5) {
+      return (status: ProjectLifecycleStatus.active, isPinned: false);
+    }
+    try {
+      final status = ProjectLifecycleStatus.values.byName(
+        preview.projectLifecycleStatus,
+      );
+      return (status: status, isPinned: preview.projectIsPinned);
+    } on ArgumentError {
+      throw const InvalidArchiveException(
+        'Unsupported project lifecycle status in archive',
+      );
+    }
+  }
+
   List<CaptureTemplatesCompanion> _validatedRestoredTemplates({
     required rust.ProjectArchivePreview preview,
     required String projectId,
   }) {
-    if (preview.schemaVersion < 1 || preview.schemaVersion > 4) {
+    if (preview.schemaVersion < 1 || preview.schemaVersion > 5) {
       throw const InvalidArchiveException(
         'Unsupported project archive schema version',
       );

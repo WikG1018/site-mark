@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_dart_regexp_whitespace`, `is_dart_trim_whitespace`, `is_leap_year`, `is_valid_exported_timestamp`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `normalized_template_name`, `open_zip`, `parse_two_digits`, `read_project_bundle_manifest`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `template_name_key`, `tokenize`, `trimmed_template_field`, `unix_time_millis`, `validate_archive_templates`, `validate_project_bundle`, `validate_render_request`, `wrap_text`, `zip_failure`
+// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_dart_regexp_whitespace`, `is_dart_trim_whitespace`, `is_leap_year`, `is_valid_exported_timestamp`, `is_valid_lifecycle_status`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `normalize_lifecycle_fields`, `normalized_template_name`, `open_zip`, `parse_two_digits`, `read_project_bundle_manifest`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `template_name_key`, `tokenize`, `trimmed_template_field`, `unix_time_millis`, `validate_archive_templates`, `validate_project_bundle`, `validate_render_request`, `wrap_text`, `zip_failure`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestCaptureTemplate`, `ManifestPhoto`, `ManifestWatermark`, `ProjectBundleManifestEntry`, `ProjectBundleManifest`, `ProjectManifestFile`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -56,7 +56,7 @@ Future<void> extractProjectBundleEntry({
 );
 
 /// Validates a backup ZIP and returns its restorable content. Only
-/// single-project archives (schema v1-v4) are restorable.
+/// single-project archives (schema v1-v5) are restorable.
 Future<ProjectArchivePreview> readProjectArchive({required String zipPath}) =>
     RustLib.instance.api.crateApiImageCoreReadProjectArchive(zipPath: zipPath);
 
@@ -355,6 +355,8 @@ class ExportProjectRequest {
   final int omittedFailedCount;
   final String outputZipPath;
   final bool includeOriginals;
+  final String projectLifecycleStatus;
+  final bool projectIsPinned;
   final ExportWatermarkSettings watermark;
   final List<ExportPhotoRecord> photos;
   final List<ExportCaptureTemplate> templates;
@@ -369,6 +371,8 @@ class ExportProjectRequest {
     required this.omittedFailedCount,
     required this.outputZipPath,
     required this.includeOriginals,
+    required this.projectLifecycleStatus,
+    required this.projectIsPinned,
     required this.watermark,
     required this.photos,
     required this.templates,
@@ -385,6 +389,8 @@ class ExportProjectRequest {
       omittedFailedCount.hashCode ^
       outputZipPath.hashCode ^
       includeOriginals.hashCode ^
+      projectLifecycleStatus.hashCode ^
+      projectIsPinned.hashCode ^
       watermark.hashCode ^
       photos.hashCode ^
       templates.hashCode;
@@ -403,6 +409,8 @@ class ExportProjectRequest {
           omittedFailedCount == other.omittedFailedCount &&
           outputZipPath == other.outputZipPath &&
           includeOriginals == other.includeOriginals &&
+          projectLifecycleStatus == other.projectLifecycleStatus &&
+          projectIsPinned == other.projectIsPinned &&
           watermark == other.watermark &&
           photos == other.photos &&
           templates == other.templates;
@@ -601,6 +609,13 @@ class ProjectArchivePreview {
   final int omittedFailedCount;
   final bool isPartial;
   final bool includesOriginals;
+
+  /// Normalized lifecycle status: always one of `active`, `completed`, `archived`.
+  /// Schema 1..=4 archives are normalized to `active`.
+  final String projectLifecycleStatus;
+
+  /// Normalized pin flag. Schema 1..=4 archives are normalized to `false`.
+  final bool projectIsPinned;
   final ArchiveWatermarkSettings? watermark;
   final List<ArchivePhotoPreview> photos;
   final List<ArchiveCaptureTemplate> templates;
@@ -615,6 +630,8 @@ class ProjectArchivePreview {
     required this.omittedFailedCount,
     required this.isPartial,
     required this.includesOriginals,
+    required this.projectLifecycleStatus,
+    required this.projectIsPinned,
     this.watermark,
     required this.photos,
     required this.templates,
@@ -631,6 +648,8 @@ class ProjectArchivePreview {
       omittedFailedCount.hashCode ^
       isPartial.hashCode ^
       includesOriginals.hashCode ^
+      projectLifecycleStatus.hashCode ^
+      projectIsPinned.hashCode ^
       watermark.hashCode ^
       photos.hashCode ^
       templates.hashCode;
@@ -649,6 +668,8 @@ class ProjectArchivePreview {
           omittedFailedCount == other.omittedFailedCount &&
           isPartial == other.isPartial &&
           includesOriginals == other.includesOriginals &&
+          projectLifecycleStatus == other.projectLifecycleStatus &&
+          projectIsPinned == other.projectIsPinned &&
           watermark == other.watermark &&
           photos == other.photos &&
           templates == other.templates;

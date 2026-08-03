@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/projects/project_restore_flow.dart';
 import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -95,6 +96,8 @@ void main() {
                 projectName: '恢复后的项目',
                 photoCount: 1,
                 restoredOriginals: 1,
+                lifecycleStatus: ProjectLifecycleStatus.active,
+                isPinned: false,
               ),
             ];
           },
@@ -420,6 +423,8 @@ void main() {
                           projectName: '源项目',
                           photoCount: 1,
                           restoredOriginals: 1,
+                          lifecycleStatus: ProjectLifecycleStatus.active,
+                          isPinned: false,
                         ),
                       ];
                     },
