@@ -6,22 +6,24 @@ part of 'app_database.dart';
 /// carried across a v2 -> v3 upgrade) are never overwritten.
 Future<void> _ensureGlobalSettingsRow(AppDatabase db) async {
   final now = DateTime.now();
-  await db.into(db.appSettings).insert(
-    AppSettingsCompanion.insert(
-      id: const Value('global'),
-      themeMode: const Value('system'),
-      defaultWatermarkPosition: const Value('bottomLeft'),
-      defaultWatermarkOpacity: const Value(0.78),
-      defaultWatermarkAccentColorArgb: const Value(0xff37c58b),
-      defaultWatermarkFontScale: const Value(1.0),
-      locationPermissionPromptDismissed: const Value(false),
-      useDynamicColor: const Value(false),
-      completionNotificationsEnabled: const Value(false),
-      appSeedColorArgb: const Value(kDefaultSeedColorArgb),
-      updatedAt: now,
-    ),
-    mode: InsertMode.insertOrIgnore,
-  );
+  await db
+      .into(db.appSettings)
+      .insert(
+        AppSettingsCompanion.insert(
+          id: const Value('global'),
+          themeMode: const Value('system'),
+          defaultWatermarkPosition: const Value('bottomLeft'),
+          defaultWatermarkOpacity: const Value(0.78),
+          defaultWatermarkAccentColorArgb: const Value(0xff37c58b),
+          defaultWatermarkFontScale: const Value(1.0),
+          locationPermissionPromptDismissed: const Value(false),
+          useDynamicColor: const Value(false),
+          completionNotificationsEnabled: const Value(false),
+          appSeedColorArgb: const Value(kDefaultSeedColorArgb),
+          updatedAt: now,
+        ),
+        mode: InsertMode.insertOrIgnore,
+      );
 }
 
 /// Creates the SQLite indexes that back the capture-list queries.
@@ -73,9 +75,9 @@ Future<void> _createCaptureTemplateIndexes(AppDatabase db) async {
 /// but `migrator` is only in scope inside the `MigrationStrategy` callback,
 /// so we issue the DDL directly.
 Future<void> _ensureDynamicColorColumns(AppDatabase db) async {
-  final columns = await db.customSelect(
-    'PRAGMA table_info(app_settings)',
-  ).get();
+  final columns = await db
+      .customSelect('PRAGMA table_info(app_settings)')
+      .get();
   final columnNames = columns.map((row) => row.read<String>('name')).toSet();
   if (!columnNames.contains('use_dynamic_color')) {
     await db.customStatement(
@@ -96,9 +98,9 @@ Future<void> _ensureDynamicColorColumns(AppDatabase db) async {
 /// Called from the v7 migration step. Uses `PRAGMA table_info` so the
 /// operation is idempotent and never raises "duplicate column name".
 Future<void> _ensureAppSeedColorColumn(AppDatabase db) async {
-  final columns = await db.customSelect(
-    'PRAGMA table_info(app_settings)',
-  ).get();
+  final columns = await db
+      .customSelect('PRAGMA table_info(app_settings)')
+      .get();
   final columnNames = columns.map((row) => row.read<String>('name')).toSet();
   if (!columnNames.contains('app_seed_color_argb')) {
     await db.customStatement(

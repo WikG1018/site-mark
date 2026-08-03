@@ -4,20 +4,14 @@ import 'package:flutter/material.dart';
 /// platform-supplied [dynamicColor] palette.
 ColorScheme _buildLightScheme(Color seedColor, {ColorScheme? dynamicColor}) {
   return dynamicColor ??
-      ColorScheme.fromSeed(
-        seedColor: seedColor,
-        brightness: Brightness.light,
-      );
+      ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light);
 }
 
 /// Builds a dark [ColorScheme] from [seedColor], optionally preferring a
 /// platform-supplied [dynamicColor] palette.
 ColorScheme _buildDarkScheme(Color seedColor, {ColorScheme? dynamicColor}) {
   return dynamicColor ??
-      ColorScheme.fromSeed(
-        seedColor: seedColor,
-        brightness: Brightness.dark,
-      );
+      ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark);
 }
 
 /// Builds a complete [ThemeData] from the given [colorScheme].
