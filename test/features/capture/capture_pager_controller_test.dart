@@ -398,7 +398,6 @@ final class _ControlledCaptureQuerySource implements CaptureQuerySource {
     final source = _newestControllers
         .putIfAbsent(
           searchText,
-          // ignore: unnecessary_lambdas
           () => StreamController<CapturePageCursor?>.broadcast(),
         )
         .stream;

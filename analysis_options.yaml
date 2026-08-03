@@ -19,7 +19,6 @@ analyzer:
 linter:
   rules:
     - unawaited_futures
-    - unnecessary_lambdas
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
