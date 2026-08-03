@@ -9,6 +9,7 @@ import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
@@ -23,8 +24,9 @@ import 'package:sitemark/features/settings/sections/project_backup_selection_scr
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
+import 'package:sitemark/workflow/project_lifecycle_service.dart';
 
-enum _ProjectAction { rename, delete }
+enum _ProjectAction { rename, delete, pin, unpin, complete, archive, reopen }
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
   const ProjectDetailScreen({
@@ -54,9 +56,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   bool _allQuerySelected = false;
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
-  late Future<Project?> _projectFuture;
   late final CaptureQuerySource _querySource;
   late final CapturePagerController _pagerController;
+  late Stream<Project?> _projectStream;
 
   @override
   void initState() {
@@ -64,7 +66,9 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     _querySource =
         widget.querySource ?? ref.read(captureQueryRepositoryProvider);
     _pagerController = CapturePagerController(_querySource, pageSize: 50);
-    _loadPageData();
+    _projectStream = ref
+        .read(databaseProvider)
+        .watchProjectById(widget.projectId);
     unawaited(_pagerController.setQuery(_query));
     unawaited(_loadDateOptions(_query));
     _pagerController.addListener(_onPagerChanged);
@@ -80,13 +84,11 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       _searching = false;
       _invalidateSelectionRequests();
       _selectionController.clearForFilterChange();
-      _loadPageData();
+      _projectStream = ref
+          .read(databaseProvider)
+          .watchProjectById(widget.projectId);
       _startQuery();
     }
-  }
-
-  void _loadPageData() {
-    _projectFuture = ref.read(databaseProvider).projectById(widget.projectId);
   }
 
   void _onPagerChanged() {
@@ -251,14 +253,14 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           _exitSearch();
         }
       },
-      child: FutureBuilder<Project?>(
-        future: _projectFuture,
+      child: StreamBuilder<Project?>(
+        stream: _projectStream,
         initialData: widget.initialProject,
         builder: (context, projectSnapshot) {
           final project = projectSnapshot.data;
           final waitingForProject =
               project == null &&
-              projectSnapshot.connectionState != ConnectionState.done;
+              projectSnapshot.connectionState == ConnectionState.waiting;
           final projectLoadFailed = project == null && projectSnapshot.hasError;
           final projectMissing =
               project == null && !waitingForProject && !projectLoadFailed;
@@ -269,6 +271,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   : projectMissing
                   ? strings.projectNotFound
                   : strings.appName);
+          final canCapture =
+              project != null &&
+              project.lifecycleStatus == ProjectLifecycleStatus.active &&
+              !editing;
           return Scaffold(
             appBar: AppBar(
               title: AnimatedSwitcher(
@@ -321,9 +327,102 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                           await _renameProject(project);
                         case _ProjectAction.delete:
                           await _deleteProject(project);
+                        case _ProjectAction.pin:
+                          await ref
+                              .read(databaseProvider)
+                              .setProjectPinned(project.id, true);
+                        case _ProjectAction.unpin:
+                          await ref
+                              .read(databaseProvider)
+                              .setProjectPinned(project.id, false);
+                        case _ProjectAction.complete:
+                          await _transitionLifecycle(
+                            project.id,
+                            ProjectLifecycleStatus.completed,
+                          );
+                        case _ProjectAction.archive:
+                          await _transitionLifecycle(
+                            project.id,
+                            ProjectLifecycleStatus.archived,
+                          );
+                        case _ProjectAction.reopen:
+                          await _transitionLifecycle(
+                            project.id,
+                            ProjectLifecycleStatus.active,
+                          );
                       }
                     },
                     itemBuilder: (context) => [
+                      PopupMenuItem(
+                        key: Key('project-pin-${project.id}'),
+                        value: project.isPinned
+                            ? _ProjectAction.unpin
+                            : _ProjectAction.pin,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            project.isPinned
+                                ? Icons.push_pin
+                                : Icons.push_pin_outlined,
+                          ),
+                          title: Text(
+                            project.isPinned
+                                ? strings.unpinProject
+                                : strings.pinProject,
+                          ),
+                        ),
+                      ),
+                      ...switch (project.lifecycleStatus) {
+                        ProjectLifecycleStatus.active => [
+                          PopupMenuItem(
+                            key: Key('project-lifecycle-${project.id}'),
+                            value: _ProjectAction.complete,
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.check_circle_outline),
+                              title: Text(strings.markProjectCompleted),
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: _ProjectAction.archive,
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.archive_outlined),
+                              title: Text(strings.archiveProject),
+                            ),
+                          ),
+                        ],
+                        ProjectLifecycleStatus.completed => [
+                          PopupMenuItem(
+                            key: Key('project-lifecycle-${project.id}'),
+                            value: _ProjectAction.reopen,
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.replay_outlined),
+                              title: Text(strings.reopenProject),
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: _ProjectAction.archive,
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.archive_outlined),
+                              title: Text(strings.archiveProject),
+                            ),
+                          ),
+                        ],
+                        ProjectLifecycleStatus.archived => [
+                          PopupMenuItem(
+                            key: Key('project-lifecycle-${project.id}'),
+                            value: _ProjectAction.reopen,
+                            child: ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.unarchive_outlined),
+                              title: Text(strings.restoreProjectToActive),
+                            ),
+                          ),
+                        ],
+                      },
                       PopupMenuItem(
                         key: const Key('rename-project'),
                         value: _ProjectAction.rename,
@@ -442,7 +541,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               switchOutCurve: AppMotion.emphasized,
               transitionBuilder: (child, animation) =>
                   ScaleTransition(scale: animation, child: child),
-              child: project == null || editing
+              child: !canCapture
                   ? const SizedBox.shrink()
                   : FloatingActionButton.extended(
                       key: const ValueKey('capture-fab'),
@@ -496,6 +595,21 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             child: _ProjectHeader(project: project),
           ),
         ),
+        if (project.lifecycleStatus != ProjectLifecycleStatus.active)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: _ProjectStatusBanner(
+                project: project,
+                onReopen: () => unawaited(
+                  _transitionLifecycle(
+                    project.id,
+                    ProjectLifecycleStatus.active,
+                  ),
+                ),
+              ),
+            ),
+          ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
@@ -557,9 +671,83 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       ),
     );
     if (!mounted || renamed == null) return;
-    setState(() {
-      _projectFuture = Future.value(renamed);
-    });
+    // StreamBuilder watches the project row and refreshes the title automatically.
+  }
+
+  Future<void> _transitionLifecycle(
+    String projectId,
+    ProjectLifecycleStatus target,
+  ) async {
+    final strings = AppStrings.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final service = ref.read(projectLifecycleServiceProvider);
+    try {
+      final preview = await service.preview(projectId, target);
+      final requiresSettledCaptures = target != ProjectLifecycleStatus.active;
+      if (requiresSettledCaptures && preview.processingCount > 0) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              strings.projectLifecycleProcessingBlocked(
+                preview.processingCount,
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+      var confirmFailed = false;
+      if (requiresSettledCaptures && preview.failedCount > 0) {
+        if (!mounted) return;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            content: Text(
+              strings.projectLifecycleFailedConfirm(preview.failedCount),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text(strings.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(strings.projectLifecycleContinue),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true) {
+          return;
+        }
+        confirmFailed = true;
+      }
+      await service.transition(preview, confirmFailed: confirmFailed);
+    } on ProjectLifecycleProcessingException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            strings.projectLifecycleProcessingBlocked(error.processingCount),
+          ),
+        ),
+      );
+    } on ProjectLifecycleConfirmationRequiredException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            strings.projectLifecycleFailedConfirm(error.failedCount),
+          ),
+        ),
+      );
+    } on ProjectLifecycleConflictException {
+      messenger.showSnackBar(
+        SnackBar(content: Text(strings.projectLifecycleConflict)),
+      );
+    } on ProjectLifecycleInvalidTransitionException {
+      messenger.showSnackBar(
+        SnackBar(content: Text(strings.projectLifecycleConflict)),
+      );
+    }
   }
 
   Future<void> _deleteProject(Project project) async {
@@ -877,6 +1065,63 @@ class _ProjectHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(project.description!),
                   ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProjectStatusBanner extends StatelessWidget {
+  const _ProjectStatusBanner({required this.project, required this.onReopen});
+
+  final Project project;
+  final VoidCallback onReopen;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final message = switch (project.lifecycleStatus) {
+      ProjectLifecycleStatus.completed => strings.projectStatusBannerCompleted,
+      ProjectLifecycleStatus.archived => strings.projectStatusBannerArchived,
+      ProjectLifecycleStatus.active => '',
+    };
+    return Material(
+      key: const Key('project-status-banner'),
+      color: colors.secondaryContainer,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, color: colors.onSecondaryContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    message,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colors.onSecondaryContainer,
+                    ),
+                  ),
+                  TextButton(
+                    key: const Key('reopen-project'),
+                    onPressed: onReopen,
+                    child: Text(
+                      project.lifecycleStatus == ProjectLifecycleStatus.archived
+                          ? strings.restoreProjectToActive
+                          : strings.reopenProject,
+                    ),
+                  ),
                 ],
               ),
             ),

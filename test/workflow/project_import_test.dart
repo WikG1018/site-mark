@@ -6,12 +6,110 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
+  test('v4 restore normalizes lifecycle to active and unpinned', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(
+        ProjectArchivePreview(
+          schemaVersion: 4,
+          projectName: '旧备份',
+          omittedProcessingCount: 0,
+          omittedFailedCount: 0,
+          isPartial: false,
+          includesOriginals: false,
+          projectLifecycleStatus: 'archived',
+          projectIsPinned: true,
+          photos: const [],
+          templates: const [],
+        ),
+      ),
+      files: _RecordingFileStore(),
+    );
+
+    final result = await service.importProject(
+      zipPath: '/backups/v4.zip',
+      projectName: '旧备份',
+    );
+
+    expect(result.lifecycleStatus, ProjectLifecycleStatus.active);
+    expect(result.isPinned, isFalse);
+    final project = await database.projectById(result.projectId);
+    expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
+    expect(project.isPinned, isFalse);
+  });
+
+  test('v5 restore preserves lifecycle status and pin flag', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(
+        ProjectArchivePreview(
+          schemaVersion: 5,
+          projectName: '归档备份',
+          omittedProcessingCount: 0,
+          omittedFailedCount: 0,
+          isPartial: false,
+          includesOriginals: false,
+          projectLifecycleStatus: 'archived',
+          projectIsPinned: true,
+          photos: const [],
+          templates: const [],
+        ),
+      ),
+      files: _RecordingFileStore(),
+    );
+
+    final result = await service.importProject(
+      zipPath: '/backups/v5.zip',
+      projectName: '归档备份',
+    );
+
+    expect(result.lifecycleStatus, ProjectLifecycleStatus.archived);
+    expect(result.isPinned, isTrue);
+    final project = await database.projectById(result.projectId);
+    expect(project!.lifecycleStatus, ProjectLifecycleStatus.archived);
+    expect(project.isPinned, isTrue);
+  });
+
+  test('v5 rejects illegal lifecycle status in Dart validation', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(
+        ProjectArchivePreview(
+          schemaVersion: 5,
+          projectName: '非法状态',
+          omittedProcessingCount: 0,
+          omittedFailedCount: 0,
+          isPartial: false,
+          includesOriginals: false,
+          projectLifecycleStatus: 'deleted',
+          projectIsPinned: false,
+          photos: const [],
+          templates: const [],
+        ),
+      ),
+      files: _RecordingFileStore(),
+    );
+
+    await expectLater(
+      service.importProject(zipPath: '/backups/bad.zip', projectName: '非法状态'),
+      throwsA(isA<InvalidArchiveException>()),
+    );
+    expect(await database.getAllProjectsInternal(), isEmpty);
+  });
+
   test('v4 restore inserts templates with new UUIDs and exact values', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -204,9 +302,9 @@ void main() {
           schemaVersion: 3,
         ),
         (
-          label: 'a preview newer than schema v4',
+          label: 'a preview newer than schema v5',
           templates: const [],
-          schemaVersion: 5,
+          schemaVersion: 6,
         ),
       ];
   for (final invalid in invalidTemplateCases) {
@@ -826,6 +924,8 @@ void main() {
         omittedFailedCount: 0,
         isPartial: false,
         includesOriginals: false,
+        projectLifecycleStatus: 'active',
+        projectIsPinned: false,
         photos: [
           ArchivePhotoPreview(
             photoNumber: '东区厂房改造-SM-20260716-001',
@@ -1334,6 +1434,8 @@ void main() {
       omittedFailedCount: 0,
       isPartial: false,
       includesOriginals: false,
+      projectLifecycleStatus: 'active',
+      projectIsPinned: false,
       photos: [
         ArchivePhotoPreview(
           photoNumber: '旧项目-SM-20240101-001',
@@ -1474,6 +1576,8 @@ ProjectArchivePreview _previewWithTemplates(
   omittedFailedCount: 0,
   isPartial: false,
   includesOriginals: photos.any((photo) => photo.hasOriginal),
+  projectLifecycleStatus: 'active',
+  projectIsPinned: false,
   photos: photos,
   templates: templates,
 );
@@ -1486,6 +1590,8 @@ ProjectArchivePreview _preview() {
     omittedFailedCount: 0,
     isPartial: false,
     includesOriginals: true,
+    projectLifecycleStatus: 'active',
+    projectIsPinned: false,
     watermark: const ArchiveWatermarkSettings(
       position: 'bottomRight',
       opacity: 0.66,

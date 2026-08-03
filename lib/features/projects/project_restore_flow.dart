@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -173,7 +174,7 @@ Future<void> runProjectRestoreFlow(
     progress.dispose();
     if (!context.mounted) return;
     if (results != null) {
-      _showRestoreSuccess(context, strings);
+      await _showRestoreSuccess(context, strings, results);
     } else {
       _showMessage(
         context,
@@ -332,10 +333,68 @@ void _showMessage(BuildContext context, String message) {
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
 
-void _showRestoreSuccess(BuildContext context, AppStrings strings) {
+Future<void> _showRestoreSuccess(
+  BuildContext context,
+  AppStrings strings,
+  List<ProjectImportResult> results,
+) async {
   final messenger = ScaffoldMessenger.of(context);
+  final activeCount = results
+      .where((r) => r.lifecycleStatus == ProjectLifecycleStatus.active)
+      .length;
+  final completedCount = results
+      .where((r) => r.lifecycleStatus == ProjectLifecycleStatus.completed)
+      .length;
+  final archivedCount = results
+      .where((r) => r.lifecycleStatus == ProjectLifecycleStatus.archived)
+      .length;
+  final summary = strings.restoreStatusSummary(
+    activeCount: activeCount,
+    completedCount: completedCount,
+    archivedCount: archivedCount,
+  );
+  final message = '${strings.restoreComplete}\n$summary';
+
+  if (archivedCount > 0) {
+    final viewArchived = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.restoreComplete),
+        content: Text(summary),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(strings.done),
+          ),
+          FilledButton(
+            key: const Key('view-archived-projects'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(strings.viewArchivedProjects),
+          ),
+        ],
+      ),
+    );
+    if (!context.mounted) return;
+    if (viewArchived == true) {
+      GoRouter.maybeOf(
+        context,
+      )?.go('/', extra: ProjectLifecycleStatus.archived);
+    } else {
+      GoRouter.maybeOf(context)?.go('/');
+    }
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+    return;
+  }
+
+  if (results.length == 1 &&
+      results.single.lifecycleStatus != ProjectLifecycleStatus.archived) {
+    GoRouter.maybeOf(context)?.go('/projects/${results.single.projectId}');
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+    return;
+  }
+
   GoRouter.maybeOf(context)?.go('/');
-  messenger.showSnackBar(SnackBar(content: Text(strings.restoreComplete)));
+  messenger.showSnackBar(SnackBar(content: Text(message)));
 }
 
 class _PreparedDiscardGuard {

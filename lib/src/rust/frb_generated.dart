@@ -689,8 +689,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ExportProjectRequest dco_decode_export_project_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return ExportProjectRequest(
       projectId: dco_decode_String(arr[0]),
       projectName: dco_decode_String(arr[1]),
@@ -701,9 +701,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       omittedFailedCount: dco_decode_u_32(arr[6]),
       outputZipPath: dco_decode_String(arr[7]),
       includeOriginals: dco_decode_bool(arr[8]),
-      watermark: dco_decode_export_watermark_settings(arr[9]),
-      photos: dco_decode_list_export_photo_record(arr[10]),
-      templates: dco_decode_list_export_capture_template(arr[11]),
+      projectLifecycleStatus: dco_decode_String(arr[9]),
+      projectIsPinned: dco_decode_bool(arr[10]),
+      watermark: dco_decode_export_watermark_settings(arr[11]),
+      photos: dco_decode_list_export_photo_record(arr[12]),
+      templates: dco_decode_list_export_capture_template(arr[13]),
     );
   }
 
@@ -907,8 +909,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ProjectArchivePreview dco_decode_project_archive_preview(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return ProjectArchivePreview(
       schemaVersion: dco_decode_u_32(arr[0]),
       projectName: dco_decode_String(arr[1]),
@@ -919,9 +921,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       omittedFailedCount: dco_decode_u_32(arr[6]),
       isPartial: dco_decode_bool(arr[7]),
       includesOriginals: dco_decode_bool(arr[8]),
-      watermark: dco_decode_opt_box_autoadd_archive_watermark_settings(arr[9]),
-      photos: dco_decode_list_archive_photo_preview(arr[10]),
-      templates: dco_decode_list_archive_capture_template(arr[11]),
+      projectLifecycleStatus: dco_decode_String(arr[9]),
+      projectIsPinned: dco_decode_bool(arr[10]),
+      watermark: dco_decode_opt_box_autoadd_archive_watermark_settings(arr[11]),
+      photos: dco_decode_list_archive_photo_preview(arr[12]),
+      templates: dco_decode_list_archive_capture_template(arr[13]),
     );
   }
 
@@ -1269,6 +1273,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_omittedFailedCount = sse_decode_u_32(deserializer);
     var var_outputZipPath = sse_decode_String(deserializer);
     var var_includeOriginals = sse_decode_bool(deserializer);
+    var var_projectLifecycleStatus = sse_decode_String(deserializer);
+    var var_projectIsPinned = sse_decode_bool(deserializer);
     var var_watermark = sse_decode_export_watermark_settings(deserializer);
     var var_photos = sse_decode_list_export_photo_record(deserializer);
     var var_templates = sse_decode_list_export_capture_template(deserializer);
@@ -1282,6 +1288,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       omittedFailedCount: var_omittedFailedCount,
       outputZipPath: var_outputZipPath,
       includeOriginals: var_includeOriginals,
+      projectLifecycleStatus: var_projectLifecycleStatus,
+      projectIsPinned: var_projectIsPinned,
       watermark: var_watermark,
       photos: var_photos,
       templates: var_templates,
@@ -1563,6 +1571,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_omittedFailedCount = sse_decode_u_32(deserializer);
     var var_isPartial = sse_decode_bool(deserializer);
     var var_includesOriginals = sse_decode_bool(deserializer);
+    var var_projectLifecycleStatus = sse_decode_String(deserializer);
+    var var_projectIsPinned = sse_decode_bool(deserializer);
     var var_watermark = sse_decode_opt_box_autoadd_archive_watermark_settings(
       deserializer,
     );
@@ -1578,6 +1588,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       omittedFailedCount: var_omittedFailedCount,
       isPartial: var_isPartial,
       includesOriginals: var_includesOriginals,
+      projectLifecycleStatus: var_projectLifecycleStatus,
+      projectIsPinned: var_projectIsPinned,
       watermark: var_watermark,
       photos: var_photos,
       templates: var_templates,
@@ -1907,6 +1919,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.omittedFailedCount, serializer);
     sse_encode_String(self.outputZipPath, serializer);
     sse_encode_bool(self.includeOriginals, serializer);
+    sse_encode_String(self.projectLifecycleStatus, serializer);
+    sse_encode_bool(self.projectIsPinned, serializer);
     sse_encode_export_watermark_settings(self.watermark, serializer);
     sse_encode_list_export_photo_record(self.photos, serializer);
     sse_encode_list_export_capture_template(self.templates, serializer);
@@ -2144,6 +2158,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.omittedFailedCount, serializer);
     sse_encode_bool(self.isPartial, serializer);
     sse_encode_bool(self.includesOriginals, serializer);
+    sse_encode_String(self.projectLifecycleStatus, serializer);
+    sse_encode_bool(self.projectIsPinned, serializer);
     sse_encode_opt_box_autoadd_archive_watermark_settings(
       self.watermark,
       serializer,

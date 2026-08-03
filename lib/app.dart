@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/diagnostics/diagnostic_bundle_service.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
@@ -51,6 +52,7 @@ import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
+import 'package:sitemark/workflow/project_lifecycle_service.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -76,6 +78,12 @@ final captureQueryRepositoryProvider = Provider<CaptureQueryRepository>((ref) {
 
 final captureTemplateServiceProvider = Provider<CaptureTemplateService>((ref) {
   return CaptureTemplateService(database: ref.watch(databaseProvider));
+});
+
+final projectLifecycleServiceProvider = Provider<ProjectLifecycleService>((
+  ref,
+) {
+  return ProjectLifecycleService(ref.watch(databaseProvider));
 });
 
 class _DatabasePollingControl implements BackgroundWorkControl {
@@ -444,8 +452,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/',
-        pageBuilder: (context, state) =>
-            _fadeThroughPage(state, const ProjectListScreen()),
+        pageBuilder: (context, state) => _fadeThroughPage(
+          state,
+          ProjectListScreen(
+            initialStatus: state.extra is ProjectLifecycleStatus
+                ? state.extra! as ProjectLifecycleStatus
+                : null,
+          ),
+        ),
         routes: [
           GoRoute(
             path: 'projects/new',

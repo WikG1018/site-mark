@@ -622,6 +622,8 @@ impl SseDecode for crate::api::image_core::ExportProjectRequest {
         let mut var_omittedFailedCount = <u32>::sse_decode(deserializer);
         let mut var_outputZipPath = <String>::sse_decode(deserializer);
         let mut var_includeOriginals = <bool>::sse_decode(deserializer);
+        let mut var_projectLifecycleStatus = <String>::sse_decode(deserializer);
+        let mut var_projectIsPinned = <bool>::sse_decode(deserializer);
         let mut var_watermark =
             <crate::api::image_core::ExportWatermarkSettings>::sse_decode(deserializer);
         let mut var_photos =
@@ -638,6 +640,8 @@ impl SseDecode for crate::api::image_core::ExportProjectRequest {
             omitted_failed_count: var_omittedFailedCount,
             output_zip_path: var_outputZipPath,
             include_originals: var_includeOriginals,
+            project_lifecycle_status: var_projectLifecycleStatus,
+            project_is_pinned: var_projectIsPinned,
             watermark: var_watermark,
             photos: var_photos,
             templates: var_templates,
@@ -914,6 +918,8 @@ impl SseDecode for crate::api::image_core::ProjectArchivePreview {
         let mut var_omittedFailedCount = <u32>::sse_decode(deserializer);
         let mut var_isPartial = <bool>::sse_decode(deserializer);
         let mut var_includesOriginals = <bool>::sse_decode(deserializer);
+        let mut var_projectLifecycleStatus = <String>::sse_decode(deserializer);
+        let mut var_projectIsPinned = <bool>::sse_decode(deserializer);
         let mut var_watermark =
             <Option<crate::api::image_core::ArchiveWatermarkSettings>>::sse_decode(deserializer);
         let mut var_photos =
@@ -930,6 +936,8 @@ impl SseDecode for crate::api::image_core::ProjectArchivePreview {
             omitted_failed_count: var_omittedFailedCount,
             is_partial: var_isPartial,
             includes_originals: var_includesOriginals,
+            project_lifecycle_status: var_projectLifecycleStatus,
+            project_is_pinned: var_projectIsPinned,
             watermark: var_watermark,
             photos: var_photos,
             templates: var_templates,
@@ -1307,6 +1315,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportProjectRequ
             self.omitted_failed_count.into_into_dart().into_dart(),
             self.output_zip_path.into_into_dart().into_dart(),
             self.include_originals.into_into_dart().into_dart(),
+            self.project_lifecycle_status.into_into_dart().into_dart(),
+            self.project_is_pinned.into_into_dart().into_dart(),
             self.watermark.into_into_dart().into_dart(),
             self.photos.into_into_dart().into_dart(),
             self.templates.into_into_dart().into_dart(),
@@ -1493,6 +1503,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ProjectArchivePre
             self.omitted_failed_count.into_into_dart().into_dart(),
             self.is_partial.into_into_dart().into_dart(),
             self.includes_originals.into_into_dart().into_dart(),
+            self.project_lifecycle_status.into_into_dart().into_dart(),
+            self.project_is_pinned.into_into_dart().into_dart(),
             self.watermark.into_into_dart().into_dart(),
             self.photos.into_into_dart().into_dart(),
             self.templates.into_into_dart().into_dart(),
@@ -1766,6 +1778,8 @@ impl SseEncode for crate::api::image_core::ExportProjectRequest {
         <u32>::sse_encode(self.omitted_failed_count, serializer);
         <String>::sse_encode(self.output_zip_path, serializer);
         <bool>::sse_encode(self.include_originals, serializer);
+        <String>::sse_encode(self.project_lifecycle_status, serializer);
+        <bool>::sse_encode(self.project_is_pinned, serializer);
         <crate::api::image_core::ExportWatermarkSettings>::sse_encode(self.watermark, serializer);
         <Vec<crate::api::image_core::ExportPhotoRecord>>::sse_encode(self.photos, serializer);
         <Vec<crate::api::image_core::ExportCaptureTemplate>>::sse_encode(
@@ -1978,6 +1992,8 @@ impl SseEncode for crate::api::image_core::ProjectArchivePreview {
         <u32>::sse_encode(self.omitted_failed_count, serializer);
         <bool>::sse_encode(self.is_partial, serializer);
         <bool>::sse_encode(self.includes_originals, serializer);
+        <String>::sse_encode(self.project_lifecycle_status, serializer);
+        <bool>::sse_encode(self.project_is_pinned, serializer);
         <Option<crate::api::image_core::ArchiveWatermarkSettings>>::sse_encode(
             self.watermark,
             serializer,

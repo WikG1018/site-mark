@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_backup_preflight.dart';
@@ -316,9 +317,31 @@ class _ProjectBackupSelectionScreenState
                   child: CheckboxListTile(
                     value: _selectedIds.contains(project.id),
                     title: Text(project.name),
-                    subtitle: project.description == null
-                        ? null
-                        : Text(project.description!),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (project.description != null)
+                          Text(project.description!),
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Chip(
+                            key: Key(
+                              'backup-status-${project.lifecycleStatus.name}',
+                            ),
+                            visualDensity: VisualDensity.compact,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            label: Text(
+                              _statusLabel(strings, project.lifecycleStatus),
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                            padding: EdgeInsets.zero,
+                          ),
+                        ),
+                      ],
+                    ),
+                    isThreeLine: project.description != null,
                     onChanged: _submitting
                         ? null
                         : (selected) => setState(() {
@@ -379,6 +402,14 @@ class _ProjectBackupSelectionScreenState
         ),
       ),
     );
+  }
+
+  String _statusLabel(AppStrings strings, ProjectLifecycleStatus status) {
+    return switch (status) {
+      ProjectLifecycleStatus.active => strings.projectStatusActive,
+      ProjectLifecycleStatus.completed => strings.projectStatusCompleted,
+      ProjectLifecycleStatus.archived => strings.projectStatusArchived,
+    };
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// Opens a raw in-memory sqlite database, creates the genuine v2 schema (no
@@ -493,6 +494,100 @@ Future<Map<String, String>> captureIndexes(AppDatabase database) async {
   };
 }
 
+/// Opens a raw in-memory sqlite database with the genuine v10 schema (including
+/// capture templates, no lifecycle columns), seeds one project, and sets
+/// `PRAGMA user_version = 10`.
+QueryExecutor openMigratedV10Fixture() {
+  final db = sqlite3.openInMemory();
+  final projectCreated =
+      DateTime.utc(2026, 8, 3).millisecondsSinceEpoch ~/ 1000;
+
+  db.execute('''
+    CREATE TABLE projects (
+      id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      restore_operation_id TEXT,
+      watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+      watermark_opacity REAL NOT NULL DEFAULT 0.78,
+      watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE app_settings (
+      id TEXT NOT NULL,
+      theme_mode TEXT NOT NULL DEFAULT 'system',
+      locale_code TEXT,
+      default_watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+      default_watermark_opacity REAL NOT NULL DEFAULT 0.78,
+      default_watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      default_watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+      location_permission_prompt_dismissed INTEGER NOT NULL DEFAULT 0,
+      use_dynamic_color INTEGER NOT NULL DEFAULT 0,
+      completion_notifications_enabled INTEGER NOT NULL DEFAULT 0,
+      app_seed_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE captures (
+      id TEXT NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+      photo_number TEXT,
+      work_location TEXT NOT NULL,
+      work_content TEXT NOT NULL,
+      photographer TEXT NOT NULL,
+      notes TEXT,
+      original_path TEXT NOT NULL,
+      published_uri TEXT,
+      original_sha256 TEXT,
+      status TEXT NOT NULL,
+      failure_reason TEXT,
+      created_at INTEGER NOT NULL,
+      captured_at INTEGER,
+      latitude REAL,
+      longitude REAL,
+      accuracy_meters REAL,
+      address TEXT,
+      location_outcome TEXT,
+      processing_attempts INTEGER NOT NULL DEFAULT 0,
+      watermark_locale_code TEXT NOT NULL DEFAULT 'zh',
+      location_resolution TEXT NOT NULL DEFAULT 'resolved',
+      original_deleted_at INTEGER,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE capture_templates (
+      id TEXT NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      name_key TEXT NOT NULL,
+      work_location TEXT NOT NULL,
+      work_content TEXT NOT NULL,
+      photographer TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (id),
+      UNIQUE (project_id, name_key)
+    );
+  ''');
+  db.execute(
+    "INSERT INTO projects (id, name, created_at, updated_at) "
+    "VALUES ('existing', '既有项目', $projectCreated, $projectCreated);",
+  );
+  db.execute(
+    "INSERT INTO app_settings (id, updated_at) VALUES ('global', $projectCreated);",
+  );
+  db.execute('PRAGMA user_version = 10;');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
 /// Opens the v8 table shapes and index set, then lets the current database
 /// implementation run the real v8 upgrade path.
 QueryExecutor openV8AndUpgrade() {
@@ -844,6 +939,44 @@ void main() {
       normalizedSql(indexes['capture_records_sort_cursor_idx']!),
       contains('coalesce(captured_at, created_at) desc, id desc'),
     );
+  });
+
+  test('v10 to v11 migration adds lifecycle defaults', () async {
+    final database = AppDatabase.forTesting(openMigratedV10Fixture());
+    addTearDown(database.close);
+
+    expect(database.schemaVersion, 11);
+    final project = await database.projectById('existing');
+    expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
+    expect(project.isPinned, isFalse);
+  });
+
+  test(
+    'v10 migration rejects lifecycle values outside the stable enum',
+    () async {
+      final database = AppDatabase.forTesting(openMigratedV10Fixture());
+      addTearDown(database.close);
+
+      await expectLater(
+        database.customStatement(
+          "UPDATE projects SET lifecycle_status = 'deleted' WHERE id = 'existing'",
+        ),
+        throwsA(isA<SqliteException>()),
+      );
+
+      final project = await database.projectById('existing');
+      expect(project?.lifecycleStatus, ProjectLifecycleStatus.active);
+    },
+  );
+
+  test('fresh database defaults new projects to active unpinned', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    expect(database.schemaVersion, 11);
+    final project = await database.createProject(id: 'fresh', name: '新项目');
+    expect(project.lifecycleStatus, ProjectLifecycleStatus.active);
+    expect(project.isPinned, isFalse);
   });
 
   test('v6 to v7 migration adds app_seed_color_argb column', () async {

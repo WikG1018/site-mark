@@ -482,6 +482,8 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
         omitted_failed_count: 0,
         output_zip_path: archive_path.to_string_lossy().into_owned(),
         include_originals: false,
+        project_lifecycle_status: "archived".to_string(),
+        project_is_pinned: true,
         watermark: sample_watermark(),
         photos: vec![ExportPhotoRecord {
             photo_number: "SM-20260716-001".to_string(),
@@ -525,7 +527,9 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
         .unwrap()
         .read_to_string(&mut manifest)
         .unwrap();
-    assert!(manifest.contains("\"schema_version\": 4"));
+    assert!(manifest.contains("\"schema_version\": 5"));
+    assert!(manifest.contains("\"project_lifecycle_status\": \"archived\""));
+    assert!(manifest.contains("\"project_is_pinned\": true"));
     assert!(manifest.contains("\"watermark\""));
     assert!(manifest.contains("\"templates\": []"));
 }
@@ -931,6 +935,8 @@ fn restores_a_v4_project_archive_round_trip() {
         omitted_failed_count: 0,
         output_zip_path: archive_path.to_string_lossy().into_owned(),
         include_originals: true,
+        project_lifecycle_status: "completed".to_string(),
+        project_is_pinned: true,
         watermark: sample_watermark(),
         photos: vec![ExportPhotoRecord {
             photo_number: "SM-20260716-001".to_string(),
@@ -954,7 +960,9 @@ fn restores_a_v4_project_archive_round_trip() {
     .unwrap();
 
     let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
-    assert_eq!(preview.schema_version, 4);
+    assert_eq!(preview.schema_version, 5);
+    assert_eq!(preview.project_lifecycle_status, "completed");
+    assert!(preview.project_is_pinned);
     assert_eq!(preview.project_name, "东区厂房改造");
     assert!(preview.includes_originals);
     assert!(preview.templates.is_empty());
@@ -1025,6 +1033,8 @@ fn exports_and_reads_schema_v4_capture_templates_without_database_ids() {
         omitted_failed_count: 0,
         output_zip_path: archive_path.to_string_lossy().into_owned(),
         include_originals: false,
+        project_lifecycle_status: "active".to_string(),
+        project_is_pinned: false,
         watermark: sample_watermark(),
         photos: vec![],
         templates,
@@ -1040,13 +1050,13 @@ fn exports_and_reads_schema_v4_capture_templates_without_database_ids() {
         .read_to_string(&mut manifest_text)
         .unwrap();
     let manifest: serde_json::Value = serde_json::from_str(&manifest_text).unwrap();
-    assert_eq!(manifest["schema_version"], 4);
+    assert_eq!(manifest["schema_version"], 5);
     assert_eq!(manifest["templates"].as_array().unwrap().len(), 2);
     assert!(manifest["templates"][0].get("id").is_none());
     drop(archive);
 
     let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
-    assert_eq!(preview.schema_version, 4);
+    assert_eq!(preview.schema_version, 5);
     assert_eq!(preview.templates.len(), 2);
     assert_eq!(preview.templates[0].name, "日常 巡检");
     assert_eq!(preview.templates[0].work_location, "A 区三层");
@@ -1307,6 +1317,8 @@ fn accepts_v1_manifests_without_restore_fields() {
 
     let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
     assert_eq!(preview.schema_version, 1);
+    assert_eq!(preview.project_lifecycle_status, "active");
+    assert!(!preview.project_is_pinned);
     assert!(preview.watermark.is_none());
     let photo = preview.photos.first().unwrap();
     assert!(!photo.has_original);
@@ -1351,9 +1363,138 @@ fn accepts_v2_manifests_without_capture_templates() {
 
     let preview = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap();
     assert_eq!(preview.schema_version, 2);
+    assert_eq!(preview.project_lifecycle_status, "active");
+    assert!(!preview.project_is_pinned);
     assert_eq!(preview.photos.len(), 1);
     assert!(preview.watermark.is_some());
     assert!(preview.templates.is_empty());
+}
+
+fn write_schema_v5_archive(
+    path: &std::path::Path,
+    lifecycle_status: serde_json::Value,
+    is_pinned: serde_json::Value,
+) {
+    let mut manifest = serde_json::json!({
+        "schema_version": 5,
+        "app": "SiteMark",
+        "project_id": "project-lifecycle",
+        "project_name": "生命周期项目",
+        "project_created_at": "2026-08-01T08:00:00+08:00",
+        "snapshot_at": "2026-08-03T13:00:00+08:00",
+        "omitted_processing_count": 0,
+        "omitted_failed_count": 0,
+        "includes_originals": false,
+        "watermark": {
+            "position": "bottomRight",
+            "opacity": 0.66,
+            "accent_color_argb": 0xff3366cc_u32,
+            "font_scale": 1.2,
+        },
+        "photos": [{
+            "photo_number": "SM-20260801-001",
+            "original_sha256": "a".repeat(64),
+            "captured_at": "2026-08-01 09:30:00 +08:00",
+            "work_location": "A 区",
+            "work_content": "现场检查",
+            "photographer": "张工"
+        }],
+        "templates": [],
+    });
+    if !lifecycle_status.is_null() {
+        manifest["project_lifecycle_status"] = lifecycle_status;
+    }
+    if !is_pinned.is_null() {
+        manifest["project_is_pinned"] = is_pinned;
+    }
+    write_zip(
+        path,
+        &[
+            ("manifest.json", manifest.to_string().as_bytes()),
+            ("photos/SM-20260801-001.jpg", b"jpeg"),
+        ],
+    );
+}
+
+#[test]
+fn project_archive_schema_5_preserves_lifecycle_and_rejects_invalid_fields() {
+    let directory = tempdir().unwrap();
+
+    for (status, pinned) in [("active", false), ("completed", true), ("archived", true)] {
+        let archive = directory.path().join(format!("ok-{status}-{pinned}.zip"));
+        write_schema_v5_archive(
+            &archive,
+            serde_json::json!(status),
+            serde_json::json!(pinned),
+        );
+        let preview = read_project_archive(archive.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(preview.schema_version, 5);
+        assert_eq!(preview.project_lifecycle_status, status);
+        assert_eq!(preview.project_is_pinned, pinned);
+    }
+
+    for schema_version in [1, 2, 3, 4] {
+        let archive = directory
+            .path()
+            .join(format!("legacy-v{schema_version}.zip"));
+        write_schema_v4_archive(&archive, schema_version, vec![]);
+        let preview = read_project_archive(archive.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(preview.schema_version, schema_version);
+        assert_eq!(preview.project_lifecycle_status, "active");
+        assert!(!preview.project_is_pinned);
+    }
+
+    let missing_status = directory.path().join("missing-status.zip");
+    write_schema_v5_archive(
+        &missing_status,
+        serde_json::Value::Null,
+        serde_json::json!(true),
+    );
+    assert!(read_project_archive(missing_status.to_string_lossy().into_owned()).is_err());
+
+    let missing_pin = directory.path().join("missing-pin.zip");
+    write_schema_v5_archive(
+        &missing_pin,
+        serde_json::json!("archived"),
+        serde_json::Value::Null,
+    );
+    assert!(read_project_archive(missing_pin.to_string_lossy().into_owned()).is_err());
+
+    let unknown_status = directory.path().join("unknown-status.zip");
+    write_schema_v5_archive(
+        &unknown_status,
+        serde_json::json!("deleted"),
+        serde_json::json!(false),
+    );
+    assert!(read_project_archive(unknown_status.to_string_lossy().into_owned()).is_err());
+
+    let string_bool = directory.path().join("string-bool.zip");
+    write_schema_v5_archive(
+        &string_bool,
+        serde_json::json!("active"),
+        serde_json::json!("true"),
+    );
+    assert!(read_project_archive(string_bool.to_string_lossy().into_owned()).is_err());
+
+    // Outer multi-project bundle schema remains 1.
+    let project_zip = directory.path().join("inner.zip");
+    write_schema_v5_archive(
+        &project_zip,
+        serde_json::json!("archived"),
+        serde_json::json!(true),
+    );
+    let bundle_path = directory.path().join("bundle.zip");
+    export_project_bundle(ExportProjectBundleRequest {
+        output_zip_path: bundle_path.to_string_lossy().into_owned(),
+        projects: vec![ProjectBundleSource {
+            project_id: "project-lifecycle".to_string(),
+            project_name: "生命周期项目".to_string(),
+            archive_path: project_zip.to_string_lossy().into_owned(),
+        }],
+    })
+    .unwrap();
+    let bundle = read_project_bundle(bundle_path.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(bundle.schema_version, 1);
 }
 
 #[test]
@@ -1569,6 +1710,8 @@ fn build_restorable_zip(directory: &tempfile::TempDir) -> std::path::PathBuf {
         omitted_failed_count: 0,
         output_zip_path: archive_path.to_string_lossy().into_owned(),
         include_originals: true,
+        project_lifecycle_status: "active".to_string(),
+        project_is_pinned: false,
         watermark: sample_watermark(),
         photos: vec![ExportPhotoRecord {
             photo_number: "SM-20260716-001".to_string(),

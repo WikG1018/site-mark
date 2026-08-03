@@ -90,6 +90,8 @@ class ProjectExportService implements ProjectArchiveExporter {
         omittedFailedCount: omittedFailedCount,
         outputZipPath: outputPath,
         includeOriginals: includeOriginals,
+        projectLifecycleStatus: project.lifecycleStatus.name,
+        projectIsPinned: project.isPinned,
         watermark: ExportWatermarkSettings(
           position: project.watermarkPosition,
           opacity: project.watermarkOpacity,

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/projects/project_restore_flow.dart';
 import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -95,6 +96,8 @@ void main() {
                 projectName: '恢复后的项目',
                 photoCount: 1,
                 restoredOriginals: 1,
+                lifecycleStatus: ProjectLifecycleStatus.active,
+                isPinned: false,
               ),
             ];
           },
@@ -413,13 +416,23 @@ void main() {
                       required projectNames,
                       onProgress,
                     }) async {
-                      onProgress?.call(1, 1);
+                      onProgress?.call(2, 2);
                       return const [
                         ProjectImportResult(
                           projectId: 'target',
                           projectName: '源项目',
                           photoCount: 1,
                           restoredOriginals: 1,
+                          lifecycleStatus: ProjectLifecycleStatus.active,
+                          isPinned: false,
+                        ),
+                        ProjectImportResult(
+                          projectId: 'target-2',
+                          projectName: '源项目二',
+                          photoCount: 0,
+                          restoredOriginals: 0,
+                          lifecycleStatus: ProjectLifecycleStatus.active,
+                          isPinned: false,
                         ),
                       ];
                     },
@@ -456,9 +469,115 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('project-home')), findsOneWidget);
-      expect(find.text('恢复完成'), findsOneWidget);
+      expect(find.textContaining('恢复完成'), findsWidgets);
+      expect(find.textContaining('进行中 2'), findsOneWidget);
       expect(find.textContaining('下次启动'), findsNothing);
       expect(discardCalls, 0);
+    },
+  );
+
+  testWidgets(
+    'mixed restore shows status summary and opens archived projects',
+    (tester) async {
+      final prepared = _prepared(bundle: true);
+      ProjectLifecycleStatus? homeExtra;
+      final router = GoRouter(
+        initialLocation: '/settings/backup-restore',
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (context, state) {
+              homeExtra = state.extra is ProjectLifecycleStatus
+                  ? state.extra! as ProjectLifecycleStatus
+                  : null;
+              return Scaffold(
+                key: const Key('project-home'),
+                body: Text(homeExtra?.name ?? 'none'),
+              );
+            },
+          ),
+          GoRoute(
+            path: '/settings/backup-restore',
+            builder: (context, state) => BackupRestoreSectionScreen(
+              restoreDependencies: ProjectRestoreFlowDependencies(
+                pickZip: () async => '/tmp/backup.zip',
+                prepareRestore: (_) async => prepared,
+                restorePrepared:
+                    ({
+                      required prepared,
+                      required projectNames,
+                      onProgress,
+                    }) async {
+                      onProgress?.call(3, 3);
+                      return const [
+                        ProjectImportResult(
+                          projectId: 'a',
+                          projectName: '进行中',
+                          photoCount: 0,
+                          restoredOriginals: 0,
+                          lifecycleStatus: ProjectLifecycleStatus.active,
+                          isPinned: false,
+                        ),
+                        ProjectImportResult(
+                          projectId: 'c',
+                          projectName: '已完成',
+                          photoCount: 0,
+                          restoredOriginals: 0,
+                          lifecycleStatus: ProjectLifecycleStatus.completed,
+                          isPinned: false,
+                        ),
+                        ProjectImportResult(
+                          projectId: 'z',
+                          projectName: '已归档',
+                          photoCount: 0,
+                          restoredOriginals: 0,
+                          lifecycleStatus: ProjectLifecycleStatus.archived,
+                          isPinned: true,
+                        ),
+                      ];
+                    },
+                discardPrepared: (_) async {},
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [databaseProvider.overrideWithValue(database)],
+          child: MaterialApp.router(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('restore-projects')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('choose-restore-zip')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('restore-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('进行中 1'), findsOneWidget);
+      expect(find.textContaining('已完成 1'), findsOneWidget);
+      expect(find.textContaining('已归档 1'), findsOneWidget);
+      expect(find.byKey(const Key('view-archived-projects')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('view-archived-projects')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-home')), findsOneWidget);
+      expect(homeExtra, ProjectLifecycleStatus.archived);
     },
   );
 }
@@ -474,6 +593,8 @@ PreparedProjectRestore _prepared({
     omittedFailedCount: 0,
     isPartial: false,
     includesOriginals: true,
+    projectLifecycleStatus: 'active',
+    projectIsPinned: false,
     watermark: includeWatermark
         ? const rust.ArchiveWatermarkSettings(
             position: 'bottomLeft',

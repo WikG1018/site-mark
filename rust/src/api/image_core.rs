@@ -104,6 +104,8 @@ pub struct ExportProjectRequest {
     pub omitted_failed_count: u32,
     pub output_zip_path: String,
     pub include_originals: bool,
+    pub project_lifecycle_status: String,
+    pub project_is_pinned: bool,
     pub watermark: ExportWatermarkSettings,
     pub photos: Vec<ExportPhotoRecord>,
     pub templates: Vec<ExportCaptureTemplate>,
@@ -187,6 +189,8 @@ struct ExportManifest<'a> {
     omitted_processing_count: u32,
     omitted_failed_count: u32,
     includes_originals: bool,
+    project_lifecycle_status: &'a str,
+    project_is_pinned: bool,
     watermark: &'a ExportWatermarkSettings,
     photos: &'a [ExportPhotoRecord],
     templates: &'a [ExportCaptureTemplate],
@@ -310,6 +314,15 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
             "project name is required",
         ));
     }
+    if !is_valid_lifecycle_status(&request.project_lifecycle_status) {
+        return Err(invalid_data(
+            "validate export request",
+            format!(
+                "unsupported project lifecycle status {}",
+                request.project_lifecycle_status
+            ),
+        ));
+    }
     let output = Path::new(&request.output_zip_path);
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| io_failure("create export directory", error))?;
@@ -377,11 +390,11 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         .write_all(&csv_bytes)
         .map_err(|error| io_failure("write CSV entry", error))?;
 
-    // Single-project exports are the restorable backup format: schema v4
-    // records the project watermark template and per-photo restore fields.
+    // Single-project exports are the restorable backup format: schema v5
+    // records lifecycle status and pin flag with the watermark template.
     // Selection archives intentionally stay at v1 and are not restorable.
     let manifest = serde_json::to_vec_pretty(&ExportManifest {
-        schema_version: 4,
+        schema_version: 5,
         app: "SiteMark",
         project_id: &request.project_id,
         project_name: &request.project_name,
@@ -391,6 +404,8 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         omitted_processing_count: request.omitted_processing_count,
         omitted_failed_count: request.omitted_failed_count,
         includes_originals: request.include_originals,
+        project_lifecycle_status: &request.project_lifecycle_status,
+        project_is_pinned: request.project_is_pinned,
         watermark: &request.watermark,
         photos: &request.photos,
         templates: &request.templates,
@@ -1425,6 +1440,11 @@ pub struct ProjectArchivePreview {
     pub omitted_failed_count: u32,
     pub is_partial: bool,
     pub includes_originals: bool,
+    /// Normalized lifecycle status: always one of `active`, `completed`, `archived`.
+    /// Schema 1..=4 archives are normalized to `active`.
+    pub project_lifecycle_status: String,
+    /// Normalized pin flag. Schema 1..=4 archives are normalized to `false`.
+    pub project_is_pinned: bool,
     pub watermark: Option<ArchiveWatermarkSettings>,
     pub photos: Vec<ArchivePhotoPreview>,
     pub templates: Vec<ArchiveCaptureTemplate>,
@@ -1504,10 +1524,48 @@ struct ProjectManifestFile {
     omitted_failed_count: u32,
     includes_originals: bool,
     #[serde(default)]
+    project_lifecycle_status: Option<String>,
+    #[serde(default)]
+    project_is_pinned: Option<bool>,
+    #[serde(default)]
     watermark: Option<ManifestWatermark>,
     photos: Vec<ManifestPhoto>,
     #[serde(default)]
     templates: Vec<ManifestCaptureTemplate>,
+}
+
+fn is_valid_lifecycle_status(value: &str) -> bool {
+    matches!(value, "active" | "completed" | "archived")
+}
+
+/// Normalizes lifecycle fields according to schema version:
+/// - schema 5 requires both fields, status must be active/completed/archived
+/// - schema 1..=4 always normalize to active / unpinned
+fn normalize_lifecycle_fields(
+    schema_version: u32,
+    project_lifecycle_status: Option<String>,
+    project_is_pinned: Option<bool>,
+) -> Result<(String, bool), String> {
+    if schema_version >= 5 {
+        let status = project_lifecycle_status.ok_or_else(|| {
+            invalid_data(
+                "validate manifest",
+                "schema 5 requires project_lifecycle_status",
+            )
+        })?;
+        if !is_valid_lifecycle_status(&status) {
+            return Err(invalid_data(
+                "validate manifest",
+                format!("unsupported project lifecycle status {status}"),
+            ));
+        }
+        let is_pinned = project_is_pinned.ok_or_else(|| {
+            invalid_data("validate manifest", "schema 5 requires project_is_pinned")
+        })?;
+        Ok((status, is_pinned))
+    } else {
+        Ok(("active".to_string(), false))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -2207,7 +2265,7 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
     if manifest.app != "SiteMark" {
         return Err(invalid_data("validate manifest", "not a SiteMark archive"));
     }
-    if !(1..=4).contains(&manifest.schema_version) {
+    if !(1..=5).contains(&manifest.schema_version) {
         return Err(invalid_data(
             "validate manifest",
             format!("unsupported schema version {}", manifest.schema_version),
@@ -2218,6 +2276,18 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
             "validate manifest",
             "capture templates require schema version 4",
         ));
+    }
+    // Reject invalid lifecycle values early even on legacy schemas when present,
+    // but only require them for schema 5. Normalization happens in preview.
+    if manifest.schema_version >= 5 {
+        normalize_lifecycle_fields(
+            manifest.schema_version,
+            manifest.project_lifecycle_status.clone(),
+            manifest.project_is_pinned,
+        )?;
+    } else if let Some(status) = manifest.project_lifecycle_status.as_deref() {
+        // Legacy schemas ignore unknown lifecycle values by normalizing away.
+        let _ = status;
     }
     if manifest.project_name.trim().is_empty() {
         return Err(invalid_data("validate manifest", "project name is empty"));
@@ -2354,9 +2424,14 @@ fn extract_entry_to(
 }
 
 /// Validates a backup ZIP and returns its restorable content. Only
-/// single-project archives (schema v1-v4) are restorable.
+/// single-project archives (schema v1-v5) are restorable.
 pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, String> {
     let manifest = read_project_manifest(&zip_path)?;
+    let (project_lifecycle_status, project_is_pinned) = normalize_lifecycle_fields(
+        manifest.schema_version,
+        manifest.project_lifecycle_status.clone(),
+        manifest.project_is_pinned,
+    )?;
     let mut archive = open_zip(&zip_path)?;
     let mut total_uncompressed: u64 = 0;
     let mut photos = Vec::with_capacity(manifest.photos.len());
@@ -2414,6 +2489,8 @@ pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, S
         omitted_failed_count: manifest.omitted_failed_count,
         is_partial: manifest.omitted_processing_count > 0 || manifest.omitted_failed_count > 0,
         includes_originals: manifest.includes_originals,
+        project_lifecycle_status,
+        project_is_pinned,
         watermark: manifest
             .watermark
             .map(|watermark| ArchiveWatermarkSettings {

@@ -7,16 +7,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
+import 'package:sitemark/domain/project_summary.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 class _ControlledProjectsDatabase extends AppDatabase {
   _ControlledProjectsDatabase() : super.forTesting(NativeDatabase.memory());
 
-  final projectEvents = StreamController<List<Project>>();
+  final projectEvents = StreamController<List<ProjectSummary>>();
 
   @override
-  Stream<List<Project>> watchProjects() => projectEvents.stream;
+  Stream<List<ProjectSummary>> watchProjectSummaries({
+    ProjectLifecycleStatus? status,
+    String search = '',
+  }) => projectEvents.stream;
 
   @override
   Future<void> close() async {
@@ -66,7 +71,7 @@ void main() {
     await tester.tap(find.byKey(const Key('search-projects')));
     await tester.pump();
     await tester.enterText(find.byKey(const Key('project-search-field')), '东区');
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('东区厂房改造'), findsOneWidget);
     expect(find.text('西区管线整改'), findsNothing);
     await disposeApp(tester);
@@ -118,18 +123,20 @@ void main() {
       find.byKey(const Key('project-search-field')),
       'warehouse alpha',
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('Warehouse Alpha'), findsOneWidget);
     expect(find.byKey(const Key('project-search-action')), findsOneWidget);
     expect(find.byIcon(Icons.clear), findsOneWidget);
     expect(find.byIcon(Icons.close), findsNothing);
     await tester.tap(find.byKey(const Key('project-search-action')));
-    await tester.pump();
-    expect(find.byType(Card), findsNWidgets(3));
+    await tester.pumpAndSettle();
+    expect(find.text('东区厂房改造'), findsOneWidget);
+    expect(find.text('西区管线整改'), findsOneWidget);
+    expect(find.text('Warehouse Alpha'), findsOneWidget);
     expect(find.byKey(const Key('project-search-field')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('project-search-action')));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('project-search-field')), findsNothing);
     expect(find.byKey(const Key('project-title')), findsOneWidget);
     await disposeApp(tester);
@@ -143,7 +150,7 @@ void main() {
       find.byKey(const Key('project-search-field')),
       '不存在',
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.text('没有匹配的项目'), findsOneWidget);
     expect(find.byKey(const Key('project-search-action')), findsOneWidget);
     await disposeApp(tester);
@@ -181,6 +188,210 @@ void main() {
       find.descendant(of: appBar, matching: find.byType(AnimatedSwitcher)),
       findsNothing,
     );
+    await disposeApp(tester);
+  });
+
+  testWidgets('defaults to active and switches lifecycle filters', (
+    tester,
+  ) async {
+    await pumpProjects(tester);
+    expect(
+      find.byKey(const Key('project-status-badge-active')),
+      findsNWidgets(3),
+    );
+    await database.updateProjectLifecycleStatus(
+      projectId: 'west',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.archived,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('已归档'), findsNothing);
+    expect(find.text('西区管线整改'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('project-status-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-status-archived')));
+    await tester.pumpAndSettle();
+    expect(find.text('西区管线整改'), findsOneWidget);
+    expect(find.text('东区厂房改造'), findsNothing);
+    await disposeApp(tester);
+  });
+
+  testWidgets('search spans statuses and shows status badges', (tester) async {
+    await pumpProjects(tester);
+    await database.updateProjectLifecycleStatus(
+      projectId: 'east',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.completed,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('search-projects')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('project-search-field')),
+      '东区厂房改造',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byType(Card), matching: find.text('东区厂房改造')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('project-status-badge-completed')),
+      findsOneWidget,
+    );
+    await disposeApp(tester);
+  });
+
+  testWidgets('status sheet system back only closes the sheet', (tester) async {
+    await pumpProjects(tester);
+    await tester.tap(find.byKey(const Key('project-status-filter')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-status-active')), findsOneWidget);
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const Key('project-status-active')))
+          .selected,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<ListTile>(find.byKey(const Key('project-status-archived')))
+          .selected,
+      isFalse,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-status-active')), findsNothing);
+    expect(find.byKey(const Key('project-title')), findsOneWidget);
+    expect(find.text('东区厂房改造'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('exiting search restores the active-filter scroll position', (
+    tester,
+  ) async {
+    database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final base = DateTime(2026, 8, 3, 8);
+    for (var index = 0; index < 30; index++) {
+      await database.createProject(
+        id: 'project-$index',
+        name: '项目${index.toString().padLeft(2, '0')}',
+        createdAt: base.add(Duration(minutes: index)),
+      );
+    }
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ProjectListScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('项目00'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('项目00'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('search-projects')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('project-search-field')),
+      '项目29',
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: find.byType(Card), matching: find.text('项目29')),
+      findsOneWidget,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project-search-field')), findsNothing);
+    expect(find.text('项目00'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('narrow width and large text do not overflow', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(
+      id: 'long',
+      name: '超长项目名称用于验证窄屏和大字体布局是否会溢出',
+      isPinned: true,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.5)),
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const ProjectListScreen(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await disposeApp(tester);
+  });
+
+  testWidgets('disableAnimations does not add custom transitions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(
+            AppDatabase.forTesting(NativeDatabase.memory()),
+          ),
+        ],
+        child: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const ProjectListScreen(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(AnimatedSwitcher), findsNothing);
     await disposeApp(tester);
   });
 }

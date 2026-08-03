@@ -52,6 +52,33 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  @override
+  late final GeneratedColumnWithTypeConverter<ProjectLifecycleStatus, String>
+  lifecycleStatus = GeneratedColumn<String>(
+    'lifecycle_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT \'active\' CHECK (lifecycle_status IN (\'active\', \'completed\', \'archived\'))',
+    defaultValue: const CustomExpression('\'active\''),
+  ).withConverter<ProjectLifecycleStatus>($ProjectsTable.$converterlifecycleStatus);
+  static const VerificationMeta _isPinnedMeta = const VerificationMeta(
+    'isPinned',
+  );
+  @override
+  late final GeneratedColumn<bool> isPinned = GeneratedColumn<bool>(
+    'is_pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _watermarkPositionMeta = const VerificationMeta(
     'watermarkPosition',
   );
@@ -129,6 +156,8 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
     name,
     description,
     restoreOperationId,
+    lifecycleStatus,
+    isPinned,
     watermarkPosition,
     watermarkOpacity,
     watermarkAccentColorArgb,
@@ -177,6 +206,12 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
           data['restore_operation_id']!,
           _restoreOperationIdMeta,
         ),
+      );
+    }
+    if (data.containsKey('is_pinned')) {
+      context.handle(
+        _isPinnedMeta,
+        isPinned.isAcceptableOrUnknown(data['is_pinned']!, _isPinnedMeta),
       );
     }
     if (data.containsKey('watermark_position')) {
@@ -256,6 +291,16 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
         DriftSqlType.string,
         data['${effectivePrefix}restore_operation_id'],
       ),
+      lifecycleStatus: $ProjectsTable.$converterlifecycleStatus.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}lifecycle_status'],
+        )!,
+      ),
+      isPinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_pinned'],
+      )!,
       watermarkPosition: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}watermark_position'],
@@ -287,6 +332,9 @@ class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
   $ProjectsTable createAlias(String alias) {
     return $ProjectsTable(attachedDatabase, alias);
   }
+
+  static TypeConverter<ProjectLifecycleStatus, String>
+  $converterlifecycleStatus = const ProjectLifecycleStatusConverter();
 }
 
 class Project extends DataClass implements Insertable<Project> {
@@ -299,6 +347,8 @@ class Project extends DataClass implements Insertable<Project> {
   /// User-created and fully committed projects keep this null. Recovery may
   /// delete a project only when its durable marker carries the same token.
   final String? restoreOperationId;
+  final ProjectLifecycleStatus lifecycleStatus;
+  final bool isPinned;
   final String watermarkPosition;
   final double watermarkOpacity;
   final int watermarkAccentColorArgb;
@@ -310,6 +360,8 @@ class Project extends DataClass implements Insertable<Project> {
     required this.name,
     this.description,
     this.restoreOperationId,
+    required this.lifecycleStatus,
+    required this.isPinned,
     required this.watermarkPosition,
     required this.watermarkOpacity,
     required this.watermarkAccentColorArgb,
@@ -328,6 +380,12 @@ class Project extends DataClass implements Insertable<Project> {
     if (!nullToAbsent || restoreOperationId != null) {
       map['restore_operation_id'] = Variable<String>(restoreOperationId);
     }
+    {
+      map['lifecycle_status'] = Variable<String>(
+        $ProjectsTable.$converterlifecycleStatus.toSql(lifecycleStatus),
+      );
+    }
+    map['is_pinned'] = Variable<bool>(isPinned);
     map['watermark_position'] = Variable<String>(watermarkPosition);
     map['watermark_opacity'] = Variable<double>(watermarkOpacity);
     map['watermark_accent_color_argb'] = Variable<int>(
@@ -349,6 +407,8 @@ class Project extends DataClass implements Insertable<Project> {
       restoreOperationId: restoreOperationId == null && nullToAbsent
           ? const Value.absent()
           : Value(restoreOperationId),
+      lifecycleStatus: Value(lifecycleStatus),
+      isPinned: Value(isPinned),
       watermarkPosition: Value(watermarkPosition),
       watermarkOpacity: Value(watermarkOpacity),
       watermarkAccentColorArgb: Value(watermarkAccentColorArgb),
@@ -370,6 +430,10 @@ class Project extends DataClass implements Insertable<Project> {
       restoreOperationId: serializer.fromJson<String?>(
         json['restoreOperationId'],
       ),
+      lifecycleStatus: serializer.fromJson<ProjectLifecycleStatus>(
+        json['lifecycleStatus'],
+      ),
+      isPinned: serializer.fromJson<bool>(json['isPinned']),
       watermarkPosition: serializer.fromJson<String>(json['watermarkPosition']),
       watermarkOpacity: serializer.fromJson<double>(json['watermarkOpacity']),
       watermarkAccentColorArgb: serializer.fromJson<int>(
@@ -390,6 +454,10 @@ class Project extends DataClass implements Insertable<Project> {
       'name': serializer.toJson<String>(name),
       'description': serializer.toJson<String?>(description),
       'restoreOperationId': serializer.toJson<String?>(restoreOperationId),
+      'lifecycleStatus': serializer.toJson<ProjectLifecycleStatus>(
+        lifecycleStatus,
+      ),
+      'isPinned': serializer.toJson<bool>(isPinned),
       'watermarkPosition': serializer.toJson<String>(watermarkPosition),
       'watermarkOpacity': serializer.toJson<double>(watermarkOpacity),
       'watermarkAccentColorArgb': serializer.toJson<int>(
@@ -406,6 +474,8 @@ class Project extends DataClass implements Insertable<Project> {
     String? name,
     Value<String?> description = const Value.absent(),
     Value<String?> restoreOperationId = const Value.absent(),
+    ProjectLifecycleStatus? lifecycleStatus,
+    bool? isPinned,
     String? watermarkPosition,
     double? watermarkOpacity,
     int? watermarkAccentColorArgb,
@@ -419,6 +489,8 @@ class Project extends DataClass implements Insertable<Project> {
     restoreOperationId: restoreOperationId.present
         ? restoreOperationId.value
         : this.restoreOperationId,
+    lifecycleStatus: lifecycleStatus ?? this.lifecycleStatus,
+    isPinned: isPinned ?? this.isPinned,
     watermarkPosition: watermarkPosition ?? this.watermarkPosition,
     watermarkOpacity: watermarkOpacity ?? this.watermarkOpacity,
     watermarkAccentColorArgb:
@@ -437,6 +509,10 @@ class Project extends DataClass implements Insertable<Project> {
       restoreOperationId: data.restoreOperationId.present
           ? data.restoreOperationId.value
           : this.restoreOperationId,
+      lifecycleStatus: data.lifecycleStatus.present
+          ? data.lifecycleStatus.value
+          : this.lifecycleStatus,
+      isPinned: data.isPinned.present ? data.isPinned.value : this.isPinned,
       watermarkPosition: data.watermarkPosition.present
           ? data.watermarkPosition.value
           : this.watermarkPosition,
@@ -461,6 +537,8 @@ class Project extends DataClass implements Insertable<Project> {
           ..write('name: $name, ')
           ..write('description: $description, ')
           ..write('restoreOperationId: $restoreOperationId, ')
+          ..write('lifecycleStatus: $lifecycleStatus, ')
+          ..write('isPinned: $isPinned, ')
           ..write('watermarkPosition: $watermarkPosition, ')
           ..write('watermarkOpacity: $watermarkOpacity, ')
           ..write('watermarkAccentColorArgb: $watermarkAccentColorArgb, ')
@@ -477,6 +555,8 @@ class Project extends DataClass implements Insertable<Project> {
     name,
     description,
     restoreOperationId,
+    lifecycleStatus,
+    isPinned,
     watermarkPosition,
     watermarkOpacity,
     watermarkAccentColorArgb,
@@ -492,6 +572,8 @@ class Project extends DataClass implements Insertable<Project> {
           other.name == this.name &&
           other.description == this.description &&
           other.restoreOperationId == this.restoreOperationId &&
+          other.lifecycleStatus == this.lifecycleStatus &&
+          other.isPinned == this.isPinned &&
           other.watermarkPosition == this.watermarkPosition &&
           other.watermarkOpacity == this.watermarkOpacity &&
           other.watermarkAccentColorArgb == this.watermarkAccentColorArgb &&
@@ -505,6 +587,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
   final Value<String> name;
   final Value<String?> description;
   final Value<String?> restoreOperationId;
+  final Value<ProjectLifecycleStatus> lifecycleStatus;
+  final Value<bool> isPinned;
   final Value<String> watermarkPosition;
   final Value<double> watermarkOpacity;
   final Value<int> watermarkAccentColorArgb;
@@ -517,6 +601,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     this.name = const Value.absent(),
     this.description = const Value.absent(),
     this.restoreOperationId = const Value.absent(),
+    this.lifecycleStatus = const Value.absent(),
+    this.isPinned = const Value.absent(),
     this.watermarkPosition = const Value.absent(),
     this.watermarkOpacity = const Value.absent(),
     this.watermarkAccentColorArgb = const Value.absent(),
@@ -530,6 +616,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     required String name,
     this.description = const Value.absent(),
     this.restoreOperationId = const Value.absent(),
+    this.lifecycleStatus = const Value.absent(),
+    this.isPinned = const Value.absent(),
     this.watermarkPosition = const Value.absent(),
     this.watermarkOpacity = const Value.absent(),
     this.watermarkAccentColorArgb = const Value.absent(),
@@ -546,6 +634,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Expression<String>? name,
     Expression<String>? description,
     Expression<String>? restoreOperationId,
+    Expression<String>? lifecycleStatus,
+    Expression<bool>? isPinned,
     Expression<String>? watermarkPosition,
     Expression<double>? watermarkOpacity,
     Expression<int>? watermarkAccentColorArgb,
@@ -560,6 +650,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       if (description != null) 'description': description,
       if (restoreOperationId != null)
         'restore_operation_id': restoreOperationId,
+      if (lifecycleStatus != null) 'lifecycle_status': lifecycleStatus,
+      if (isPinned != null) 'is_pinned': isPinned,
       if (watermarkPosition != null) 'watermark_position': watermarkPosition,
       if (watermarkOpacity != null) 'watermark_opacity': watermarkOpacity,
       if (watermarkAccentColorArgb != null)
@@ -577,6 +669,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     Value<String>? name,
     Value<String?>? description,
     Value<String?>? restoreOperationId,
+    Value<ProjectLifecycleStatus>? lifecycleStatus,
+    Value<bool>? isPinned,
     Value<String>? watermarkPosition,
     Value<double>? watermarkOpacity,
     Value<int>? watermarkAccentColorArgb,
@@ -590,6 +684,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
       name: name ?? this.name,
       description: description ?? this.description,
       restoreOperationId: restoreOperationId ?? this.restoreOperationId,
+      lifecycleStatus: lifecycleStatus ?? this.lifecycleStatus,
+      isPinned: isPinned ?? this.isPinned,
       watermarkPosition: watermarkPosition ?? this.watermarkPosition,
       watermarkOpacity: watermarkOpacity ?? this.watermarkOpacity,
       watermarkAccentColorArgb:
@@ -615,6 +711,14 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
     }
     if (restoreOperationId.present) {
       map['restore_operation_id'] = Variable<String>(restoreOperationId.value);
+    }
+    if (lifecycleStatus.present) {
+      map['lifecycle_status'] = Variable<String>(
+        $ProjectsTable.$converterlifecycleStatus.toSql(lifecycleStatus.value),
+      );
+    }
+    if (isPinned.present) {
+      map['is_pinned'] = Variable<bool>(isPinned.value);
     }
     if (watermarkPosition.present) {
       map['watermark_position'] = Variable<String>(watermarkPosition.value);
@@ -649,6 +753,8 @@ class ProjectsCompanion extends UpdateCompanion<Project> {
           ..write('name: $name, ')
           ..write('description: $description, ')
           ..write('restoreOperationId: $restoreOperationId, ')
+          ..write('lifecycleStatus: $lifecycleStatus, ')
+          ..write('isPinned: $isPinned, ')
           ..write('watermarkPosition: $watermarkPosition, ')
           ..write('watermarkOpacity: $watermarkOpacity, ')
           ..write('watermarkAccentColorArgb: $watermarkAccentColorArgb, ')
@@ -3474,6 +3580,8 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       required String name,
       Value<String?> description,
       Value<String?> restoreOperationId,
+      Value<ProjectLifecycleStatus> lifecycleStatus,
+      Value<bool> isPinned,
       Value<String> watermarkPosition,
       Value<double> watermarkOpacity,
       Value<int> watermarkAccentColorArgb,
@@ -3488,6 +3596,8 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String?> description,
       Value<String?> restoreOperationId,
+      Value<ProjectLifecycleStatus> lifecycleStatus,
+      Value<bool> isPinned,
       Value<String> watermarkPosition,
       Value<double> watermarkOpacity,
       Value<int> watermarkAccentColorArgb,
@@ -3566,6 +3676,21 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<String> get restoreOperationId => $composableBuilder(
     column: $table.restoreOperationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<
+    ProjectLifecycleStatus,
+    ProjectLifecycleStatus,
+    String
+  >
+  get lifecycleStatus => $composableBuilder(
+    column: $table.lifecycleStatus,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<bool> get isPinned => $composableBuilder(
+    column: $table.isPinned,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3679,6 +3804,16 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get lifecycleStatus => $composableBuilder(
+    column: $table.lifecycleStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isPinned => $composableBuilder(
+    column: $table.isPinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get watermarkPosition => $composableBuilder(
     column: $table.watermarkPosition,
     builder: (column) => ColumnOrderings(column),
@@ -3734,6 +3869,15 @@ class $$ProjectsTableAnnotationComposer
     column: $table.restoreOperationId,
     builder: (column) => column,
   );
+
+  GeneratedColumnWithTypeConverter<ProjectLifecycleStatus, String>
+  get lifecycleStatus => $composableBuilder(
+    column: $table.lifecycleStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isPinned =>
+      $composableBuilder(column: $table.isPinned, builder: (column) => column);
 
   GeneratedColumn<String> get watermarkPosition => $composableBuilder(
     column: $table.watermarkPosition,
@@ -3847,6 +3991,9 @@ class $$ProjectsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> description = const Value.absent(),
                 Value<String?> restoreOperationId = const Value.absent(),
+                Value<ProjectLifecycleStatus> lifecycleStatus =
+                    const Value.absent(),
+                Value<bool> isPinned = const Value.absent(),
                 Value<String> watermarkPosition = const Value.absent(),
                 Value<double> watermarkOpacity = const Value.absent(),
                 Value<int> watermarkAccentColorArgb = const Value.absent(),
@@ -3859,6 +4006,8 @@ class $$ProjectsTableTableManager
                 name: name,
                 description: description,
                 restoreOperationId: restoreOperationId,
+                lifecycleStatus: lifecycleStatus,
+                isPinned: isPinned,
                 watermarkPosition: watermarkPosition,
                 watermarkOpacity: watermarkOpacity,
                 watermarkAccentColorArgb: watermarkAccentColorArgb,
@@ -3873,6 +4022,9 @@ class $$ProjectsTableTableManager
                 required String name,
                 Value<String?> description = const Value.absent(),
                 Value<String?> restoreOperationId = const Value.absent(),
+                Value<ProjectLifecycleStatus> lifecycleStatus =
+                    const Value.absent(),
+                Value<bool> isPinned = const Value.absent(),
                 Value<String> watermarkPosition = const Value.absent(),
                 Value<double> watermarkOpacity = const Value.absent(),
                 Value<int> watermarkAccentColorArgb = const Value.absent(),
@@ -3885,6 +4037,8 @@ class $$ProjectsTableTableManager
                 name: name,
                 description: description,
                 restoreOperationId: restoreOperationId,
+                lifecycleStatus: lifecycleStatus,
+                isPinned: isPinned,
                 watermarkPosition: watermarkPosition,
                 watermarkOpacity: watermarkOpacity,
                 watermarkAccentColorArgb: watermarkAccentColorArgb,

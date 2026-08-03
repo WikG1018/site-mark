@@ -5,6 +5,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
 import 'package:sitemark/features/capture/capture_template_sheet.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
@@ -313,6 +314,14 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
 
   Future<void> _capture(Project project) async {
     if (!_formKey.currentState!.validate()) return;
+    if (project.lifecycleStatus != ProjectLifecycleStatus.active) {
+      if (!mounted) return;
+      final strings = AppStrings.of(context);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(strings.captureReadOnlyMessage)));
+      return;
+    }
     final projectId = project.id;
     final generation = _initGeneration;
     final operation = ++_captureOperation;
@@ -324,25 +333,37 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     setState(() => _working = true);
     final language = Localizations.localeOf(context).languageCode;
     final watermarkLocaleCode = language == 'en' ? 'en' : 'zh';
-    final result = await ref
-        .read(captureWorkflowProvider)
-        .capture(
-          CaptureDraft(
-            projectId: project.id,
-            projectName: project.name,
-            workLocation: _locationController.text.trim(),
-            workContent: _contentController.text.trim(),
-            photographer: _photographerController.text.trim(),
-            notes: _notesController.text.trim().isEmpty
-                ? null
-                : _notesController.text.trim(),
-            watermarkLocaleCode: watermarkLocaleCode,
-            // The capture button path must never trigger a runtime permission
-            // request, so only attempt a location read when permission is
-            // already granted.
-            useLocationFallback: _permissionState?.locationEnabled ?? false,
-          ),
-        );
+    final CaptureWorkflowResult result;
+    try {
+      result = await ref
+          .read(captureWorkflowProvider)
+          .capture(
+            CaptureDraft(
+              projectId: project.id,
+              projectName: project.name,
+              workLocation: _locationController.text.trim(),
+              workContent: _contentController.text.trim(),
+              photographer: _photographerController.text.trim(),
+              notes: _notesController.text.trim().isEmpty
+                  ? null
+                  : _notesController.text.trim(),
+              watermarkLocaleCode: watermarkLocaleCode,
+              // The capture button path must never trigger a runtime permission
+              // request, so only attempt a location read when permission is
+              // already granted.
+              useLocationFallback: _permissionState?.locationEnabled ?? false,
+            ),
+          );
+    } on ProjectReadOnlyException {
+      if (!mounted) return;
+      if (!isCurrent()) return;
+      setState(() => _working = false);
+      final strings = AppStrings.of(context);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(strings.captureReadOnlyMessage)));
+      return;
+    }
     if (!mounted) return;
     if (!isCurrent()) {
       if (result.outcome == CaptureWorkflowOutcome.queued ||
@@ -433,10 +454,25 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                 onEnable: _enableLocation,
               )
             : null;
+        final readOnly =
+            project != null &&
+            project.lifecycleStatus != ProjectLifecycleStatus.active;
         return Scaffold(
           appBar: AppBar(title: Text(strings.captureFormTitle)),
           body: project == null
               ? const Center(child: CircularProgressIndicator())
+              : readOnly
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Text(
+                      key: const Key('capture-read-only'),
+                      strings.captureReadOnlyMessage,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                )
               : SafeArea(
                   child: Center(
                     child: ConstrainedBox(

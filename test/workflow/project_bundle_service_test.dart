@@ -6,6 +6,7 @@ import 'package:drift/drift.dart'
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
@@ -1109,6 +1110,78 @@ void main() {
     });
 
     test(
+      'restorePrepared preserves mixed lifecycle statuses and pins',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore();
+        final importer = _FakeProjectImporter(
+          lifecycleByName: {
+            '进行中项目': ProjectLifecycleStatus.active,
+            '已完成项目': ProjectLifecycleStatus.completed,
+            '归档项目': ProjectLifecycleStatus.archived,
+          },
+          pinByName: {'进行中项目': false, '已完成项目': true, '归档项目': true},
+        );
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(
+            preview: rust.ProjectBundlePreview(
+              schemaVersion: 1,
+              createdAt: '2026-08-03T12:00:00+08:00',
+              projects: [
+                rust.ProjectBundleEntryPreview(
+                  projectId: 'p1',
+                  projectName: '进行中项目',
+                  archivePath: 'projects/p1.zip',
+                  archiveSha256: 'a' * 64,
+                ),
+                rust.ProjectBundleEntryPreview(
+                  projectId: 'p2',
+                  projectName: '已完成项目',
+                  archivePath: 'projects/p2.zip',
+                  archiveSha256: 'b' * 64,
+                ),
+                rust.ProjectBundleEntryPreview(
+                  projectId: 'p3',
+                  projectName: '归档项目',
+                  archivePath: 'projects/p3.zip',
+                  archiveSha256: 'c' * 64,
+                ),
+              ],
+            ),
+          ),
+          importer: importer,
+          pending: pending,
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+        final results = await service.restorePrepared(
+          prepared: prepared,
+          projectNames: const {'p1': '进行中项目', 'p2': '已完成项目', 'p3': '归档项目'},
+        );
+
+        expect(results.map((r) => r.lifecycleStatus), [
+          ProjectLifecycleStatus.active,
+          ProjectLifecycleStatus.completed,
+          ProjectLifecycleStatus.archived,
+        ]);
+        expect(results.map((r) => r.isPinned), [false, true, true]);
+        final projects = await database.getProjects();
+        expect(projects, hasLength(3));
+        Project byName(String name) =>
+            projects.firstWhere((project) => project.name == name);
+        expect(byName('进行中项目').lifecycleStatus, ProjectLifecycleStatus.active);
+        expect(
+          byName('已完成项目').lifecycleStatus,
+          ProjectLifecycleStatus.completed,
+        );
+        expect(byName('已完成项目').isPinned, isTrue);
+        expect(byName('归档项目').lifecycleStatus, ProjectLifecycleStatus.archived);
+        expect(byName('归档项目').isPinned, isTrue);
+      },
+    );
+
+    test(
       'interrupted cleanup attempts every planned id before clearing',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -1811,6 +1884,8 @@ rust.ProjectArchivePreview _archivePreview(String name) =>
       omittedFailedCount: 0,
       isPartial: false,
       includesOriginals: true,
+      projectLifecycleStatus: 'active',
+      projectIsPinned: false,
       photos: [
         rust.ArchivePhotoPreview(
           photoNumber: '$name-SM-20260728-001',
@@ -2208,12 +2283,16 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
     this.importGate,
     this.inspectFailure,
     this.importFailure,
+    this.lifecycleByName = const {},
+    this.pinByName = const {},
   });
 
   final String? failSource;
   final Completer<void>? importGate;
   final Object? inspectFailure;
   final Object? importFailure;
+  final Map<String, ProjectLifecycleStatus> lifecycleByName;
+  final Map<String, bool> pinByName;
   final inspected = <String>[];
   final imports = <String>[];
   _FakeBundlePendingStore? pendingStore;
@@ -2245,10 +2324,15 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
     if (zipPath.endsWith(failSource ?? '\u0000')) {
       throw importFailure ?? StateError('item import failed');
     }
+    final status =
+        lifecycleByName[projectName] ?? ProjectLifecycleStatus.active;
+    final pinned = pinByName[projectName] ?? false;
     await database?.createProject(
       id: projectId!,
       name: projectName,
       restoreOperationId: restoreOperationId,
+      lifecycleStatus: status,
+      isPinned: pinned,
     );
     onProgress?.call(1, 1);
     return ProjectImportResult(
@@ -2256,6 +2340,8 @@ class _FakeProjectImporter implements ProjectArchiveImporter {
       projectName: projectName,
       photoCount: 1,
       restoredOriginals: 1,
+      lifecycleStatus: status,
+      isPinned: pinned,
     );
   }
 }
@@ -2300,6 +2386,8 @@ class _DatabaseProjectImporter implements ProjectArchiveImporter {
       projectName: projectName,
       photoCount: 1,
       restoredOriginals: 1,
+      lifecycleStatus: ProjectLifecycleStatus.active,
+      isPinned: false,
     );
   }
 }

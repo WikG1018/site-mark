@@ -858,7 +858,39 @@ final class _ControlledProjectDatabase extends AppDatabase {
   _ControlledProjectDatabase() : super.forTesting(NativeDatabase.memory());
 
   final Completer<Project?> projectLookup = Completer<Project?>();
+  final StreamController<Project?> _projectWatch =
+      StreamController<Project?>.broadcast();
+  var _watchBridged = false;
+
+  void _bridgeProjectLookup() {
+    if (_watchBridged) return;
+    _watchBridged = true;
+    projectLookup.future.then(
+      (value) {
+        if (!_projectWatch.isClosed) {
+          _projectWatch.add(value);
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!_projectWatch.isClosed) {
+          _projectWatch.addError(error, stackTrace);
+        }
+      },
+    );
+  }
 
   @override
   Future<Project?> projectById(String projectId) => projectLookup.future;
+
+  @override
+  Stream<Project?> watchProjectById(String projectId) {
+    _bridgeProjectLookup();
+    return _projectWatch.stream;
+  }
+
+  @override
+  Future<void> close() async {
+    await _projectWatch.close();
+    await super.close();
+  }
 }
