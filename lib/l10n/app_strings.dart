@@ -24,6 +24,63 @@ class AppStrings {
   String get noProjectsHint => _english
       ? 'Create an engineering project before recording the site.'
       : '先创建工程项目，再开始现场拍摄记录。';
+  String get noActiveProjects => _english ? 'No active projects' : '暂无进行中的项目';
+  String get noActiveProjectsHint => _english
+      ? 'Create a project or restore one from backup.'
+      : '可以新建项目，或从备份恢复项目。';
+  String get noCompletedProjects =>
+      _english ? 'No completed projects yet' : '暂无已完成的项目';
+  String get noCompletedProjectsHint => _english
+      ? 'Mark a project complete when site work is finished.'
+      : '现场工作结束后，可将项目标记为已完成。';
+  String get noArchivedProjects =>
+      _english ? 'No archived projects yet' : '暂无已归档的项目';
+  String get noArchivedProjectsHint => _english
+      ? 'Archive finished projects to keep the active list clean.'
+      : '归档已结束的项目，保持进行中列表整洁。';
+  String get projectStatusFilterTitle => _english ? 'Project status' : '项目状态';
+  String get projectStatusActive => _english ? 'Active' : '进行中';
+  String get projectStatusCompleted => _english ? 'Completed' : '已完成';
+  String get projectStatusArchived => _english ? 'Archived' : '已归档';
+  String get pinProject => _english ? 'Pin project' : '置顶';
+  String get unpinProject => _english ? 'Unpin project' : '取消置顶';
+  String get markProjectCompleted => _english ? 'Mark completed' : '标记完成';
+  String get archiveProject => _english ? 'Archive' : '归档';
+  String get reopenProject => _english ? 'Reopen project' : '重新启用';
+  String get restoreProjectToActive => _english ? 'Restore to active' : '恢复使用';
+  String get projectPinnedBadge => _english ? 'Pinned' : '置顶';
+  String projectPhotoCount(int count) =>
+      _english ? (count == 1 ? '1 photo' : '$count photos') : '$count 张照片';
+  String get noCaptureRecordsYet => _english ? 'No captures yet' : '暂无拍摄记录';
+  String lastCaptureAtLabel(String value) =>
+      _english ? 'Last capture: $value' : '最近拍摄：$value';
+  String projectLifecycleProcessingBlocked(int count) => _english
+      ? 'Cannot change status while $count capture(s) are still processing.'
+      : '仍有 $count 张照片在拍摄或处理中，无法更改状态。';
+  String projectLifecycleFailedConfirm(int count) => _english
+      ? 'This project has $count failed capture(s). Continue anyway?'
+      : '该项目有 $count 条失败记录，仍要继续吗？';
+  String get projectLifecycleConflict =>
+      _english ? 'Project status changed. Please try again.' : '项目状态已变化，请重试';
+  String get projectLifecycleContinue => _english ? 'Continue' : '继续';
+  String get projectStatusBannerCompleted => _english
+      ? 'This project is completed. New captures are disabled.'
+      : '项目已完成，不能继续拍摄。';
+  String get projectStatusBannerArchived => _english
+      ? 'This project is archived. New captures are disabled.'
+      : '项目已归档，不能继续拍摄。';
+  String get captureReadOnlyMessage => _english
+      ? 'This project is not active, so new captures are disabled.'
+      : '项目当前不可拍摄，无法新建记录。';
+  String restoreStatusSummary({
+    required int activeCount,
+    required int completedCount,
+    required int archivedCount,
+  }) => _english
+      ? 'Active $activeCount · Completed $completedCount · Archived $archivedCount'
+      : '进行中 $activeCount、已完成 $completedCount、已归档 $archivedCount';
+  String get viewArchivedProjects =>
+      _english ? 'View archived projects' : '查看归档项目';
   String get newProject => _english ? 'New project' : '新建项目';
   String get createProject => _english ? 'Create project' : '创建项目';
   String get projectName => _english ? 'Project name' : '项目名称';

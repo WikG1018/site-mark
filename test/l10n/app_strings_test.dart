@@ -54,6 +54,22 @@ final _stringReaders = <String, _StringReader>{
   'backupFailedFriendly': (strings) => strings.backupFailedFriendly,
   'backupProjectFailed': (strings) => strings.backupProjectFailed(_projectName),
   'backupStorageInsufficient': (strings) => strings.backupStorageInsufficient,
+  'projectStatusActive': (strings) => strings.projectStatusActive,
+  'projectStatusCompleted': (strings) => strings.projectStatusCompleted,
+  'projectStatusArchived': (strings) => strings.projectStatusArchived,
+  'pinProject': (strings) => strings.pinProject,
+  'unpinProject': (strings) => strings.unpinProject,
+  'markProjectCompleted': (strings) => strings.markProjectCompleted,
+  'archiveProject': (strings) => strings.archiveProject,
+  'reopenProject': (strings) => strings.reopenProject,
+  'restoreProjectToActive': (strings) => strings.restoreProjectToActive,
+  'projectLifecycleConflict': (strings) => strings.projectLifecycleConflict,
+  'viewArchivedProjects': (strings) => strings.viewArchivedProjects,
+  'noActiveProjects': (strings) => strings.noActiveProjects,
+  'noCompletedProjects': (strings) => strings.noCompletedProjects,
+  'noArchivedProjects': (strings) => strings.noArchivedProjects,
+  'projectPhotoCount': (strings) => strings.projectPhotoCount(3),
+  'noCaptureRecordsYet': (strings) => strings.noCaptureRecordsYet,
 };
 
 const expectedZh = <String, String>{
@@ -89,6 +105,22 @@ const expectedZh = <String, String>{
   'backupFailedFriendly': '无法生成备份',
   'backupProjectFailed': '无法备份项目“Project Alpha”。请重试；若仍失败，请单独选择该项目备份。',
   'backupStorageInsufficient': '存储空间不足，无法完成操作',
+  'projectStatusActive': '进行中',
+  'projectStatusCompleted': '已完成',
+  'projectStatusArchived': '已归档',
+  'pinProject': '置顶',
+  'unpinProject': '取消置顶',
+  'markProjectCompleted': '标记完成',
+  'archiveProject': '归档',
+  'reopenProject': '重新启用',
+  'restoreProjectToActive': '恢复使用',
+  'projectLifecycleConflict': '项目状态已变化，请重试',
+  'viewArchivedProjects': '查看归档项目',
+  'noActiveProjects': '暂无进行中的项目',
+  'noCompletedProjects': '暂无已完成的项目',
+  'noArchivedProjects': '暂无已归档的项目',
+  'projectPhotoCount': '3 张照片',
+  'noCaptureRecordsYet': '暂无拍摄记录',
 };
 
 const expectedEn = <String, String>{
@@ -128,6 +160,22 @@ const expectedEn = <String, String>{
       'Could not back up "Project Alpha". Try again; if it still fails, select only this project and retry.',
   'backupStorageInsufficient':
       'Not enough storage space to complete this operation',
+  'projectStatusActive': 'Active',
+  'projectStatusCompleted': 'Completed',
+  'projectStatusArchived': 'Archived',
+  'pinProject': 'Pin project',
+  'unpinProject': 'Unpin project',
+  'markProjectCompleted': 'Mark completed',
+  'archiveProject': 'Archive',
+  'reopenProject': 'Reopen project',
+  'restoreProjectToActive': 'Restore to active',
+  'projectLifecycleConflict': 'Project status changed. Please try again.',
+  'viewArchivedProjects': 'View archived projects',
+  'noActiveProjects': 'No active projects',
+  'noCompletedProjects': 'No completed projects yet',
+  'noArchivedProjects': 'No archived projects yet',
+  'projectPhotoCount': '3 photos',
+  'noCaptureRecordsYet': 'No captures yet',
 };
 
 void main() {
