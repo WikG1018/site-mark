@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -218,4 +219,78 @@ void main() {
     expect(find.text('备份已分享'), findsOneWidget);
     await disposeScreen(tester);
   });
+
+  testWidgets('project export failure names only the failed project safely', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      initialProjectIds: const {'p2'},
+      exportProjects:
+          ({
+            required projectIds,
+            required includeOriginals,
+            onProgress,
+            allowFailedOmissions = false,
+          }) async => throw ProjectBackupExportException(
+            projectId: 'p2',
+            projectName: '二号项目',
+            cause: FileSystemException(
+              'private-template-value',
+              r'C:\private\database\sitemark.sqlite',
+            ),
+          ),
+    );
+
+    await tester.tap(find.byKey(const Key('backup-continue')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('exclude-private-originals')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('无法备份项目“二号项目”。请重试；若仍失败，请单独选择该项目备份。'), findsOneWidget);
+    expect(find.textContaining('private-template-value'), findsNothing);
+    expect(find.textContaining(r'C:\private\database'), findsNothing);
+    await disposeScreen(tester);
+  });
+
+  for (final wrapped in [false, true]) {
+    testWidgets(
+      '${wrapped ? 'wrapped project' : 'direct'} ENOSPC uses the storage message safely',
+      (tester) async {
+        final storageError = FileSystemException(
+          'private-template-value',
+          r'C:\private\database\sitemark.sqlite',
+          const OSError('No space left on device', 28),
+        );
+        await pumpScreen(
+          tester,
+          initialProjectIds: const {'p2'},
+          exportProjects:
+              ({
+                required projectIds,
+                required includeOriginals,
+                onProgress,
+                allowFailedOmissions = false,
+              }) async => throw wrapped
+                  ? ProjectBackupExportException(
+                      projectId: 'p2',
+                      projectName: '二号项目',
+                      cause: storageError,
+                    )
+                  : storageError,
+        );
+
+        await tester.tap(find.byKey(const Key('backup-continue')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('exclude-private-originals')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('存储空间不足，无法完成操作'), findsOneWidget);
+        expect(find.textContaining('请单独选择'), findsNothing);
+        expect(find.textContaining('private-template-value'), findsNothing);
+        expect(find.textContaining(r'C:\private\database'), findsNothing);
+        await disposeScreen(tester);
+      },
+    );
+  }
 }

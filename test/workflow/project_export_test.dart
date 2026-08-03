@@ -7,12 +7,95 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
+import 'package:sitemark/workflow/project_import_service.dart';
 
 void main() {
+  test('exports ordered templates for a project without photos', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '无照片项目');
+    await database.insertCaptureTemplate(
+      CaptureTemplatesCompanion.insert(
+        id: 'template-older',
+        projectId: 'project-1',
+        name: '早班',
+        nameKey: '早班',
+        workLocation: 'A 区',
+        workContent: '风管检查',
+        photographer: '张工',
+        createdAt: DateTime.utc(2026, 7, 15, 8),
+        updatedAt: DateTime.utc(2026, 7, 15, 9),
+      ),
+    );
+    await database.insertCaptureTemplate(
+      CaptureTemplatesCompanion.insert(
+        id: 'template-newer',
+        projectId: 'project-1',
+        name: '晚班',
+        nameKey: '晚班',
+        workLocation: 'B 区',
+        workContent: '水压复核',
+        photographer: '李工',
+        createdAt: DateTime.utc(2026, 7, 16, 8, 30),
+        updatedAt: DateTime.utc(2026, 7, 16, 10, 45),
+      ),
+    );
+    final images = _ExportImagePipeline();
+    final service = ProjectExportService(
+      database: database,
+      images: images,
+      capturePaths: _ExportCapturePaths(),
+      exportPaths: _ExportOutputPaths(),
+      selectionExportPaths: _SelectionOutputPaths(),
+    );
+
+    final result = await service.exportProject(
+      projectId: 'project-1',
+      includeOriginals: false,
+    );
+
+    expect(result.photoCount, 0);
+    expect(images.request!.photos, isEmpty);
+    final templates = images.request!.templates;
+    expect(templates.map(_templateTextValues), const [
+      ['晚班', 'B 区', '水压复核', '李工'],
+      ['早班', 'A 区', '风管检查', '张工'],
+    ]);
+    expect(
+      parseExportedTimestamp(templates[0].createdAt)?.millisecondsSinceEpoch,
+      DateTime.utc(2026, 7, 16, 8, 30).millisecondsSinceEpoch,
+    );
+    expect(
+      parseExportedTimestamp(templates[0].updatedAt)?.millisecondsSinceEpoch,
+      DateTime.utc(2026, 7, 16, 10, 45).millisecondsSinceEpoch,
+    );
+    expect(
+      parseExportedTimestamp(templates[1].createdAt)?.millisecondsSinceEpoch,
+      DateTime.utc(2026, 7, 15, 8).millisecondsSinceEpoch,
+    );
+    expect(
+      parseExportedTimestamp(templates[1].updatedAt)?.millisecondsSinceEpoch,
+      DateTime.utc(2026, 7, 15, 9).millisecondsSinceEpoch,
+    );
+  });
+
   test('builds a project ZIP request from completed capture records', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await database.insertCaptureTemplate(
+      CaptureTemplatesCompanion.insert(
+        id: 'template-with-photo',
+        projectId: 'project-1',
+        name: '复验',
+        nameKey: '复验',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        createdAt: DateTime.utc(2026, 7, 16, 1),
+        updatedAt: DateTime.utc(2026, 7, 16, 2),
+      ),
+    );
     final pending = await database.createPendingCapture(
       id: 'capture-1',
       projectId: 'project-1',
@@ -57,6 +140,9 @@ void main() {
       '/rendered/capture-1.jpg',
     );
     expect(images.request?.photos.single.originalPath, '/private/original.jpg');
+    expect(images.request!.templates.map(_templateTextValues), const [
+      ['复验', 'A 区三层', '风管安装检查', '张工'],
+    ]);
 
     final staged = await service.exportProject(
       projectId: 'project-1',
@@ -116,6 +202,31 @@ void main() {
       '西区市政给水-SM-20260716-002',
     );
     expect(images.selectionRequest!.includeOriginals, isFalse);
+  });
+
+  test('template read failure aborts the project export', () async {
+    final interceptor = _TemplateReadFailure();
+    final database = AppDatabase.forTesting(
+      NativeDatabase.memory().interceptWith(interceptor),
+    );
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '不得静默降级');
+    interceptor.failReads = true;
+    final images = _ExportImagePipeline();
+    final service = ProjectExportService(
+      database: database,
+      images: images,
+      capturePaths: _ExportCapturePaths(),
+      exportPaths: _ExportOutputPaths(),
+      selectionExportPaths: _SelectionOutputPaths(),
+    );
+
+    await expectLater(
+      service.exportProject(projectId: 'project-1', includeOriginals: false),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(images.request, isNull);
   });
 
   test('exportSelection rejects captures that are not ready', () async {
@@ -208,6 +319,13 @@ void main() {
     },
   );
 }
+
+List<String> _templateTextValues(ExportCaptureTemplate template) => [
+  template.name,
+  template.workLocation,
+  template.workContent,
+  template.photographer,
+];
 
 Future<void> _seedReadyCapture({
   required AppDatabase database,
@@ -314,6 +432,22 @@ class _LegacySqliteVariableGuard extends QueryInterceptor {
     if (args.length > 1) multiVariableSelects.add(args.length);
     if (args.length > 999) {
       throw StateError('too many SQL variables: ${args.length}');
+    }
+    return super.runSelect(executor, statement, args);
+  }
+}
+
+class _TemplateReadFailure extends QueryInterceptor {
+  bool failReads = false;
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    if (failReads && statement.toLowerCase().contains('capture_templates')) {
+      throw StateError('simulated capture template read failure');
     }
     return super.runSelect(executor, statement, args);
   }

@@ -3,6 +3,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:sitemark/data/conditional_polling_stream.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/photo_number.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
@@ -108,7 +109,45 @@ class CaptureRecords extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Projects, CaptureRecords, AppSettings])
+@DataClassName('CaptureTemplate')
+class CaptureTemplates extends Table {
+  TextColumn get id => text()();
+  TextColumn get projectId =>
+      text().references(Projects, #id, onDelete: KeyAction.cascade)();
+  // Drift validates UTF-16 code units, while service rules use Unicode scalar
+  // values to match Rust `chars().count()`. A scalar may need two code units.
+  TextColumn get name => text().withLength(min: 1, max: 160)();
+  TextColumn get nameKey => text().withLength(min: 1, max: 160)();
+  TextColumn get workLocation => text().withLength(min: 1, max: 320)();
+  TextColumn get workContent => text().withLength(min: 1, max: 480)();
+  TextColumn get photographer => text().withLength(min: 1, max: 160)();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+    {projectId, nameKey},
+  ];
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (instr(name, char(0)) = 0 AND length(name) BETWEEN 1 AND 80)',
+    'CHECK (instr(name_key, char(0)) = 0 AND length(name_key) BETWEEN 1 AND 80)',
+    'CHECK (instr(work_location, char(0)) = 0 AND '
+        'length(work_location) BETWEEN 1 AND 160)',
+    'CHECK (instr(work_content, char(0)) = 0 AND '
+        'length(work_content) BETWEEN 1 AND 240)',
+    'CHECK (instr(photographer, char(0)) = 0 AND '
+        'length(photographer) BETWEEN 1 AND 80)',
+  ];
+}
+
+@DriftDatabase(
+  tables: [Projects, CaptureRecords, AppSettings, CaptureTemplates],
+)
 class AppDatabase extends _$AppDatabase {
   static const _defaultExternalRefreshInterval = Duration(seconds: 1);
   static const _captureIdChunkSize = 900;
@@ -145,7 +184,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -153,6 +192,7 @@ class AppDatabase extends _$AppDatabase {
       await migrator.createAll();
       await _createCaptureIndexes();
       await _createCaptureCursorIndexes();
+      await _createCaptureTemplateIndexes();
     },
     onUpgrade: (migrator, from, to) async {
       // When migrating from v2 directly to v4+, migrator.createTable creates
@@ -234,9 +274,14 @@ class AppDatabase extends _$AppDatabase {
       if (from < 9) {
         await _createCaptureCursorIndexes();
       }
+      if (from < 10) {
+        await migrator.createTable(captureTemplates);
+        await _createCaptureTemplateIndexes();
+      }
       await _ensureGlobalSettingsRow();
     },
     beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON');
       await _ensureGlobalSettingsRow();
     },
   );
@@ -293,6 +338,13 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS capture_records_project_sort_cursor_idx '
       'ON captures (project_id, COALESCE(captured_at, created_at) DESC, id DESC)',
+    );
+  }
+
+  Future<void> _createCaptureTemplateIndexes() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS capture_templates_project_updated_name_idx '
+      'ON capture_templates (project_id, updated_at DESC, name)',
     );
   }
 
@@ -474,6 +526,151 @@ class AppDatabase extends _$AppDatabase {
           ..where((row) => row.projectId.equals(projectId))
           ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
         .get();
+  }
+
+  Stream<List<CaptureTemplate>> watchCaptureTemplates(String projectId) {
+    return (select(captureTemplates)
+          ..where((row) => row.projectId.equals(projectId))
+          ..orderBy([
+            (row) => OrderingTerm.desc(row.updatedAt),
+            (row) => OrderingTerm.asc(row.name),
+          ]))
+        .watch();
+  }
+
+  Future<List<CaptureTemplate>> captureTemplatesForProject(String projectId) {
+    return (select(captureTemplates)
+          ..where((row) => row.projectId.equals(projectId))
+          ..orderBy([
+            (row) => OrderingTerm.desc(row.updatedAt),
+            (row) => OrderingTerm.asc(row.name),
+          ]))
+        .get();
+  }
+
+  Future<int> countCaptureTemplates(String projectId) async {
+    final count = captureTemplates.id.count();
+    final row =
+        await (selectOnly(captureTemplates)
+              ..addColumns([count])
+              ..where(captureTemplates.projectId.equals(projectId)))
+            .getSingle();
+    return row.read(count) ?? 0;
+  }
+
+  Future<CaptureTemplate> insertCaptureTemplate(CaptureTemplatesCompanion row) {
+    return transaction(() => into(captureTemplates).insertReturning(row));
+  }
+
+  Future<CaptureTemplate> renameCaptureTemplate({
+    required String id,
+    required String projectId,
+    required String name,
+    required String nameKey,
+    required DateTime updatedAt,
+  }) {
+    return transaction(() async {
+      final updated =
+          await (update(captureTemplates)..where(
+                (row) => row.id.equals(id) & row.projectId.equals(projectId),
+              ))
+              .write(
+                CaptureTemplatesCompanion(
+                  name: Value(name),
+                  nameKey: Value(nameKey),
+                  updatedAt: Value(updatedAt),
+                ),
+              );
+      if (updated != 1) throw StateError('Capture template does not exist');
+      return (await (select(captureTemplates)..where(
+            (row) => row.id.equals(id) & row.projectId.equals(projectId),
+          ))
+          .getSingle());
+    });
+  }
+
+  Future<int> deleteCaptureTemplate({
+    required String id,
+    required String projectId,
+  }) {
+    return transaction(
+      () =>
+          (delete(captureTemplates)..where(
+                (row) => row.id.equals(id) & row.projectId.equals(projectId),
+              ))
+              .go(),
+    );
+  }
+
+  Future<void> insertRestoredCaptureTemplates({
+    required String projectId,
+    required String restoreOperationId,
+    required List<CaptureTemplatesCompanion> templates,
+  }) {
+    return transaction(() async {
+      final ownsRestore = await projectHasRestoreOwnership(
+        projectId: projectId,
+        operationId: restoreOperationId,
+      );
+      if (!ownsRestore) return;
+      for (final template in templates) {
+        await into(
+          captureTemplates,
+        ).insert(template.copyWith(projectId: Value(projectId)));
+      }
+    });
+  }
+
+  Future<List<String>> recentCaptureSuggestions({
+    required String projectId,
+    required CaptureSuggestionField field,
+    int limit = 20,
+  }) async {
+    if (limit < 1 || limit > 20) {
+      throw ArgumentError.value(
+        limit,
+        'limit',
+        'Expected a value from 1 to 20',
+      );
+    }
+    final candidates =
+        await (select(captureRecords)
+              ..where(
+                (row) =>
+                    row.projectId.equals(projectId) &
+                    row.status.equals(CaptureStatus.pendingCamera.name).not(),
+              )
+              ..orderBy([
+                (row) => OrderingTerm(
+                  expression: coalesce([row.capturedAt, row.createdAt]),
+                  mode: OrderingMode.desc,
+                ),
+                (row) => OrderingTerm.desc(row.id),
+              ])
+              ..limit(200))
+            .get();
+    final seen = <String>{};
+    final suggestions = <String>[];
+    for (final capture in candidates) {
+      final value = switch (field) {
+        CaptureSuggestionField.workLocation => capture.workLocation,
+        CaptureSuggestionField.workContent => capture.workContent,
+        CaptureSuggestionField.photographer => capture.photographer,
+      }.trim();
+      if (value.isEmpty || !seen.add(_asciiCaseInsensitiveKey(value))) continue;
+      suggestions.add(value);
+      if (suggestions.length == limit) break;
+    }
+    return suggestions;
+  }
+
+  String _asciiCaseInsensitiveKey(String value) {
+    return String.fromCharCodes(
+      value.codeUnits.map(
+        (codeUnit) =>
+            codeUnit >= 0x41 && codeUnit <= 0x5a ? codeUnit + 0x20 : codeUnit,
+      ),
+    );
   }
 
   Future<Project?> projectById(String projectId) {

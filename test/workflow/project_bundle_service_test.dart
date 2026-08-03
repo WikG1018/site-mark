@@ -1,15 +1,21 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:drift/drift.dart'
+    show ApplyInterceptor, QueryExecutor, QueryInterceptor;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   test(
@@ -170,6 +176,281 @@ void main() {
             '/exports/sitemark-backup-bundle-1.zip',
           ),
         ]);
+      },
+    );
+
+    test(
+      'bundle exports each project with its own ordered template values',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.createProject(id: 'p1', name: '东区');
+        await database.createProject(id: 'p2', name: '西区');
+        await database.insertCaptureTemplate(
+          CaptureTemplatesCompanion.insert(
+            id: 'p1-old',
+            projectId: 'p1',
+            name: '东区早班',
+            nameKey: '东区早班',
+            workLocation: 'A 区',
+            workContent: '风管检查',
+            photographer: '张工',
+            createdAt: DateTime.utc(2026, 7, 14, 1),
+            updatedAt: DateTime.utc(2026, 7, 14, 2),
+          ),
+        );
+        await database.insertCaptureTemplate(
+          CaptureTemplatesCompanion.insert(
+            id: 'p1-new',
+            projectId: 'p1',
+            name: '东区晚班',
+            nameKey: '东区晚班',
+            workLocation: 'B 区',
+            workContent: '水压复核',
+            photographer: '李工',
+            createdAt: DateTime.utc(2026, 7, 15, 1),
+            updatedAt: DateTime.utc(2026, 7, 15, 2),
+          ),
+        );
+        await database.insertCaptureTemplate(
+          CaptureTemplatesCompanion.insert(
+            id: 'p2-only',
+            projectId: 'p2',
+            name: '西区班组',
+            nameKey: '西区班组',
+            workLocation: 'C 区',
+            workContent: '给水检查',
+            photographer: '王工',
+            createdAt: DateTime.utc(2026, 7, 16, 1),
+            updatedAt: DateTime.utc(2026, 7, 16, 2),
+          ),
+        );
+        final images = _RecordingProjectImagePipeline();
+        final exporter = ProjectExportService(
+          database: database,
+          images: images,
+          capturePaths: _BundleCapturePaths(),
+          exportPaths: _BundleProjectExportPaths(),
+          selectionExportPaths: _BundleSelectionPaths(),
+        );
+        final service = ProjectBackupService(
+          projectExporter: exporter,
+          database: database,
+          bundles: _FakeBundlePipeline(),
+          paths: _FakeBundlePaths(),
+          files: _FakeBundleFiles(),
+          idGenerator: () => 'bundle-templates',
+        );
+
+        await service.exportProjects(
+          projectIds: const ['p1', 'p2'],
+          includeOriginals: false,
+        );
+
+        expect(images.requests.map((request) => request.projectId), [
+          'p1',
+          'p2',
+        ]);
+        expect(
+          images.requests[0].templates
+              .map(
+                (template) => [
+                  template.name,
+                  template.workLocation,
+                  template.workContent,
+                  template.photographer,
+                ],
+              )
+              .toList(),
+          const [
+            ['东区晚班', 'B 区', '水压复核', '李工'],
+            ['东区早班', 'A 区', '风管检查', '张工'],
+          ],
+        );
+        expect(
+          images.requests[1].templates
+              .map(
+                (template) => [
+                  template.name,
+                  template.workLocation,
+                  template.workContent,
+                  template.photographer,
+                ],
+              )
+              .toList(),
+          const [
+            ['西区班组', 'C 区', '给水检查', '王工'],
+          ],
+        );
+      },
+    );
+
+    for (final projectIds in const [
+      ['p1'],
+      ['p1', 'p2'],
+    ]) {
+      test(
+        '${projectIds.length == 1 ? 'single' : 'multi'} project template read '
+        'failure identifies the exact project and never writes a bundle',
+        () async {
+          final failedProjectId = projectIds.last;
+          final interceptor = _ProjectTemplateReadFailure(failedProjectId);
+          final database = AppDatabase.forTesting(
+            NativeDatabase.memory().interceptWith(interceptor),
+          );
+          addTearDown(database.close);
+          await database.createProject(id: 'p1', name: '东区');
+          if (projectIds.length > 1) {
+            await database.createProject(id: 'p2', name: '西区');
+          }
+          interceptor.enabled = true;
+          final images = _RecordingProjectImagePipeline();
+          final bundles = _FakeBundlePipeline();
+          final files = _FakeBundleFiles();
+          final diagnosticRoot = await Directory.systemTemp.createTemp(
+            'sitemark-backup-diagnostics-',
+          );
+          addTearDown(() => diagnosticRoot.delete(recursive: true));
+          final diagnosticStore = DiagnosticEventStore(
+            directory: diagnosticRoot,
+          );
+          final service = ProjectBackupService(
+            projectExporter: ProjectExportService(
+              database: database,
+              images: images,
+              capturePaths: _BundleCapturePaths(),
+              exportPaths: _BundleProjectExportPaths(),
+              selectionExportPaths: _BundleSelectionPaths(),
+            ),
+            database: database,
+            bundles: bundles,
+            paths: _FakeBundlePaths(),
+            files: files,
+            diagnostics: DiagnosticRecorder(diagnosticStore),
+            idGenerator: () => 'bundle-template-read-failure',
+          );
+
+          ProjectBackupExportException? failure;
+          try {
+            await service.exportProjects(
+              projectIds: projectIds,
+              includeOriginals: false,
+            );
+          } catch (error) {
+            expect(error, isA<ProjectBackupExportException>());
+            failure = error as ProjectBackupExportException;
+          }
+
+          expect(failure, isNotNull);
+          expect(failure!.projectId, failedProjectId);
+          expect(failure.projectName, projectIds.length == 1 ? '东区' : '西区');
+          expect(failure.cause, same(interceptor.failure));
+          expect(failure.toString(), isNot(contains('private-template-value')));
+          expect(failure.toString(), isNot(contains(r'C:\private\database')));
+          expect(
+            images.requests.map((request) => request.projectId),
+            projectIds.length == 1 ? isEmpty : ['p1'],
+          );
+          expect(bundles.exportRequests, isEmpty);
+          expect(files.committedFiles, isEmpty);
+          expect(files.deletedTrees, [
+            '/imports/bundle-export-bundle-template-read-failure',
+          ]);
+
+          List<DiagnosticEvent> events = const [];
+          for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            events = await diagnosticStore.readRecent();
+          }
+          expect(events, hasLength(1));
+          final event = events.single;
+          expect(event.category, DiagnosticCategory.backup);
+          expect(event.outcome, DiagnosticOutcome.failed);
+          expect(event.code, DiagnosticCode.unexpected);
+          expect(event.count, 1);
+          expect(event.toJson().keys.toSet(), {
+            'timestamp',
+            'category',
+            'outcome',
+            'code',
+            'duration_ms',
+            'count',
+          });
+          final encoded = event.encode();
+          expect(encoded, isNot(contains('private-template-value')));
+          expect(encoded, isNot(contains(r'C:\private\database')));
+          expect(encoded, isNot(contains('东区')));
+          expect(encoded, isNot(contains('西区')));
+        },
+      );
+    }
+
+    test(
+      'project ENOSPC records storage diagnostic without private context',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        await database.createProject(id: 'p1', name: '私有项目名称');
+        final storageError = FileSystemException(
+          'private-template-value',
+          r'C:\private\database\sitemark.sqlite',
+          const OSError('No space left on device', 28),
+        );
+        final diagnosticRoot = await Directory.systemTemp.createTemp(
+          'sitemark-backup-storage-diagnostics-',
+        );
+        addTearDown(() => diagnosticRoot.delete(recursive: true));
+        final diagnosticStore = DiagnosticEventStore(directory: diagnosticRoot);
+        final service = ProjectBackupService(
+          projectExporter: _FakeProjectExporter(
+            failProjectId: 'p1',
+            failure: storageError,
+          ),
+          database: database,
+          bundles: _FakeBundlePipeline(),
+          paths: _FakeBundlePaths(),
+          files: _FakeBundleFiles(),
+          diagnostics: DiagnosticRecorder(diagnosticStore),
+          idGenerator: () => 'bundle-storage-failure',
+        );
+
+        await expectLater(
+          service.exportProjects(
+            projectIds: const ['p1'],
+            includeOriginals: false,
+          ),
+          throwsA(
+            isA<ProjectBackupExportException>().having(
+              (error) => error.cause,
+              'cause',
+              same(storageError),
+            ),
+          ),
+        );
+
+        List<DiagnosticEvent> events = const [];
+        for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          events = await diagnosticStore.readRecent();
+        }
+        expect(events, hasLength(1));
+        final event = events.single;
+        expect(event.category, DiagnosticCategory.backup);
+        expect(event.outcome, DiagnosticOutcome.failed);
+        expect(event.code, DiagnosticCode.insufficientStorage);
+        expect(event.count, 1);
+        expect(event.toJson().keys.toSet(), {
+          'timestamp',
+          'category',
+          'outcome',
+          'code',
+          'duration_ms',
+          'count',
+        });
+        final encoded = event.encode();
+        expect(encoded, isNot(contains('private-template-value')));
+        expect(encoded, isNot(contains(r'C:\private\database')));
+        expect(encoded, isNot(contains('私有项目名称')));
       },
     );
 
@@ -609,6 +890,40 @@ void main() {
       expect(pending.items, isEmpty);
       expect(importer.markerSeenBeforeFirstImport, isTrue);
     });
+
+    test(
+      'restore-state failures are classified as general, not corrupted',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final importer = _FakeProjectImporter(
+          failSource: 'p1.zip',
+          importFailure: const ProjectRestoreStateException(
+            ProjectRestoreStateFailure.ownershipLost,
+          ),
+        );
+        final service = _bundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: importer,
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        await expectLater(
+          service.restorePrepared(
+            prepared: prepared,
+            projectNames: const {'p1': '东区', 'p2': '西区'},
+          ),
+          throwsA(
+            isA<ProjectBundleRestoreException>().having(
+              (error) => error.failure,
+              'failure',
+              ProjectBundleRestoreFailure.general,
+            ),
+          ),
+        );
+      },
+    );
 
     test(
       'item two ENOSPC keeps storage classification after rollback',
@@ -1492,6 +1807,9 @@ rust.ProjectArchivePreview _archivePreview(String name) =>
     rust.ProjectArchivePreview(
       schemaVersion: 2,
       projectName: name,
+      omittedProcessingCount: 0,
+      omittedFailedCount: 0,
+      isPartial: false,
       includesOriginals: true,
       photos: [
         rust.ArchivePhotoPreview(
@@ -1504,6 +1822,7 @@ rust.ProjectArchivePreview _archivePreview(String name) =>
           photographer: '张工',
         ),
       ],
+      templates: const [],
     );
 
 class _ExportCall {
@@ -1514,10 +1833,92 @@ class _ExportCall {
   final String? outputZipPath;
 }
 
+class _RecordingProjectImagePipeline implements ImagePipeline {
+  final requests = <rust.ExportProjectRequest>[];
+
+  @override
+  Future<rust.ExportProjectResult> export(
+    rust.ExportProjectRequest request,
+  ) async {
+    requests.add(request);
+    return rust.ExportProjectResult(
+      outputZipPath: request.outputZipPath,
+      archiveSha256: 'c' * 64,
+      photoCount: request.photos.length,
+    );
+  }
+
+  @override
+  Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<rust.ExtractedArchivePhoto> extractArchivePhoto(
+    rust.ExtractArchivePhotoRequest request,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<rust.ExportProjectResult> exportSelection(
+    rust.ExportSelectionRequest request,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> sha256(String path) => throw UnimplementedError();
+}
+
+class _ProjectTemplateReadFailure extends QueryInterceptor {
+  _ProjectTemplateReadFailure(this.projectId)
+    : failure = SqliteException(
+        extendedResultCode: SqlExtendedError.SQLITE_IOERR_READ,
+        message: 'private-template-value',
+        causingStatement: r'C:\private\database\sitemark.sqlite',
+      );
+
+  final String projectId;
+  final SqliteException failure;
+  bool enabled = false;
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    if (enabled &&
+        statement.toLowerCase().contains('capture_templates') &&
+        args.contains(projectId)) {
+      throw failure;
+    }
+    return super.runSelect(executor, statement, args);
+  }
+}
+
+class _BundleCapturePaths implements CaptureOutputPaths {
+  @override
+  Future<String> renderedPhotoPath(String captureId) async =>
+      '/rendered/$captureId.jpg';
+}
+
+class _BundleProjectExportPaths implements ProjectExportPaths {
+  @override
+  Future<String> projectZipPath(String projectId) async =>
+      '/exports/$projectId.zip';
+}
+
+class _BundleSelectionPaths implements SelectionExportPaths {
+  @override
+  Future<String> selectionZipPath() async => '/exports/selection.zip';
+}
+
 class _FakeProjectExporter implements ProjectArchiveExporter {
-  _FakeProjectExporter({this.failProjectId});
+  _FakeProjectExporter({this.failProjectId, this.failure});
 
   final String? failProjectId;
+  final Object? failure;
   final requests = <_ExportCall>[];
 
   @override
@@ -1530,7 +1931,9 @@ class _FakeProjectExporter implements ProjectArchiveExporter {
     int omittedFailedCount = 0,
   }) async {
     requests.add(_ExportCall(projectId, includeOriginals, outputZipPath));
-    if (projectId == failProjectId) throw StateError('export failed');
+    if (projectId == failProjectId) {
+      throw failure ?? StateError('export failed');
+    }
     return rust.ExportProjectResult(
       outputZipPath: outputZipPath ?? '/exports/$projectId.zip',
       archiveSha256: 'c' * 64,

@@ -470,6 +470,9 @@ PreparedProjectRestore _prepared({
   rust.ProjectArchivePreview preview(String name) => rust.ProjectArchivePreview(
     schemaVersion: 2,
     projectName: name,
+    omittedProcessingCount: 0,
+    omittedFailedCount: 0,
+    isPartial: false,
     includesOriginals: true,
     watermark: includeWatermark
         ? const rust.ArchiveWatermarkSettings(
@@ -490,6 +493,7 @@ PreparedProjectRestore _prepared({
         photographer: '测试',
       ),
     ],
+    templates: const [],
   );
   return PreparedProjectRestore(
     sourceZipPath: '/tmp/backup.zip',

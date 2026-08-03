@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart'
+    show ApplyInterceptor, QueryExecutor, QueryInterceptor;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -7,8 +9,573 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 void main() {
+  test('v4 restore inserts templates with new UUIDs and exact values', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(
+        _previewWithTemplates([
+          _archiveTemplate(
+            name: '早班',
+            workLocation: 'A 区',
+            workContent: '风管检查',
+            photographer: '张工',
+            createdAt: '2026-07-15 08:00:00 +08:00',
+            updatedAt: '2026-07-15 09:00:00 +08:00',
+          ),
+          _archiveTemplate(
+            name: '晚班',
+            workLocation: 'B 区',
+            workContent: '水压复核',
+            photographer: '李工',
+            createdAt: '2026-07-16 08:30:00 +08:00',
+            updatedAt: '2026-07-16 10:45:00 +08:00',
+          ),
+        ]),
+      ),
+      files: _RecordingFileStore(),
+    );
+
+    final result = await service.importProject(
+      zipPath: '/backups/templates.zip',
+      projectName: '模板项目',
+    );
+
+    final templates = await database.captureTemplatesForProject(
+      result.projectId,
+    );
+    expect(templates, hasLength(2));
+    expect(
+      templates.map((template) => template.id),
+      everyElement(
+        matches(
+          RegExp(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+          ),
+        ),
+      ),
+    );
+    expect(templates.map((template) => template.id).toSet(), hasLength(2));
+    expect(
+      templates
+          .map(
+            (template) => [
+              template.name,
+              template.nameKey,
+              template.workLocation,
+              template.workContent,
+              template.photographer,
+            ],
+          )
+          .toList(),
+      const [
+        ['晚班', '晚班', 'B 区', '水压复核', '李工'],
+        ['早班', '早班', 'A 区', '风管检查', '张工'],
+      ],
+    );
+    expect(
+      templates[0].createdAt.millisecondsSinceEpoch,
+      DateTime.parse('2026-07-16T08:30:00+08:00').millisecondsSinceEpoch,
+    );
+    expect(
+      templates[0].updatedAt.millisecondsSinceEpoch,
+      DateTime.parse('2026-07-16T10:45:00+08:00').millisecondsSinceEpoch,
+    );
+  });
+
+  final invalidTemplateCases =
+      <
+        ({
+          String label,
+          List<ArchiveCaptureTemplate> templates,
+          int schemaVersion,
+        })
+      >[
+        (
+          label: 'more than 100 templates',
+          templates: List.generate(
+            101,
+            (index) => _archiveTemplate(name: 'Template $index'),
+          ),
+          schemaVersion: 4,
+        ),
+        (
+          label: 'a name not normalized by the Rust preview',
+          templates: [_archiveTemplate(name: '  Night\t Shift  ')],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'a field not trimmed by the Rust preview',
+          templates: [_archiveTemplate(name: 'Night', workLocation: ' A 区 ')],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'duplicate ASCII-insensitive names',
+          templates: [
+            _archiveTemplate(name: 'ABC'),
+            _archiveTemplate(name: 'abc'),
+          ],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an empty name',
+          templates: [_archiveTemplate(name: '')],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an empty work location',
+          templates: [_archiveTemplate(name: 'Night', workLocation: '')],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an empty work content',
+          templates: [_archiveTemplate(name: 'Night', workContent: '')],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an empty photographer',
+          templates: [_archiveTemplate(name: 'Night', photographer: '')],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an overlong name by Unicode scalar count',
+          templates: [_archiveTemplate(name: '😀' * 81)],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an overlong work location by Unicode scalar count',
+          templates: [
+            _archiveTemplate(name: 'Night', workLocation: '😀' * 161),
+          ],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an overlong work content by Unicode scalar count',
+          templates: [_archiveTemplate(name: 'Night', workContent: '😀' * 241)],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an overlong photographer by Unicode scalar count',
+          templates: [_archiveTemplate(name: 'Night', photographer: '😀' * 81)],
+          schemaVersion: 4,
+        ),
+        for (final field in [
+          'name',
+          'work location',
+          'work content',
+          'photographer',
+        ])
+          (
+            label: 'U+0000 in $field',
+            templates: [
+              _archiveTemplate(
+                name: field == 'name' ? 'Night\u0000' : 'Night',
+                workLocation: field == 'work location' ? 'A\u0000' : 'A 区',
+                workContent: field == 'work content' ? '检查\u0000' : '风管检查',
+                photographer: field == 'photographer' ? '张\u0000' : '张工',
+              ),
+            ],
+            schemaVersion: 4,
+          ),
+        (
+          label: 'an invalid created timestamp',
+          templates: [
+            _archiveTemplate(name: 'Night', createdAt: 'not-a-timestamp'),
+          ],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'an invalid calendar date in the updated timestamp',
+          templates: [
+            _archiveTemplate(
+              name: 'Night',
+              updatedAt: '2026-02-29 09:00:00 +08:00',
+            ),
+          ],
+          schemaVersion: 4,
+        ),
+        (
+          label: 'templates attached to a legacy preview',
+          templates: [_archiveTemplate(name: 'Night')],
+          schemaVersion: 3,
+        ),
+        (
+          label: 'a preview newer than schema v4',
+          templates: const [],
+          schemaVersion: 5,
+        ),
+      ];
+  for (final invalid in invalidTemplateCases) {
+    test('rejects ${invalid.label} before creating a project', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final images = _ImportImagePipeline(
+        _previewWithTemplates(
+          invalid.templates,
+          schemaVersion: invalid.schemaVersion,
+        ),
+      );
+      final pendingStore = _FakePendingStore();
+      final service = _service(
+        database: database,
+        images: images,
+        files: _RecordingFileStore(),
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/invalid-template.zip',
+          projectName: '损坏模板项目',
+        ),
+        throwsA(isA<InvalidArchiveException>()),
+      );
+
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
+      expect(images.extractRequests, isEmpty);
+      expect(pendingStore.writes, 0);
+    });
+  }
+
+  final archiveCompatibilityMatrix =
+      <
+        ({
+          String label,
+          int schemaVersion,
+          List<ArchivePhotoPreview> photos,
+          List<ArchiveCaptureTemplate> templates,
+        })
+      >[
+        (
+          label: 'v1 photos without templates',
+          schemaVersion: 1,
+          photos: _preview().photos,
+          templates: const [],
+        ),
+        (
+          label: 'v2 photos without templates',
+          schemaVersion: 2,
+          photos: _preview().photos,
+          templates: const [],
+        ),
+        (
+          label: 'v3 empty archive',
+          schemaVersion: 3,
+          photos: const [],
+          templates: const [],
+        ),
+        (
+          label: 'v4 empty archive',
+          schemaVersion: 4,
+          photos: const [],
+          templates: const [],
+        ),
+        (
+          label: 'v4 photos without templates',
+          schemaVersion: 4,
+          photos: _preview().photos,
+          templates: const [],
+        ),
+        (
+          label: 'v4 templates without photos',
+          schemaVersion: 4,
+          photos: const [],
+          templates: [_archiveTemplate(name: '模板单独恢复')],
+        ),
+        (
+          label: 'v4 photos with templates',
+          schemaVersion: 4,
+          photos: _preview().photos,
+          templates: [_archiveTemplate(name: '照片模板共同恢复')],
+        ),
+      ];
+  for (final archiveCase in archiveCompatibilityMatrix) {
+    test('archive compatibility matrix: ${archiveCase.label}', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final images = _ImportImagePipeline(
+        _previewWithTemplates(
+          archiveCase.templates,
+          photos: archiveCase.photos,
+          schemaVersion: archiveCase.schemaVersion,
+        ),
+      );
+      final service = _service(
+        database: database,
+        images: images,
+        files: _RecordingFileStore(),
+      );
+
+      final result = await service.importProject(
+        zipPath: '/backups/v${archiveCase.schemaVersion}.zip',
+        projectName: archiveCase.label,
+      );
+
+      expect(
+        await database.captureTemplatesForProject(result.projectId),
+        hasLength(archiveCase.templates.length),
+      );
+      expect(
+        await database.capturesForProject(result.projectId),
+        hasLength(archiveCase.photos.length),
+      );
+      expect(images.extractRequests, hasLength(archiveCase.photos.length));
+      expect(await database.getAllProjectsInternal(), hasLength(1));
+    });
+  }
+
+  test(
+    'template insert failure rolls back project records files and templates',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.customStatement('''
+      CREATE TRIGGER fail_second_restored_template
+      BEFORE INSERT ON capture_templates
+      WHEN NEW.name = '失败'
+      BEGIN
+        SELECT RAISE(ABORT, 'simulated template insert failure');
+      END;
+    ''');
+      final files = _RecordingFileStore();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(
+          _previewWithTemplates([
+            _archiveTemplate(name: '成功'),
+            _archiveTemplate(name: '失败'),
+          ], photos: _preview().photos),
+        ),
+        files: files,
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/template-failure.zip',
+          projectName: '应回滚项目',
+        ),
+        throwsA(isA<InvalidArchiveException>()),
+      );
+
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.getAllCaptures(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
+      expect(files.attemptedDeletes, hasLength(8));
+    },
+  );
+
+  test(
+    'second template failure removes real staged and final files plus marker',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'sitemark-template-real-rollback-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final documents = Directory(
+        '${root.path}${Platform.pathSeparator}documents',
+      );
+      final support = Directory('${root.path}${Platform.pathSeparator}support');
+      await documents.create(recursive: true);
+      await support.create(recursive: true);
+
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.customStatement('''
+        CREATE TRIGGER fail_second_real_restored_template
+        BEFORE INSERT ON capture_templates
+        WHEN NEW.name = '失败'
+        BEGIN
+          SELECT RAISE(ABORT, 'simulated second template failure');
+        END;
+      ''');
+      final images = _WritingImportImagePipeline(
+        _previewWithTemplates([
+          _archiveTemplate(name: '成功'),
+          _archiveTemplate(name: '失败'),
+        ], photos: _preview().photos),
+      );
+      final pendingStore = AppImportPendingStore(
+        documentsDirectory: () async => documents,
+      );
+      final service = ProjectImportService(
+        database: database,
+        images: images,
+        capturePaths: AppCaptureOutputPaths(
+          documentsDirectory: () async => documents,
+        ),
+        originalPaths: AppOriginalPhotoPaths(
+          supportDirectory: () async => support,
+        ),
+        fileStore: DartIoPrivateFileStore(),
+        stagingPaths: AppImportStagingPaths(
+          documentsDirectory: () async => documents,
+        ),
+        pendingStore: pendingStore,
+        committer: DartImportFileCommitter(),
+        clock: () => DateTime(2026, 7, 27, 12),
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/template-real-failure.zip',
+          projectName: '真实文件回滚项目',
+          projectId: 'real-file-rollback',
+        ),
+        throwsA(isA<InvalidArchiveException>()),
+      );
+
+      expect(images.extractRequests, hasLength(2));
+      for (final request in images.extractRequests) {
+        expect(await File(request.renderedDestination).exists(), isFalse);
+        if (request.originalDestination case final original?) {
+          expect(await File(original).exists(), isFalse);
+        }
+      }
+      expect(
+        await Directory(
+          '${documents.path}${Platform.pathSeparator}imports'
+          '${Platform.pathSeparator}staging-real-file-rollback',
+        ).exists(),
+        isFalse,
+      );
+      expect(
+        await _filesBelow(Directory('${documents.path}/rendered')),
+        isEmpty,
+      );
+      expect(
+        await _filesBelow(Directory('${support.path}/originals')),
+        isEmpty,
+      );
+      expect(await pendingStore.listPending(), isEmpty);
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.getAllCaptures(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
+    },
+  );
+
+  test(
+    'template insert IO failure propagates without archive relabeling',
+    () async {
+      final interceptor = _TemplateInsertIoFailure();
+      final database = AppDatabase.forTesting(
+        NativeDatabase.memory().interceptWith(interceptor),
+      );
+      addTearDown(database.close);
+      interceptor.enabled = true;
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(
+          _previewWithTemplates([_archiveTemplate(name: 'IO failure')]),
+        ),
+        files: _RecordingFileStore(),
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/template-io.zip',
+          projectName: '应保留 IO 错误',
+        ),
+        throwsA(same(interceptor.failure)),
+      );
+
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
+    },
+  );
+
+  test('lost restore ownership is a stable restore-state failure', () async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.customStatement('''
+      CREATE TRIGGER clear_restore_ownership_after_project_insert
+      AFTER INSERT ON projects
+      WHEN NEW.restore_operation_id IS NOT NULL
+      BEGIN
+        UPDATE projects
+        SET restore_operation_id = NULL
+        WHERE id = NEW.id;
+      END;
+    ''');
+    final pendingStore = _FakePendingStore();
+    final service = _service(
+      database: database,
+      images: _ImportImagePipeline(
+        _previewWithTemplates([_archiveTemplate(name: 'Ownership')]),
+      ),
+      files: _RecordingFileStore(),
+      pendingStore: pendingStore,
+    );
+
+    await expectLater(
+      service.importProject(
+        zipPath: '/backups/template-ownership.zip',
+        projectName: '所有权竞态项目',
+      ),
+      throwsA(
+        isA<ProjectRestoreStateException>().having(
+          (error) => error.failure,
+          'failure',
+          ProjectRestoreStateFailure.ownershipLost,
+        ),
+      ),
+    );
+
+    expect(await database.getAllProjectsInternal(), hasLength(1));
+    expect(await database.select(database.captureTemplates).get(), isEmpty);
+    expect(pendingStore.pending, hasLength(1));
+  });
+
+  test(
+    'restored template count mismatch is a stable restore-state failure',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.customStatement('''
+      CREATE TRIGGER remove_first_restored_template
+      AFTER INSERT ON capture_templates
+      WHEN NEW.name = '第二条'
+      BEGIN
+        DELETE FROM capture_templates WHERE name = '第一条';
+      END;
+    ''');
+      final pendingStore = _FakePendingStore();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(
+          _previewWithTemplates([
+            _archiveTemplate(name: '第一条'),
+            _archiveTemplate(name: '第二条'),
+          ]),
+        ),
+        files: _RecordingFileStore(),
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/template-count-mismatch.zip',
+          projectName: '模板集合竞态项目',
+        ),
+        throwsA(
+          isA<ProjectRestoreStateException>().having(
+            (error) => error.failure,
+            'failure',
+            ProjectRestoreStateFailure.templateSetMismatch,
+          ),
+        ),
+      );
+
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
+      expect(pendingStore.pending, isEmpty);
+    },
+  );
+
   test('importProject restores photos with their original fields', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -255,6 +822,9 @@ void main() {
       final broken = ProjectArchivePreview(
         schemaVersion: 2,
         projectName: '东区厂房改造',
+        omittedProcessingCount: 0,
+        omittedFailedCount: 0,
+        isPartial: false,
         includesOriginals: false,
         photos: [
           ArchivePhotoPreview(
@@ -267,6 +837,7 @@ void main() {
             photographer: '张工',
           ),
         ],
+        templates: const [],
       );
       final images = _ImportImagePipeline(broken);
       final service = _service(
@@ -329,6 +900,60 @@ void main() {
         ]),
       );
       expect(committer.deletedTrees, ['/staging/dead-project']);
+      expect(pendingStore.pending, isEmpty);
+    },
+  );
+
+  test(
+    'restore-owned startup cleanup cascades to restored templates',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      const operationId = 'restore-with-template';
+      await database.createProject(
+        id: 'dead-template-project',
+        name: '含模板烂尾项目',
+        restoreOperationId: operationId,
+      );
+      await database.insertRestoredCaptureTemplates(
+        projectId: 'dead-template-project',
+        restoreOperationId: operationId,
+        templates: [
+          CaptureTemplatesCompanion.insert(
+            id: 'restored-template-id',
+            projectId: 'dead-template-project',
+            name: '现场模板',
+            nameKey: '现场模板',
+            workLocation: 'A 区',
+            workContent: '风管检查',
+            photographer: '张工',
+            createdAt: DateTime.utc(2026, 7, 15, 8),
+            updatedAt: DateTime.utc(2026, 7, 15, 9),
+          ),
+        ],
+      );
+      final pendingStore = _FakePendingStore()
+        ..pending.add(
+          const PendingImport(
+            projectId: 'dead-template-project',
+            stagingDirectory: '/staging/dead-template-project',
+            stagedFiles: [],
+            finalFiles: [],
+            phase: PendingImportPhase.ownsProject,
+            operationId: operationId,
+          ),
+        );
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: _RecordingFileStore(),
+        pendingStore: pendingStore,
+      );
+
+      await service.cleanupInterruptedImports();
+
+      expect(await database.getAllProjectsInternal(), isEmpty);
+      expect(await database.select(database.captureTemplates).get(), isEmpty);
       expect(pendingStore.pending, isEmpty);
     },
   );
@@ -563,6 +1188,64 @@ void main() {
   );
 
   test(
+    'committing restart finalization never inserts restored templates twice',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.customStatement('''
+        CREATE TRIGGER fail_template_project_token_clear
+        BEFORE UPDATE OF restore_operation_id ON projects
+        WHEN NEW.restore_operation_id IS NULL
+        BEGIN
+          SELECT RAISE(ABORT, 'simulated token clear failure');
+        END;
+      ''');
+      final files = _RecordingFileStore();
+      final pendingStore = _FakePendingStore();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(
+          _previewWithTemplates([_archiveTemplate(name: '只恢复一次')]),
+        ),
+        files: files,
+        pendingStore: pendingStore,
+      );
+
+      await expectLater(
+        service.importProject(
+          zipPath: '/backups/template-finalization.zip',
+          projectName: '待收尾模板项目',
+        ),
+        throwsA(isA<ProjectImportFinalizationPendingException>()),
+      );
+
+      final hiddenProject = (await database.getAllProjectsInternal()).single;
+      final beforeRestart = await database.captureTemplatesForProject(
+        hiddenProject.id,
+      );
+      expect(beforeRestart, hasLength(1));
+      final restoredId = beforeRestart.single.id;
+      expect(pendingStore.pending.single.phase, PendingImportPhase.committing);
+      expect(files.attemptedDeletes, isEmpty);
+
+      await database.customStatement(
+        'DROP TRIGGER fail_template_project_token_clear',
+      );
+      await service.cleanupInterruptedImports();
+      await service.cleanupInterruptedImports();
+
+      expect((await database.getProjects()).single.id, hiddenProject.id);
+      final afterRestart = await database.captureTemplatesForProject(
+        hiddenProject.id,
+      );
+      expect(afterRestart, hasLength(1));
+      expect(afterRestart.single.id, restoredId);
+      expect(pendingStore.pending, isEmpty);
+      expect(files.attemptedDeletes, isEmpty);
+    },
+  );
+
+  test(
     'committing marker survives token clear failure and startup finalizes without rollback',
     () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -647,6 +1330,9 @@ void main() {
     final preview = ProjectArchivePreview(
       schemaVersion: 1,
       projectName: '旧项目',
+      omittedProcessingCount: 0,
+      omittedFailedCount: 0,
+      isPartial: false,
       includesOriginals: false,
       photos: [
         ArchivePhotoPreview(
@@ -659,6 +1345,7 @@ void main() {
           photographer: '李工',
         ),
       ],
+      templates: const [],
     );
     final service = _service(
       database: database,
@@ -716,6 +1403,24 @@ void main() {
     expect(parseExportedTimestamp('2026-07-16 09:32:18'), isNull);
     expect(parseExportedTimestamp('not a timestamp'), isNull);
     expect(parseExportedTimestamp(''), isNull);
+    expect(parseExportedTimestamp('2024-02-29 23:59:59 -23:59'), isNotNull);
+    for (final invalid in [
+      '1900-02-29 09:32:18 +08:00',
+      '2026-02-29 09:32:18 +08:00',
+      '2026-00-01 09:32:18 +08:00',
+      '2026-13-01 09:32:18 +08:00',
+      '2026-01-00 09:32:18 +08:00',
+      '2026-04-31 09:32:18 +08:00',
+      '2026-07-16 24:00:00 +08:00',
+      '2026-07-16 23:60:00 +08:00',
+      '2026-07-16 23:59:60 +08:00',
+      '2026-07-16 23:59:59 +24:00',
+      '2026-07-16 23:59:59 +23:60',
+      '2026-07-16 23:59:59 08:00',
+      '2026-07-16 23:59:59 +08:00 trailing',
+    ]) {
+      expect(parseExportedTimestamp(invalid), isNull, reason: invalid);
+    }
   });
 }
 
@@ -739,10 +1444,47 @@ ProjectImportService _service({
   );
 }
 
+ArchiveCaptureTemplate _archiveTemplate({
+  required String name,
+  String workLocation = 'A 区',
+  String workContent = '风管检查',
+  String photographer = '张工',
+  String createdAt = '2026-07-15 08:00:00 +08:00',
+  String updatedAt = '2026-07-15 09:00:00 +08:00',
+}) => ArchiveCaptureTemplate(
+  name: name,
+  workLocation: workLocation,
+  workContent: workContent,
+  photographer: photographer,
+  createdAt: createdAt,
+  updatedAt: updatedAt,
+);
+
+ProjectArchivePreview _previewWithTemplates(
+  List<ArchiveCaptureTemplate> templates, {
+  List<ArchivePhotoPreview> photos = const [],
+  int schemaVersion = 4,
+}) => ProjectArchivePreview(
+  schemaVersion: schemaVersion,
+  projectName: '模板项目',
+  projectDescription: '字段复用测试',
+  projectCreatedAt: '2026-07-14T08:00:00.000Z',
+  snapshotAt: '2026-07-16T08:00:00.000Z',
+  omittedProcessingCount: 0,
+  omittedFailedCount: 0,
+  isPartial: false,
+  includesOriginals: photos.any((photo) => photo.hasOriginal),
+  photos: photos,
+  templates: templates,
+);
+
 ProjectArchivePreview _preview() {
   return ProjectArchivePreview(
     schemaVersion: 2,
     projectName: '东区厂房改造',
+    omittedProcessingCount: 0,
+    omittedFailedCount: 0,
+    isPartial: false,
     includesOriginals: true,
     watermark: const ArchiveWatermarkSettings(
       position: 'bottomRight',
@@ -776,6 +1518,7 @@ ProjectArchivePreview _preview() {
         photographer: '张工',
       ),
     ],
+    templates: const [],
   );
 }
 
@@ -822,6 +1565,60 @@ class _ImportImagePipeline implements ImagePipeline {
 
   @override
   Future<String> sha256(String path) => throw UnimplementedError();
+}
+
+class _WritingImportImagePipeline implements ImagePipeline {
+  _WritingImportImagePipeline(this.preview);
+
+  final ProjectArchivePreview preview;
+  final extractRequests = <ExtractArchivePhotoRequest>[];
+
+  @override
+  Future<ProjectArchivePreview> readProjectArchive(String zipPath) async =>
+      preview;
+
+  @override
+  Future<ExtractedArchivePhoto> extractArchivePhoto(
+    ExtractArchivePhotoRequest request,
+  ) async {
+    extractRequests.add(request);
+    final rendered = File(request.renderedDestination);
+    await rendered.parent.create(recursive: true);
+    await rendered.writeAsBytes(const [1, 2, 3], flush: true);
+    if (request.originalDestination case final originalPath?) {
+      final original = File(originalPath);
+      await original.parent.create(recursive: true);
+      await original.writeAsBytes(const [4, 5, 6], flush: true);
+    }
+    return ExtractedArchivePhoto(
+      renderedPath: request.renderedDestination,
+      originalPath: request.originalDestination,
+    );
+  }
+
+  @override
+  Future<ExportProjectResult> export(ExportProjectRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExportProjectResult> exportSelection(ExportSelectionRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<RenderPhotoResult> render(RenderPhotoRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> sha256(String path) => throw UnimplementedError();
+}
+
+Future<List<File>> _filesBelow(Directory directory) async {
+  if (!await directory.exists()) return const [];
+  final files = <File>[];
+  await for (final entity in directory.list(recursive: true)) {
+    if (entity is File) files.add(entity);
+  }
+  return files;
 }
 
 class _ImportCapturePaths implements CaptureOutputPaths {
@@ -917,6 +1714,26 @@ class _RecordingFileStore implements PrivateFileStore {
     }
     attemptedDeletes.add(path);
     deleted.add(path);
+  }
+}
+
+class _TemplateInsertIoFailure extends QueryInterceptor {
+  final failure = SqliteException(
+    extendedResultCode: SqlExtendedError.SQLITE_IOERR_WRITE,
+    message: 'simulated template database write failure',
+  );
+  bool enabled = false;
+
+  @override
+  Future<int> runInsert(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    if (enabled && statement.toLowerCase().contains('capture_templates')) {
+      throw failure;
+    }
+    return super.runInsert(executor, statement, args);
   }
 }
 

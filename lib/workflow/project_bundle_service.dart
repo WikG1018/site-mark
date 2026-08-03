@@ -30,6 +30,74 @@ class ProjectBackupResult {
   final int omittedFailedCount;
 }
 
+class ProjectBackupExportException implements Exception {
+  const ProjectBackupExportException({
+    required this.projectId,
+    required this.projectName,
+    required this.cause,
+  });
+
+  final String projectId;
+  final String projectName;
+  final Object cause;
+
+  @override
+  String toString() => 'Project backup export failed for "$projectName"';
+}
+
+enum StorageFailurePlatform { windows, posix, unknown }
+
+StorageFailurePlatform storageFailurePlatformForOperatingSystem(
+  String operatingSystem,
+) {
+  return switch (operatingSystem.toLowerCase()) {
+    'windows' => StorageFailurePlatform.windows,
+    'android' || 'linux' || 'macos' || 'ios' => StorageFailurePlatform.posix,
+    _ => StorageFailurePlatform.unknown,
+  };
+}
+
+bool isInsufficientStorageFailure(Object error) {
+  return isInsufficientStorageFailureForPlatform(
+    error,
+    platform: storageFailurePlatformForOperatingSystem(
+      Platform.operatingSystem,
+    ),
+  );
+}
+
+bool isInsufficientStorageFailureForPlatform(
+  Object error, {
+  required StorageFailurePlatform platform,
+}) {
+  if (error is ProjectBackupExportException) {
+    return isInsufficientStorageFailureForPlatform(
+      error.cause,
+      platform: platform,
+    );
+  }
+  final osError = switch (error) {
+    FileSystemException(:final osError) => osError,
+    OSError value => value,
+    _ => null,
+  };
+  if (osError != null) {
+    final errorCode = osError.errorCode;
+    final codeMeansNoSpace = switch (platform) {
+      // ERROR_HANDLE_DISK_FULL / ERROR_DISK_FULL.
+      StorageFailurePlatform.windows => errorCode == 39 || errorCode == 112,
+      // POSIX ENOSPC on Android, Linux, macOS, and iOS.
+      StorageFailurePlatform.posix => errorCode == 28,
+      StorageFailurePlatform.unknown => false,
+    };
+    if (codeMeansNoSpace) return true;
+  }
+  final message = error.toString().toLowerCase();
+  return message.contains('no space') ||
+      message.contains('disk full') ||
+      message.contains('enospc');
+}
+
 class ProjectBackupService {
   ProjectBackupService({
     required this.projectExporter,
@@ -112,12 +180,13 @@ class ProjectBackupService {
           stagingDirectory,
           projectIds.single,
         );
-        await projectExporter.exportProject(
-          projectId: projectIds.single,
+        await _exportProjectArchive(
+          project: projects.single,
           includeOriginals: includeOriginals,
           outputZipPath: stagedArchivePath,
           snapshotAt: snapshot.capturedAt,
           omittedFailedCount: projectSnapshot.failedCount,
+          stopwatch: stopwatch,
         );
         await files.commitFile(stagedArchivePath, finalOutputPath);
         onProgress?.call(1, 1);
@@ -144,12 +213,13 @@ class ProjectBackupService {
           stagingDirectory,
           project.id,
         );
-        await projectExporter.exportProject(
-          projectId: project.id,
+        await _exportProjectArchive(
+          project: project,
           includeOriginals: includeOriginals,
           outputZipPath: archivePath,
           snapshotAt: snapshot.capturedAt,
           omittedFailedCount: snapshot.projects[index].failedCount,
+          stopwatch: stopwatch,
         );
         sources.add(
           rust.ProjectBundleSource(
@@ -207,6 +277,40 @@ class ProjectBackupService {
     }
     if (firstFailure != null) {
       Error.throwWithStackTrace(firstFailure, firstStackTrace!);
+    }
+  }
+
+  Future<void> _exportProjectArchive({
+    required Project project,
+    required bool includeOriginals,
+    required String outputZipPath,
+    required DateTime snapshotAt,
+    required int omittedFailedCount,
+    required Stopwatch stopwatch,
+  }) async {
+    try {
+      await projectExporter.exportProject(
+        projectId: project.id,
+        includeOriginals: includeOriginals,
+        outputZipPath: outputZipPath,
+        snapshotAt: snapshotAt,
+        omittedFailedCount: omittedFailedCount,
+      );
+    } on Exception catch (error, stackTrace) {
+      final failure = ProjectBackupExportException(
+        projectId: project.id,
+        projectName: project.name,
+        cause: error,
+      );
+      _recordBackup(
+        DiagnosticOutcome.failed,
+        isInsufficientStorageFailure(failure)
+            ? DiagnosticCode.insufficientStorage
+            : DiagnosticCode.unexpected,
+        1,
+        stopwatch.elapsedMilliseconds,
+      );
+      Error.throwWithStackTrace(failure, stackTrace);
     }
   }
 
@@ -299,15 +403,16 @@ ProjectBundleRestoreFailure _classifyRestoreFailure(
   if (error is ProjectNameConflictException) {
     return ProjectBundleRestoreFailure.nameConflict;
   }
+  if (error is ProjectRestoreStateException) {
+    return ProjectBundleRestoreFailure.general;
+  }
   if (error is InvalidArchiveException) {
     return ProjectBundleRestoreFailure.corrupted;
   }
-  final message = error.toString().toLowerCase();
-  if (message.contains('no space') ||
-      message.contains('disk full') ||
-      message.contains('enospc')) {
+  if (isInsufficientStorageFailure(error)) {
     return ProjectBundleRestoreFailure.insufficientStorage;
   }
+  final message = error.toString().toLowerCase();
   if (error is ImagePipelineException &&
       error.kind == ImagePipelineFailureKind.invalidData) {
     if (message.contains('selection archive')) {

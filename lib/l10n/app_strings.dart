@@ -93,6 +93,56 @@ class AppStrings {
   String get photographer => _english ? 'Photographer' : '拍摄人';
   String get notesOptional => _english ? 'Notes (optional)' : '备注（选填）';
   String get requiredField => _english ? 'This field is required' : '此项为必填';
+  String get recentlyUsed => _english ? 'Recently used' : '最近使用';
+  String get more => _english ? 'More' : '更多';
+  String get searchHistory => _english ? 'Search history' : '搜索历史';
+  String get noRecentSuggestions => _english ? 'No history' : '暂无历史';
+  String get suggestionsLoadFailed =>
+      _english ? 'Could not load suggestions' : '加载失败';
+  String get captureTemplates => _english ? 'Templates' : '模板';
+  String get captureTemplateCreate => _english ? 'Save current' : '保存当前内容';
+  String get captureTemplateName => _english ? 'Template name' : '模板名称';
+  String get captureTemplateEmpty => _english ? 'No templates yet' : '暂无模板';
+  String get captureTemplateApplied => _english ? 'Template applied' : '已应用模板';
+  String get captureTemplateLoadFailed =>
+      _english ? 'Could not load templates' : '模板加载失败';
+  String get captureTemplateSaveFailed =>
+      _english ? 'Could not save template. Try again.' : '模板保存失败，请重试。';
+  String get captureTemplateRenameFailed =>
+      _english ? 'Could not rename template. Try again.' : '模板重命名失败，请重试。';
+  String get captureTemplateDeleteFailed =>
+      _english ? 'Could not delete template. Try again.' : '模板删除失败，请重试。';
+  String get captureTemplateDeleteTitle =>
+      _english ? 'Delete this template?' : '删除此模板？';
+  String get captureTemplateDeleteNotice => _english
+      ? 'Only this template will be deleted. Photos and the current form are not affected.'
+      : '只会删除此模板，不会影响照片或当前已填写的表单。';
+  String get captureTemplateRename => _english ? 'Rename' : '重命名';
+  String get captureTemplateEmptyName =>
+      _english ? 'Enter a template name' : '请输入模板名称';
+  String get captureTemplateNameTooLong =>
+      _english ? 'Template name is too long' : '模板名称过长';
+  String get captureTemplateEmptyWorkLocation =>
+      _english ? 'Work location is required' : '工程部位不能为空';
+  String get captureTemplateWorkLocationTooLong =>
+      _english ? 'Work location is too long' : '工程部位过长';
+  String get captureTemplateEmptyWorkContent =>
+      _english ? 'Work content is required' : '工作内容不能为空';
+  String get captureTemplateWorkContentTooLong =>
+      _english ? 'Work content is too long' : '工作内容过长';
+  String get captureTemplateEmptyPhotographer =>
+      _english ? 'Photographer is required' : '拍摄人不能为空';
+  String get captureTemplatePhotographerTooLong =>
+      _english ? 'Photographer is too long' : '拍摄人过长';
+  String get captureTemplateDuplicateName =>
+      _english ? 'A template with this name already exists' : '已存在同名模板';
+  String get captureTemplateLimitReached =>
+      _english ? 'This project already has 100 templates' : '此项目已达到 100 个模板上限';
+  String get captureTemplateInvalidCharacter => _english
+      ? 'Template text cannot contain unsupported characters'
+      : '模板文字包含不支持的字符';
+  String get captureTemplateNotFound =>
+      _english ? 'Template no longer exists' : '模板已不存在';
   String get openSystemCamera => _english ? 'Capture' : '拍摄';
   String get captureWorkflowHint => _english
       ? 'Capture will invoke the system camera. Watermarks are processed in the background. You can tap capture repeatedly; return to the project detail to view records as they finish.'
@@ -237,15 +287,15 @@ class AppStrings {
   String get about => _english ? 'About' : '关于';
   String get version => _english ? 'Version' : '版本';
   String get privacyStatements => _english
-      ? 'No ads · No account · No cloud · System camera only · Local storage only'
-      : '无广告 · 无账号 · 无云端 · 仅调用系统相机 · 仅保存在本机';
+      ? 'No ads · No account · No cloud sync · No network permission · System camera'
+      : '无广告 · 无账号 · 无云同步 · 发布包无网络权限 · 调用系统相机';
   String get repository => _english ? 'GitHub Repository' : 'GitHub 代码仓库';
   String get repositoryValue => siteMarkRepositoryUrl;
   String get openLinkFailed =>
       _english ? 'Could not open the browser' : '无法打开浏览器';
   String get privacySummary => _english
-      ? 'Offline by design. No account, no SiteMark server, no ads, no analytics SDK. Foreground location is requested once before capture and stored only with the local record.'
-      : '以离线使用为设计前提，不创建账号、不连接服务器、不展示广告、不含统计 SDK。拍摄前仅请求一次前台定位，结果只保存在本机记录中。';
+      ? 'The release APK requests no network permission; GitHub links open in an external browser. Foreground location is used only when requested, and a diagnostic bundle reaches the system share sheet only after confirmation.'
+      : '发布包不申请网络权限；GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。';
   String get license => _english ? 'License' : '许可证';
   String get licenseValue => 'Apache-2.0';
   String get licenses => _english ? 'Open-source licenses' : '开源许可证';
@@ -451,6 +501,9 @@ class AppStrings {
       : '无法分享备份，请重试';
   String get backupFailedFriendly =>
       _english ? 'Could not create the backup' : '无法生成备份';
+  String backupProjectFailed(String projectName) => _english
+      ? 'Could not back up "$projectName". Try again; if it still fails, select only this project and retry.'
+      : '无法备份项目“$projectName”。请重试；若仍失败，请单独选择该项目备份。';
   String get chooseRestoreZip => _english ? 'Choose backup ZIP' : '选择备份 ZIP';
   String get restorePickerFailed => _english
       ? 'Could not open the backup file picker. Please try again.'

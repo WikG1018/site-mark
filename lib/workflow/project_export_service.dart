@@ -40,6 +40,18 @@ class ProjectExportService implements ProjectArchiveExporter {
   }) async {
     final project = await database.projectById(projectId);
     if (project == null) throw StateError('Project does not exist');
+    final templates = (await database.captureTemplatesForProject(projectId))
+        .map(
+          (template) => ExportCaptureTemplate(
+            name: template.name,
+            workLocation: template.workLocation,
+            workContent: template.workContent,
+            photographer: template.photographer,
+            createdAt: _formatLocalTimestamp(template.createdAt),
+            updatedAt: _formatLocalTimestamp(template.updatedAt),
+          ),
+        )
+        .toList(growable: false);
     final captures = (await database.capturesForProject(
       projectId,
     )).where((capture) => capture.status == CaptureStatus.ready).toList();
@@ -85,6 +97,7 @@ class ProjectExportService implements ProjectArchiveExporter {
           fontScale: project.watermarkFontScale,
         ),
         photos: photos,
+        templates: templates,
       ),
     );
   }

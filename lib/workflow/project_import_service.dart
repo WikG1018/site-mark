@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
+import 'package:sqlite3/sqlite3.dart';
 import 'package:uuid/uuid.dart';
 
 /// Outcome of a successful project backup restore.
@@ -34,6 +36,17 @@ class InvalidArchiveException implements Exception {
 
   @override
   String toString() => message;
+}
+
+enum ProjectRestoreStateFailure { ownershipLost, templateSetMismatch }
+
+class ProjectRestoreStateException implements Exception {
+  const ProjectRestoreStateException(this.failure);
+
+  final ProjectRestoreStateFailure failure;
+
+  @override
+  String toString() => 'Project restore state is inconsistent: ${failure.name}';
 }
 
 /// The project rows and files are committed, but the final visibility marker
@@ -473,6 +486,10 @@ class ProjectImportService implements ProjectArchiveImporter {
       }
       capturedTimes.add(parsed);
     }
+    final restoredTemplates = _validatedRestoredTemplates(
+      preview: preview,
+      projectId: targetProjectId,
+    );
 
     final watermark = preview.watermark;
     final stagingDir = await stagingPaths.stagingDirectory(targetProjectId);
@@ -568,6 +585,42 @@ class ProjectImportService implements ProjectArchiveImporter {
           createdAt: capturedTimes[index],
           capturedAt: capturedTimes[index],
         );
+      }
+      if (restoredTemplates.isNotEmpty) {
+        try {
+          await database.insertRestoredCaptureTemplates(
+            projectId: targetProjectId,
+            restoreOperationId: operationId,
+            templates: restoredTemplates,
+          );
+          final inserted = await database.captureTemplatesForProject(
+            targetProjectId,
+          );
+          final expectedIds = {
+            for (final template in restoredTemplates) template.id.value,
+          };
+          if (!await database.projectHasRestoreOwnership(
+            projectId: targetProjectId,
+            operationId: operationId,
+          )) {
+            throw const ProjectRestoreStateException(
+              ProjectRestoreStateFailure.ownershipLost,
+            );
+          }
+          if (inserted.length != restoredTemplates.length ||
+              inserted.any((template) => !expectedIds.contains(template.id))) {
+            throw const ProjectRestoreStateException(
+              ProjectRestoreStateFailure.templateSetMismatch,
+            );
+          }
+        } on SqliteException catch (error) {
+          if (error.resultCode == SqlError.SQLITE_CONSTRAINT) {
+            throw const InvalidArchiveException(
+              'Invalid capture template data',
+            );
+          }
+          rethrow;
+        }
       }
 
       // Commit point: move staged files into their final locations.
@@ -729,6 +782,82 @@ class ProjectImportService implements ProjectArchiveImporter {
 
   static String _validLocale(String? value) =>
       value != null && {'zh', 'en'}.contains(value) ? value : 'zh';
+
+  List<CaptureTemplatesCompanion> _validatedRestoredTemplates({
+    required rust.ProjectArchivePreview preview,
+    required String projectId,
+  }) {
+    if (preview.schemaVersion < 1 || preview.schemaVersion > 4) {
+      throw const InvalidArchiveException(
+        'Unsupported project archive schema version',
+      );
+    }
+    if (preview.schemaVersion < 4 && preview.templates.isNotEmpty) {
+      throw const InvalidArchiveException(
+        'Legacy project archives cannot contain capture templates',
+      );
+    }
+    if (preview.templates.length > captureTemplateLimitPerProject) {
+      throw const InvalidArchiveException(
+        'Project archive contains too many capture templates',
+      );
+    }
+    final nameKeys = <String>{};
+    final templates = <CaptureTemplatesCompanion>[];
+    for (final template in preview.templates) {
+      final name = normalizeCaptureTemplateName(template.name);
+      final workLocation = template.workLocation.trim();
+      final workContent = template.workContent.trim();
+      final photographer = template.photographer.trim();
+      if ([
+        template.name,
+        template.workLocation,
+        template.workContent,
+        template.photographer,
+      ].any((value) => value.contains('\u0000'))) {
+        throw const InvalidArchiveException('Capture template contains U+0000');
+      }
+      if (name != template.name ||
+          workLocation != template.workLocation ||
+          workContent != template.workContent ||
+          photographer != template.photographer ||
+          name.isEmpty ||
+          name.runes.length > captureTemplateNameMaxLength ||
+          workLocation.isEmpty ||
+          workLocation.runes.length > captureTemplateLocationMaxLength ||
+          workContent.isEmpty ||
+          workContent.runes.length > captureTemplateContentMaxLength ||
+          photographer.isEmpty ||
+          photographer.runes.length > captureTemplatePhotographerMaxLength) {
+        throw const InvalidArchiveException('Invalid capture template fields');
+      }
+      final nameKey = captureTemplateNameKey(name);
+      if (!nameKeys.add(nameKey)) {
+        throw const InvalidArchiveException('Duplicate capture template name');
+      }
+      final createdAt = parseExportedTimestamp(template.createdAt);
+      final updatedAt = parseExportedTimestamp(template.updatedAt);
+      if (createdAt == null || updatedAt == null) {
+        throw const InvalidArchiveException(
+          'Invalid capture template timestamp',
+        );
+      }
+      templates.add(
+        CaptureTemplatesCompanion.insert(
+          id: _uuid.v4(),
+          projectId: projectId,
+          name: name,
+          nameKey: nameKey,
+          workLocation: workLocation,
+          workContent: workContent,
+          photographer: photographer,
+          createdAt: createdAt,
+          updatedAt: updatedAt,
+        ),
+      );
+    }
+    return templates;
+  }
 }
 
 class _PhotoPlan {
@@ -752,9 +881,35 @@ class _PhotoPlan {
 /// value does not match the expected shape.
 DateTime? parseExportedTimestamp(String value) {
   final match = RegExp(
-    r'^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2}) ([+-])(\d{2}):(\d{2})$',
+    r'^([0-9]{4})-([0-9]{2})-([0-9]{2}) '
+    r'([0-9]{2}):([0-9]{2}):([0-9]{2}) '
+    r'([+-])([0-9]{2}):([0-9]{2})$',
   ).firstMatch(value.trim());
   if (match == null) return null;
+  final year = int.parse(match[1]!);
+  final month = int.parse(match[2]!);
+  final day = int.parse(match[3]!);
+  final hour = int.parse(match[4]!);
+  final minute = int.parse(match[5]!);
+  final second = int.parse(match[6]!);
+  final offsetHour = int.parse(match[8]!);
+  final offsetMinute = int.parse(match[9]!);
+  final leapYear = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+  final daysInMonth = switch (month) {
+    1 || 3 || 5 || 7 || 8 || 10 || 12 => 31,
+    4 || 6 || 9 || 11 => 30,
+    2 => leapYear ? 29 : 28,
+    _ => 0,
+  };
+  if (day < 1 ||
+      day > daysInMonth ||
+      hour > 23 ||
+      minute > 59 ||
+      second > 59 ||
+      offsetHour > 23 ||
+      offsetMinute > 59) {
+    return null;
+  }
   final iso =
       '${match[1]}-${match[2]}-${match[3]}'
       'T${match[4]}:${match[5]}:${match[6]}'

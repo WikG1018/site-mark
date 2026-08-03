@@ -23,6 +23,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  ArchiveCaptureTemplate dco_decode_archive_capture_template(dynamic raw);
+
+  @protected
   ArchivePhotoPreview dco_decode_archive_photo_preview(dynamic raw);
 
   @protected
@@ -63,6 +66,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RenderPhotoRequest dco_decode_box_autoadd_render_photo_request(dynamic raw);
+
+  @protected
+  ExportCaptureTemplate dco_decode_export_capture_template(dynamic raw);
 
   @protected
   ExportPhotoRecord dco_decode_export_photo_record(dynamic raw);
@@ -106,7 +112,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  List<ArchiveCaptureTemplate> dco_decode_list_archive_capture_template(
+    dynamic raw,
+  );
+
+  @protected
   List<ArchivePhotoPreview> dco_decode_list_archive_photo_preview(dynamic raw);
+
+  @protected
+  List<ExportCaptureTemplate> dco_decode_list_export_capture_template(
+    dynamic raw,
+  );
 
   @protected
   List<ExportPhotoRecord> dco_decode_list_export_photo_record(dynamic raw);
@@ -173,6 +189,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  ArchiveCaptureTemplate sse_decode_archive_capture_template(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ArchivePhotoPreview sse_decode_archive_photo_preview(
     SseDeserializer deserializer,
   );
@@ -223,6 +244,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RenderPhotoRequest sse_decode_box_autoadd_render_photo_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ExportCaptureTemplate sse_decode_export_capture_template(
     SseDeserializer deserializer,
   );
 
@@ -282,7 +308,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  List<ArchiveCaptureTemplate> sse_decode_list_archive_capture_template(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<ArchivePhotoPreview> sse_decode_list_archive_photo_preview(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ExportCaptureTemplate> sse_decode_list_export_capture_template(
     SseDeserializer deserializer,
   );
 
@@ -367,6 +403,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_archive_capture_template(
+    ArchiveCaptureTemplate self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_archive_photo_preview(
     ArchivePhotoPreview self,
     SseSerializer serializer,
@@ -423,6 +465,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_render_photo_request(
     RenderPhotoRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_export_capture_template(
+    ExportCaptureTemplate self,
     SseSerializer serializer,
   );
 
@@ -493,8 +541,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_archive_capture_template(
+    List<ArchiveCaptureTemplate> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_archive_photo_preview(
     List<ArchivePhotoPreview> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_export_capture_template(
+    List<ExportCaptureTemplate> self,
     SseSerializer serializer,
   );
 

@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_template_rules.dart';
+import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
+import 'package:sitemark/features/capture/capture_template_sheet.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
@@ -28,6 +31,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   final _contentController = TextEditingController();
   final _photographerController = TextEditingController();
   final _notesController = TextEditingController();
+  final _locationFocusNode = FocusNode();
+  final _contentFocusNode = FocusNode();
+  final _photographerFocusNode = FocusNode();
   bool _working = false;
 
   /// Detaches the KILL-persistence hook registered in [initState]. Null
@@ -39,6 +45,11 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   /// fields can be prefilled exactly once. Rebuilt only when [widget.projectId]
   /// changes; never recomputed on every [build].
   Future<_CaptureFormInit?>? _initFuture;
+  var _initGeneration = 0;
+  var _captureOperation = 0;
+  var _templateOperation = 0;
+  var _templateSheetOpen = false;
+  CaptureTemplateSheetController? _templateSheetController;
 
   /// Cached location-permission view state. Loaded once during initialization
   /// and refreshed whenever the app returns to the foreground so the
@@ -46,9 +57,13 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   /// system dialog or settings. `null` means the first load has not finished.
   LocationPermissionViewState? _permissionState;
 
-  Future<_CaptureFormInit?> _loadInit() async {
+  bool _isCurrentInit(String projectId, int generation) =>
+      mounted && widget.projectId == projectId && _initGeneration == generation;
+
+  Future<_CaptureFormInit?> _loadInit(String projectId, int generation) async {
     final database = ref.read(databaseProvider);
-    final project = await database.projectById(widget.projectId);
+    final project = await database.projectById(projectId);
+    if (!_isCurrentInit(projectId, generation)) return null;
     if (project == null) return null;
 
     // Check the KILL-persisted draft first. A KILL draft represents the
@@ -59,12 +74,11 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     // whether the project already has captured records.
     CaptureFormDraftSnapshot? snapshot;
     try {
-      snapshot = await ref
-          .read(captureFormDraftStoreProvider)
-          .load(widget.projectId);
+      snapshot = await ref.read(captureFormDraftStoreProvider).load(projectId);
     } catch (_) {
       snapshot = null;
     }
+    if (!_isCurrentInit(projectId, generation)) return null;
 
     if (snapshot != null) {
       // Restore the user's unsaved draft from the last KILL event.
@@ -75,7 +89,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     } else {
       // No KILL draft to restore; fall back to carry-forward fields from
       // the most recent captured record. Notes stay blank by design.
-      final draft = await database.latestCapturedDraft(widget.projectId);
+      final draft = await database.latestCapturedDraft(projectId);
+      if (!_isCurrentInit(projectId, generation)) return null;
       if (draft != null) {
         _applyCarryForward(draft);
       }
@@ -84,7 +99,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
 
     // A snapshot was restored; still load the latest draft so the caller
     // knows whether the project has history.
-    final draft = await database.latestCapturedDraft(widget.projectId);
+    final draft = await database.latestCapturedDraft(projectId);
+    if (!_isCurrentInit(projectId, generation)) return null;
     return _CaptureFormInit(project: project, draft: draft);
   }
 
@@ -104,6 +120,10 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     // MEMORY_KILL so the user does not lose what they typed when the OEM
     // reclaims the process. The hook reads the controllers synchronously
     // (cheap) and writes the snapshot to disk asynchronously.
+    _attachKillHook();
+  }
+
+  void _attachKillHook() {
     final store = ref.read(captureFormDraftStoreProvider);
     _killHookDetach = ref
         .read(memoryPressureControllerProvider)
@@ -120,9 +140,32 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   }
 
   @override
+  void didUpdateWidget(covariant CaptureFormScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId == widget.projectId) return;
+    _initGeneration++;
+    _captureOperation++;
+    _templateOperation++;
+    final oldTemplateSheet = _templateSheetController;
+    _templateSheetController = null;
+    _templateSheetOpen = false;
+    oldTemplateSheet?.dismiss();
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    _locationController.clear();
+    _contentController.clear();
+    _photographerController.clear();
+    _notesController.clear();
+    _working = false;
+    _killHookDetach?.call();
+    _killHookDetach = null;
+    _attachKillHook();
+    _initFuture = _loadInit(widget.projectId, _initGeneration);
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _initFuture ??= _loadInit();
+    _initFuture ??= _loadInit(widget.projectId, _initGeneration);
     // Kick off the first permission load alongside the project init. Guarded
     // by the null cache so repeated rebuilds do not re-trigger the load.
     if (_permissionState == null) {
@@ -148,14 +191,100 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     // Notes are intentionally left blank so stale review notes never carry over.
   }
 
+  Future<List<String>> _loadRecentSuggestions({
+    required String projectId,
+    required CaptureSuggestionField field,
+    required int limit,
+  }) {
+    return ref
+        .read(databaseProvider)
+        .recentCaptureSuggestions(
+          projectId: projectId,
+          field: field,
+          limit: limit,
+        );
+  }
+
+  CaptureRequiredFieldsSnapshot _requiredFieldsSnapshot() {
+    return CaptureRequiredFieldsSnapshot(
+      workLocation: _locationController.text,
+      workContent: _contentController.text,
+      photographer: _photographerController.text,
+    );
+  }
+
+  void _applyRequiredFields(CaptureRequiredFieldsSnapshot snapshot) {
+    _locationController.text = snapshot.workLocation;
+    _contentController.text = snapshot.workContent;
+    _photographerController.text = snapshot.photographer;
+  }
+
+  Future<void> _openTemplates() async {
+    if (_templateSheetOpen) return;
+    final projectId = widget.projectId;
+    final generation = _initGeneration;
+    final previous = _requiredFieldsSnapshot();
+    final sheetController = CaptureTemplateSheetController();
+    _templateSheetController = sheetController;
+    _templateSheetOpen = true;
+    CaptureRequiredFieldsSnapshot? selected;
+    try {
+      selected = await showCaptureTemplateSheet(
+        context: context,
+        projectId: projectId,
+        current: previous,
+        service: ref.read(captureTemplateServiceProvider),
+        controller: sheetController,
+      );
+    } finally {
+      if (identical(_templateSheetController, sheetController)) {
+        _templateSheetController = null;
+        _templateSheetOpen = false;
+      }
+    }
+    if (!mounted ||
+        selected == null ||
+        widget.projectId != projectId ||
+        _initGeneration != generation) {
+      return;
+    }
+    final operation = ++_templateOperation;
+    _applyRequiredFields(selected);
+    final strings = AppStrings.of(context);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(strings.captureTemplateApplied),
+          action: SnackBarAction(
+            label: strings.undo,
+            onPressed: () {
+              if (!mounted ||
+                  widget.projectId != projectId ||
+                  _initGeneration != generation ||
+                  _templateOperation != operation) {
+                return;
+              }
+              _applyRequiredFields(previous);
+            },
+          ),
+        ),
+      );
+  }
+
   @override
   void dispose() {
+    _templateSheetController?.dismiss();
+    _templateSheetController = null;
     _killHookDetach?.call();
     WidgetsBinding.instance.removeObserver(this);
     _locationController.dispose();
     _contentController.dispose();
     _photographerController.dispose();
     _notesController.dispose();
+    _locationFocusNode.dispose();
+    _contentFocusNode.dispose();
+    _photographerFocusNode.dispose();
     super.dispose();
   }
 
@@ -184,6 +313,14 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
 
   Future<void> _capture(Project project) async {
     if (!_formKey.currentState!.validate()) return;
+    final projectId = project.id;
+    final generation = _initGeneration;
+    final operation = ++_captureOperation;
+    bool isCurrent() =>
+        mounted &&
+        widget.projectId == projectId &&
+        _initGeneration == generation &&
+        _captureOperation == operation;
     setState(() => _working = true);
     final language = Localizations.localeOf(context).languageCode;
     final watermarkLocaleCode = language == 'en' ? 'en' : 'zh';
@@ -207,6 +344,15 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
           ),
         );
     if (!mounted) return;
+    if (!isCurrent()) {
+      if (result.outcome == CaptureWorkflowOutcome.queued ||
+          result.outcome == CaptureWorkflowOutcome.delayed) {
+        try {
+          await ref.read(captureFormDraftStoreProvider).clear(projectId);
+        } catch (_) {}
+      }
+      return;
+    }
     final strings = AppStrings.of(context);
     switch (result.outcome) {
       case CaptureWorkflowOutcome.queued:
@@ -214,11 +360,12 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         // next launch does not resurrect the just-submitted text. Best-effort:
         // a failure to clear must not block the capture confirmation flow.
         try {
-          await ref.read(captureFormDraftStoreProvider).clear(widget.projectId);
+          await ref.read(captureFormDraftStoreProvider).clear(projectId);
         } catch (_) {
           // Ignore: the snapshot will be overwritten on the next KILL.
         }
         if (!mounted) return;
+        if (!isCurrent()) return;
         // Stay on the form for consecutive shooting: clear only notes so the
         // retained location/content/photographer edits persist, re-enable the
         // button, and surface the background-queue confirmation. Replace any
@@ -235,11 +382,12 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
           );
       case CaptureWorkflowOutcome.delayed:
         try {
-          await ref.read(captureFormDraftStoreProvider).clear(widget.projectId);
+          await ref.read(captureFormDraftStoreProvider).clear(projectId);
         } catch (_) {
           // The durable capture is authoritative; a stale draft is harmless.
         }
         if (!mounted) return;
+        if (!isCurrent()) return;
         _notesController.clear();
         setState(() => _working = false);
         ScaffoldMessenger.of(context)
@@ -273,7 +421,10 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     return FutureBuilder<_CaptureFormInit?>(
       future: _initFuture,
       builder: (context, snapshot) {
-        final project = snapshot.data?.project;
+        final loadedProject = snapshot.data?.project;
+        final project = loadedProject?.id == widget.projectId
+            ? loadedProject
+            : null;
         final permission = _permissionState;
         final prompt = permission != null && permission.showExplanation
             ? LocationPermissionPrompt(
@@ -298,8 +449,14 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                           contentController: _contentController,
                           photographerController: _photographerController,
                           notesController: _notesController,
+                          locationFocusNode: _locationFocusNode,
+                          contentFocusNode: _contentFocusNode,
+                          photographerFocusNode: _photographerFocusNode,
+                          projectId: widget.projectId,
+                          loadSuggestions: _loadRecentSuggestions,
                           strings: strings,
                           working: _working,
+                          onTemplates: _openTemplates,
                           onCapture: () => _capture(project),
                           permissionPrompt: prompt,
                         ),
@@ -329,8 +486,14 @@ class _CaptureFormBody extends StatelessWidget {
     required this.contentController,
     required this.photographerController,
     required this.notesController,
+    required this.locationFocusNode,
+    required this.contentFocusNode,
+    required this.photographerFocusNode,
+    required this.projectId,
+    required this.loadSuggestions,
     required this.strings,
     required this.working,
+    required this.onTemplates,
     required this.onCapture,
     this.permissionPrompt,
   });
@@ -339,8 +502,14 @@ class _CaptureFormBody extends StatelessWidget {
   final TextEditingController contentController;
   final TextEditingController photographerController;
   final TextEditingController notesController;
+  final FocusNode locationFocusNode;
+  final FocusNode contentFocusNode;
+  final FocusNode photographerFocusNode;
+  final String projectId;
+  final CaptureRecentSuggestionsLoader loadSuggestions;
   final AppStrings strings;
   final bool working;
+  final VoidCallback onTemplates;
   final VoidCallback onCapture;
 
   /// Optional non-blocking location-permission card rendered at the top of the
@@ -356,26 +525,60 @@ class _CaptureFormBody extends StatelessWidget {
         // Always-mounted animated slot: the prompt expands/fades in and
         // collapses out without the form fields jumping.
         LocationPermissionPromptArea(prompt: permissionPrompt),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: OutlinedButton.icon(
+            key: const Key('capture-template-button'),
+            onPressed: onTemplates,
+            icon: const Icon(Icons.bookmarks_outlined, size: 18),
+            label: Text(strings.captureTemplates),
+          ),
+        ),
+        const SizedBox(height: 8),
         _RequiredField(
           fieldKey: const Key('work-location'),
           controller: locationController,
+          focusNode: locationFocusNode,
           label: strings.workLocation,
           error: strings.requiredField,
+          suggestions: CaptureRecentSuggestions(
+            projectId: projectId,
+            field: CaptureSuggestionField.workLocation,
+            controller: locationController,
+            focusNode: locationFocusNode,
+            load: loadSuggestions,
+          ),
         ),
         const SizedBox(height: 16),
         _RequiredField(
           fieldKey: const Key('work-content'),
           controller: contentController,
+          focusNode: contentFocusNode,
           label: strings.workContent,
           error: strings.requiredField,
           maxLines: 2,
+          suggestions: CaptureRecentSuggestions(
+            projectId: projectId,
+            field: CaptureSuggestionField.workContent,
+            controller: contentController,
+            focusNode: contentFocusNode,
+            load: loadSuggestions,
+          ),
         ),
         const SizedBox(height: 16),
         _RequiredField(
           fieldKey: const Key('photographer'),
           controller: photographerController,
+          focusNode: photographerFocusNode,
           label: strings.photographer,
           error: strings.requiredField,
+          suggestions: CaptureRecentSuggestions(
+            projectId: projectId,
+            field: CaptureSuggestionField.photographer,
+            controller: photographerController,
+            focusNode: photographerFocusNode,
+            load: loadSuggestions,
+          ),
         ),
         const SizedBox(height: 16),
         TextFormField(
@@ -437,26 +640,40 @@ class _RequiredField extends StatelessWidget {
   const _RequiredField({
     required this.fieldKey,
     required this.controller,
+    required this.focusNode,
     required this.label,
     required this.error,
+    required this.suggestions,
     this.maxLines = 1,
   });
 
   final Key fieldKey;
   final TextEditingController controller;
+  final FocusNode focusNode;
   final String label;
   final String error;
+  final Widget suggestions;
   final int maxLines;
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      key: fieldKey,
-      controller: controller,
-      maxLines: maxLines,
-      decoration: InputDecoration(labelText: label, alignLabelWithHint: true),
-      validator: (value) =>
-          value == null || value.trim().isEmpty ? error : null,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextFormField(
+          key: fieldKey,
+          controller: controller,
+          focusNode: focusNode,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            labelText: label,
+            alignLabelWithHint: true,
+          ),
+          validator: (value) =>
+              value == null || value.trim().isEmpty ? error : null,
+        ),
+        suggestions,
+      ],
     );
   }
 }

@@ -462,6 +462,26 @@ impl SseDecode for String {
     }
 }
 
+impl SseDecode for crate::api::image_core::ArchiveCaptureTemplate {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_workLocation = <String>::sse_decode(deserializer);
+        let mut var_workContent = <String>::sse_decode(deserializer);
+        let mut var_photographer = <String>::sse_decode(deserializer);
+        let mut var_createdAt = <String>::sse_decode(deserializer);
+        let mut var_updatedAt = <String>::sse_decode(deserializer);
+        return crate::api::image_core::ArchiveCaptureTemplate {
+            name: var_name,
+            work_location: var_workLocation,
+            work_content: var_workContent,
+            photographer: var_photographer,
+            created_at: var_createdAt,
+            updated_at: var_updatedAt,
+        };
+    }
+}
+
 impl SseDecode for crate::api::image_core::ArchivePhotoPreview {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -516,6 +536,26 @@ impl SseDecode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u8().unwrap() != 0
+    }
+}
+
+impl SseDecode for crate::api::image_core::ExportCaptureTemplate {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_workLocation = <String>::sse_decode(deserializer);
+        let mut var_workContent = <String>::sse_decode(deserializer);
+        let mut var_photographer = <String>::sse_decode(deserializer);
+        let mut var_createdAt = <String>::sse_decode(deserializer);
+        let mut var_updatedAt = <String>::sse_decode(deserializer);
+        return crate::api::image_core::ExportCaptureTemplate {
+            name: var_name,
+            work_location: var_workLocation,
+            work_content: var_workContent,
+            photographer: var_photographer,
+            created_at: var_createdAt,
+            updated_at: var_updatedAt,
+        };
     }
 }
 
@@ -586,6 +626,8 @@ impl SseDecode for crate::api::image_core::ExportProjectRequest {
             <crate::api::image_core::ExportWatermarkSettings>::sse_decode(deserializer);
         let mut var_photos =
             <Vec<crate::api::image_core::ExportPhotoRecord>>::sse_decode(deserializer);
+        let mut var_templates =
+            <Vec<crate::api::image_core::ExportCaptureTemplate>>::sse_decode(deserializer);
         return crate::api::image_core::ExportProjectRequest {
             project_id: var_projectId,
             project_name: var_projectName,
@@ -598,6 +640,7 @@ impl SseDecode for crate::api::image_core::ExportProjectRequest {
             include_originals: var_includeOriginals,
             watermark: var_watermark,
             photos: var_photos,
+            templates: var_templates,
         };
     }
 }
@@ -718,6 +761,18 @@ impl SseDecode for i32 {
     }
 }
 
+impl SseDecode for Vec<crate::api::image_core::ArchiveCaptureTemplate> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::image_core::ArchiveCaptureTemplate>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::image_core::ArchivePhotoPreview> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -725,6 +780,20 @@ impl SseDecode for Vec<crate::api::image_core::ArchivePhotoPreview> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::image_core::ArchivePhotoPreview>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::image_core::ExportCaptureTemplate> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::image_core::ExportCaptureTemplate>::sse_decode(
                 deserializer,
             ));
         }
@@ -849,6 +918,8 @@ impl SseDecode for crate::api::image_core::ProjectArchivePreview {
             <Option<crate::api::image_core::ArchiveWatermarkSettings>>::sse_decode(deserializer);
         let mut var_photos =
             <Vec<crate::api::image_core::ArchivePhotoPreview>>::sse_decode(deserializer);
+        let mut var_templates =
+            <Vec<crate::api::image_core::ArchiveCaptureTemplate>>::sse_decode(deserializer);
         return crate::api::image_core::ProjectArchivePreview {
             schema_version: var_schemaVersion,
             project_name: var_projectName,
@@ -861,6 +932,7 @@ impl SseDecode for crate::api::image_core::ProjectArchivePreview {
             includes_originals: var_includesOriginals,
             watermark: var_watermark,
             photos: var_photos,
+            templates: var_templates,
         };
     }
 }
@@ -1063,6 +1135,31 @@ fn pde_ffi_dispatcher_sync_impl(
 // Section: rust2dart
 
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ArchiveCaptureTemplate {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.name.into_into_dart().into_dart(),
+            self.work_location.into_into_dart().into_dart(),
+            self.work_content.into_into_dart().into_dart(),
+            self.photographer.into_into_dart().into_dart(),
+            self.created_at.into_into_dart().into_dart(),
+            self.updated_at.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ArchiveCaptureTemplate
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ArchiveCaptureTemplate>
+    for crate::api::image_core::ArchiveCaptureTemplate
+{
+    fn into_into_dart(self) -> crate::api::image_core::ArchiveCaptureTemplate {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::image_core::ArchivePhotoPreview {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1114,6 +1211,31 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ArchiveWatermarkS
     for crate::api::image_core::ArchiveWatermarkSettings
 {
     fn into_into_dart(self) -> crate::api::image_core::ArchiveWatermarkSettings {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportCaptureTemplate {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.name.into_into_dart().into_dart(),
+            self.work_location.into_into_dart().into_dart(),
+            self.work_content.into_into_dart().into_dart(),
+            self.photographer.into_into_dart().into_dart(),
+            self.created_at.into_into_dart().into_dart(),
+            self.updated_at.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ExportCaptureTemplate
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExportCaptureTemplate>
+    for crate::api::image_core::ExportCaptureTemplate
+{
+    fn into_into_dart(self) -> crate::api::image_core::ExportCaptureTemplate {
         self
     }
 }
@@ -1187,6 +1309,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportProjectRequ
             self.include_originals.into_into_dart().into_dart(),
             self.watermark.into_into_dart().into_dart(),
             self.photos.into_into_dart().into_dart(),
+            self.templates.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1372,6 +1495,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ProjectArchivePre
             self.includes_originals.into_into_dart().into_dart(),
             self.watermark.into_into_dart().into_dart(),
             self.photos.into_into_dart().into_dart(),
+            self.templates.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1541,6 +1665,18 @@ impl SseEncode for String {
     }
 }
 
+impl SseEncode for crate::api::image_core::ArchiveCaptureTemplate {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.work_location, serializer);
+        <String>::sse_encode(self.work_content, serializer);
+        <String>::sse_encode(self.photographer, serializer);
+        <String>::sse_encode(self.created_at, serializer);
+        <String>::sse_encode(self.updated_at, serializer);
+    }
+}
+
 impl SseEncode for crate::api::image_core::ArchivePhotoPreview {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1574,6 +1710,18 @@ impl SseEncode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::image_core::ExportCaptureTemplate {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <String>::sse_encode(self.work_location, serializer);
+        <String>::sse_encode(self.work_content, serializer);
+        <String>::sse_encode(self.photographer, serializer);
+        <String>::sse_encode(self.created_at, serializer);
+        <String>::sse_encode(self.updated_at, serializer);
     }
 }
 
@@ -1620,6 +1768,10 @@ impl SseEncode for crate::api::image_core::ExportProjectRequest {
         <bool>::sse_encode(self.include_originals, serializer);
         <crate::api::image_core::ExportWatermarkSettings>::sse_encode(self.watermark, serializer);
         <Vec<crate::api::image_core::ExportPhotoRecord>>::sse_encode(self.photos, serializer);
+        <Vec<crate::api::image_core::ExportCaptureTemplate>>::sse_encode(
+            self.templates,
+            serializer,
+        );
     }
 }
 
@@ -1704,12 +1856,32 @@ impl SseEncode for i32 {
     }
 }
 
+impl SseEncode for Vec<crate::api::image_core::ArchiveCaptureTemplate> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::image_core::ArchiveCaptureTemplate>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::image_core::ArchivePhotoPreview> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::image_core::ArchivePhotoPreview>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::image_core::ExportCaptureTemplate> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::image_core::ExportCaptureTemplate>::sse_encode(item, serializer);
         }
     }
 }
@@ -1811,6 +1983,10 @@ impl SseEncode for crate::api::image_core::ProjectArchivePreview {
             serializer,
         );
         <Vec<crate::api::image_core::ArchivePhotoPreview>>::sse_encode(self.photos, serializer);
+        <Vec<crate::api::image_core::ArchiveCaptureTemplate>>::sse_encode(
+            self.templates,
+            serializer,
+        );
     }
 }
 
