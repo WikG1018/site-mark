@@ -1,17 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_summary.dart';
+import 'package:sitemark/features/projects/project_summary_card.dart';
 import 'package:sitemark/features/projects/project_status_filter_sheet.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
-import 'package:sitemark/workflow/project_lifecycle_service.dart';
 import 'package:skeletonizer/skeletonizer.dart';
-
-enum _ProjectCardAction { pin, unpin, complete, archive, reopen }
 
 class ProjectListScreen extends ConsumerStatefulWidget {
   const ProjectListScreen({super.key, this.initialStatus});
@@ -104,125 +101,11 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     };
   }
 
-  Future<void> _handleCardAction(
-    ProjectSummary summary,
-    _ProjectCardAction action,
-  ) async {
-    final database = ref.read(databaseProvider);
-    final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-
-    switch (action) {
-      case _ProjectCardAction.pin:
-        await database.setProjectPinned(summary.project.id, true);
-        return;
-      case _ProjectCardAction.unpin:
-        await database.setProjectPinned(summary.project.id, false);
-        return;
-      case _ProjectCardAction.complete:
-        await _transitionLifecycle(
-          summary.project.id,
-          ProjectLifecycleStatus.completed,
-          strings,
-          messenger,
-        );
-      case _ProjectCardAction.archive:
-        await _transitionLifecycle(
-          summary.project.id,
-          ProjectLifecycleStatus.archived,
-          strings,
-          messenger,
-        );
-      case _ProjectCardAction.reopen:
-        await _transitionLifecycle(
-          summary.project.id,
-          ProjectLifecycleStatus.active,
-          strings,
-          messenger,
-        );
-    }
-  }
-
-  Future<void> _transitionLifecycle(
-    String projectId,
-    ProjectLifecycleStatus target,
-    AppStrings strings,
-    ScaffoldMessengerState messenger,
-  ) async {
-    final service = ref.read(projectLifecycleServiceProvider);
-    try {
-      final preview = await service.preview(projectId, target);
-      final requiresSettledCaptures = target != ProjectLifecycleStatus.active;
-      if (requiresSettledCaptures && preview.processingCount > 0) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              strings.projectLifecycleProcessingBlocked(
-                preview.processingCount,
-              ),
-            ),
-          ),
-        );
-        return;
-      }
-      var confirmFailed = false;
-      if (requiresSettledCaptures && preview.failedCount > 0) {
-        if (!mounted) return;
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            content: Text(
-              strings.projectLifecycleFailedConfirm(preview.failedCount),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: Text(strings.cancel),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(strings.projectLifecycleContinue),
-              ),
-            ],
-          ),
-        );
-        if (confirmed != true) {
-          return;
-        }
-        confirmFailed = true;
-      }
-      await service.transition(preview, confirmFailed: confirmFailed);
-    } on ProjectLifecycleProcessingException catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            strings.projectLifecycleProcessingBlocked(error.processingCount),
-          ),
-        ),
-      );
-    } on ProjectLifecycleConfirmationRequiredException catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            strings.projectLifecycleFailedConfirm(error.failedCount),
-          ),
-        ),
-      );
-    } on ProjectLifecycleConflictException {
-      messenger.showSnackBar(
-        SnackBar(content: Text(strings.projectLifecycleConflict)),
-      );
-    } on ProjectLifecycleInvalidTransitionException {
-      messenger.showSnackBar(
-        SnackBar(content: Text(strings.projectLifecycleConflict)),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final database = ref.watch(databaseProvider);
+    final outputPaths = ref.watch(captureOutputPathsProvider);
     final searching = _searching && _query.trim().isNotEmpty;
     final listController = searching
         ? _searchScrollController
@@ -265,11 +148,15 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                 icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
               )
             else ...[
-              IconButton(
+              TextButton.icon(
                 key: const Key('project-status-filter'),
                 onPressed: _openStatusFilter,
-                tooltip: strings.projectStatusFilterTitle,
-                icon: const Icon(Icons.filter_list),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                icon: const Icon(Icons.filter_list, size: 20),
+                label: Text(_statusLabel(strings, _status)),
               ),
               IconButton(
                 key: const Key('search-projects'),
@@ -329,171 +216,20 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final summary = summaries[index];
-                return _ProjectSummaryCard(
+                return ProjectSummaryCard(
+                  key: Key('project-card-${summary.project.id}'),
                   summary: summary,
-                  strings: strings,
-                  showStatusBadge: true,
-                  statusLabel: _statusLabel(
-                    strings,
-                    summary.project.lifecycleStatus,
-                  ),
+                  outputPaths: outputPaths,
                   onOpen: () => context.push(
                     '/projects/${summary.project.id}',
                     extra: summary.project,
                   ),
-                  onAction: (action) => _handleCardAction(summary, action),
                 );
               },
             );
           },
         ),
       ),
-    );
-  }
-}
-
-class _ProjectSummaryCard extends StatelessWidget {
-  const _ProjectSummaryCard({
-    required this.summary,
-    required this.strings,
-    required this.showStatusBadge,
-    required this.statusLabel,
-    required this.onOpen,
-    required this.onAction,
-  });
-
-  final ProjectSummary summary;
-  final AppStrings strings;
-  final bool showStatusBadge;
-  final String statusLabel;
-  final VoidCallback onOpen;
-  final ValueChanged<_ProjectCardAction> onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final project = summary.project;
-    final theme = Theme.of(context);
-    final lastCaptureLabel = summary.lastCaptureAt == null
-        ? strings.noCaptureRecordsYet
-        : strings.lastCaptureAtLabel(
-            DateFormat.yMMMd(
-              Localizations.localeOf(context).toString(),
-            ).add_Hm().format(summary.lastCaptureAt!),
-          );
-    final menuItems = <PopupMenuEntry<_ProjectCardAction>>[
-      PopupMenuItem(
-        key: Key('project-pin-${project.id}'),
-        value: project.isPinned
-            ? _ProjectCardAction.unpin
-            : _ProjectCardAction.pin,
-        child: Text(
-          project.isPinned ? strings.unpinProject : strings.pinProject,
-        ),
-      ),
-      ...switch (project.lifecycleStatus) {
-        ProjectLifecycleStatus.active => [
-          PopupMenuItem(
-            key: Key('project-lifecycle-${project.id}'),
-            value: _ProjectCardAction.complete,
-            child: Text(strings.markProjectCompleted),
-          ),
-          PopupMenuItem(
-            value: _ProjectCardAction.archive,
-            child: Text(strings.archiveProject),
-          ),
-        ],
-        ProjectLifecycleStatus.completed => [
-          PopupMenuItem(
-            key: Key('project-lifecycle-${project.id}'),
-            value: _ProjectCardAction.reopen,
-            child: Text(strings.reopenProject),
-          ),
-          PopupMenuItem(
-            value: _ProjectCardAction.archive,
-            child: Text(strings.archiveProject),
-          ),
-        ],
-        ProjectLifecycleStatus.archived => [
-          PopupMenuItem(
-            key: Key('project-lifecycle-${project.id}'),
-            value: _ProjectCardAction.reopen,
-            child: Text(strings.restoreProjectToActive),
-          ),
-        ],
-      },
-    ];
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(child: Text(project.name.characters.first)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(project.name, style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 4),
-                    Text(project.description ?? strings.localOnly),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        if (showStatusBadge)
-                          _MetaChip(
-                            key: Key(
-                              'project-status-badge-${project.lifecycleStatus.name}',
-                            ),
-                            label: statusLabel,
-                          ),
-                        if (project.isPinned)
-                          _MetaChip(label: strings.projectPinnedBadge),
-                        _MetaChip(
-                          label: strings.projectPhotoCount(
-                            summary.captureCount,
-                          ),
-                        ),
-                        _MetaChip(label: lastCaptureLabel),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuButton<_ProjectCardAction>(
-                tooltip: strings.projectActions,
-                onSelected: onAction,
-                itemBuilder: (_) => menuItems,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MetaChip extends StatelessWidget {
-  const _MetaChip({super.key, required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(label, style: Theme.of(context).textTheme.labelMedium),
     );
   }
 }

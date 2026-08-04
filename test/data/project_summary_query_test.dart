@@ -41,6 +41,47 @@ void main() {
     );
   }
 
+  test('returns the three newest ready capture ids for each project', () async {
+    await database.createProject(id: 'recent', name: '最近项目');
+    await database.createProject(id: 'empty', name: '空项目');
+
+    for (var index = 0; index < 4; index++) {
+      await insertReadyCapture(
+        id: 'capture-$index',
+        projectId: 'recent',
+        capturedAt: DateTime.utc(2026, 8, 3, 8, index),
+      );
+    }
+    final capturedOnly = await database.createPendingCapture(
+      id: 'capture-not-ready',
+      projectId: 'recent',
+      originalPath: '/private/capture-not-ready.jpg',
+      workLocation: 'A 区',
+      workContent: '检查',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime.utc(2026, 8, 3, 9),
+    );
+    await database.markCaptured(
+      captureId: capturedOnly.id,
+      capturedAt: DateTime.utc(2026, 8, 3, 9),
+    );
+
+    final summaries = await database
+        .watchProjectSummaries(status: ProjectLifecycleStatus.active)
+        .first;
+    final recent = summaries.singleWhere(
+      (summary) => summary.project.id == 'recent',
+    );
+    final empty = summaries.singleWhere(
+      (summary) => summary.project.id == 'empty',
+    );
+
+    expect(recent.recentCaptureIds, ['capture-3', 'capture-2', 'capture-1']);
+    expect(recent.recentCaptureIds, hasLength(3));
+    expect(empty.recentCaptureIds, isEmpty);
+  });
+
   test(
     'orders active summaries by pin, last capture, created_at, id',
     () async {

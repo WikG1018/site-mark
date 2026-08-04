@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +13,18 @@ import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_summary.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/platform/platform_services.dart';
+
+class _TestCaptureOutputPaths implements CaptureOutputPaths {
+  _TestCaptureOutputPaths(this.directory);
+
+  final Directory directory;
+
+  @override
+  Future<String> renderedPhotoPath(String captureId) async {
+    return '${directory.path}${Platform.pathSeparator}$captureId.png';
+  }
+}
 
 class _ControlledProjectsDatabase extends AppDatabase {
   _ControlledProjectsDatabase() : super.forTesting(NativeDatabase.memory());
@@ -58,6 +72,78 @@ void main() {
     if (settle) await tester.pumpAndSettle();
   }
 
+  Future<(ProviderContainer, Directory)> pumpProjectList(
+    WidgetTester tester, {
+    required int captures,
+  }) async {
+    database = AppDatabase.forTesting(NativeDatabase.memory());
+    await database.createProject(id: 'recent', name: '最近项目');
+    final outputDirectory = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('sitemark-project-thumbnails-'),
+    ))!;
+    final pngBytes = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    );
+    for (var index = 1; index <= captures; index++) {
+      final id = 'capture-$index';
+      final capturedAt = DateTime.utc(2026, 8, 3, 8, index);
+      final pending = await database.createPendingCapture(
+        id: id,
+        projectId: 'recent',
+        originalPath: '/private/$id.jpg',
+        workLocation: 'A 区',
+        workContent: '检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: capturedAt,
+      );
+      await database.markCaptured(
+        captureId: pending.id,
+        capturedAt: capturedAt,
+      );
+      await database.markRendering(
+        captureId: pending.id,
+        originalSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      await database.markReady(
+        captureId: pending.id,
+        publishedUri: 'content://media/$id',
+      );
+      await tester.runAsync(
+        () => File(
+          '${outputDirectory.path}${Platform.pathSeparator}$id.png',
+        ).writeAsBytes(pngBytes),
+      );
+    }
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        captureOutputPathsProvider.overrideWithValue(
+          _TestCaptureOutputPaths(outputDirectory),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ProjectListScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return (container, outputDirectory);
+  }
+
   // Dispose the widget tree before the test ends so the StreamBuilder cancels
   // its drift stream subscription, preventing a pending-timer failure at
   // teardown (same pattern used by test/widget_test.dart's disposeApp).
@@ -72,7 +158,13 @@ void main() {
     await tester.pump();
     await tester.enterText(find.byKey(const Key('project-search-field')), '东区');
     await tester.pumpAndSettle();
-    expect(find.text('东区厂房改造'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('project-card-east')),
+        matching: find.text('东区厂房改造'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('西区管线整改'), findsNothing);
     await disposeApp(tester);
   });
@@ -81,6 +173,37 @@ void main() {
     await pumpProjects(tester);
     expect(find.byKey(const Key('import-project')), findsNothing);
     await disposeApp(tester);
+  });
+
+  testWidgets('project card is one tap target and shows recent thumbnails', (
+    tester,
+  ) async {
+    final (container, outputDirectory) = await pumpProjectList(
+      tester,
+      captures: 3,
+    );
+    try {
+      expect(
+        find.byKey(const Key('project-thumbnail-capture-3')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('project-thumbnail-capture-2')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('project-thumbnail-capture-1')),
+        findsOneWidget,
+      );
+      expect(find.byType(PopupMenuButton), findsNothing);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      container.dispose();
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(database.close);
+      await tester.runAsync(() => outputDirectory.delete(recursive: true));
+    }
   });
 
   testWidgets(
@@ -234,7 +357,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.descendant(of: find.byType(Card), matching: find.text('东区厂房改造')),
+      find.descendant(
+        of: find.byKey(const Key('project-card-east')),
+        matching: find.text('东区厂房改造'),
+      ),
       findsOneWidget,
     );
     expect(
@@ -316,7 +442,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.descendant(of: find.byType(Card), matching: find.text('项目29')),
+      find.descendant(
+        of: find.byKey(const Key('project-card-project-29')),
+        matching: find.text('项目29'),
+      ),
       findsOneWidget,
     );
 

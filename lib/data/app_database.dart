@@ -364,6 +364,26 @@ class AppDatabase extends _$AppDatabase {
 
     final sql =
         '''
+WITH ranked_ready AS (
+  SELECT
+    c.id,
+    c.project_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY c.project_id
+      ORDER BY COALESCE(c.captured_at, c.created_at) DESC, c.id DESC
+    ) AS row_number
+  FROM captures AS c
+  WHERE c.status = 'ready'
+), recent_ready AS (
+  SELECT project_id, GROUP_CONCAT(id, CHAR(31)) AS recent_capture_ids
+  FROM (
+    SELECT project_id, id
+    FROM ranked_ready
+    WHERE row_number <= 3
+    ORDER BY project_id, row_number
+  )
+  GROUP BY project_id
+)
 SELECT
   p.id,
   p.name,
@@ -378,11 +398,14 @@ SELECT
   p.created_at,
   p.updated_at,
   COUNT(c.id) AS capture_count,
-  MAX(COALESCE(c.captured_at, c.created_at)) AS last_capture_at
+  MAX(COALESCE(c.captured_at, c.created_at)) AS last_capture_at,
+  recent_ready.recent_capture_ids
 FROM projects AS p
 LEFT JOIN captures AS c
   ON c.project_id = p.id
   AND c.status != 'pendingCamera'
+LEFT JOIN recent_ready
+  ON recent_ready.project_id = p.id
 WHERE ${clauses.join('\nAND ')}
 GROUP BY
   p.id,
@@ -396,7 +419,8 @@ GROUP BY
   p.watermark_accent_color_argb,
   p.watermark_font_scale,
   p.created_at,
-  p.updated_at
+  p.updated_at,
+  recent_ready.recent_capture_ids
 ORDER BY
   p.is_pinned DESC,
   CASE WHEN last_capture_at IS NULL THEN 1 ELSE 0 END,
@@ -411,13 +435,20 @@ ORDER BY
       readsFrom: {projects, captureRecords},
     ).watch().map(
       (rows) => rows
-          .map(
-            (row) => ProjectSummary(
+          .map((row) {
+            final recentCaptureIds = row.readNullable<String>(
+              'recent_capture_ids',
+            );
+            return ProjectSummary(
               project: projects.map(row.data),
               captureCount: row.read<int>('capture_count'),
               lastCaptureAt: row.readNullable<DateTime>('last_capture_at'),
-            ),
-          )
+              recentCaptureIds:
+                  recentCaptureIds == null || recentCaptureIds.isEmpty
+                  ? const []
+                  : recentCaptureIds.split(String.fromCharCode(31)),
+            );
+          })
           .toList(growable: false),
     );
   }
