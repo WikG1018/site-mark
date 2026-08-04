@@ -484,6 +484,10 @@ void main() {
   testWidgets('initial load uses a skeleton and does not wait for count', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(720, 1600);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final page = Completer<CapturePage>();
     final count = Completer<int>();
     final source = _FakeCaptureQuerySource(countFuture: count.future)
@@ -498,10 +502,24 @@ void main() {
     await tester.pumpWidget(_pagedHarness(controller, source));
     await tester.pump();
     expect(find.byKey(const Key('capture-list-skeleton')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('capture-list-skeleton')),
+        matching: find.byType(Card),
+      ),
+      findsNWidgets(7),
+    );
+    final contentElement = tester.element(
+      find.byKey(const Key('capture-list-content')),
+    );
 
     page.complete(_page([_summary(0)], hasMore: false));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('row-capture-0')), findsOneWidget);
+    expect(
+      tester.element(find.byKey(const Key('capture-list-content'))),
+      same(contentElement),
+    );
     expect(controller.state.totalCount, isNull);
 
     count.complete(1);

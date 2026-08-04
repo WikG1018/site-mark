@@ -8,6 +8,7 @@ import 'package:sitemark/features/projects/project_summary_card.dart';
 import 'package:sitemark/features/projects/project_status_filter_sheet.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/shared/ui/adaptive_skeleton_count.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
@@ -179,63 +180,72 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
             ],
           ],
         ),
-        body: StreamBuilder<List<ProjectSummary>>(
-          key: ValueKey(
-            'project-summaries-${searching ? 'search' : _status.name}-$_query',
-          ),
-          stream: stream,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return Skeletonizer(
-                key: const Key('project-list-skeleton'),
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                  itemCount: 5,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (_, _) => const _ProjectCardSkeleton(),
+        body: LayoutBuilder(
+          key: const Key('project-list-content'),
+          builder: (context, constraints) =>
+              StreamBuilder<List<ProjectSummary>>(
+                key: ValueKey(
+                  'project-summaries-'
+                  '${searching ? 'search' : _status.name}-$_query',
                 ),
-              );
-            }
-            final summaries = snapshot.data!;
-            if (summaries.isEmpty) {
-              if (_searching && _query.trim().isNotEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Text(
-                      strings.noMatchingProjects,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                      textAlign: TextAlign.center,
+                stream: stream,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    final skeletonCount = adaptiveSkeletonCount(
+                      viewportHeight: constraints.maxHeight,
+                      itemExtent: 118,
+                    );
+                    return Skeletonizer(
+                      key: const Key('project-list-skeleton'),
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                        itemCount: skeletonCount,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (_, _) => const _ProjectCardSkeleton(),
+                      ),
+                    );
+                  }
+                  final summaries = snapshot.data!;
+                  if (summaries.isEmpty) {
+                    if (_searching && _query.trim().isNotEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Text(
+                            strings.noMatchingProjects,
+                            style: Theme.of(context).textTheme.headlineSmall,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
+                    return _EmptyState(strings: strings, status: _status);
+                  }
+                  return ListView.separated(
+                    key: PageStorageKey<String>(
+                      searching
+                          ? 'project-list-search'
+                          : 'project-list-${_status.name}',
                     ),
-                  ),
-                );
-              }
-              return _EmptyState(strings: strings, status: _status);
-            }
-            return ListView.separated(
-              key: PageStorageKey<String>(
-                searching
-                    ? 'project-list-search'
-                    : 'project-list-${_status.name}',
+                    controller: listController,
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                    itemCount: summaries.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final summary = summaries[index];
+                      return ProjectSummaryCard(
+                        key: Key('project-card-${summary.project.id}'),
+                        summary: summary,
+                        outputPaths: outputPaths,
+                        onOpen: () => context.push(
+                          '/projects/${summary.project.id}',
+                          extra: summary.project,
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
-              controller: listController,
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: summaries.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final summary = summaries[index];
-                return ProjectSummaryCard(
-                  key: Key('project-card-${summary.project.id}'),
-                  summary: summary,
-                  outputPaths: outputPaths,
-                  onOpen: () => context.push(
-                    '/projects/${summary.project.id}',
-                    extra: summary.project,
-                  ),
-                );
-              },
-            );
-          },
         ),
       ),
     );

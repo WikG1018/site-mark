@@ -332,10 +332,12 @@ void main() {
     final expected = <ProjectBundleRestoreFailure, String>{
       ProjectBundleRestoreFailure.notSiteMarkBackup: '不是 SiteMark 备份文件',
       ProjectBundleRestoreFailure.unsupportedVersion: '此备份版本暂不支持',
-      ProjectBundleRestoreFailure.corrupted: '备份已损坏或校验不一致',
+      ProjectBundleRestoreFailure.corrupted:
+          '备份已损坏或校验不一致。请选择其他 SiteMark 备份后重试。',
       ProjectBundleRestoreFailure.selectionArchive: '照片分享 ZIP 不能用于恢复项目',
       ProjectBundleRestoreFailure.nameConflict: '项目名称与已有或所选项目冲突',
-      ProjectBundleRestoreFailure.insufficientStorage: '存储空间不足，无法完成操作',
+      ProjectBundleRestoreFailure.insufficientStorage:
+          '存储空间不足，无法完成操作。请释放空间后重试。',
       ProjectBundleRestoreFailure.finalizationPending:
           '恢复数据已安全保存，将在下次启动应用时自动完成发布和显示',
       ProjectBundleRestoreFailure.rolledBack: '恢复失败，本次产生的内容已回滚',

@@ -304,8 +304,8 @@ class AppStrings {
       : '搜索项目、部位、内容、拍摄人、备注、地址或照片编号';
   String get clearSearch => _english ? 'Clear search' : '清空搜索';
   String get captureListLoadFailed => _english
-      ? 'Could not load capture records. Please try again.'
-      : '拍摄记录加载失败，请重试';
+      ? 'Local capture records could not be read. Please try again.'
+      : '无法读取本机拍摄记录，请重试。';
   String get loadMoreFailedRetry =>
       _english ? 'Could not load more. Tap to retry.' : '加载更多失败，点击重试';
   String get newCaptureRecords => _english ? 'New records' : '有新记录';
@@ -577,8 +577,9 @@ class AppStrings {
   String get backupShareFailed => _english
       ? 'Could not share the backup. You can try again.'
       : '无法分享备份，请重试';
-  String get backupFailedFriendly =>
-      _english ? 'Could not create the backup' : '无法生成备份';
+  String get backupFailedFriendly => _english
+      ? 'Project data or files could not be read, so the backup was not created. Try again; if it still fails, back up one project at a time.'
+      : '无法读取项目数据或文件，因而无法生成备份。请重试；若仍失败，请逐个项目备份。';
   String backupProjectFailed(String projectName) => _english
       ? 'Could not back up "$projectName". Try again; if it still fails, select only this project and retry.'
       : '无法备份项目“$projectName”。请重试；若仍失败，请单独选择该项目备份。';
@@ -602,8 +603,8 @@ class AppStrings {
   String get backupUnsupportedVersion =>
       _english ? 'This backup version is not supported' : '此备份版本暂不支持';
   String get backupCorrupted => _english
-      ? 'The backup is corrupted or its checksum does not match'
-      : '备份已损坏或校验不一致';
+      ? 'The backup is corrupted or its checksum does not match. Choose another SiteMark backup and try again.'
+      : '备份已损坏或校验不一致。请选择其他 SiteMark 备份后重试。';
   String get backupSelectionNotRestorable => _english
       ? 'Photo sharing ZIP files cannot restore projects'
       : '照片分享 ZIP 不能用于恢复项目';
@@ -611,8 +612,8 @@ class AppStrings {
       ? 'A project name conflicts with an existing or selected project'
       : '项目名称与已有或所选项目冲突';
   String get backupStorageInsufficient => _english
-      ? 'Not enough storage space to complete this operation'
-      : '存储空间不足，无法完成操作';
+      ? 'Not enough storage space to complete this operation. Free some space and try again.'
+      : '存储空间不足，无法完成操作。请释放空间后重试。';
   String get restoreFinalizationPending => _english
       ? 'Restore data is safely saved. Publication and visibility will finish automatically the next time the app starts.'
       : '恢复数据已安全保存，将在下次启动应用时自动完成发布和显示';

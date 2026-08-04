@@ -8,6 +8,7 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/shared/ui/adaptive_skeleton_count.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 typedef CapturePagedItemBuilder =
@@ -33,7 +34,7 @@ class CapturePagedList extends StatefulWidget {
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 96),
     this.skeletonKey = const Key('capture-list-skeleton'),
     this.contentKey = const Key('capture-list-content'),
-    this.skeletonItemCount = 6,
+    this.skeletonItemCount = 8,
     this.forceInitialLoading = false,
     this.groupKey,
     this.groupHeaderBuilder,
@@ -246,89 +247,91 @@ class _CapturePagedListState extends State<CapturePagedList> {
         !showSkeleton && state.initialError != null && state.rows.isEmpty;
     final showContent = !showSkeleton && !showInitialError;
     final strings = AppStrings.of(context);
-    return AnimatedSwitcher(
-      key: const Key('capture-page-switcher'),
-      duration: AppMotion.durationOf(context, AppMotion.short4),
-      child: Stack(
-        key: const ValueKey('capture-page-surface'),
-        children: [
-          CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              ...widget.sliversBefore,
-              SliverToBoxAdapter(
-                child: AnimatedSwitcher(
-                  duration: AppMotion.durationOf(context, AppMotion.short4),
-                  child: showSkeleton
-                      ? _buildSkeletonStatus()
-                      : showInitialError
-                      ? _buildInitialErrorStatus(strings)
-                      : const SizedBox.shrink(
-                          key: ValueKey('capture-page-ready'),
-                        ),
-                ),
-              ),
-              if (showContent && state.rows.isEmpty)
-                SliverFillRemaining(
-                  key: widget.contentKey,
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        widget.emptyMessage,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ),
-                  ),
-                )
-              else if (showContent)
-                ..._buildContentSlivers(context, state),
-              if (showContent && state.loadingMore)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    child: Center(
-                      child: SizedBox.square(
-                        key: Key('capture-next-page-loading'),
-                        dimension: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  ),
-                )
-              else if (showContent && state.nextPageError != null)
+    return LayoutBuilder(
+      key: widget.contentKey,
+      builder: (context, constraints) => AnimatedSwitcher(
+        key: const Key('capture-page-switcher'),
+        duration: AppMotion.durationOf(context, AppMotion.short4),
+        child: Stack(
+          key: const ValueKey('capture-page-surface'),
+          children: [
+            CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                ...widget.sliversBefore,
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  child: AnimatedSwitcher(
+                    duration: AppMotion.durationOf(context, AppMotion.short4),
+                    child: showSkeleton
+                        ? _buildSkeletonStatus(constraints.maxHeight)
+                        : showInitialError
+                        ? _buildInitialErrorStatus(strings)
+                        : const SizedBox.shrink(
+                            key: ValueKey('capture-page-ready'),
+                          ),
+                  ),
+                ),
+                if (showContent && state.rows.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
                     child: Center(
-                      child: TextButton.icon(
-                        key: const Key('capture-next-page-retry'),
-                        onPressed: widget.controller.loadMore,
-                        icon: const Icon(Icons.refresh),
-                        label: Text(strings.loadMoreFailedRetry),
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          widget.emptyMessage,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ),
+                    ),
+                  )
+                else if (showContent)
+                  ..._buildContentSlivers(context, state),
+                if (showContent && state.loadingMore)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      child: Center(
+                        child: SizedBox.square(
+                          key: Key('capture-next-page-loading'),
+                          dimension: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (showContent && state.nextPageError != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      child: Center(
+                        child: TextButton.icon(
+                          key: const Key('capture-next-page-retry'),
+                          onPressed: widget.controller.loadMore,
+                          icon: const Icon(Icons.refresh),
+                          label: Text(strings.loadMoreFailedRetry),
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
-          if (showContent && state.hasNewer)
-            Positioned(
-              top: 12,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: FilledButton.tonalIcon(
-                  key: const Key('capture-new-records'),
-                  onPressed: _acceptNewer,
-                  icon: const Icon(Icons.arrow_upward),
-                  label: Text(strings.newCaptureRecords),
+              ],
+            ),
+            if (showContent && state.hasNewer)
+              Positioned(
+                top: 12,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: FilledButton.tonalIcon(
+                    key: const Key('capture-new-records'),
+                    onPressed: _acceptNewer,
+                    icon: const Icon(Icons.arrow_upward),
+                    label: Text(strings.newCaptureRecords),
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -342,7 +345,6 @@ class _CapturePagedListState extends State<CapturePagedList> {
     if (groupKey == null || groupHeaderBuilder == null) {
       return [
         SliverPadding(
-          key: widget.contentKey,
           padding: widget.padding,
           sliver: SliverList.separated(
             itemCount: state.rows.length,
@@ -367,7 +369,6 @@ class _CapturePagedListState extends State<CapturePagedList> {
     return [
       for (var groupIndex = 0; groupIndex < groups.length; groupIndex++)
         SliverPadding(
-          key: groupIndex == 0 ? widget.contentKey : null,
           padding: EdgeInsets.fromLTRB(
             padding.left,
             groupIndex == 0 ? padding.top : 0,
@@ -422,17 +423,22 @@ class _CapturePagedListState extends State<CapturePagedList> {
     return widget.itemBuilder(context, state.rows[index], state.rows);
   }
 
-  Widget _buildSkeletonStatus() {
+  Widget _buildSkeletonStatus(double viewportHeight) {
+    final skeletonCount = adaptiveSkeletonCount(
+      viewportHeight: viewportHeight,
+      itemExtent: 118,
+      max: widget.skeletonItemCount,
+    );
     return Skeletonizer(
       key: widget.skeletonKey,
       child: Padding(
         padding: widget.padding,
         child: Column(
           children: List.generate(
-            widget.skeletonItemCount,
+            skeletonCount,
             (index) => Padding(
               padding: EdgeInsets.only(
-                bottom: index == widget.skeletonItemCount - 1 ? 0 : 10,
+                bottom: index == skeletonCount - 1 ? 0 : 10,
               ),
               child: const _CaptureCardSkeleton(),
             ),

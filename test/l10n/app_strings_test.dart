@@ -54,6 +54,8 @@ final _stringReaders = <String, _StringReader>{
   'backupFailedFriendly': (strings) => strings.backupFailedFriendly,
   'backupProjectFailed': (strings) => strings.backupProjectFailed(_projectName),
   'backupStorageInsufficient': (strings) => strings.backupStorageInsufficient,
+  'backupCorrupted': (strings) => strings.backupCorrupted,
+  'captureListLoadFailed': (strings) => strings.captureListLoadFailed,
   'projectStatusActive': (strings) => strings.projectStatusActive,
   'projectStatusCompleted': (strings) => strings.projectStatusCompleted,
   'projectStatusArchived': (strings) => strings.projectStatusArchived,
@@ -102,9 +104,11 @@ const expectedZh = <String, String>{
   'captureTemplateLimitReached': '此项目已达到 100 个模板上限',
   'captureTemplateInvalidCharacter': '模板文字包含不支持的字符',
   'captureTemplateNotFound': '模板已不存在',
-  'backupFailedFriendly': '无法生成备份',
+  'backupFailedFriendly': '无法读取项目数据或文件，因而无法生成备份。请重试；若仍失败，请逐个项目备份。',
   'backupProjectFailed': '无法备份项目“Project Alpha”。请重试；若仍失败，请单独选择该项目备份。',
-  'backupStorageInsufficient': '存储空间不足，无法完成操作',
+  'backupStorageInsufficient': '存储空间不足，无法完成操作。请释放空间后重试。',
+  'backupCorrupted': '备份已损坏或校验不一致。请选择其他 SiteMark 备份后重试。',
+  'captureListLoadFailed': '无法读取本机拍摄记录，请重试。',
   'projectStatusActive': '进行中',
   'projectStatusCompleted': '已完成',
   'projectStatusArchived': '已归档',
@@ -155,11 +159,16 @@ const expectedEn = <String, String>{
   'captureTemplateInvalidCharacter':
       'Template text cannot contain unsupported characters',
   'captureTemplateNotFound': 'Template no longer exists',
-  'backupFailedFriendly': 'Could not create the backup',
+  'backupFailedFriendly':
+      'Project data or files could not be read, so the backup was not created. Try again; if it still fails, back up one project at a time.',
   'backupProjectFailed':
       'Could not back up "Project Alpha". Try again; if it still fails, select only this project and retry.',
   'backupStorageInsufficient':
-      'Not enough storage space to complete this operation',
+      'Not enough storage space to complete this operation. Free some space and try again.',
+  'backupCorrupted':
+      'The backup is corrupted or its checksum does not match. Choose another SiteMark backup and try again.',
+  'captureListLoadFailed':
+      'Local capture records could not be read. Please try again.',
   'projectStatusActive': 'Active',
   'projectStatusCompleted': 'Completed',
   'projectStatusArchived': 'Archived',

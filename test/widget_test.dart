@@ -164,7 +164,10 @@ void main() {
 
   /// Pumps [MyApp] with the standard widget-test fakes and a single ready
   /// capture under `project-1` so the all-records surface has content to show.
-  Future<void> pumpAppWithRecords(WidgetTester tester) async {
+  Future<void> pumpAppWithRecords(
+    WidgetTester tester, {
+    Locale locale = const Locale('zh'),
+  }) async {
     await seedReadyCapture();
     final images = _WidgetTestImagePipeline();
     final share = _WidgetTestShareService();
@@ -179,7 +182,7 @@ void main() {
     await tester.pumpWidget(
       MyApp(
         database: database,
-        initialLocale: const Locale('zh'),
+        initialLocale: locale,
         platformServices: platform,
         imagePipeline: images,
         outputPaths: outputPaths,
@@ -216,6 +219,39 @@ void main() {
     expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
     await disposeApp(tester);
   });
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('real root pages have no overflow at 360dp and 2x text in '
+        '${locale.languageCode}', (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await pumpAppWithRecords(tester, locale: locale);
+      expect(tester.getSize(find.byType(MaterialApp)), const Size(360, 800));
+      expect(find.byKey(const Key('root-dock')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('root-destination-records')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('root-destination-settings')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('settings-group-capture')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('root-destination-projects')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('project-title')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await disposeApp(tester);
+    });
+  }
 
   testWidgets('creates a project and returns to the project list', (
     tester,

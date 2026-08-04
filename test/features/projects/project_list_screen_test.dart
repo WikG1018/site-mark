@@ -223,7 +223,12 @@ void main() {
   testWidgets(
     'home first frame shows Skeletonizer without real project cards',
     (tester) async {
-      database = _ControlledProjectsDatabase();
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controlledDatabase = _ControlledProjectsDatabase();
+      database = controlledDatabase;
       addTearDown(database.close);
       await tester.pumpWidget(
         ProviderScope(
@@ -242,10 +247,28 @@ void main() {
         ),
       );
 
-      // Loading state shows a fixed skeleton layout but no real project data.
+      // Loading state fills this viewport without inventing off-screen rows.
       expect(find.byKey(const Key('project-list-skeleton')), findsOneWidget);
+      final skeletonList = tester.widget<ListView>(
+        find.descendant(
+          of: find.byKey(const Key('project-list-skeleton')),
+          matching: find.byType(ListView),
+        ),
+      );
+      // Seven rows plus the six separators inserted by ListView.separated.
+      expect(skeletonList.childrenDelegate.estimatedChildCount, 13);
+      final contentElement = tester.element(
+        find.byKey(const Key('project-list-content')),
+      );
       expect(find.text('东区厂房改造'), findsNothing);
       expect(find.text('西区管线整改'), findsNothing);
+
+      controlledDatabase.projectEvents.add(const []);
+      await tester.pumpAndSettle();
+      expect(
+        tester.element(find.byKey(const Key('project-list-content'))),
+        same(contentElement),
+      );
       await disposeApp(tester);
     },
   );
