@@ -10,9 +10,11 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
+import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -645,6 +647,20 @@ void main() {
               ),
             ],
           ),
+          GoRoute(
+            path: '/settings/backup-restore/backup',
+            builder: (_, state) {
+              final arguments = state.extra as ProjectBackupSelectionArguments;
+              return Scaffold(
+                body: Column(
+                  children: [
+                    for (final projectId in arguments.initialProjectIds)
+                      SizedBox(key: Key('backup-initial-$projectId')),
+                  ],
+                ),
+              );
+            },
+          ),
         ],
       );
       addTearDown(router.dispose);
@@ -875,6 +891,156 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets(
+    'project detail uses one compact action sheet and preselects only itself for backup',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-1', name: '东区项目');
+      await database.createProject(id: 'project-2', name: '西区项目');
+      await seedReadyCaptureForFilterTest(
+        database,
+        id: 'capture-a',
+        projectId: 'project-1',
+        capturedAt: DateTime(2026, 7, 16, 9),
+      );
+
+      await tester.pumpWidget(
+        pumpProjectDetail(database, 'project-1', withRouter: true),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('此项目水印设置'), findsNothing);
+      expect(find.byTooltip('备份项目'), findsNothing);
+      expect(find.byKey(const Key('project-watermark-action')), findsNothing);
+      expect(find.byKey(const Key('project-backup-action')), findsNothing);
+      expect(find.byKey(const Key('project-actions')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byKey(const Key('edit-captures')),
+        ),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('edit-captures')), findsOneWidget);
+      expect(find.byKey(const Key('project-summary')), findsOneWidget);
+      expect(find.text('1 张照片'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-action-sheet')), findsOneWidget);
+      expect(find.text('此项目水印设置'), findsOneWidget);
+      expect(find.text('备份项目'), findsOneWidget);
+      expect(find.text('重命名项目'), findsOneWidget);
+      expect(find.byKey(const Key('pin-project')), findsOneWidget);
+      expect(find.byKey(const Key('complete-project')), findsOneWidget);
+      expect(find.byKey(const Key('archive-project')), findsOneWidget);
+      expect(find.byKey(const Key('reopen-project')), findsNothing);
+
+      final bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+      expect(bottomSheet.showDragHandle, isTrue);
+      expect(
+        find.ancestor(
+          of: find.byKey(const Key('project-action-sheet')),
+          matching: find.byType(SafeArea),
+        ),
+        findsWidgets,
+      );
+      final deleteIcon = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const Key('delete-project')),
+          matching: find.byIcon(Icons.delete_outline),
+        ),
+      );
+      expect(
+        deleteIcon.color,
+        Theme.of(tester.element(find.byType(Scaffold).first)).colorScheme.error,
+      );
+
+      await tester.tap(find.byKey(const Key('project-backup-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backup-initial-project-1')), findsOneWidget);
+      expect(find.byKey(const Key('backup-initial-project-2')), findsNothing);
+      await unmountTree(tester);
+    },
+  );
+
+  testWidgets('project action sheet follows lifecycle and pin state', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'active', name: '进行中');
+    await database.createProject(
+      id: 'completed',
+      name: '已完成',
+      lifecycleStatus: ProjectLifecycleStatus.completed,
+      isPinned: true,
+    );
+    await database.createProject(
+      id: 'archived',
+      name: '已归档',
+      lifecycleStatus: ProjectLifecycleStatus.archived,
+    );
+
+    Future<void> expectActions(
+      String projectId, {
+      required List<Key> present,
+      required List<Key> absent,
+    }) async {
+      await tester.pumpWidget(pumpProjectDetail(database, projectId));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('reopen-project')), findsNothing);
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+      final sheet = find.byKey(const Key('project-action-sheet'));
+      for (final key in present) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(key)),
+          findsOneWidget,
+        );
+      }
+      for (final key in absent) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(key)),
+          findsNothing,
+        );
+      }
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+    }
+
+    await expectActions(
+      'active',
+      present: const [
+        Key('pin-project'),
+        Key('complete-project'),
+        Key('archive-project'),
+      ],
+      absent: const [Key('unpin-project'), Key('reopen-project')],
+    );
+    await expectActions(
+      'completed',
+      present: const [
+        Key('unpin-project'),
+        Key('reopen-project'),
+        Key('archive-project'),
+      ],
+      absent: const [Key('pin-project'), Key('complete-project')],
+    );
+    await expectActions(
+      'archived',
+      present: const [Key('pin-project'), Key('reopen-project')],
+      absent: const [
+        Key('unpin-project'),
+        Key('complete-project'),
+        Key('archive-project'),
+      ],
+    );
     await unmountTree(tester);
   });
 

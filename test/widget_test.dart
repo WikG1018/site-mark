@@ -262,8 +262,10 @@ void main() {
 
     await tester.tap(find.text('东区厂房改造'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('此项目水印设置'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.tune_outlined));
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('此项目水印设置'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('project-watermark-action')));
     // Pump until the watermark settings screen's FutureBuilder resolves and
     // the slider is visible.
     await tester.pumpAndSettle();
@@ -361,7 +363,9 @@ void main() {
     expect(find.textContaining('SM-'), findsNothing);
     expect(find.text('已完成'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.archive_outlined));
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-backup-action')));
     await tester.pumpAndSettle();
     expect(find.text('备份项目'), findsOneWidget);
     expect(find.text('已选择 1 个项目'), findsOneWidget);
@@ -802,6 +806,8 @@ void main() {
       expect(find.byKey(const Key('edit-captures')), findsOneWidget);
       expect(find.byType(CaptureRecordCard), findsWidgets);
 
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('reopen-project')));
       await tester.pumpAndSettle();
 
@@ -865,7 +871,12 @@ void main() {
 
     await tester.tap(find.byKey(const Key('project-actions')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('project-lifecycle-project-1')));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('project-action-sheet')),
+        matching: find.byKey(const Key('reopen-project')),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);

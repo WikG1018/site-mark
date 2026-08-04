@@ -415,6 +415,7 @@ class AppStrings {
 
   // Capture list edit mode and batch actions (Task 4)
   String get editRecords => _english ? 'Edit records' : '编辑记录';
+  String get selectRecords => _english ? 'Select' : '选择';
   String get done => _english ? 'Done' : '完成';
   String get selectAll => _english ? 'Select all' : '全选';
   String get deselectAll => _english ? 'Deselect all' : '取消全选';

@@ -58,6 +58,35 @@ void main() {
         expect(find.byType(ProjectDetailScreen), findsOneWidget);
         expect(find.byKey(const Key('root-dock')), findsNothing);
 
+        await tester.tap(find.byKey(const Key('project-actions')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('project-action-sheet')), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('project-action-sheet')), findsNothing);
+        expect(find.byType(ProjectDetailScreen), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('search-captures')));
+        await tester.pump();
+        expect(find.byKey(const Key('capture-search-field')), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        await tester.pump(AppMotion.short4);
+        await tester.pump();
+        expect(find.byKey(const Key('capture-search-field')), findsNothing);
+        expect(find.byType(ProjectDetailScreen), findsOneWidget);
+
+        await tester.tap(find.byKey(const Key('edit-captures')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('select-all-captures')), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('select-all-captures')), findsNothing);
+        expect(find.byType(ProjectDetailScreen), findsOneWidget);
+
         await tester.binding.handlePopRoute();
         await tester.pump();
         await tester.pump(AppMotion.pageTransition);
