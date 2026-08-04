@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
@@ -53,20 +55,31 @@ class CaptureFilterSheet extends StatefulWidget {
 }
 
 class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
-  late CaptureFilter _draft = widget.initial;
-  late CaptureDateOptions _options = widget.options;
+  late CaptureFilter _draft;
+  CaptureDateOptions _options = const CaptureDateOptions();
   int _optionsGeneration = 0;
 
   void _update(CaptureFilter next) => setState(() => _draft = next);
 
+  @override
+  void initState() {
+    super.initState();
+    _draft = widget.initial;
+    unawaited(_loadOptions(widget.initial));
+  }
+
   Future<void> _updateAndReload(CaptureFilter next) async {
-    final generation = ++_optionsGeneration;
     setState(() {
       _draft = next;
       _options = const CaptureDateOptions();
     });
+    await _loadOptions(next);
+  }
+
+  Future<void> _loadOptions(CaptureFilter draft) async {
+    final generation = ++_optionsGeneration;
     try {
-      final options = await widget.optionsLoader(next);
+      final options = await widget.optionsLoader(draft);
       if (!mounted || generation != _optionsGeneration) return;
       setState(() => _options = options);
     } catch (_) {

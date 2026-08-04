@@ -56,8 +56,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     _querySource =
         widget.querySource ?? ref.read(captureQueryRepositoryProvider);
     _pagerController = CapturePagerController(_querySource, pageSize: 50);
-    unawaited(_pagerController.setQuery(_query));
-    unawaited(_loadDateOptions(_query));
+    _startQuery();
     _pagerController.addListener(_onPagerChanged);
     _selectionController.addListener(_onSelectionChanged);
   }
@@ -102,6 +101,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
 
   void _startQuery() {
     final query = _query;
+    _dateOptions = const CaptureDateOptions();
     unawaited(_pagerController.setQuery(query));
     unawaited(_loadDateOptions(query));
   }

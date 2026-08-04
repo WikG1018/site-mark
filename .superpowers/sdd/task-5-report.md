@@ -54,22 +54,33 @@ flutter test test/features/capture/capture_filter_ui_test.dart --plain-name "Eng
 
 结果：退出码 1；旧实现找不到 `Month 8`，只显示无上下文的数字 `8`，四类删除按钮也共用 `Remove filter`。修复后英文显示 `Month 8` / `Day 4`，中文保持 `8月` / `4日`；项目、年份、月份、日期使用各自的本地化删除提示，语义树中月份和日期标签各出现一次。
 
+### RED 5：增量审查修复——应用后立即重开
+
+命令：
+
+```text
+flutter test test/features/capture/capture_filter_ui_test.dart --plain-name "reopening after apply never shows date options from the previous query"
+```
+
+结果：退出码 1；从全部项目选择项目 A 并应用后，父页面的新日期请求保持延迟，立即重开面板仍找到旧查询的 `filter-year-2025`。修复为父页面在 query/filter/search 改变时同步清空 `_dateOptions`，面板从空候选开始并在 `initState` 主动加载当前 `initial` 草稿；initial 请求沿用 generation、mounted 和错误守卫。新增覆盖证明旧候选立即消失，面板自己的真实 2026 候选返回后才显示；同时覆盖 initial 慢响应后快速切项目、initial 失败和 initial 完成时已销毁。
+
 ## GREEN 与回归验证
 
-- 指定三文件：67/67 通过。
+- 指定三文件：68/68 通过。
   - `capture_filter_ui_test.dart`
   - `capture_search_paging_ui_test.dart`
   - `capture_batch_paged_selection_test.dart`
 - 相关分页、查询过滤、详情、全屏、选择和 Task 2 导航测试：104/104 通过。
 - `flutter analyze`：无问题。
-- 完整 `flutter test`：788/788 通过。
+- 完整 `flutter test`：789/789 通过。
 - `git diff --check`：通过。
 
-特殊边界测试已覆盖：取消不污染页面、完整筛选应用、真实数据库年月日候选、父级切换异步刷新、慢旧请求竞态、错误及销毁安全、当前已选日期保留、条件标签级联删除、中英文标签及字段级删除语义、未知项目标签、360dp 无溢出、3× 字号日期 header、搜索时无筛选入口、筛选清空选择、减少动态效果、最后 8 条分页触发、`watchByIds` 保持、`capturedAt` 为空时回退 `createdAt`、跨分页同日标题不重复且记录不遗漏、header pinned。
+特殊边界测试已覆盖：取消不污染页面、完整筛选应用、应用后立即重开、真实数据库年月日候选、首次打开主动刷新、父级切换异步刷新、initial 与用户选择竞态、慢旧请求竞态、错误及销毁安全、当前已选日期保留、条件标签级联删除、中英文标签及字段级删除语义、未知项目标签、360dp 无溢出、3× 字号日期 header、搜索时无筛选入口、筛选清空选择、减少动态效果、最后 8 条分页触发、`watchByIds` 保持、`capturedAt` 为空时回退 `createdAt`、跨分页同日标题不重复且记录不遗漏、header pinned。
 
 ## 交付约束
 
 - 初始提交：`72fd86d6df82651bbbaa38ba8e799d652e3752b3` (`feat: add record filter sheet and date groups`)
-- 审查修复提交标题：`fix: refresh record filter options`
+- 首轮审查修复：`fbaf7096acdcbe31a55a54aece81356dd27292a6` (`fix: refresh record filter options`)
+- 增量审查修复提交标题：`fix: refresh filter options on open`
 - 未推送。
 - 未开始 Task 6。
