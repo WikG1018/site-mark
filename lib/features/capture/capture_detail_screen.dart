@@ -458,35 +458,81 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     final database = ref.read(databaseProvider);
     final mediaService = ref.read(captureMediaServiceProvider);
     final project = await database.projectById(projectId);
-    if (!mounted ||
-        _projectId != projectId ||
-        _captureId != captureId ||
-        project?.lifecycleStatus != ProjectLifecycleStatus.active) {
-      return null;
-    }
+    if (!_matchesActionScope(projectId, captureId)) return null;
     final capture = await database.captureById(captureId);
-    if (!mounted ||
-        capture == null ||
-        capture.projectId != projectId ||
-        (capture.status != CaptureStatus.ready &&
-            capture.status != CaptureStatus.failed)) {
+    if (!_matchesActionScope(projectId, captureId)) return null;
+    if (!_baseActionAllowed(action, project, capture)) return null;
+
+    OriginalPhotoState? inspectedOriginalState;
+    if (_requiresRetainedOriginal(action)) {
+      final info = await mediaService.inspect(capture!);
+      if (!_matchesActionScope(projectId, captureId)) return null;
+      inspectedOriginalState = info.originalState;
+      if (inspectedOriginalState != OriginalPhotoState.retained) return null;
+    }
+
+    // Keep the final database consistency window short. File inspection above
+    // never runs inside this transaction.
+    final latest = await database.transaction(() async {
+      final latestProject = await database.projectById(projectId);
+      if (!_matchesActionScope(projectId, captureId)) return null;
+      final latestCapture = await database.captureById(captureId);
+      if (!_matchesActionScope(projectId, captureId)) return null;
+      if (latestProject == null || latestCapture == null) return null;
+      return (project: latestProject, capture: latestCapture);
+    });
+    if (!_matchesActionScope(projectId, captureId) || latest == null) {
       return null;
     }
-    if (action == CaptureDetailAction.deleteRecord) return capture;
-    if (action == CaptureDetailAction.edit &&
-        capture.status != CaptureStatus.ready) {
+    if (!_finalActionAllowed(
+      action,
+      latest.project,
+      latest.capture,
+      inspectedOriginalState,
+    )) {
       return null;
     }
-    if (capture.originalDeletedAt != null) return null;
-    final info = await mediaService.inspect(capture);
-    if (!mounted ||
-        _projectId != projectId ||
-        _captureId != captureId ||
-        info.originalState != OriginalPhotoState.retained) {
-      return null;
-    }
-    return capture;
+    return latest.capture;
   }
+
+  bool _matchesActionScope(String projectId, String captureId) =>
+      mounted && _projectId == projectId && _captureId == captureId;
+
+  bool _baseActionAllowed(
+    CaptureDetailAction action,
+    Project? project,
+    CaptureRecord? capture,
+  ) {
+    if (project?.lifecycleStatus != ProjectLifecycleStatus.active ||
+        capture == null ||
+        capture.projectId != project?.id) {
+      return false;
+    }
+    final statusAllowed = switch (action) {
+      CaptureDetailAction.edit => capture.status == CaptureStatus.ready,
+      CaptureDetailAction.deleteOriginal || CaptureDetailAction.deleteRecord =>
+        capture.status == CaptureStatus.ready ||
+            capture.status == CaptureStatus.failed,
+    };
+    if (!statusAllowed) return false;
+    return !_requiresRetainedOriginal(action) ||
+        capture.originalDeletedAt == null;
+  }
+
+  bool _finalActionAllowed(
+    CaptureDetailAction action,
+    Project project,
+    CaptureRecord capture,
+    OriginalPhotoState? inspectedOriginalState,
+  ) {
+    return _baseActionAllowed(action, project, capture) &&
+        (!_requiresRetainedOriginal(action) ||
+            inspectedOriginalState == OriginalPhotoState.retained);
+  }
+
+  bool _requiresRetainedOriginal(CaptureDetailAction action) =>
+      action == CaptureDetailAction.edit ||
+      action == CaptureDetailAction.deleteOriginal;
 
   Future<void> _retry() async {
     await ref.read(captureBackgroundSchedulerProvider).retry(_captureId);

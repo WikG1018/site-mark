@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show SemanticsAction;
 
 import 'package:drift/native.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
@@ -17,11 +19,11 @@ import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
-  late AppDatabase database;
+  late _DetailDatabase database;
   late _DetailFiles files;
   late _DetailPlatform platform;
   late _DetailPaths paths;
-  late CaptureMediaService media;
+  late _DetailMediaService media;
 
   Future<void> pumpReadyDetail(
     WidgetTester tester, {
@@ -33,7 +35,7 @@ void main() {
     CaptureStatus status = CaptureStatus.ready,
     ProjectLifecycleStatus projectStatus = ProjectLifecycleStatus.active,
   }) async {
-    database = AppDatabase.forTesting(NativeDatabase.memory());
+    database = _DetailDatabase();
     addTearDown(database.close);
     await database.createProject(id: 'project-1', name: '东区厂房改造');
     final pending = await database.createPendingCapture(
@@ -94,7 +96,7 @@ void main() {
         mimeType: 'image/jpeg',
       );
     paths = _DetailPaths();
-    media = CaptureMediaService(
+    media = _DetailMediaService(
       database: database,
       platform: platform,
       outputPaths: paths,
@@ -566,6 +568,160 @@ void main() {
     await disposeDetail(tester);
   });
 
+  testWidgets('edit revalidates project after delayed file inspection', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    final releaseInspect = media.delayNextInspect();
+
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-record')));
+    await tester.pump();
+    await tester.pump();
+    expect(media.inspectBlocked, isTrue);
+
+    await database.updateProjectLifecycleStatus(
+      projectId: 'project-1',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.completed,
+    );
+    releaseInspect.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CaptureDetailScreen), findsOneWidget);
+    await disposeDetail(tester);
+  });
+
+  testWidgets(
+    'delete original revalidates capture after delayed file inspection',
+    (tester) async {
+      await pumpReadyDetail(tester, originalExists: true);
+      final releaseInspect = media.delayNextInspect();
+
+      await tester.tap(find.byKey(const Key('capture-detail-actions')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('delete-original')));
+      await tester.pump();
+      await tester.pump();
+      expect(media.inspectBlocked, isTrue);
+
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 8, 4, 10),
+      );
+      releaseInspect.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('将在 5 秒后清理 1 张原图'), findsNothing);
+      await tester.pump(const Duration(seconds: 6));
+      await tester.pumpAndSettle();
+      expect(media.clearOriginalCalls, 0);
+      expect(files.existing, contains('/private/original.jpg'));
+      await disposeDetail(tester);
+    },
+  );
+
+  testWidgets('delete record revalidates a delayed project read', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    final releaseProjectRead = database.delayNextProjectRead();
+
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-record')));
+    await tester.pump();
+    await tester.pump();
+    expect(database.projectReadBlocked, isTrue);
+
+    await database.updateProjectLifecycleStatus(
+      projectId: 'project-1',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.archived,
+    );
+    releaseProjectRead.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(media.deleteAllCalls, 0);
+    expect(await database.captureById('capture-1'), isNotNull);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('delete record revalidates a delayed capture read', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    final releaseCaptureRead = database.delayNextCaptureRead();
+
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-record')));
+    await tester.pump();
+    await tester.pump();
+    expect(database.captureReadBlocked, isTrue);
+
+    await database.markCaptured(
+      captureId: 'capture-1',
+      capturedAt: DateTime(2026, 8, 4, 10),
+    );
+    releaseCaptureRead.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(media.deleteAllCalls, 0);
+    expect(await database.captureById('capture-1'), isNotNull);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('delete original timer revalidates before clearing files', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-original')));
+    await tester.pump();
+    expect(find.text('将在 5 秒后清理 1 张原图'), findsOneWidget);
+
+    await database.markCaptured(
+      captureId: 'capture-1',
+      capturedAt: DateTime(2026, 8, 4, 10),
+    );
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+
+    expect(media.clearOriginalCalls, 0);
+    expect(files.existing, contains('/private/original.jpg'));
+    await disposeDetail(tester);
+  });
+
+  testWidgets('delete record dialog revalidates after confirmation', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-record')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+
+    await database.markCaptured(
+      captureId: 'capture-1',
+      capturedAt: DateTime(2026, 8, 4, 10),
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(media.deleteAllCalls, 0);
+    expect(await database.captureById('capture-1'), isNotNull);
+    expect(files.existing, contains('/private/original.jpg'));
+    await disposeDetail(tester);
+  });
+
   testWidgets('failed original deletion does not clear the original', (
     tester,
   ) async {
@@ -592,6 +748,100 @@ void main() {
 
     await disposeDetail(tester);
   });
+}
+
+class _DetailDatabase extends AppDatabase {
+  _DetailDatabase() : super.forTesting(NativeDatabase.memory());
+
+  Completer<void>? _projectReadRelease;
+  Completer<void>? _projectReadStarted;
+  Completer<void>? _captureReadRelease;
+  Completer<void>? _captureReadStarted;
+
+  Completer<void> delayNextProjectRead() {
+    final release = Completer<void>();
+    _projectReadRelease = release;
+    _projectReadStarted = Completer<void>();
+    return release;
+  }
+
+  Completer<void> delayNextCaptureRead() {
+    final release = Completer<void>();
+    _captureReadRelease = release;
+    _captureReadStarted = Completer<void>();
+    return release;
+  }
+
+  bool get projectReadBlocked => _projectReadStarted?.isCompleted ?? false;
+  bool get captureReadBlocked => _captureReadStarted?.isCompleted ?? false;
+
+  @override
+  Future<Project?> projectById(String projectId) async {
+    final snapshot = await super.projectById(projectId);
+    final release = _projectReadRelease;
+    if (release == null) return snapshot;
+    _projectReadRelease = null;
+    _projectReadStarted?.complete();
+    await release.future;
+    return snapshot;
+  }
+
+  @override
+  Future<CaptureRecord?> captureById(String captureId) async {
+    final snapshot = await super.captureById(captureId);
+    final release = _captureReadRelease;
+    if (release == null) return snapshot;
+    _captureReadRelease = null;
+    _captureReadStarted?.complete();
+    await release.future;
+    return snapshot;
+  }
+}
+
+class _DetailMediaService extends CaptureMediaService {
+  _DetailMediaService({
+    required super.database,
+    required super.platform,
+    required super.outputPaths,
+    required super.files,
+  });
+
+  Completer<void>? _inspectRelease;
+  Completer<void>? _inspectStarted;
+  int clearOriginalCalls = 0;
+  int deleteAllCalls = 0;
+
+  Completer<void> delayNextInspect() {
+    final release = Completer<void>();
+    _inspectRelease = release;
+    _inspectStarted = Completer<void>();
+    return release;
+  }
+
+  bool get inspectBlocked => _inspectStarted?.isCompleted ?? false;
+
+  @override
+  Future<CaptureFileInfo> inspect(CaptureRecord record) async {
+    final snapshot = await super.inspect(record);
+    final release = _inspectRelease;
+    if (release == null) return snapshot;
+    _inspectRelease = null;
+    _inspectStarted?.complete();
+    await release.future;
+    return snapshot;
+  }
+
+  @override
+  Future<CaptureActionResult> clearOriginals(List<String> captureIds) {
+    clearOriginalCalls += 1;
+    return super.clearOriginals(captureIds);
+  }
+
+  @override
+  Future<CaptureActionResult> deleteAll(List<String> captureIds) {
+    deleteAllCalls += 1;
+    return super.deleteAll(captureIds);
+  }
 }
 
 class _DetailFiles implements PrivateFileStore {
