@@ -31,7 +31,13 @@ class GlassSurface extends StatelessWidget {
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: .55)),
         borderRadius: borderRadius,
       ),
-      child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+      child: DefaultTextStyle.merge(
+        style: TextStyle(color: scheme.onSurface),
+        child: IconTheme.merge(
+          data: IconThemeData(color: scheme.onSurface),
+          child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+        ),
+      ),
     );
     if (blurEnabled) {
       content = BackdropFilter(

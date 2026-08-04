@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
@@ -33,4 +33,46 @@ void main() {
     await tester.tap(find.text('项目'));
     expect(tapped, isTrue);
   });
+
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'glass surface provides onSurface foregrounds in $brightness mode',
+      (tester) async {
+        final scheme = ColorScheme.fromSeed(
+          seedColor: const Color(0xff005a9c),
+          brightness: brightness,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(colorScheme: scheme),
+            home: GlassSurface(
+              child: const Column(
+                children: [Text('content'), Icon(Icons.photo)],
+              ),
+            ),
+          ),
+        );
+
+        final foregrounds = find.descendant(
+          of: find.byType(GlassSurface),
+          matching: find.byType(DefaultTextStyle),
+        );
+        expect(foregrounds, findsOneWidget);
+        expect(
+          tester.widget<DefaultTextStyle>(foregrounds).style.color,
+          scheme.onSurface,
+        );
+
+        final iconThemes = find.descendant(
+          of: find.byType(GlassSurface),
+          matching: find.byType(IconTheme),
+        );
+        expect(iconThemes, findsOneWidget);
+        expect(
+          tester.widget<IconTheme>(iconThemes).data.color,
+          scheme.onSurface,
+        );
+      },
+    );
+  }
 }
