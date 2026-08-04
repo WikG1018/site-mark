@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -81,7 +82,122 @@ List<String> paintedFilePaths(WidgetTester tester) => tester
     .map((provider) => provider.file.path)
     .toList(growable: false);
 
+Future<void> pumpFullscreenPhoto(
+  WidgetTester tester,
+  CaptureFullscreenPhoto photo,
+) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: CaptureFullscreenScreen(photos: [photo]),
+      ),
+    ),
+  );
+}
+
+final class _FailingImageProvider extends ImageProvider<_FailingImageProvider> {
+  const _FailingImageProvider(this.id);
+
+  final int id;
+
+  @override
+  Future<_FailingImageProvider> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+    _FailingImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return OneFrameImageStreamCompleter(
+      Future<ImageInfo>.error(StateError('preview $id failed to decode')),
+    );
+  }
+}
+
+ImageProvider<Object> corruptPreview(int seed) => _FailingImageProvider(seed);
+
+Future<List<Object>> pumpImageFrames(WidgetTester tester) async {
+  final errors = <Object>[];
+  for (var frame = 0; frame < 8; frame++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+    final error = tester.takeException();
+    if (error != null) errors.add(error as Object);
+  }
+  return errors;
+}
+
 void main() {
+  testWidgets('corrupt preview with null target ends on missing photo', (
+    tester,
+  ) async {
+    await pumpFullscreenPhoto(
+      tester,
+      CaptureFullscreenPhoto(
+        id: 'capture-null',
+        previewImage: corruptPreview(1),
+        resolvePath: () async => null,
+      ),
+    );
+    final errors = await pumpImageFrames(tester);
+
+    expect(errors, isEmpty);
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+  });
+
+  testWidgets('corrupt preview with missing target ends on missing photo', (
+    tester,
+  ) async {
+    await pumpFullscreenPhoto(
+      tester,
+      CaptureFullscreenPhoto(
+        id: 'capture-missing',
+        previewImage: corruptPreview(2),
+        resolvePath: () async => '/definitely/missing/photo.jpg',
+      ),
+    );
+    final errors = await pumpImageFrames(tester);
+
+    expect(errors, isEmpty);
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+  });
+
+  testWidgets('corrupt preview yields to a decoded valid target', (
+    tester,
+  ) async {
+    final validTarget = File('assets/branding/sitemark-icon.png').absolute;
+
+    await pumpFullscreenPhoto(
+      tester,
+      CaptureFullscreenPhoto(
+        id: 'capture-valid-target',
+        previewImage: corruptPreview(3),
+        resolvePath: () async => validTarget.path,
+      ),
+    );
+    final errors = await pumpImageFrames(tester);
+
+    expect(errors, isEmpty);
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+    expect(
+      tester
+          .widgetList<RawImage>(find.byType(RawImage))
+          .any((image) => image.image != null),
+      isTrue,
+    );
+  });
+
   testWidgets('fullscreen paints preview on its first black frame', (
     tester,
   ) async {
@@ -169,14 +285,20 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
-    await tester.pump();
+    final errors = await pumpImageFrames(tester);
 
+    expect(errors, isEmpty);
     expect(
       find.byWidgetPredicate(
         (widget) => widget is Image && identical(widget.image, preview),
       ),
       findsOneWidget,
+    );
+    expect(
+      tester
+          .widgetList<RawImage>(find.byType(RawImage))
+          .any((image) => image.image != null),
+      isTrue,
     );
     expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
   });

@@ -58,13 +58,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   @override
   void initState() {
     super.initState();
-    final initialImagePath = widget.initialImagePath;
-    if (initialImagePath != null) {
-      _handoffResolution = _PreviewResolution.image(
-        initialImagePath,
-        status: null,
-      );
-    }
+    _handoffResolution = _handoffForPath(widget.initialImagePath);
     _resolution = _startResolution();
   }
 
@@ -75,15 +69,9 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     final handoffChanged =
         oldWidget.initialImagePath != widget.initialImagePath;
     if (captureChanged) {
-      final initialImagePath = widget.initialImagePath;
-      _handoffResolution = initialImagePath == null
-          ? null
-          : _PreviewResolution.image(initialImagePath, status: null);
+      _handoffResolution = _handoffForPath(widget.initialImagePath);
     } else if (handoffChanged && widget.initialImagePath != null) {
-      _handoffResolution = _PreviewResolution.image(
-        widget.initialImagePath!,
-        status: null,
-      );
+      _handoffResolution = _handoffForPath(widget.initialImagePath);
     }
     if (widget.capture.originalDeletedAt != null &&
         _handoffResolution?.path == widget.capture.originalPath) {
@@ -92,6 +80,15 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     if (_resolutionInputsChanged(oldWidget) || handoffChanged) {
       _resolution = _startResolution();
     }
+  }
+
+  _PreviewResolution? _handoffForPath(String? path) {
+    if (path == null ||
+        (widget.capture.originalDeletedAt != null &&
+            path == widget.capture.originalPath)) {
+      return null;
+    }
+    return _PreviewResolution.image(path, status: null);
   }
 
   bool _resolutionInputsChanged(CaptureImagePreview previous) {

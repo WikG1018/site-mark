@@ -854,6 +854,79 @@ void main() {
     },
   );
 
+  testWidgets(
+    'initial deleted-original path is rejected before the first frame',
+    (tester) async {
+      final capture = _record(
+        id: 'capture-1',
+        status: CaptureStatus.ready,
+        originalDeletedAt: DateTime(2026, 8, 4, 11),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _ThrowingOutputPaths(),
+              initialImagePath: capture.originalPath,
+              fileExists: (path) => path == capture.originalPath,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('original-preview-capture-1')), findsNothing);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('original-preview-capture-1')), findsNothing);
+      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+    },
+  );
+
+  testWidgets('deleted original still accepts a rendered initial path', (
+    tester,
+  ) async {
+    final capture = _record(
+      id: 'capture-1',
+      status: CaptureStatus.ready,
+      originalDeletedAt: DateTime(2026, 8, 4, 11),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureImagePreview(
+            capture: capture,
+            outputPaths: _ThrowingOutputPaths(),
+            initialImagePath: '/private/rendered/capture-1.jpg',
+            fileExists: (_) => true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+  });
+
   testWidgets('same-ID logical deletion invalidates an original handoff', (
     tester,
   ) async {
