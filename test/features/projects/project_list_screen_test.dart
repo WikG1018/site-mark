@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -16,13 +15,13 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 
 class _TestCaptureOutputPaths implements CaptureOutputPaths {
-  _TestCaptureOutputPaths(this.directory);
+  _TestCaptureOutputPaths(this.renderedPath);
 
-  final Directory directory;
+  final String renderedPath;
 
   @override
   Future<String> renderedPhotoPath(String captureId) async {
-    return '${directory.path}${Platform.pathSeparator}$captureId.png';
+    return renderedPath;
   }
 }
 
@@ -47,7 +46,11 @@ class _ControlledProjectsDatabase extends AppDatabase {
 void main() {
   late AppDatabase database;
 
-  Future<void> pumpProjects(WidgetTester tester, {bool settle = true}) async {
+  Future<void> pumpProjects(
+    WidgetTester tester, {
+    bool settle = true,
+    Locale locale = const Locale('zh'),
+  }) async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     await database.createProject(id: 'east', name: '东区厂房改造');
@@ -57,7 +60,7 @@ void main() {
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(database)],
         child: MaterialApp(
-          locale: const Locale('zh'),
+          locale: locale,
           supportedLocales: AppStrings.supportedLocales,
           localizationsDelegates: const [
             AppStrings.delegate,
@@ -72,18 +75,12 @@ void main() {
     if (settle) await tester.pumpAndSettle();
   }
 
-  Future<(ProviderContainer, Directory)> pumpProjectList(
+  Future<ProviderContainer> pumpProjectList(
     WidgetTester tester, {
     required int captures,
   }) async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     await database.createProject(id: 'recent', name: '最近项目');
-    final outputDirectory = (await tester.runAsync(
-      () => Directory.systemTemp.createTemp('sitemark-project-thumbnails-'),
-    ))!;
-    final pngBytes = base64Decode(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-    );
     for (var index = 1; index <= captures; index++) {
       final id = 'capture-$index';
       final capturedAt = DateTime.utc(2026, 8, 3, 8, index);
@@ -110,17 +107,14 @@ void main() {
         captureId: pending.id,
         publishedUri: 'content://media/$id',
       );
-      await tester.runAsync(
-        () => File(
-          '${outputDirectory.path}${Platform.pathSeparator}$id.png',
-        ).writeAsBytes(pngBytes),
-      );
     }
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(database),
         captureOutputPathsProvider.overrideWithValue(
-          _TestCaptureOutputPaths(outputDirectory),
+          _TestCaptureOutputPaths(
+            File('assets/branding/sitemark-icon.png').absolute.path,
+          ),
         ),
       ],
     );
@@ -141,7 +135,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    return (container, outputDirectory);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1)),
+    );
+    await tester.pumpAndSettle();
+    return container;
   }
 
   // Dispose the widget tree before the test ends so the StreamBuilder cancels
@@ -175,13 +173,30 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('status filter announces its title and current value', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await pumpProjects(tester, locale: const Locale('en'));
+    try {
+      expect(
+        tester.getSemantics(find.byKey(const Key('project-status-filter'))),
+        matchesSemantics(
+          label: 'Project status: Active',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+    } finally {
+      semantics.dispose();
+      await disposeApp(tester);
+    }
+  });
+
   testWidgets('project card is one tap target and shows recent thumbnails', (
     tester,
   ) async {
-    final (container, outputDirectory) = await pumpProjectList(
-      tester,
-      captures: 3,
-    );
+    final container = await pumpProjectList(tester, captures: 3);
     try {
       expect(
         find.byKey(const Key('project-thumbnail-capture-3')),
@@ -202,7 +217,6 @@ void main() {
       container.dispose();
       await tester.pump(const Duration(milliseconds: 1));
       await tester.runAsync(database.close);
-      await tester.runAsync(() => outputDirectory.delete(recursive: true));
     }
   });
 

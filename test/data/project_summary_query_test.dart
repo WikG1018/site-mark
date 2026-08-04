@@ -82,6 +82,54 @@ void main() {
     expect(empty.recentCaptureIds, isEmpty);
   });
 
+  test('round-trips opaque ready capture ids without delimiter loss', () async {
+    await database.createProject(id: 'opaque', name: '不透明编号');
+    final unitSeparatorId = 'unit${String.fromCharCode(31)}separator';
+    const escapedId = 'quote"slash\\';
+    final ids = [unitSeparatorId, escapedId, ''];
+    for (final (index, id) in ids.indexed) {
+      await insertReadyCapture(
+        id: id,
+        projectId: 'opaque',
+        capturedAt: DateTime.utc(
+          2026,
+          8,
+          3,
+          10,
+        ).subtract(Duration(minutes: index)),
+      );
+    }
+
+    final summary =
+        (await database
+                .watchProjectSummaries(status: ProjectLifecycleStatus.active)
+                .first)
+            .single;
+
+    expect(summary.recentCaptureIds, ids);
+    expect(summary.recentCaptureIds, hasLength(3));
+  });
+
+  test('orders equal capture timestamps by id descending', () async {
+    await database.createProject(id: 'ties', name: '同时间项目');
+    final capturedAt = DateTime.utc(2026, 8, 3, 11);
+    for (final id in ['capture-a', 'capture-c', 'capture-b']) {
+      await insertReadyCapture(
+        id: id,
+        projectId: 'ties',
+        capturedAt: capturedAt,
+      );
+    }
+
+    final summary =
+        (await database
+                .watchProjectSummaries(status: ProjectLifecycleStatus.active)
+                .first)
+            .single;
+
+    expect(summary.recentCaptureIds, ['capture-c', 'capture-b', 'capture-a']);
+  });
+
   test(
     'orders active summaries by pin, last capture, created_at, id',
     () async {

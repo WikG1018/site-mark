@@ -148,15 +148,23 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                 icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
               )
             else ...[
-              TextButton.icon(
+              Semantics(
                 key: const Key('project-status-filter'),
-                onPressed: _openStatusFilter,
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                label:
+                    '${strings.projectStatusFilterTitle}: '
+                    '${_statusLabel(strings, _status)}',
+                button: true,
+                onTap: _openStatusFilter,
+                excludeSemantics: true,
+                child: TextButton.icon(
+                  onPressed: _openStatusFilter,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  icon: const Icon(Icons.filter_list, size: 20),
+                  label: Text(_statusLabel(strings, _status)),
                 ),
-                icon: const Icon(Icons.filter_list, size: 20),
-                label: Text(_statusLabel(strings, _status)),
               ),
               IconButton(
                 key: const Key('search-projects'),

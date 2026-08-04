@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:sitemark/data/conditional_polling_stream.dart';
@@ -375,7 +377,7 @@ WITH ranked_ready AS (
   FROM captures AS c
   WHERE c.status = 'ready'
 ), recent_ready AS (
-  SELECT project_id, GROUP_CONCAT(id, CHAR(31)) AS recent_capture_ids
+  SELECT project_id, JSON_GROUP_ARRAY(id) AS recent_capture_ids
   FROM (
     SELECT project_id, id
     FROM ranked_ready
@@ -446,7 +448,8 @@ ORDER BY
               recentCaptureIds:
                   recentCaptureIds == null || recentCaptureIds.isEmpty
                   ? const []
-                  : recentCaptureIds.split(String.fromCharCode(31)),
+                  : (jsonDecode(recentCaptureIds) as List<dynamic>)
+                        .cast<String>(),
             );
           })
           .toList(growable: false),

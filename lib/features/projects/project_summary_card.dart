@@ -66,39 +66,97 @@ class ProjectRecentThumbnails extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       for (final (index, id) in captureIds.indexed)
-        Expanded(
-          child: Padding(
-            padding: EdgeInsetsDirectional.only(
-              end: index == captureIds.length - 1 ? 0 : 6,
-            ),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: RepaintBoundary(
-                  child: FutureBuilder<String>(
-                    future: outputPaths.renderedPhotoPath(id),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const _ThumbnailPlaceholder();
-                      }
-                      return Image.file(
-                        File(snapshot.data!),
-                        key: Key('project-thumbnail-$id'),
-                        fit: BoxFit.cover,
-                        cacheWidth: 192,
-                        gaplessPlayback: true,
-                        errorBuilder: (_, _, _) =>
-                            const _ThumbnailPlaceholder(),
-                      );
-                    },
+        _ProjectThumbnail(
+          key: ValueKey(id),
+          captureId: id,
+          outputPaths: outputPaths,
+          addTrailingGap: index != captureIds.length - 1,
+        ),
+    ],
+  );
+}
+
+class _ProjectThumbnail extends StatefulWidget {
+  const _ProjectThumbnail({
+    super.key,
+    required this.captureId,
+    required this.outputPaths,
+    required this.addTrailingGap,
+  });
+
+  final String captureId;
+  final CaptureOutputPaths outputPaths;
+  final bool addTrailingGap;
+
+  @override
+  State<_ProjectThumbnail> createState() => _ProjectThumbnailState();
+}
+
+class _ProjectThumbnailState extends State<_ProjectThumbnail> {
+  late Future<File?> _file;
+
+  @override
+  void initState() {
+    super.initState();
+    _file = _resolveFile();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProjectThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.captureId != widget.captureId ||
+        !identical(oldWidget.outputPaths, widget.outputPaths)) {
+      _file = _resolveFile();
+    }
+  }
+
+  Future<File?> _resolveFile() async {
+    final path = await widget.outputPaths.renderedPhotoPath(widget.captureId);
+    if (path.isEmpty) return null;
+    final file = File(path);
+    return await file.exists() ? file : null;
+  }
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: Padding(
+      padding: EdgeInsetsDirectional.only(end: widget.addTrailingGap ? 6 : 0),
+      child: AspectRatio(
+        aspectRatio: 1,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: RepaintBoundary(
+            child: FutureBuilder<File?>(
+              key: ObjectKey(_file),
+              future: _file,
+              builder: (context, snapshot) {
+                final file = snapshot.data;
+                if (file == null) {
+                  return _ThumbnailPlaceholder(
+                    key: Key(
+                      'project-thumbnail-placeholder-${widget.captureId}',
+                    ),
+                  );
+                }
+                return Image.file(
+                  file,
+                  key: Key('project-thumbnail-${widget.captureId}'),
+                  fit: BoxFit.cover,
+                  cacheWidth: 192,
+                  gaplessPlayback: true,
+                  excludeFromSemantics: true,
+                  errorBuilder: (_, _, _) => _ThumbnailPlaceholder(
+                    key: Key(
+                      'project-thumbnail-placeholder-${widget.captureId}',
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ),
-    ],
+      ),
+    ),
   );
 }
 
@@ -160,7 +218,7 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _ThumbnailPlaceholder extends StatelessWidget {
-  const _ThumbnailPlaceholder();
+  const _ThumbnailPlaceholder({super.key});
 
   @override
   Widget build(BuildContext context) =>
