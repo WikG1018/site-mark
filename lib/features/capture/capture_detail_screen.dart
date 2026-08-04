@@ -147,11 +147,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     : null;
                 final failureGuidance =
                     failureCode != null &&
-                        info != null &&
-                        projectSnapshot.hasData
+                        projectSnapshot.hasData &&
+                        (info != null || infoSnapshot.hasError)
                     ? captureFailureGuidanceForDetail(
                         code: failureCode,
-                        originalState: info.originalState,
+                        originalState: info?.originalState,
                         projectActive: projectActive,
                       )
                     : null;

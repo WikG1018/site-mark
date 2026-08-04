@@ -23,6 +23,9 @@ Baseline: `9b53b720b084a834c2a8866af15964912748d7da`
   present.
 - Made narrow cards switch to a stacked layout for large text, keeping failed
   records readable and tappable at 360 dp with 2x text scaling in both locales.
+- Kept failure guidance visible when media inspection fails. An unknown
+  original-photo state never enables retry; the detail explains that inspection
+  is unavailable and offers only safe keep/reopen/menu-delete next steps.
 - Added regression coverage for final rendered text/icon foregrounds under a
   hostile inherited theme, explicit foreground overrides, and the tappable
   semantics action on `GlassCard`.
@@ -52,6 +55,9 @@ RED was established before production changes:
   card produced a 906-pixel bottom overflow. After shortening the list copy,
   the same test still exposed the underlying narrow-column layout before the
   card switched to its large-text stacked layout.
+- The final media-inspection regression produced zero failure-guidance widgets
+  in both locales when `CaptureMediaService.inspect()` threw, confirming that
+  `info == null` incorrectly suppressed the entire banner.
 
 GREEN coverage includes:
 
@@ -75,6 +81,9 @@ GREEN coverage includes:
   no list-level retry promise, and tap-through to the detail/actions surface.
 - The real `finalizationPending` restore Snackbar in both locales, not only a
   localization snapshot.
+- Real Chinese and English detail screens with an injected media-inspection
+  exception: reason and recovery guidance remain visible, raw errors stay
+  hidden, the detail menu remains available, and Retry processing is absent.
 
 ## Copy audit
 
@@ -88,6 +97,7 @@ GREEN coverage includes:
 | Photo original missing | Original evidence file is gone | Detail says retake; keep or use the top-right menu to delete | Retry hidden |
 | Photo original modified | Capture-time checksum no longer matches | Detail says preserve evidence and retake, or use the top-right menu to delete | Retry hidden |
 | Photo processing/unknown | Processing failed while original state and project lifecycle may vary | Detail offers retry only for a retryable code with retained original in an active project; otherwise gives the actual missing, cleared, or read-only recovery | Guidance/button agreement tested in zh/en |
+| Photo media state unavailable | Media inspection could not determine the original state | Keep the record and reopen details later to check again, or use the active-project detail menu to delete | Retry hidden; real inspect-exception path tested in zh/en |
 | Capture list | Local-record read failure | Retry | Message fixed |
 
 ## Design-decision acceptance
@@ -110,9 +120,9 @@ targeted final check: 14 tests passed.
 | Gate | Result |
 | --- | --- |
 | `dart format --output=none --set-exit-if-changed lib test` | PASS, 193 files checked, 0 changed |
-| Selected final-action widget/unit tests | PASS, 60 tests |
+| Selected final media-inspection widget/unit tests | PASS, 32 tests |
 | `flutter analyze` | PASS, no issues |
-| `flutter test` | PASS, 860 tests |
+| `flutter test` | PASS, 862 tests |
 | `cargo fmt --manifest-path rust/Cargo.toml -- --check` | PASS |
 | `cargo test --manifest-path rust/Cargo.toml` | PASS, 54 tests |
 | `android/gradlew.bat testDebugUnitTest` | PASS, 285 actionable tasks |
@@ -134,8 +144,8 @@ configuration were not changed.
 ## APK
 
 - Path: `C:\tmp\sitemark-pr30-review\build\app\outputs\flutter-apk\app-debug.apk`
-- Size: 265,849,258 bytes
-- SHA-256: `E15B0D77B52AEB82A382004818027A7BAF61C5BA728AE7ECCD91BEA8472D02DA`
+- Size: 265,845,247 bytes
+- SHA-256: `82A4DC5C1EE1D3A7CC01C1C7A08434F70F3D12F1F585634A8A3A9A83E7E65A90`
 
 ## Device acceptance
 

@@ -13,7 +13,7 @@ void main() {
   test('detail retry requires code, retained original, and active project', () {
     CaptureFailureGuidance guidance({
       CaptureFailureCode code = CaptureFailureCode.processingFailed,
-      OriginalPhotoState state = OriginalPhotoState.retained,
+      OriginalPhotoState? state = OriginalPhotoState.retained,
       bool projectActive = true,
     }) => captureFailureGuidanceForDetail(
       code: code,
@@ -24,6 +24,7 @@ void main() {
     expect(guidance().canRetry, isTrue);
     expect(guidance(state: OriginalPhotoState.missing).canRetry, isFalse);
     expect(guidance(state: OriginalPhotoState.cleared).canRetry, isFalse);
+    expect(guidance(state: null).canRetry, isFalse);
     expect(guidance(projectActive: false).canRetry, isFalse);
     expect(
       guidance(code: CaptureFailureCode.originalModified).canRetry,

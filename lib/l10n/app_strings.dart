@@ -294,6 +294,16 @@ class AppStrings {
             : '照片因未知原因处理失败。',
     };
 
+    if (guidance.originalState == null) {
+      if (!guidance.projectActive) {
+        return _english
+            ? '$reason The original photo state could not be checked, so Retry processing is unavailable for now. The project is read-only; keep this record and reopen the details later to check again.'
+            : '$reason 无法检查原图状态，暂不提供重新处理。项目当前为只读状态；可保留此记录，稍后重新打开详情检查。';
+      }
+      return _english
+          ? '$reason The original photo state could not be checked, so Retry processing is unavailable for now. Keep this record and reopen the details later to check again, or use the top-right menu to delete it.'
+          : '$reason 无法检查原图状态，暂不提供重新处理。可保留此记录，稍后重新打开详情检查，或使用右上角菜单删除记录。';
+    }
     if (!guidance.projectActive) {
       return _english
           ? '$reason The project is read-only, so the record cannot be retried or deleted. Keep the record, or restore the project to active and open it again to see available actions.'

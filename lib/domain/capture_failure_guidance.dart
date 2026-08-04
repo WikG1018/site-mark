@@ -33,7 +33,7 @@ CaptureFailureGuidance captureFailureGuidanceForList(CaptureFailureCode code) =>
 
 CaptureFailureGuidance captureFailureGuidanceForDetail({
   required CaptureFailureCode code,
-  required OriginalPhotoState originalState,
+  required OriginalPhotoState? originalState,
   required bool projectActive,
 }) => CaptureFailureGuidance._(
   code: code,

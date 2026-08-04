@@ -36,6 +36,7 @@ void main() {
     CaptureStatus status = CaptureStatus.ready,
     CaptureFailureCode failureCode = CaptureFailureCode.processingFailed,
     ProjectLifecycleStatus projectStatus = ProjectLifecycleStatus.active,
+    Object? inspectError,
   }) async {
     database = _DetailDatabase();
     addTearDown(database.close);
@@ -106,7 +107,7 @@ void main() {
       platform: platform,
       outputPaths: paths,
       files: files,
-    );
+    )..inspectError = inspectError;
 
     await tester.pumpWidget(
       ProviderScope(
@@ -696,6 +697,70 @@ void main() {
     });
   }
 
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('inspect failure keeps safe processing guidance in '
+        '${locale.languageCode}', (tester) async {
+      await pumpReadyDetail(
+        tester,
+        originalExists: true,
+        status: CaptureStatus.failed,
+        failureCode: CaptureFailureCode.processingFailed,
+        locale: locale,
+        inspectError: StateError('raw inspect failure'),
+      );
+
+      final guidance = find.byKey(const Key('capture-failure-guidance'));
+      expect(guidance, findsOneWidget);
+      expect(
+        find.descendant(
+          of: guidance,
+          matching: find.textContaining(
+            locale.languageCode == 'zh' ? '照片处理失败' : 'Photo processing failed',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: guidance,
+          matching: find.textContaining(
+            locale.languageCode == 'zh'
+                ? '无法检查原图状态，暂不提供重新处理'
+                : 'The original photo state could not be checked, so Retry processing is unavailable for now',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: guidance,
+          matching: find.textContaining(
+            locale.languageCode == 'zh'
+                ? '稍后重新打开详情检查'
+                : 'reopen the details later to check again',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: guidance,
+          matching: find.textContaining(
+            locale.languageCode == 'zh'
+                ? '右上角菜单删除记录'
+                : 'top-right menu to delete it',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('capture-retry-processing')), findsNothing);
+      expect(find.textContaining('raw inspect failure'), findsNothing);
+      expect(find.byKey(const Key('capture-detail-actions')), findsOneWidget);
+
+      await disposeDetail(tester);
+    });
+  }
+
   testWidgets('processing and read-only details expose no mutation menu', (
     tester,
   ) async {
@@ -1001,6 +1066,7 @@ class _DetailMediaService extends CaptureMediaService {
 
   Completer<void>? _inspectRelease;
   Completer<void>? _inspectStarted;
+  Object? inspectError;
   int clearOriginalCalls = 0;
   int deleteAllCalls = 0;
 
@@ -1015,6 +1081,8 @@ class _DetailMediaService extends CaptureMediaService {
 
   @override
   Future<CaptureFileInfo> inspect(CaptureRecord record) async {
+    final error = inspectError;
+    if (error != null) throw error;
     final snapshot = await super.inspect(record);
     final release = _inspectRelease;
     if (release == null) return snapshot;
