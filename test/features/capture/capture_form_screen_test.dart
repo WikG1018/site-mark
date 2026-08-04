@@ -28,12 +28,13 @@ void main() {
   Future<void> pumpCaptureForm(
     WidgetTester tester, {
     required _CaptureFormPlatform platform,
+    Locale locale = const Locale('zh'),
   }) async {
     await database.createProject(id: 'project-1', name: '东区厂房改造');
     await tester.pumpWidget(
       MyApp(
         database: database,
-        initialLocale: const Locale('zh'),
+        initialLocale: locale,
         platformServices: platform,
         completionNotificationService: _NoOpCompletionNotificationService(),
         captureFormDraftStore: MemoryCaptureFormDraftStore(),
@@ -66,6 +67,19 @@ void main() {
         find.byKey(const Key('location-permission-prompt')),
         findsOneWidget,
       );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('location-permission-prompt')),
+          matching: find.byType(Card),
+        ),
+        findsNothing,
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const Key('location-permission-prompt')))
+            .height,
+        lessThanOrEqualTo(64),
+      );
       expect(find.text(fixedLocationHint), findsNothing);
       expect(platform.requestLocationPermissionCount, 0);
       expect(tester.takeException(), isNull);
@@ -87,6 +101,88 @@ void main() {
     expect(platform.requestLocationPermissionCount, 0);
     await disposeApp(tester);
   });
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets(
+      '${locale.languageCode} compact form keeps required fields and submit action visible at 360dp/3x',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 3;
+        tester.view.padding = const FakeViewPadding(top: 72, bottom: 48);
+        tester.view.viewPadding = const FakeViewPadding(top: 72, bottom: 48);
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+          tester.view.resetPadding();
+          tester.view.resetViewPadding();
+        });
+        final platform = _CaptureFormPlatform(
+          permissionState: LocationPermissionState.granted,
+        );
+
+        await pumpCaptureForm(tester, platform: platform, locale: locale);
+
+        expect(find.byKey(const Key('work-location')), findsOneWidget);
+        expect(find.byKey(const Key('work-content')), findsOneWidget);
+        expect(find.byKey(const Key('photographer')), findsOneWidget);
+        expect(find.byKey(const Key('notes')), findsNothing);
+        expect(find.byKey(const Key('notes-expander')), findsOneWidget);
+        final visibleHeight =
+            tester.view.physicalSize.height / tester.view.devicePixelRatio;
+        expect(
+          tester.getBottomRight(find.byKey(const Key('capture-button'))).dy,
+          lessThanOrEqualTo(visibleHeight),
+        );
+
+        await tester.tap(find.byKey(const Key('notes-expander')));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('notes')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await disposeApp(tester);
+      },
+    );
+  }
+
+  testWidgets(
+    'keyboard and system insets keep submit action visible without covering the focused field',
+    (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 3;
+      tester.view.padding = const FakeViewPadding(top: 72, bottom: 48);
+      tester.view.viewPadding = const FakeViewPadding(top: 72, bottom: 48);
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetPadding();
+        tester.view.resetViewPadding();
+        tester.view.resetViewInsets();
+      });
+      final platform = _CaptureFormPlatform(
+        permissionState: LocationPermissionState.granted,
+      );
+      await pumpCaptureForm(tester, platform: platform);
+
+      await tester.tap(find.byKey(const Key('photographer')));
+      await tester.pump();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 720);
+      await tester.pumpAndSettle();
+
+      final visibleHeight =
+          (tester.view.physicalSize.height - tester.view.viewInsets.bottom) /
+          tester.view.devicePixelRatio;
+      final buttonRect = tester.getRect(
+        find.byKey(const Key('capture-button')),
+      );
+      final focusedFieldRect = tester.getRect(
+        find.byKey(const Key('photographer')),
+      );
+      expect(buttonRect.bottom, lessThanOrEqualTo(visibleHeight));
+      expect(buttonRect.top, greaterThanOrEqualTo(focusedFieldRect.bottom));
+      expect(tester.takeException(), isNull);
+      await disposeApp(tester);
+    },
+  );
 
   testWidgets('dismissed state keeps the contextual prompt hidden', (
     tester,

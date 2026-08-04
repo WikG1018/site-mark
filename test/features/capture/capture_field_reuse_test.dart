@@ -2248,6 +2248,52 @@ void main() {
     expect(rig.fieldText(tester, const Key('notes')), 'Project 2 notes');
   });
 
+  testWidgets('rapid repeated taps start only one capture while working', (
+    tester,
+  ) async {
+    final rig = await _CaptureFormTestRig.create();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await rig.dispose();
+    });
+    await rig.drafts.save(_draft('project-1', 'Rapid'));
+    await rig.pump(tester);
+    final button = find.byKey(const Key('capture-button')).hitTestable();
+
+    await tester.tap(button);
+    await tester.tap(button);
+    await tester.pump();
+
+    expect(rig.workflow.drafts, hasLength(1));
+    expect(rig.captureButton(tester).onPressed, isNull);
+  });
+
+  testWidgets(
+    'reduced motion notes expander defaults closed and uses no animation',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        await rig.dispose();
+      });
+      rig.disableAnimations = true;
+      await rig.pump(tester);
+
+      expect(find.byKey(const Key('notes')), findsNothing);
+      await tester.tap(find.byKey(const Key('notes-expander')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('notes')), findsOneWidget);
+      final animation = find.byKey(const Key('notes-animation'));
+      expect(animation, findsOneWidget);
+      if (animation.evaluate().isNotEmpty) {
+        expect(tester.widget(animation), isNot(isA<AnimatedSize>()));
+      }
+    },
+  );
+
   for (final outcome in [
     CaptureWorkflowOutcome.cancelled,
     CaptureWorkflowOutcome.failed,
@@ -2546,6 +2592,7 @@ void main() {
 
           rig.expectFields(tester, prefix: 'Consecutive');
           expect(rig.fieldText(tester, const Key('notes')), isEmpty);
+          expect(rig.captureButton(tester).onPressed, isNotNull);
           expect(await rig.drafts.load('project-1'), isNull);
         },
       );
@@ -3247,6 +3294,7 @@ class _CaptureFormTestRig {
       find.byKey(const Key('photographer')),
       '$prefix photographer',
     );
+    await expandNotes(tester);
     await tester.enterText(find.byKey(const Key('notes')), '$prefix notes');
   }
 
@@ -3263,7 +3311,19 @@ class _CaptureFormTestRig {
   }
 
   String fieldText(WidgetTester tester, Key key) {
+    if (key == const Key('notes') && find.byKey(key).evaluate().isEmpty) {
+      return tester
+          .widget<CaptureNotesField>(find.byType(CaptureNotesField))
+          .controller
+          .text;
+    }
     return tester.widget<TextFormField>(find.byKey(key)).controller!.text;
+  }
+
+  Future<void> expandNotes(WidgetTester tester) async {
+    if (find.byKey(const Key('notes')).evaluate().isNotEmpty) return;
+    await tester.tap(find.byKey(const Key('notes-expander')));
+    await tester.pumpAndSettle();
   }
 
   void expectFields(WidgetTester tester, {required String prefix}) {

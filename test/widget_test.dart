@@ -5,6 +5,7 @@ import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
+import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
@@ -145,8 +146,20 @@ void main() {
 
   /// Reads the current text of the [TextFormField] found by [key].
   String fieldText(WidgetTester tester, Key key) {
+    if (key == const Key('notes') && find.byKey(key).evaluate().isEmpty) {
+      return tester
+          .widget<CaptureNotesField>(find.byType(CaptureNotesField))
+          .controller
+          .text;
+    }
     final field = tester.widget<TextFormField>(find.byKey(key));
     return field.controller!.text;
+  }
+
+  Future<void> expandNotes(WidgetTester tester) async {
+    if (find.byKey(const Key('notes')).evaluate().isNotEmpty) return;
+    await tester.tap(find.byKey(const Key('notes-expander')));
+    await tester.pumpAndSettle();
   }
 
   /// Pumps [MyApp] with the standard widget-test fakes and a single ready
@@ -474,6 +487,7 @@ void main() {
       photographer: '历史拍摄人',
     );
     await openCaptureForm(tester);
+    await expandNotes(tester);
     await tester.enterText(find.byKey(const Key('notes')), '保留本张备注');
 
     await tester.tap(find.byKey(const Key('work-location')));
@@ -498,6 +512,7 @@ void main() {
         photographer: '张工',
       );
       await openCaptureForm(tester, workflowResult: queuedResult);
+      await expandNotes(tester);
       await tester.enterText(find.byKey(const Key('notes')), '本张备注');
       await tester.tap(find.byKey(const Key('capture-button')));
       await tester.pumpAndSettle();
@@ -523,6 +538,7 @@ void main() {
   ) async {
     await seedReadyCapture();
     await openCaptureForm(tester, schedulerOverride: _DelayedScheduler());
+    await expandNotes(tester);
     await tester.enterText(find.byKey(const Key('notes')), '本张备注');
     await tester.tap(find.byKey(const Key('capture-button')));
     await tester.pumpAndSettle();

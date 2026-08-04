@@ -202,8 +202,8 @@ class AppStrings {
       _english ? 'Template no longer exists' : '模板已不存在';
   String get openSystemCamera => _english ? 'Capture' : '拍摄';
   String get captureWorkflowHint => _english
-      ? 'Capture will invoke the system camera. Watermarks are processed in the background. You can tap capture repeatedly; return to the project detail to view records as they finish.'
-      : '拍摄将调用系统相机，水印将在后台处理。可连续点击拍摄，返回项目详情即可查看处理中的记录。';
+      ? 'System camera · background watermarking · continuous capture'
+      : '系统相机拍摄 · 后台生成水印 · 支持连续拍摄';
   String get ready => _english ? 'Ready' : '已完成';
   String get failed => _english ? 'Failed' : '失败';
   String get pendingCamera => _english ? 'Waiting for camera' : '等待相机';
@@ -414,8 +414,8 @@ class AppStrings {
 
   // Non-blocking location permission UX
   String get locationPermissionExplanation => _english
-      ? 'Foreground location tags each capture with GPS coordinates. Capture still works if you decline; tap below to enable it once.'
-      : '前台定位为每张照片记录 GPS 坐标。拒绝授权也可继续拍摄，点击下方按钮可一次性开启。';
+      ? 'Add GPS to photos (capture works without it).'
+      : '为照片记录 GPS（拒绝后仍可拍摄）';
   String get dismiss => _english ? 'Dismiss' : '关闭';
   String get enableLocation => _english ? 'Enable location' : '开启定位';
   String get openSettingsLabel => _english ? 'Open settings' : '打开设置';

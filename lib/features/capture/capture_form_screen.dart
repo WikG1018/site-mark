@@ -313,6 +313,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   }
 
   Future<void> _capture(Project project) async {
+    if (_working) return;
     if (!_formKey.currentState!.validate()) return;
     if (project.lifecycleStatus != ProjectLifecycleStatus.active) {
       if (!mounted) return;
@@ -491,10 +492,47 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                           projectId: widget.projectId,
                           loadSuggestions: _loadRecentSuggestions,
                           strings: strings,
-                          working: _working,
                           onTemplates: _openTemplates,
-                          onCapture: () => _capture(project),
                           permissionPrompt: prompt,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+          bottomNavigationBar: project == null || readOnly
+              ? null
+              : Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom,
+                  ),
+                  child: SafeArea(
+                    minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Center(
+                      heightFactor: 1,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 620),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              strings.captureWorkflowHint,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 6),
+                            CaptureSubmitButton(
+                              working: _working,
+                              onPressed: () => _capture(project),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -528,9 +566,7 @@ class _CaptureFormBody extends StatelessWidget {
     required this.projectId,
     required this.loadSuggestions,
     required this.strings,
-    required this.working,
     required this.onTemplates,
-    required this.onCapture,
     this.permissionPrompt,
   });
 
@@ -544,9 +580,7 @@ class _CaptureFormBody extends StatelessWidget {
   final String projectId;
   final CaptureRecentSuggestionsLoader loadSuggestions;
   final AppStrings strings;
-  final bool working;
   final VoidCallback onTemplates;
-  final VoidCallback onCapture;
 
   /// Optional non-blocking location-permission card rendered at the top of the
   /// form when the host permission is not granted and the user has not
@@ -556,7 +590,8 @@ class _CaptureFormBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(24),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       children: [
         // Always-mounted animated slot: the prompt expands/fades in and
         // collapses out without the form fields jumping.
@@ -570,7 +605,7 @@ class _CaptureFormBody extends StatelessWidget {
             label: Text(strings.captureTemplates),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         _RequiredField(
           fieldKey: const Key('work-location'),
           controller: locationController,
@@ -585,14 +620,13 @@ class _CaptureFormBody extends StatelessWidget {
             load: loadSuggestions,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _RequiredField(
           fieldKey: const Key('work-content'),
           controller: contentController,
           focusNode: contentFocusNode,
           label: strings.workContent,
           error: strings.requiredField,
-          maxLines: 2,
           suggestions: CaptureRecentSuggestions(
             projectId: projectId,
             field: CaptureSuggestionField.workContent,
@@ -601,7 +635,7 @@ class _CaptureFormBody extends StatelessWidget {
             load: loadSuggestions,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _RequiredField(
           fieldKey: const Key('photographer'),
           controller: photographerController,
@@ -616,58 +650,96 @@ class _CaptureFormBody extends StatelessWidget {
             load: loadSuggestions,
           ),
         ),
-        const SizedBox(height: 16),
-        TextFormField(
-          key: const Key('notes'),
-          controller: notesController,
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: strings.notesOptional,
-            alignLabelWithHint: true,
-          ),
-        ),
-        const SizedBox(height: 24),
-        FilledButton.icon(
-          key: const Key('capture-button'),
-          onPressed: working
-              ? null
-              : () {
-                  HapticFeedback.lightImpact();
-                  onCapture();
-                },
-          // Cross-fade between the camera glyph and the busy spinner. Both
-          // children sit inside the same fixed square so the icon slot width
-          // never shifts while the button toggles its loading state.
-          icon: AnimatedSwitcher(
-            duration: AppMotion.short4,
-            child: working
-                ? const SizedBox.square(
-                    key: ValueKey('capture-button-busy'),
-                    dimension: 24,
-                    child: Center(
-                      child: SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  )
-                : const SizedBox.square(
-                    key: ValueKey('capture-button-idle'),
-                    dimension: 24,
-                    child: Icon(Icons.photo_camera_outlined),
-                  ),
-          ),
-          label: Text(strings.openSystemCamera),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          strings.captureWorkflowHint,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          textAlign: TextAlign.center,
-        ),
+        const SizedBox(height: 4),
+        CaptureNotesField(controller: notesController),
       ],
+    );
+  }
+}
+
+class CaptureNotesField extends StatefulWidget {
+  const CaptureNotesField({super.key, required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  State<CaptureNotesField> createState() => _CaptureNotesFieldState();
+}
+
+class _CaptureNotesFieldState extends State<CaptureNotesField> {
+  var _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = _expanded
+        ? TextFormField(
+            key: const Key('notes'),
+            controller: widget.controller,
+            maxLines: 3,
+            decoration: InputDecoration(
+              labelText: AppStrings.of(context).notesOptional,
+              alignLabelWithHint: true,
+            ),
+          )
+        : const SizedBox.shrink();
+    final duration = AppMotion.durationOf(context, AppMotion.short4);
+    return Column(
+      children: [
+        ListTile(
+          key: const Key('notes-expander'),
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          title: Text(AppStrings.of(context).notesOptional),
+          trailing: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+          onTap: () => setState(() => _expanded = !_expanded),
+        ),
+        if (duration == Duration.zero)
+          KeyedSubtree(key: const Key('notes-animation'), child: child)
+        else
+          AnimatedSize(
+            key: const Key('notes-animation'),
+            duration: duration,
+            curve: AppMotion.standard,
+            alignment: Alignment.topCenter,
+            child: child,
+          ),
+      ],
+    );
+  }
+}
+
+class CaptureSubmitButton extends StatelessWidget {
+  const CaptureSubmitButton({
+    super.key,
+    required this.working,
+    required this.onPressed,
+  });
+
+  final bool working;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      key: const Key('capture-button'),
+      onPressed: working
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              onPressed();
+            },
+      icon: working
+          ? const SizedBox.square(
+              key: ValueKey('capture-button-busy'),
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(
+              Icons.photo_camera_outlined,
+              key: ValueKey('capture-button-idle'),
+            ),
+      label: Text(AppStrings.of(context).openSystemCamera),
     );
   }
 }
@@ -680,7 +752,6 @@ class _RequiredField extends StatelessWidget {
     required this.label,
     required this.error,
     required this.suggestions,
-    this.maxLines = 1,
   });
 
   final Key fieldKey;
@@ -689,7 +760,6 @@ class _RequiredField extends StatelessWidget {
   final String label;
   final String error;
   final Widget suggestions;
-  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -700,7 +770,6 @@ class _RequiredField extends StatelessWidget {
           key: fieldKey,
           controller: controller,
           focusNode: focusNode,
-          maxLines: maxLines,
           decoration: InputDecoration(
             labelText: label,
             alignLabelWithHint: true,

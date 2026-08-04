@@ -15,19 +15,22 @@ class LocationPermissionPromptArea extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visible = prompt != null;
+    final duration = AppMotion.durationOf(context, AppMotion.medium2);
+    final child = visible
+        ? Padding(padding: const EdgeInsets.only(bottom: 8), child: prompt)
+        : const SizedBox(width: double.infinity);
+    if (duration == Duration.zero) {
+      return child;
+    }
     return AnimatedSize(
-      duration: AppMotion.medium2,
+      duration: duration,
       curve: AppMotion.standard,
       alignment: Alignment.topCenter,
       child: AnimatedOpacity(
-        duration: AppMotion.medium2,
+        duration: duration,
         curve: AppMotion.standard,
         opacity: visible ? 1 : 0,
-        child: visible
-            ? Padding(padding: const EdgeInsets.only(bottom: 16), child: prompt)
-            // Zero-height placeholder keeps the collapsed state full-width so
-            // the size animation starts from the same width as the card.
-            : const SizedBox(width: double.infinity),
+        child: child,
       ),
     );
   }
@@ -60,42 +63,36 @@ class LocationPermissionPrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return Card(
+    return Row(
       key: const Key('location-permission-prompt'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.location_on_outlined),
-                const SizedBox(width: 12),
-                Expanded(child: Text(strings.locationPermissionExplanation)),
-                IconButton(
-                  key: const Key('location-permission-dismiss'),
-                  icon: const Icon(Icons.close),
-                  onPressed: onDismiss,
-                  tooltip: strings.dismiss,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            FilledButton.icon(
-              key: const Key('location-permission-enable'),
-              onPressed: onEnable,
-              icon: const Icon(Icons.location_searching),
-              label: Text(
-                openSettings
-                    ? strings.openSettingsLabel
-                    : strings.enableLocation,
-              ),
-            ),
-          ],
+      children: [
+        const Icon(Icons.location_on_outlined, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            strings.locationPermissionExplanation,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
         ),
-      ),
+        TextButton(
+          key: const Key('location-permission-enable'),
+          onPressed: onEnable,
+          child: Text(
+            openSettings ? strings.openSettingsLabel : strings.enableLocation,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        IconButton(
+          key: const Key('location-permission-dismiss'),
+          icon: const Icon(Icons.close),
+          onPressed: onDismiss,
+          tooltip: strings.dismiss,
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
     );
   }
 }
