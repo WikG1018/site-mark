@@ -258,6 +258,9 @@ class AppStrings {
   String get cancel => _english ? 'Cancel' : '取消';
   String get exportFailed => _english ? 'Export failed' : '导出失败';
   String get captureDetail => _english ? 'Record details' : '记录详情';
+  String get fieldRecordTab => _english ? 'Field record' : '现场记录';
+  String get fileInfoTab => _english ? 'File info' : '文件信息';
+  String get fullFileName => _english ? 'Full file name' : '完整文件名';
   String get originalSha256 => _english ? 'Original SHA-256' : '原图 SHA-256';
   String get capturedAt => _english ? 'Captured at' : '拍摄时间';
   String get coordinates => _english ? 'Coordinates' : '坐标';

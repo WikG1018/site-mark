@@ -390,8 +390,12 @@ void main() {
 
     await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();
-    // The detail screen now leads with a large image preview, so the evidence
-    // card is below the fold and must be scrolled into view before asserting.
+    // File evidence lives in the detail screen's file-info tab below the
+    // preview. Scroll to the tabs before selecting it.
+    await tester.ensureVisible(find.byKey(const Key('detail-tab-file-info')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('detail-tab-file-info')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('原图 SHA-256'),
       200,
@@ -399,7 +403,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('原图 SHA-256'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-record')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('edit-work-location')),
@@ -414,7 +420,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('B 区屋面'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-record')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
@@ -628,7 +636,9 @@ void main() {
 
     await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-record')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('edit-work-location')),

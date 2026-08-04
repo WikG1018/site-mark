@@ -1,6 +1,6 @@
-/// Builds the compact title used only in capture lists.
+/// Builds the compact title shared by capture lists and the detail app bar.
 ///
-/// Full stored photo numbers remain available on the detail screen. Both the
+/// Full stored photo numbers remain available in detail file information. Both
 /// legacy UUID-bearing format and the new short format end in the same daily
 /// sequence, so the list can display a stable date and sequence for either.
 String captureListDisplayName({

@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -5,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -25,6 +29,9 @@ void main() {
     bool settle = true,
     bool includeInitialCapture = false,
     bool originalDeleted = false,
+    Locale locale = const Locale('zh'),
+    CaptureStatus status = CaptureStatus.ready,
+    ProjectLifecycleStatus projectStatus = ProjectLifecycleStatus.active,
   }) async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -41,21 +48,34 @@ void main() {
     );
     await database.markCaptured(
       captureId: pending.id,
-      capturedAt: DateTime(2026, 7, 16, 9),
+      capturedAt: DateTime(2026, 8, 4, 9),
     );
-    await database.markRendering(
-      captureId: pending.id,
-      originalSha256:
-          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-    );
-    await database.markReady(
-      captureId: pending.id,
-      publishedUri: 'content://media/site-mark/1',
-    );
+    if (status != CaptureStatus.captured) {
+      await database.markRendering(
+        captureId: pending.id,
+        originalSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+    }
+    if (status == CaptureStatus.ready) {
+      await database.markReady(
+        captureId: pending.id,
+        publishedUri: 'content://media/site-mark/1',
+      );
+    } else if (status == CaptureStatus.failed) {
+      await database.markFailed(captureId: pending.id, reason: 'test failure');
+    }
     if (originalDeleted) {
       await database.markOriginalDeleted(pending.id);
     }
     final readyCapture = await database.captureById(pending.id);
+    if (projectStatus != ProjectLifecycleStatus.active) {
+      await database.updateProjectLifecycleStatus(
+        projectId: 'project-1',
+        expectedStatus: ProjectLifecycleStatus.active,
+        targetStatus: projectStatus,
+      );
+    }
 
     files = _DetailFiles();
     if (originalExists) files.existing.add('/private/original.jpg');
@@ -89,7 +109,7 @@ void main() {
           captureMediaServiceProvider.overrideWithValue(media),
         ],
         child: MaterialApp(
-          locale: const Locale('zh'),
+          locale: locale,
           supportedLocales: AppStrings.supportedLocales,
           localizationsDelegates: const [
             AppStrings.delegate,
@@ -116,16 +136,180 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
-  testWidgets('detail shows both file sizes and original toggle', (
+  Future<void> showFileInfo(WidgetTester tester) async {
+    final tab = find.byKey(const Key('detail-tab-file-info'));
+    await tester.ensureVisible(tab);
+    await tester.pumpAndSettle();
+    await tester.tap(tab);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('detail uses short title, tabs, and file metadata section', (
     tester,
   ) async {
     await pumpReadyDetail(tester, originalExists: true);
+
+    expect(find.text('2026-08-04 · 001'), findsOneWidget);
+    expect(find.text('东区厂房改造-SM-20260804-001.jpg'), findsNothing);
+    expect(find.byKey(const Key('detail-tab-field-record')), findsOneWidget);
+    expect(find.byKey(const Key('detail-tab-file-info')), findsOneWidget);
+    expect(find.text('A 区'), findsOneWidget);
+    expect(find.text('4.8 MB'), findsNothing);
+
+    await showFileInfo(tester);
+
+    expect(find.text('东区厂房改造-SM-20260804-001.jpg'), findsOneWidget);
     expect(find.text('4.8 MB'), findsOneWidget);
     expect(find.text('3.1 MB'), findsOneWidget);
+    expect(find.text('4000 × 3000'), findsNWidgets(2));
+    expect(find.text('image/jpeg'), findsNWidgets(2));
+    expect(find.text('已发布'), findsOneWidget);
+    expect(
+      find.text(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('show-original')), findsOneWidget);
-    expect(find.byKey(const Key('delete-original')), findsOneWidget);
-    expect(find.byKey(const Key('delete-all')), findsOneWidget);
+    expect(find.byKey(const Key('delete-original')), findsNothing);
+    expect(find.byKey(const Key('delete-all')), findsNothing);
+    expect(find.byKey(const Key('capture-detail-actions')), findsOneWidget);
     await disposeDetail(tester);
+  });
+
+  testWidgets('action sheet contains text actions and dangerous styling', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('capture-detail-action-sheet')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('edit-record')), findsOneWidget);
+    expect(find.byKey(const Key('delete-original')), findsOneWidget);
+    final deleteRecord = tester.widget<ListTile>(
+      find.byKey(const Key('delete-record')),
+    );
+    expect(
+      (deleteRecord.leading! as Icon).color,
+      Theme.of(
+        tester.element(find.byKey(const Key('delete-record'))),
+      ).colorScheme.error,
+    );
+    expect(
+      (deleteRecord.title as Text).style?.color,
+      Theme.of(
+        tester.element(find.byKey(const Key('delete-record'))),
+      ).colorScheme.error,
+    );
+
+    await disposeDetail(tester);
+  });
+
+  testWidgets('system back closes the action sheet before detail', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('capture-detail-action-sheet')), findsNothing);
+    expect(find.byType(CaptureDetailScreen), findsOneWidget);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('tabs and action controls expose tappable semantics', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await pumpReadyDetail(tester, originalExists: true);
+
+    final actions = tester.getSemantics(
+      find.byKey(const Key('capture-detail-actions')),
+    );
+    expect(actions.label, isNotEmpty);
+    expect(actions.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+
+    await tester.ensureVisible(
+      find.byKey(const Key('detail-tab-field-record')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel(RegExp('现场记录')), findsOneWidget);
+    final fileInfoTab = find.bySemanticsLabel(RegExp('文件信息'));
+    expect(fileInfoTab, findsOneWidget);
+    await tester.tap(fileInfoTab);
+    await tester.pumpAndSettle();
+    expect(find.text('完整文件名'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    final deleteRecord = tester.getSemantics(
+      find.byKey(const Key('delete-record')),
+    );
+    expect(deleteRecord.label, contains('删除记录'));
+    expect(
+      deleteRecord.getSemanticsData().hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+    await disposeDetail(tester);
+    semantics.dispose();
+  });
+
+  testWidgets('tab selection survives capture stream refresh', (tester) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    await showFileInfo(tester);
+    expect(find.text('完整文件名'), findsOneWidget);
+
+    await database.markOriginalDeleted('capture-1');
+    await tester.pumpAndSettle();
+
+    expect(find.text('完整文件名'), findsOneWidget);
+    expect(find.text('原图已清理'), findsOneWidget);
+    expect(find.text('A 区'), findsNothing);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('detail is scrollable at 360dp and 3x in both locales', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final locale in const [Locale('zh'), Locale('en')]) {
+      await pumpReadyDetail(tester, originalExists: true, locale: locale);
+      expect(
+        find.text(locale.languageCode == 'zh' ? '现场记录' : 'Field record'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(locale.languageCode == 'zh' ? '文件信息' : 'File info'),
+        findsOneWidget,
+      );
+      await showFileInfo(tester);
+      expect(
+        find.text(locale.languageCode == 'zh' ? '完整文件名' : 'Full file name'),
+        findsOneWidget,
+      );
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -500));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text(
+          locale.languageCode == 'zh' ? '原图 SHA-256' : 'Original SHA-256',
+        ),
+        findsOneWidget,
+      );
+      await disposeDetail(tester);
+    }
   });
 
   testWidgets('detail exposes the record Hero on its first route frame', (
@@ -247,11 +431,14 @@ void main() {
     tester,
   ) async {
     await pumpReadyDetail(tester, originalExists: true);
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('delete-original')));
     // Advance past the 5-second undo window so the timer fires.
     await tester.pump();
     await tester.pump(const Duration(seconds: 6));
     await tester.pumpAndSettle();
+    await showFileInfo(tester);
     expect(find.text('原图已清理'), findsOneWidget);
     expect(find.byKey(const Key('show-original')), findsNothing);
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
@@ -261,6 +448,8 @@ void main() {
 
   testWidgets('undo cancels the delete-original timer', (tester) async {
     await pumpReadyDetail(tester, originalExists: true);
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('delete-original')));
     // Let the SnackBar appear without advancing past the 5-second window.
     await tester.pump();
@@ -282,11 +471,98 @@ void main() {
   ) async {
     await pumpReadyDetail(tester, originalExists: false);
 
+    await showFileInfo(tester);
     expect(find.text('原图缺失'), findsOneWidget);
     expect(find.byKey(const Key('show-original')), findsNothing);
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('delete-original')), findsNothing);
-    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(find.byKey(const Key('edit-record')), findsNothing);
+    expect(find.byKey(const Key('delete-record')), findsOneWidget);
 
+    await disposeDetail(tester);
+  });
+
+  testWidgets('failed detail offers cleanup and record deletion but no edit', (
+    tester,
+  ) async {
+    await pumpReadyDetail(
+      tester,
+      originalExists: true,
+      status: CaptureStatus.failed,
+    );
+
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('edit-record')), findsNothing);
+    expect(find.byKey(const Key('delete-original')), findsOneWidget);
+    expect(find.byKey(const Key('delete-record')), findsOneWidget);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('processing and read-only details expose no mutation menu', (
+    tester,
+  ) async {
+    await pumpReadyDetail(
+      tester,
+      originalExists: true,
+      status: CaptureStatus.rendering,
+    );
+    expect(find.byKey(const Key('capture-detail-actions')), findsNothing);
+    await disposeDetail(tester);
+
+    await pumpReadyDetail(
+      tester,
+      originalExists: true,
+      projectStatus: ProjectLifecycleStatus.completed,
+    );
+    expect(find.byKey(const Key('capture-detail-actions')), findsNothing);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('stale action is ignored when project becomes read-only', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await database.updateProjectLifecycleStatus(
+      projectId: 'project-1',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.completed,
+    );
+
+    await tester.tap(find.byKey(const Key('delete-original')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+
+    expect(
+      (await database.captureById('capture-1'))?.originalDeletedAt,
+      isNull,
+    );
+    expect(files.existing, contains('/private/original.jpg'));
+    await disposeDetail(tester);
+  });
+
+  testWidgets('stale delete is ignored when record starts processing', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await database.markCaptured(
+      captureId: 'capture-1',
+      capturedAt: DateTime(2026, 8, 4, 10),
+    );
+
+    await tester.tap(find.byKey(const Key('delete-record')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(await database.captureById('capture-1'), isNotNull);
+    expect(files.existing, contains('/private/original.jpg'));
     await disposeDetail(tester);
   });
 
@@ -296,6 +572,8 @@ void main() {
     await pumpReadyDetail(tester, originalExists: true);
     files.deleteError = StateError('delete blocked');
 
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('delete-original')));
     await tester.pump();
     // Verify the undo Snackbar appears.
