@@ -44,12 +44,14 @@ class SettingsEntry extends StatelessWidget {
     required this.title,
     required this.route,
     this.subtitle,
+    this.reserveSubtitleSpace = false,
   });
 
   final IconData icon;
   final String title;
   final String route;
   final String? subtitle;
+  final bool reserveSubtitleSpace;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +59,13 @@ class SettingsEntry extends StatelessWidget {
       minTileHeight: 48,
       leading: Icon(icon),
       title: Text(title),
-      subtitle: subtitle == null ? null : Text(subtitle!),
+      subtitle: switch (subtitle) {
+        final value? => Text(value),
+        null when reserveSubtitleSpace => const ExcludeSemantics(
+          child: Text(' '),
+        ),
+        null => null,
+      },
       trailing: const Icon(Icons.chevron_right),
       onTap: () => context.push(route),
     );

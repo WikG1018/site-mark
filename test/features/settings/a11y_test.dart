@@ -16,6 +16,18 @@ import 'package:sitemark/workflow/app_storage_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
+  Future<void> closeRouterFixture(
+    WidgetTester tester,
+    ProviderContainer container,
+    AppDatabase database,
+  ) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    container.dispose();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.runAsync(database.close);
+  }
+
   testWidgets('global settings screen meets the Android tap target guideline', (
     tester,
   ) async {
@@ -61,57 +73,81 @@ void main() {
     }
   });
 
-  testWidgets('settings remain scrollable at 360dp and 3x text', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('real root settings remain usable at 360dp and 3x text in '
+        '${locale.languageCode}', (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final database = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    final settings = await database.getAppSettings();
-    await tester.pumpWidget(
-      ProviderScope(
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      await database.getAppSettings();
+      final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(database),
           storageUsageServiceProvider.overrideWithValue(
             _A11yStorageUsageService(),
           ),
-          appSettingsProvider.overrideWith((ref) => Stream.value(settings)),
         ],
-        child: MaterialApp(
-          locale: const Locale('en'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: const [
-            AppStrings.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(3)),
-            child: child!,
+      );
+      try {
+        final router = container.read(routerProvider);
+        router.go('/settings');
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp.router(
+              locale: locale,
+              supportedLocales: AppStrings.supportedLocales,
+              localizationsDelegates: const [
+                AppStrings.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(3)),
+                child: child!,
+              ),
+              routerConfig: router,
+            ),
           ),
-          home: const GlobalSettingsScreen(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-    await tester.scrollUntilVisible(
-      find.text('About'),
-      400,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('About'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+        expect(find.byKey(const Key('root-dock')), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        final aboutEntry = find.byKey(const Key('settings-entry-about'));
+        await tester.scrollUntilVisible(
+          aboutEntry,
+          400,
+          scrollable: find.descendant(
+            of: find.byType(GlobalSettingsScreen),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.getRect(aboutEntry).bottom,
+          lessThanOrEqualTo(
+            tester.getRect(find.byKey(const Key('root-dock'))).top,
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        await tester.tap(aboutEntry);
+        expect(
+          router.routeInformationProvider.value.uri.path,
+          '/settings/about',
+        );
+      } finally {
+        await closeRouterFixture(tester, container, database);
+      }
+    });
+  }
 
   testWidgets('capture date filter bar meets the Android tap target '
       'guideline', (tester) async {

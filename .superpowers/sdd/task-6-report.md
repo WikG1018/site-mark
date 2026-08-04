@@ -43,3 +43,30 @@ flutter test test/features/settings/global_settings_screen_test.dart test/featur
 - 提交标题：`feat: group settings into glass sections`
 - 未推送。
 - 未开始 Task 7。
+
+## 审查修复：稳定摘要与真实导航覆盖
+
+### 实现
+
+- 设置摘要只读取已经落定、且不处于加载状态的 `AsyncData`；刷新中、纯加载及携带旧值的错误状态均不复用旧摘要。
+- 通知、存储和语言三行始终保留一个排除语义的空副标题槽位，因此摘要清空时本行及其后续行不会上下跳动。
+- 精确验证 9 个 `SettingsEntry`、三组各 3 项及全部路由（含诊断页），并分别点击每组一个代表入口。
+- 使用真实数据库、provider 和 router 验证从语言页返回后摘要切换为 English，以及存储 provider 失效后从存储页返回时摘要更新为 2 KB。
+- 使用真实 `RootNavigationScaffold` 在 360dp、3 倍字号、中英文两种环境中把最后一项滚动到 root dock 上方，验证无溢出且可点击。
+
+### TDD RED
+
+- 构造带旧值的刷新、加载和错误状态后，三种状态最初都错误显示 `[简体中文, 已开启, 1.0 KB]`，证明直接读取 `.value` 会泄漏旧摘要。
+- 严格读取落定数据后摘要成功清空，但布局测试继续按预期失败：通知、存储、语言行均从 60dp 缩至 48dp；备份、诊断、关于分别上移 12dp、24dp、36dp。
+
+### GREEN 与最终门禁
+
+- 稳定摘要/几何测试：1/1 通过；刷新、加载、错误状态均无旧摘要、无 spinner，所有相关行尺寸及纵向位置保持不变。
+- 指定双文件：16/16 通过。
+- 设置目录全部测试：71/71 通过。
+- 导航与 widget 测试：45/45 通过。
+- `flutter analyze`：无问题。
+- 完整 `flutter test`：799/799 通过。
+- `git diff --check`：通过。
+
+审查修复使用独立提交标题 `fix: stabilize settings summaries`；不 amend、不推送，仍未开始 Task 7。

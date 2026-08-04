@@ -11,6 +11,7 @@ import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
+import 'package:sitemark/features/settings/settings_group.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
@@ -136,6 +137,45 @@ void main() {
     }
   });
 
+  testWidgets('contains exactly three groups and the nine expected routes', (
+    tester,
+  ) async {
+    await pumpSettings(tester);
+
+    const groupKeys = [
+      Key('settings-group-capture'),
+      Key('settings-group-data'),
+      Key('settings-group-app'),
+    ];
+    for (final key in groupKeys) {
+      final group = tester.widget<SettingsGroup>(find.byKey(key));
+      expect(group.children, hasLength(3));
+      expect(group.children, everyElement(isA<SettingsEntry>()));
+    }
+
+    final entries = tester.widgetList<SettingsEntry>(
+      find.byType(SettingsEntry),
+    );
+    expect(entries, hasLength(9));
+    expect(entries.map((entry) => entry.route), [
+      '/settings/watermark',
+      '/settings/location',
+      '/settings/notification',
+      '/settings/backup-restore',
+      '/settings/storage',
+      '/settings/diagnostics',
+      '/settings/appearance',
+      '/settings/language',
+      '/settings/about',
+    ]);
+    expect(
+      entries
+          .where((entry) => entry.reserveSubtitleSpace)
+          .map((entry) => entry.route),
+      ['/settings/notification', '/settings/storage', '/settings/language'],
+    );
+  });
+
   testWidgets('keeps unfinished async summaries blank without a spinner', (
     tester,
   ) async {
@@ -150,7 +190,12 @@ void main() {
     final storageTile = tester.widget<ListTile>(
       find.ancestor(of: find.text('储存'), matching: find.byType(ListTile)),
     );
-    expect(storageTile.subtitle, isNull);
+    expect(storageTile.subtitle, isA<ExcludeSemantics>());
+    final semantics = tester.getSemantics(
+      find.ancestor(of: find.text('储存'), matching: find.byType(ListTile)),
+    );
+    expect(semantics.label, contains('储存'));
+    expect(semantics.label, isNot(contains('1.0 KB')));
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
@@ -167,6 +212,133 @@ void main() {
     expect(find.byKey(const Key('settings-group-app')), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
+
+  testWidgets(
+    'refresh and error discard previous summaries without moving rows',
+    (tester) async {
+      await database.getAppSettings();
+      await database.updateAppSettings(
+        localeCode: 'zh',
+        completionNotificationsEnabled: true,
+      );
+      final settings = await database.getAppSettings();
+      const usage = AppStorageUsage(
+        originalBytes: 1025,
+        renderedBytes: 0,
+        exportBytes: 0,
+        databaseAndOtherBytes: 0,
+      );
+      final settingsData = AsyncData(settings);
+      const storageData = AsyncData(usage);
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          appSettingsProvider.overrideWithValue(settingsData),
+          storageUsageProvider.overrideWithValue(storageData),
+        ],
+      );
+      late Map<Key, Rect> dataRects;
+      late Map<String, Object> refreshSnapshot;
+      late Map<String, Object> loadingSnapshot;
+      late Map<String, Object> errorSnapshot;
+      try {
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              locale: const Locale('zh'),
+              supportedLocales: AppStrings.supportedLocales,
+              localizationsDelegates: const [
+                AppStrings.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: const GlobalSettingsScreen(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('简体中文'), findsOneWidget);
+        expect(find.text('已开启'), findsOneWidget);
+        expect(find.text('1.0 KB'), findsOneWidget);
+        dataRects = _summaryAndFollowingRects(tester);
+
+        container.updateOverrides([
+          databaseProvider.overrideWithValue(database),
+          appSettingsProvider.overrideWithValue(
+            _withPrevious(const AsyncLoading<AppSetting>(), settingsData),
+          ),
+          storageUsageProvider.overrideWithValue(
+            _withPrevious(const AsyncLoading<AppStorageUsage>(), storageData),
+          ),
+        ]);
+        await tester.pump();
+        refreshSnapshot = _summaryStateSnapshot(tester);
+
+        container.updateOverrides([
+          databaseProvider.overrideWithValue(database),
+          appSettingsProvider.overrideWithValue(
+            _withPrevious(
+              const AsyncLoading<AppSetting>(),
+              settingsData,
+              isRefresh: false,
+            ),
+          ),
+          storageUsageProvider.overrideWithValue(
+            _withPrevious(
+              const AsyncLoading<AppStorageUsage>(),
+              storageData,
+              isRefresh: false,
+            ),
+          ),
+        ]);
+        await tester.pump();
+        loadingSnapshot = _summaryStateSnapshot(tester);
+
+        container.updateOverrides([
+          databaseProvider.overrideWithValue(database),
+          appSettingsProvider.overrideWithValue(
+            _withPrevious(
+              AsyncError<AppSetting>(
+                StateError('settings refresh failed'),
+                StackTrace.empty,
+              ),
+              settingsData,
+            ),
+          ),
+          storageUsageProvider.overrideWithValue(
+            _withPrevious(
+              AsyncError<AppStorageUsage>(
+                StateError('storage refresh failed'),
+                StackTrace.empty,
+              ),
+              storageData,
+            ),
+          ),
+        ]);
+        await tester.pump();
+        errorSnapshot = _summaryStateSnapshot(tester);
+      } finally {
+        await closeRouterFixture(tester, container);
+      }
+
+      final expected = {
+        'summaries': <String>[],
+        'spinnerCount': 0,
+        'rects': dataRects,
+      };
+      expect(
+        {
+          'refresh': refreshSnapshot,
+          'loading': loadingSnapshot,
+          'error': errorSnapshot,
+        },
+        {'refresh': expected, 'loading': expected, 'error': expected},
+      );
+    },
+  );
 
   testWidgets('refreshes language and notification summaries live', (
     tester,
@@ -230,6 +402,153 @@ void main() {
         find.byKey(const Key('root-destination-settings')),
         findsOneWidget,
       );
+    } finally {
+      await closeRouterFixture(tester, container);
+    }
+  });
+
+  testWidgets('a representative entry from every group navigates', (
+    tester,
+  ) async {
+    await database.getAppSettings();
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        storageUsageServiceProvider.overrideWithValue(
+          _RecordingStorageUsageService(const [
+            AppStorageUsage(
+              originalBytes: 0,
+              renderedBytes: 0,
+              exportBytes: 0,
+              databaseAndOtherBytes: 0,
+            ),
+          ]),
+        ),
+      ],
+    );
+    try {
+      final router = container.read(routerProvider);
+      router.go('/settings');
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final (key, route) in const [
+        (Key('settings-entry-watermark'), '/settings/watermark'),
+        (Key('settings-entry-diagnostics'), '/settings/diagnostics'),
+        (Key('settings-entry-appearance'), '/settings/appearance'),
+      ]) {
+        router.go('/settings');
+        await tester.pumpAndSettle();
+        final entry = find.byKey(key);
+        await tester.ensureVisible(entry);
+        await tester.pumpAndSettle();
+        await tester.tap(entry);
+        expect(router.routeInformationProvider.value.uri.path, route);
+      }
+    } finally {
+      await closeRouterFixture(tester, container);
+    }
+  });
+
+  testWidgets('real subpage updates refresh summaries after returning', (
+    tester,
+  ) async {
+    await database.getAppSettings();
+    await database.updateAppSettings(localeCode: 'zh');
+    final storage = _RecordingStorageUsageService(const [
+      AppStorageUsage(
+        originalBytes: 1025,
+        renderedBytes: 0,
+        exportBytes: 0,
+        databaseAndOtherBytes: 0,
+      ),
+      AppStorageUsage(
+        originalBytes: 2048,
+        renderedBytes: 0,
+        exportBytes: 0,
+        databaseAndOtherBytes: 0,
+      ),
+    ]);
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        storageUsageServiceProvider.overrideWithValue(storage),
+      ],
+    );
+    try {
+      final router = container.read(routerProvider);
+      router.go('/settings');
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('简体中文'), findsOneWidget);
+      expect(find.text('1.0 KB'), findsOneWidget);
+
+      final languageEntry = find.byKey(const Key('settings-entry-language'));
+      await Scrollable.ensureVisible(
+        tester.element(languageEntry),
+        alignment: 0.5,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(languageEntry).bottom,
+        lessThan(tester.getRect(find.byKey(const Key('root-dock'))).top),
+      );
+      await tester.tap(languageEntry);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('language-en')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('English'), findsOneWidget);
+
+      final storageEntry = find.byKey(const Key('settings-entry-storage'));
+      await Scrollable.ensureVisible(
+        tester.element(storageEntry),
+        alignment: 0.5,
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(storageEntry).bottom,
+        lessThan(tester.getRect(find.byKey(const Key('root-dock'))).top),
+      );
+      await tester.tap(storageEntry);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('storage-refresh')));
+      await tester.pumpAndSettle();
+      expect(find.text('2 KB'), findsWidgets);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('2 KB'), findsOneWidget);
     } finally {
       await closeRouterFixture(tester, container);
     }
@@ -319,6 +638,44 @@ void main() {
       reenteredListener.close();
     },
   );
+}
+
+Map<Key, Rect> _summaryAndFollowingRects(WidgetTester tester) {
+  const keys = [
+    Key('settings-entry-notification'),
+    Key('backup-restore-menu'),
+    Key('settings-entry-storage'),
+    Key('settings-entry-diagnostics'),
+    Key('settings-entry-language'),
+    Key('settings-entry-about'),
+  ];
+  return {for (final key in keys) key: tester.getRect(find.byKey(key))};
+}
+
+List<String> _visibleSummaryTexts(WidgetTester tester) {
+  return [
+    for (final text in const ['简体中文', '已开启', '1.0 KB'])
+      if (find.text(text).evaluate().isNotEmpty) text,
+  ];
+}
+
+Map<String, Object> _summaryStateSnapshot(WidgetTester tester) {
+  return {
+    'summaries': _visibleSummaryTexts(tester),
+    'spinnerCount': find.byType(CircularProgressIndicator).evaluate().length,
+    'rects': _summaryAndFollowingRects(tester),
+  };
+}
+
+AsyncValue<T> _withPrevious<T>(
+  AsyncValue<T> next,
+  AsyncValue<T> previous, {
+  bool isRefresh = true,
+}) {
+  // The review specifically exercises Riverpod's retained previous-value
+  // states; this internal primitive is their deterministic constructor.
+  // ignore: invalid_use_of_internal_member
+  return next.copyWithPrevious(previous, isRefresh: isRefresh);
 }
 
 class _RecordingStorageUsageService implements StorageUsageService {

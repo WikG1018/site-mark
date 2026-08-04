@@ -11,8 +11,8 @@ class GlobalSettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final strings = AppStrings.of(context);
-    final settings = ref.watch(appSettingsProvider).value;
-    final storageUsage = ref.watch(storageUsageProvider).value;
+    final settings = _settledValue(ref.watch(appSettingsProvider));
+    final storageUsage = _settledValue(ref.watch(storageUsageProvider));
     final languageSummary = settings == null
         ? null
         : switch (settings.localeCode) {
@@ -58,6 +58,7 @@ class GlobalSettingsScreen extends ConsumerWidget {
                 icon: Icons.notifications_outlined,
                 title: strings.completionNotificationTitle,
                 subtitle: notificationSummary,
+                reserveSubtitleSpace: true,
                 route: '/settings/notification',
               ),
             ],
@@ -77,6 +78,7 @@ class GlobalSettingsScreen extends ConsumerWidget {
                 icon: Icons.storage_outlined,
                 title: strings.storageMenuLabel,
                 subtitle: storageSummary,
+                reserveSubtitleSpace: true,
                 route: '/settings/storage',
               ),
               SettingsEntry(
@@ -102,6 +104,7 @@ class GlobalSettingsScreen extends ConsumerWidget {
                 icon: Icons.language,
                 title: strings.language,
                 subtitle: languageSummary,
+                reserveSubtitleSpace: true,
                 route: '/settings/language',
               ),
               SettingsEntry(
@@ -116,4 +119,11 @@ class GlobalSettingsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+T? _settledValue<T>(AsyncValue<T> state) {
+  return switch (state) {
+    AsyncData<T>(:final value) when !state.isLoading => value,
+    _ => null,
+  };
 }
