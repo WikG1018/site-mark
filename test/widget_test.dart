@@ -638,7 +638,14 @@ void main() {
     await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('外观'));
+    final appearanceEntry = find.text('外观');
+    await tester.ensureVisible(appearanceEntry);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getCenter(appearanceEntry).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('root-dock'))).dy),
+    );
+    await tester.tap(appearanceEntry);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('theme-system')), findsOneWidget);
 

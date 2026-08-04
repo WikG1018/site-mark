@@ -7,10 +7,12 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
+import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/app_storage_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
@@ -19,7 +21,7 @@ void main() {
   ) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
-    await database.getAppSettings();
+    final settings = await database.getAppSettings();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -27,6 +29,10 @@ void main() {
           platformServicesProvider.overrideWithValue(
             _A11yTestPlatformServices(),
           ),
+          storageUsageServiceProvider.overrideWithValue(
+            _A11yStorageUsageService(),
+          ),
+          appSettingsProvider.overrideWith((ref) => Stream.value(settings)),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -44,6 +50,67 @@ void main() {
     await tester.pumpAndSettle();
 
     await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
+    expect(find.byKey(const Key('settings-group-capture')), findsOneWidget);
+    for (final tile in tester.widgetList<ListTile>(find.byType(ListTile))) {
+      expect(
+        tester.getSize(find.byWidget(tile)).height,
+        greaterThanOrEqualTo(48),
+      );
+    }
+  });
+
+  testWidgets('settings remain scrollable at 360dp and 3x text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final settings = await database.getAppSettings();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          storageUsageServiceProvider.overrideWithValue(
+            _A11yStorageUsageService(),
+          ),
+          appSettingsProvider.overrideWith((ref) => Stream.value(settings)),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3)),
+            child: child!,
+          ),
+          home: const GlobalSettingsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(
+      find.text('About'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('About'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('capture date filter bar meets the Android tap target '
@@ -82,6 +149,19 @@ void main() {
 
     await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
   });
+}
+
+class _A11yStorageUsageService implements StorageUsageService {
+  @override
+  Future<AppStorageUsage> load() async => const AppStorageUsage(
+    originalBytes: 1025,
+    renderedBytes: 0,
+    exportBytes: 0,
+    databaseAndOtherBytes: 0,
+  );
+
+  @override
+  Future<ClearExportsResult> clearExports() => throw UnimplementedError();
 }
 
 class _A11yTestPlatformServices implements PlatformServices {

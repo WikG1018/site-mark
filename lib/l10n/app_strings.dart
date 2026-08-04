@@ -342,6 +342,10 @@ class AppStrings {
   String get retryProcessing => _english ? 'Retry processing' : '重新处理';
 
   // Global settings and About
+  String get settingsCaptureAndRecords =>
+      _english ? 'Capture & records' : '拍摄与记录';
+  String get settingsDataAndSafety => _english ? 'Data & safety' : '数据与安全';
+  String get settingsApplication => _english ? 'Application' : '应用';
   String get appearance => _english ? 'Appearance' : '外观';
   String get theme => _english ? 'Theme' : '主题';
   String get systemTheme => _english ? 'System' : '跟随系统';

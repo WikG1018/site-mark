@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -11,6 +13,7 @@ import 'package:sitemark/features/settings/sections/backup_restore_section_scree
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/shared/ui/glass_surface.dart';
 import 'package:sitemark/workflow/app_storage_service.dart';
 
 void main() {
@@ -42,11 +45,32 @@ void main() {
 
   /// Pumps the [GlobalSettingsScreen] in a localized Material harness wired to
   /// the in-memory [database] via Riverpod overrides.
-  Future<void> pumpSettings(WidgetTester tester) async {
-    await database.getAppSettings();
+  Future<void> pumpSettings(
+    WidgetTester tester, {
+    StorageUsageService? storage,
+    Stream<AppSetting>? settingsStream,
+    bool settle = true,
+  }) async {
+    final initialSettings = await database.getAppSettings();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(database)],
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          storageUsageServiceProvider.overrideWithValue(
+            storage ??
+                _RecordingStorageUsageService(const [
+                  AppStorageUsage(
+                    originalBytes: 1025,
+                    renderedBytes: 0,
+                    exportBytes: 0,
+                    databaseAndOtherBytes: 0,
+                  ),
+                ]),
+          ),
+          appSettingsProvider.overrideWith(
+            (ref) => settingsStream ?? Stream.value(initialSettings),
+          ),
+        ],
         child: MaterialApp(
           locale: const Locale('zh'),
           supportedLocales: AppStrings.supportedLocales,
@@ -60,13 +84,29 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await tester.pump();
+    }
   }
 
-  testWidgets('shows backup and restore among 8 settings entries', (
+  testWidgets('groups all settings and shows current summaries', (
     tester,
   ) async {
+    await database.getAppSettings();
+    await database.updateAppSettings(
+      localeCode: 'zh',
+      completionNotificationsEnabled: true,
+    );
     await pumpSettings(tester);
+
+    expect(find.byKey(const Key('settings-group-capture')), findsOneWidget);
+    expect(find.byKey(const Key('settings-group-data')), findsOneWidget);
+    expect(find.byKey(const Key('settings-group-app')), findsOneWidget);
+    expect(find.text('拍摄与记录'), findsOneWidget);
+    expect(find.text('数据与安全'), findsOneWidget);
+    expect(find.text('应用'), findsOneWidget);
     expect(find.text('新建项目水印默认值'), findsOneWidget);
     expect(find.byKey(const Key('backup-restore-menu')), findsOneWidget);
     expect(find.text('备份与恢复'), findsOneWidget);
@@ -76,6 +116,84 @@ void main() {
     expect(find.text('定位'), findsOneWidget);
     expect(find.text('完成通知'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
+    expect(find.text('简体中文'), findsOneWidget);
+    expect(find.text('已开启'), findsOneWidget);
+    expect(find.text('1.0 KB'), findsOneWidget);
+    expect(find.byType(BackButton), findsNothing);
+  });
+
+  testWidgets('uses three rounded glass lists separated between rows', (
+    tester,
+  ) async {
+    await pumpSettings(tester);
+
+    expect(find.byType(GlassSurface), findsNWidgets(3));
+    expect(find.byType(Divider), findsNWidgets(6));
+    for (final surface in tester.widgetList<GlassSurface>(
+      find.byType(GlassSurface),
+    )) {
+      expect(surface.borderRadius, const BorderRadius.all(Radius.circular(20)));
+    }
+  });
+
+  testWidgets('keeps unfinished async summaries blank without a spinner', (
+    tester,
+  ) async {
+    final storageCompleter = Completer<AppStorageUsage>();
+    await pumpSettings(
+      tester,
+      storage: _PendingStorageUsageService(storageCompleter.future),
+      settle: false,
+    );
+
+    expect(find.byKey(const Key('settings-group-data')), findsOneWidget);
+    final storageTile = tester.widget<ListTile>(
+      find.ancestor(of: find.text('储存'), matching: find.byType(ListTile)),
+    );
+    expect(storageTile.subtitle, isNull);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('provider errors leave summaries blank without crashing', (
+    tester,
+  ) async {
+    await pumpSettings(
+      tester,
+      storage: _FailingStorageUsageService(),
+      settingsStream: Stream<AppSetting>.error(StateError('settings failed')),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('settings-group-app')), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('refreshes language and notification summaries live', (
+    tester,
+  ) async {
+    await database.getAppSettings();
+    await database.updateAppSettings(
+      localeCode: 'zh',
+      completionNotificationsEnabled: false,
+    );
+    final settingsStream = StreamController<AppSetting>();
+    addTearDown(settingsStream.close);
+    final initialSettings = await database.getAppSettings();
+    await pumpSettings(tester, settingsStream: settingsStream.stream);
+    settingsStream.add(initialSettings);
+    await tester.pumpAndSettle();
+    expect(find.text('简体中文'), findsOneWidget);
+    expect(find.text('未开启'), findsOneWidget);
+
+    await database.updateAppSettings(
+      localeCode: 'en',
+      completionNotificationsEnabled: true,
+    );
+    settingsStream.add(await database.getAppSettings());
+    await tester.pumpAndSettle();
+
+    expect(find.text('English'), findsOneWidget);
+    expect(find.text('已开启'), findsOneWidget);
   });
 
   testWidgets('settings route is reachable from the app shell', (tester) async {
@@ -231,4 +349,24 @@ class _RecordingStorageUsageService implements StorageUsageService {
     );
     return const ClearExportsResult(deletedFiles: 1, freedBytes: 1024);
   }
+}
+
+class _PendingStorageUsageService implements StorageUsageService {
+  _PendingStorageUsageService(this.pending);
+
+  final Future<AppStorageUsage> pending;
+
+  @override
+  Future<AppStorageUsage> load() => pending;
+
+  @override
+  Future<ClearExportsResult> clearExports() => throw UnimplementedError();
+}
+
+class _FailingStorageUsageService implements StorageUsageService {
+  @override
+  Future<AppStorageUsage> load() => Future.error(StateError('storage failed'));
+
+  @override
+  Future<ClearExportsResult> clearExports() => throw UnimplementedError();
 }
