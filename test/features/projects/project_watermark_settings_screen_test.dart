@@ -53,7 +53,7 @@ void main() {
       find.byKey(const Key('watermark-preview-opacity')),
     );
     expect(opacity.opacity, 0.78);
-    expect(opacity.duration, const Duration(milliseconds: 200));
+    expect(opacity.duration, const Duration(milliseconds: 180));
 
     final align = tester.widget<Align>(
       find.descendant(
