@@ -670,19 +670,50 @@ class CaptureNotesField extends StatefulWidget {
 }
 
 class _CaptureNotesFieldState extends State<CaptureNotesField> {
-  var _expanded = false;
+  late bool _expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = widget.controller.text.trim().isNotEmpty;
+    widget.controller.addListener(_showRestoredNotes);
+  }
+
+  @override
+  void didUpdateWidget(covariant CaptureNotesField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_showRestoredNotes);
+    widget.controller.addListener(_showRestoredNotes);
+    if (widget.controller.text.trim().isNotEmpty) {
+      _expanded = true;
+    }
+  }
+
+  void _showRestoredNotes() {
+    if (!mounted || _expanded || widget.controller.text.trim().isEmpty) return;
+    setState(() => _expanded = true);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_showRestoredNotes);
+    super.dispose();
+  }
 
   void _toggleExpanded() => setState(() => _expanded = !_expanded);
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final collapsedNote = widget.controller.text.trim();
     final child = _expanded
         ? TextFormField(
             key: const Key('notes'),
             controller: widget.controller,
             maxLines: 3,
             decoration: InputDecoration(
-              labelText: AppStrings.of(context).notesOptional,
+              labelText: strings.notesOptional,
               alignLabelWithHint: true,
             ),
           )
@@ -694,7 +725,9 @@ class _CaptureNotesFieldState extends State<CaptureNotesField> {
           key: const Key('notes-expander'),
           container: true,
           button: true,
-          label: AppStrings.of(context).notesOptional,
+          label: !_expanded && collapsedNote.isNotEmpty
+              ? '${strings.notesOptional}: $collapsedNote'
+              : strings.notesOptional,
           expanded: _expanded,
           onTap: _toggleExpanded,
           child: ExcludeSemantics(
@@ -702,7 +735,14 @@ class _CaptureNotesFieldState extends State<CaptureNotesField> {
               contentPadding: EdgeInsets.zero,
               dense: true,
               visualDensity: VisualDensity.compact,
-              title: Text(AppStrings.of(context).notesOptional),
+              title: Text(strings.notesOptional),
+              subtitle: !_expanded && collapsedNote.isNotEmpty
+                  ? Text(
+                      collapsedNote,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  : null,
               trailing: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
               onTap: _toggleExpanded,
             ),

@@ -4,6 +4,14 @@ Date: 2026-08-04
 Branch: `design/ui-refresh-v2`
 Baseline: `9b53b720b084a834c2a8866af15964912748d7da`
 
+> Post-review correction (2026-08-05): this report described the Task 10
+> checkpoint, not final branch acceptance. Final review subsequently found
+> missing Back handling for active record filters, hidden restored notes, a
+> permanently loading file-info error path, stale README screenshots, and two
+> trailing-whitespace errors in the design document. See
+> `.superpowers/sdd/final-ui-review-fix-report.md` for the RED/GREEN evidence
+> and fresh final gates.
+
 ## Delivered changes
 
 - Added `adaptiveSkeletonCount` with finite-input validation, ceiling division,
@@ -109,7 +117,7 @@ GREEN coverage includes:
 | F1 | Record search/filter sheets, removable active conditions, and date grouping remain covered by the full suite | PASS |
 | P2 | Processed/original selection, detail tabs, adjacent full-screen paging, and Hero behavior remain covered by the full suite | PASS |
 | S1 | Settings root exposes the three intended groups and passes the real-root 2x-text test | PASS |
-| R1 | Targeted back-navigation suite covers project detail/search and capture confirmation/template/capture precedence | PASS |
+| R1 | The checkpoint covered project detail/search and capture confirmation/template/capture precedence, but not active-filter Back handling | PARTIAL at this checkpoint; fixed in final review |
 | V2 | Glass regressions and reduced-motion route behavior are covered | PASS |
 
 The three root branches and reduced-motion transitions were also rerun as a
@@ -127,7 +135,7 @@ targeted final check: 14 tests passed.
 | `cargo test --manifest-path rust/Cargo.toml` | PASS, 54 tests |
 | `android/gradlew.bat testDebugUnitTest` | PASS, 285 actionable tasks |
 | `flutter build apk --debug` | PASS |
-| `git diff --check` | PASS |
+| `git diff --check f97db03..5e8ad89` | FAIL at this checkpoint: two trailing-whitespace lines in the design document; fixed in final review |
 
 Rust and Android unit gates were not rerun for this final Dart-only increment.
 Their immediately preceding Task 10 results above remain fresh: Rust passed 54

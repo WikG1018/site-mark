@@ -79,7 +79,17 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
   CaptureDetailSection _section = CaptureDetailSection.fieldRecord;
   Future<CaptureFileInfo>? _fileInfoFuture;
   String? _fileInfoKey;
+  CaptureMediaService? _fileInfoMediaService;
   Timer? _clearOriginalsTimer;
+
+  @override
+  void didUpdateWidget(covariant CaptureDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId ||
+        oldWidget.captureId != widget.captureId) {
+      _invalidateFileInfo();
+    }
+  }
 
   @override
   void dispose() {
@@ -98,11 +108,25 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         '${capture.id}:${capture.status.name}:'
         '${capture.originalDeletedAt?.microsecondsSinceEpoch}:'
         '${capture.publishedUri}';
-    if (_fileInfoFuture == null || _fileInfoKey != key) {
+    if (_fileInfoFuture == null ||
+        _fileInfoKey != key ||
+        !identical(_fileInfoMediaService, mediaService)) {
       _fileInfoKey = key;
+      _fileInfoMediaService = mediaService;
       _fileInfoFuture = mediaService.inspect(capture);
     }
     return _fileInfoFuture!;
+  }
+
+  void _invalidateFileInfo() {
+    _fileInfoKey = null;
+    _fileInfoMediaService = null;
+    _fileInfoFuture = null;
+  }
+
+  void _retryFileInfo() {
+    if (!mounted) return;
+    setState(_invalidateFileInfo);
   }
 
   @override
@@ -317,6 +341,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                             _DetailCard(
                               children: _fileInfoRows(strings, capture, info),
                             )
+                          else if (infoSnapshot.hasError)
+                            _FileInfoInspectionError(onRetry: _retryFileInfo)
                           else
                             const Center(child: CircularProgressIndicator()),
                         ],
@@ -744,6 +770,58 @@ class _DetailCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(children: children),
+      ),
+    );
+  }
+}
+
+class _FileInfoInspectionError extends StatelessWidget {
+  const _FileInfoInspectionError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      key: const Key('file-info-inspection-error'),
+      color: colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.error_outline, color: colorScheme.onErrorContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    strings.fileInfoInspectionFailed,
+                    style: TextStyle(color: colorScheme.onErrorContainer),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton(
+              key: const Key('file-info-retry'),
+              onPressed: onRetry,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  const Icon(Icons.refresh),
+                  Text(strings.recheckFileInfo),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -59,21 +59,6 @@ manufacturer camera experience.
 | 数据安全 | 项目备份恢复、原图 SHA-256 校验、恢复事务与文件回滚、异常中断清理 |
 | 体验 | 玻璃材质导航与卡片、符合层级关系的页面转场、图片 Hero 动画、返回逻辑、减少动画适配，以及可继续加载的记录和全屏图片列表 |
 
-## 实际效果
-
-<table>
-  <tr>
-    <td align="center"><img src="docs/images/readme/01-projects.png" alt="项目列表" width="260"><br><sub>项目列表与搜索入口</sub></td>
-    <td align="center"><img src="docs/images/readme/02-capture-form.png" alt="现场记录表单" width="260"><br><sub>现场记录表单</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/images/readme/03-system-camera.png" alt="Android 系统相机" width="260"><br><sub>Android 系统相机</sub></td>
-    <td align="center"><img src="docs/images/readme/04-watermarked-output.jpg" alt="工程水印成片" width="260"><br><sub>工程水印成片</sub></td>
-  </tr>
-</table>
-
-截图使用虚构工程数据。不同厂商系统相机的界面、镜头能力、启动速度和后台限制可能不同。
-
 ## 产品定位
 
 工程现场需要的不只是“给照片加文字”，还包括顺手的拍摄体验、稳定的后台处理、清晰的项目归档和可回查的原图信息。

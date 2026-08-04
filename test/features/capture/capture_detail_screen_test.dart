@@ -761,6 +761,73 @@ void main() {
     });
   }
 
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    for (final status in const [CaptureStatus.ready, CaptureStatus.failed]) {
+      testWidgets(
+        '${status.name} file info retries a localized inspection error in ${locale.languageCode}',
+        (tester) async {
+          await pumpReadyDetail(
+            tester,
+            originalExists: true,
+            status: status,
+            locale: locale,
+            inspectError: StateError('raw inspect failure'),
+          );
+
+          final fileInfoTab = find.byKey(const Key('detail-tab-file-info'));
+          await tester.ensureVisible(fileInfoTab);
+          await tester.pumpAndSettle();
+          await tester.tap(fileInfoTab);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 500));
+
+          final error = find.byKey(const Key('file-info-inspection-error'));
+          expect(error, findsOneWidget);
+          expect(
+            find.descendant(
+              of: error,
+              matching: find.textContaining(
+                locale.languageCode == 'zh'
+                    ? '无法检查文件信息'
+                    : 'File information could not be checked',
+              ),
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(
+              of: error,
+              matching: find.textContaining(
+                locale.languageCode == 'zh'
+                    ? '请保留此记录并重新检查'
+                    : 'Keep this record and check again',
+              ),
+            ),
+            findsOneWidget,
+          );
+          expect(find.textContaining('raw inspect failure'), findsNothing);
+          expect(find.byKey(const Key('file-info-retry')), findsOneWidget);
+          expect(media.inspectCalls, 1);
+
+          media.inspectError = null;
+          await tester.tap(find.byKey(const Key('file-info-retry')));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 500));
+          await tester.pump(const Duration(milliseconds: 1));
+
+          expect(
+            find.byKey(const Key('file-info-inspection-error')),
+            findsNothing,
+          );
+          expect(find.byKey(const Key('file-info-retry')), findsNothing);
+          expect(find.text('4.8 MB'), findsOneWidget);
+          expect(media.inspectCalls, 2);
+          await disposeDetail(tester);
+        },
+      );
+    }
+  }
+
   testWidgets('processing and read-only details expose no mutation menu', (
     tester,
   ) async {
@@ -1067,6 +1134,7 @@ class _DetailMediaService extends CaptureMediaService {
   Completer<void>? _inspectRelease;
   Completer<void>? _inspectStarted;
   Object? inspectError;
+  int inspectCalls = 0;
   int clearOriginalCalls = 0;
   int deleteAllCalls = 0;
 
@@ -1081,6 +1149,7 @@ class _DetailMediaService extends CaptureMediaService {
 
   @override
   Future<CaptureFileInfo> inspect(CaptureRecord record) async {
+    inspectCalls += 1;
     final error = inspectError;
     if (error != null) throw error;
     final snapshot = await super.inspect(record);

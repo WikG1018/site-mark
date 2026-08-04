@@ -213,7 +213,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     final allEligibleSelected =
         _allQuerySelected && _selectionController.selectedIds.isNotEmpty;
     return PopScope(
-      canPop: !editing && !_searching,
+      canPop: !editing && !_searching && !_hasFilter,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_selectionController.editing) {
@@ -221,6 +221,8 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
           _selectionController.exit();
         } else if (_searching) {
           _exitSearch();
+        } else if (_hasFilter) {
+          _onFilterChanged(const CaptureFilter());
         }
       },
       child: Scaffold(

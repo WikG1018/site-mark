@@ -358,6 +358,10 @@ class AppStrings {
   String get captureDetail => _english ? 'Record details' : '记录详情';
   String get fieldRecordTab => _english ? 'Field record' : '现场记录';
   String get fileInfoTab => _english ? 'File info' : '文件信息';
+  String get fileInfoInspectionFailed => _english
+      ? 'File information could not be checked because the local photo is temporarily unavailable. Keep this record and check again.'
+      : '无法检查文件信息，本地照片可能暂时不可访问。请保留此记录并重新检查。';
+  String get recheckFileInfo => _english ? 'Check again' : '重新检查';
   String get fullFileName => _english ? 'Full file name' : '完整文件名';
   String get originalSha256 => _english ? 'Original SHA-256' : '原图 SHA-256';
   String get capturedAt => _english ? 'Captured at' : '拍摄时间';

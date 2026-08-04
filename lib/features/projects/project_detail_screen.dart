@@ -149,6 +149,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     _startQuery();
   }
 
+  bool get _hasAppliedDateFilter =>
+      _filter?.year != null || _filter?.month != null || _filter?.day != null;
+
+  void _clearAppliedDateFilter() {
+    _onFilterChanged(CaptureFilter(projectId: widget.projectId));
+  }
+
   void _onSearchChanged(String value) {
     _invalidateSelectionRequests();
     _searchText = value;
@@ -243,7 +250,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     final allEligibleSelected =
         _allQuerySelected && _selectionController.selectedIds.isNotEmpty;
     return PopScope(
-      canPop: !editing && !_searching,
+      canPop: !editing && !_searching && !_hasAppliedDateFilter,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_selectionController.editing) {
@@ -251,6 +258,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           _selectionController.exit();
         } else if (_searching) {
           _exitSearch();
+        } else if (_hasAppliedDateFilter) {
+          _clearAppliedDateFilter();
         }
       },
       child: StreamBuilder<Project?>(

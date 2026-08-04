@@ -2638,6 +2638,46 @@ void main() {
       );
     }
   }
+
+  testWidgets(
+    'a restored non-empty KILL note is a visible editable field and cleared text is not submitted',
+    (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final rig = await _CaptureFormTestRig.create();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        await rig.dispose();
+      });
+      rig.textScaler = const TextScaler.linear(2);
+      await rig.drafts.save(_draft('project-1', 'KILL restored'));
+
+      await rig.pump(tester);
+
+      final notes = find.byKey(const Key('notes'));
+      expect(notes, findsOneWidget);
+      expect(
+        tester.widget<TextFormField>(notes).controller!.text,
+        'KILL restored notes',
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.enterText(notes, '');
+      expect(tester.widget<TextFormField>(notes).controller!.text, isEmpty);
+      await tester.tap(find.byKey(const Key('notes-expander')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notes')), findsNothing);
+
+      await rig.capture(tester);
+      expect(rig.workflow.drafts, hasLength(1));
+      expect(rig.workflow.drafts.single.notes, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<void> _pumpTemplateSheetHost(
@@ -3231,6 +3271,7 @@ class _CaptureFormTestRig {
   CaptureTemplateService? templateService;
   Locale locale = const Locale('en');
   bool disableAnimations = false;
+  TextScaler textScaler = TextScaler.noScaling;
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -3247,9 +3288,10 @@ class _CaptureFormTestRig {
         child: MaterialApp(
           locale: locale,
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(disableAnimations: disableAnimations),
+            data: MediaQuery.of(context).copyWith(
+              disableAnimations: disableAnimations,
+              textScaler: textScaler,
+            ),
             child: child!,
           ),
           localizationsDelegates: const [
