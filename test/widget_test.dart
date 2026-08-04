@@ -558,7 +558,7 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('home opens all records with project and date filters', (
+  testWidgets('home opens all records with filter sheet and date groups', (
     tester,
   ) async {
     await pumpAppWithRecords(tester);
@@ -566,8 +566,8 @@ void main() {
     await tester.tap(find.byTooltip('全部记录'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('project-filter')), findsOneWidget);
-    expect(find.byKey(const Key('filter-year')), findsOneWidget);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+    expect(find.byKey(const Key('capture-date-2026-07-16')), findsOneWidget);
     expect(find.byType(CaptureRecordCard), findsWidgets);
     await disposeApp(tester);
   });
@@ -608,7 +608,7 @@ void main() {
     await pumpAppWithRecords(tester);
     await tester.tap(find.byTooltip('全部记录'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
 
     await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();
@@ -627,7 +627,7 @@ void main() {
 
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
     await disposeApp(tester);
   });
 

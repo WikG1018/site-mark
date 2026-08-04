@@ -154,7 +154,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
     expect(find.byType(Checkbox), findsNothing);
     await disposeTree(tester);
   });
@@ -273,10 +273,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Confirm we are on the all-records surface.
-      expect(find.byKey(const Key('project-filter')), findsOneWidget);
+      expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
 
       // Tap the capture card to push into detail.
-      await tester.tap(find.textContaining('2026-07-16'));
+      await tester.tap(find.text('2026-07-16 · 001'));
       await tester.pumpAndSettle();
 
       // Verify we're on the capture detail screen.
@@ -290,9 +290,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // We must be back on /records (AllCapturesScreen), evidenced by the
-      // project-filter key. If the old `context.go` were still in place,
+      // filter-sheet-trigger key. If the old `context.go` were still in place,
       // the pop would land on the project detail screen instead.
-      expect(find.byKey(const Key('project-filter')), findsOneWidget);
+      expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
 
       await disposeTree(tester);
     },

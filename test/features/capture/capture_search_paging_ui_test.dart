@@ -27,6 +27,7 @@ CaptureSummary _summary(
   String? address,
   String? photoNumber,
   DateTime? capturedAt,
+  bool capturedAtMissing = false,
 }) {
   final time =
       capturedAt ??
@@ -44,13 +45,19 @@ CaptureSummary _summary(
       originalPath: '/private/capture-$index.jpg',
       status: CaptureStatus.ready,
       createdAt: time,
-      capturedAt: time,
+      capturedAt: capturedAtMissing ? null : time,
       processingAttempts: 0,
       watermarkLocaleCode: 'zh',
       locationResolution: 'resolved',
     ),
     projectName: projectName,
   );
+}
+
+String _dateKey(CaptureSummary summary) {
+  final time = summary.capture.capturedAt ?? summary.capture.createdAt;
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${time.year}-${two(time.month)}-${two(time.day)}';
 }
 
 CapturePage _page(List<CaptureSummary> rows, {required bool hasMore}) {
@@ -100,6 +107,7 @@ Widget _pagedHarness(
   CapturePagerController controller,
   CaptureQuerySource source, {
   bool disableAnimations = false,
+  bool grouped = false,
 }) {
   return _localized(
     disableAnimations: disableAnimations,
@@ -113,6 +121,13 @@ Widget _pagedHarness(
           height: 64,
           child: Text(summary.capture.workLocation),
         ),
+        groupKey: grouped ? _dateKey : null,
+        groupHeaderBuilder: grouped
+            ? (context, key) => ColoredBox(
+                color: Theme.of(context).colorScheme.surface,
+                child: Text(key, key: Key('test-date-$key')),
+              )
+            : null,
       ),
     ),
   );
@@ -164,16 +179,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('filter-year')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(MenuItemButton, '2030'), findsOneWidget);
-      expect(find.widgetWithText(MenuItemButton, '2026'), findsNothing);
-      await tester.tapAt(const Offset(390, 790));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
 
       source.pageQueries.clear();
       await tester.tap(find.byKey(const Key('search-captures')));
       await tester.pump();
+      expect(find.byKey(const Key('filter-sheet-trigger')), findsNothing);
+      expect(find.byKey(const Key('edit-captures')), findsNothing);
       await tester.enterText(
         find.byKey(const Key('capture-search-field')),
         '21栋',
@@ -558,6 +570,60 @@ void main() {
   );
 
   testWidgets(
+    'date groups merge across pages and use createdAt when capturedAt is null',
+    (tester) async {
+      final source = _FakeCaptureQuerySource()
+        ..enqueue(
+          () => Future.value(
+            _page([
+              _summary(0, capturedAt: DateTime(2026, 8, 4, 12)),
+              _summary(1, capturedAt: DateTime(2026, 8, 4, 11)),
+            ], hasMore: true),
+          ),
+        )
+        ..enqueue(
+          () => Future.value(
+            _page([
+              _summary(
+                2,
+                capturedAt: DateTime(2026, 8, 4, 10),
+                capturedAtMissing: true,
+              ),
+              _summary(3, capturedAt: DateTime(2026, 8, 3, 18)),
+            ], hasMore: false),
+          ),
+        );
+      final controller = CapturePagerController(source);
+      unawaited(controller.setQuery(const CaptureListQuery()));
+      addTearDown(() {
+        controller.dispose();
+        unawaited(source.dispose());
+      });
+
+      await tester.pumpWidget(_pagedHarness(controller, source, grouped: true));
+      await tester.pumpAndSettle();
+
+      expect(source.pageQueries, hasLength(2));
+      expect(find.byKey(const Key('test-date-2026-08-04')), findsOneWidget);
+      expect(find.byKey(const Key('test-date-2026-08-03')), findsOneWidget);
+      expect(find.byKey(const Key('row-capture-0')), findsOneWidget);
+      expect(find.byKey(const Key('row-capture-1')), findsOneWidget);
+      expect(find.byKey(const Key('row-capture-2')), findsOneWidget);
+      expect(find.byKey(const Key('row-capture-3')), findsOneWidget);
+      expect(source.watchedIdSets.last, hasLength(4));
+      expect(
+        tester
+            .widgetList<SliverPersistentHeader>(
+              find.byType(SliverPersistentHeader),
+            )
+            .every((header) => header.pinned),
+        isTrue,
+      );
+      await _unmount(tester);
+    },
+  );
+
+  testWidgets(
     'watched edit that no longer matches the search refreshes the page',
     (tester) async {
       final source = _FakeCaptureQuerySource()
@@ -761,6 +827,22 @@ void main() {
         find.byKey(const Key('capture-page-switcher')),
       );
       expect(listSwitcher.duration, Duration.zero);
+
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+      await tester.pumpAndSettle();
+      for (final key in const [
+        Key('filter-project-opacity'),
+        Key('filter-year-opacity'),
+        Key('filter-month-opacity'),
+        Key('filter-day-opacity'),
+      ]) {
+        expect(
+          tester.widget<AnimatedOpacity>(find.byKey(key)).duration,
+          Duration.zero,
+        );
+      }
+      await tester.tap(find.byKey(const Key('filter-cancel')));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('search-captures')));
       await tester.pump();

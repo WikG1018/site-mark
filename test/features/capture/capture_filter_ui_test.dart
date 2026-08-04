@@ -13,11 +13,13 @@ import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
+import 'package:sitemark/features/capture/capture_active_filter_chips.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/projects/project_action_sheet.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
+import 'package:sitemark/features/capture/capture_filter_sheet.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
@@ -215,6 +217,111 @@ void main() {
     expect(filter.value.day, isNull);
   });
 
+  testWidgets('filter draft drops stale date options after project changes', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final first = await database.createProject(id: 'project-1', name: '甲项目');
+    final second = await database.createProject(id: 'project-2', name: '乙项目');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureFilterSheet(
+            initial: const CaptureFilter(
+              projectId: 'project-1',
+              year: 2026,
+              month: 7,
+              day: 16,
+            ),
+            projects: [first, second],
+            options: const CaptureDateOptions(
+              years: [2026],
+              months: [7],
+              days: [16],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('filter-project-project-2')));
+    await tester.pump();
+    expect(find.byKey(const Key('filter-month-7')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pump();
+    expect(find.byKey(const Key('filter-month-8')), findsOneWidget);
+  });
+
+  testWidgets('active chips label deleted projects and fit at 360dp', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final filter = ValueNotifier(
+      const CaptureFilter(
+        projectId: 'deleted-project',
+        year: 2026,
+        month: 8,
+        day: 4,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: ValueListenableBuilder<CaptureFilter>(
+            valueListenable: filter,
+            builder: (context, value, _) => CaptureActiveFilterChips(
+              filter: value,
+              projects: const [],
+              onChanged: (next) => filter.value = next,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('已删除项目'), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-month')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-day')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.drag(
+      find.byKey(const Key('active-filter-chips')),
+      const Offset(-200, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('remove-filter-day')));
+    await tester.pump();
+    expect(filter.value.projectId, 'deleted-project');
+    expect(filter.value.year, 2026);
+    expect(filter.value.month, 8);
+    expect(filter.value.day, isNull);
+  });
+
   testWidgets(
     'all-records changing project clears year/month/day date filters',
     (tester) async {
@@ -269,28 +376,27 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Select year 2026 from the date cascade.
-      await tester.tap(find.byKey(const Key('filter-year')));
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
       await tester.pumpAndSettle();
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(MenuItemButton, '2026'));
-      await tester.pumpAndSettle();
-
-      // The year menu now reflects the 2026 selection instead of "全部年份".
-      expect(find.text('全部年份'), findsNothing);
-
-      // Switch the project from "all projects" to project-2 (no captures).
-      await tester.tap(find.byKey(const Key('project-filter')));
-      await tester.pumpAndSettle();
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(MenuItemButton, '西区管线整改'));
+      await tester.tap(find.byKey(const Key('filter-year-2026')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('filter-apply')));
       await tester.pumpAndSettle();
 
-      // The project -> year -> month -> day cascade must clear: the year
-      // control drops back to the "all years" label.
-      expect(find.text('全部年份'), findsOneWidget);
-      expect(find.text('全部月份'), findsOneWidget);
-      expect(find.text('全部日期'), findsOneWidget);
+      expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-project-project-2')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('filter-apply')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+      expect(find.text('西区管线整改'), findsOneWidget);
+      expect(find.byKey(const Key('active-filter-year')), findsNothing);
+      expect(find.byKey(const Key('active-filter-month')), findsNothing);
+      expect(find.byKey(const Key('active-filter-day')), findsNothing);
 
       // Unmount the tree so the StreamBuilder subscriptions to the Drift
       // streams are cancelled before the database closes; otherwise pending
@@ -368,16 +474,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('project-filter')));
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '乙项目'));
+    await tester.tap(find.byKey(const Key('filter-project-project-b')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-apply')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('filter-year')));
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(MenuItemButton, '2026'), findsOneWidget);
-    expect(find.widgetWithText(MenuItemButton, '2025'), findsNothing);
+    expect(find.byKey(const Key('filter-year-2026')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year-2025')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
@@ -522,47 +630,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final tops = [
-      tester.getTopLeft(find.byKey(const Key('project-filter'))).dy,
-      tester.getTopLeft(find.byKey(const Key('filter-year'))).dy,
-      tester.getTopLeft(find.byKey(const Key('filter-month'))).dy,
-      tester.getTopLeft(find.byKey(const Key('filter-day'))).dy,
-    ];
-    expect(tops.reduce(max) - tops.reduce(min), lessThan(1));
-    for (final key in const [
-      Key('project-filter'),
-      Key('filter-year'),
-      Key('filter-month'),
-      Key('filter-day'),
-    ]) {
-      expect(
-        find.descendant(
-          of: find.byKey(key),
-          matching: find.byIcon(Icons.arrow_drop_down),
-        ),
-        findsNothing,
-      );
-    }
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+    expect(find.byKey(const Key('project-filter')), findsNothing);
+    expect(find.byKey(const Key('filter-year')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('project-filter')));
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '东区厂房改造'));
+    await tester.tap(find.byKey(const Key('filter-project-project-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-apply')));
     await tester.pumpAndSettle();
 
-    final projectButton = find.descendant(
-      of: find.byKey(const Key('project-filter')),
-      matching: find.byType(OutlinedButton),
-    );
-    final projectLabel = find.descendant(
-      of: find.byKey(const Key('project-filter')),
-      matching: find.text('东区厂房改造'),
-    );
-    expect(projectLabel, findsOneWidget);
-    expect(
-      (tester.getCenter(projectButton).dx - tester.getCenter(projectLabel).dx)
-          .abs(),
-      lessThan(1),
-    );
+    expect(find.byKey(const Key('active-filter-chips')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // Unmount the tree so the StreamBuilder subscriptions to the Drift
@@ -784,6 +864,118 @@ void main() {
     await unmountTree(tester);
   });
 
+  testWidgets('all records uses one filter trigger and date group headers', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 8, 4, 9),
+    );
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-b',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 8, 4, 8),
+    );
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-c',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 8, 3, 18),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+    expect(find.byKey(const Key('project-filter')), findsNothing);
+    expect(find.byKey(const Key('filter-year')), findsNothing);
+    expect(find.byKey(const Key('capture-date-2026-08-04')), findsOneWidget);
+    expect(find.byKey(const Key('capture-date-2026-08-03')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets('filter sheet keeps a draft until apply and chips cascade', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await database.createProject(id: 'project-2', name: '西区管线整改');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 8, 4, 9),
+    );
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-b',
+      projectId: 'project-2',
+      capturedAt: DateTime(2026, 8, 3, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-project-project-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-month-8')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-day-4')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-cancel')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('active-filter-project')), findsNothing);
+    expect(find.byKey(const Key('active-filter-year')), findsNothing);
+    expect(find.byKey(const Key('capture-a')), findsOneWidget);
+    expect(find.byKey(const Key('capture-b')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-project-project-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-month-8')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-day-4')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-apply')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-month')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-day')), findsOneWidget);
+    expect(find.byKey(const Key('capture-a')), findsOneWidget);
+    expect(find.byKey(const Key('capture-b')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('remove-filter-month')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('active-filter-month')), findsNothing);
+    expect(find.byKey(const Key('active-filter-day')), findsNothing);
+    expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('remove-filter-project')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('active-filter-project')), findsNothing);
+    expect(find.byKey(const Key('active-filter-year')), findsNothing);
+    expect(find.byKey(const Key('capture-b')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
   testWidgets('all-records edit mode shows checkboxes and batch bar', (
     tester,
   ) async {
@@ -892,10 +1084,11 @@ void main() {
         .any((cb) => cb.value == true);
     expect(anyChecked(), isTrue);
 
-    await tester.tap(find.byKey(const Key('filter-year')));
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '2026'));
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-apply')));
     await tester.pumpAndSettle();
 
     expect(anyChecked(), isFalse);

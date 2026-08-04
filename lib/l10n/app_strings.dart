@@ -325,6 +325,11 @@ class AppStrings {
   String get allDays => _english ? 'All days' : '全部日期';
   String get monthSuffix => _english ? '' : '月';
   String get daySuffix => _english ? '' : '日';
+  String get filterRecords => _english ? 'Filter records' : '筛选记录';
+  String get resetFilters => _english ? 'Reset' : '重置';
+  String get applyFilters => _english ? 'Apply' : '应用';
+  String get removeFilter => _english ? 'Remove filter' : '移除筛选条件';
+  String get deletedProject => _english ? 'Deleted project' : '已删除项目';
   String get filteredEmpty =>
       _english ? 'No records match the current filters' : '没有符合筛选条件的记录';
   String get retryProcessing => _english ? 'Retry processing' : '重新处理';

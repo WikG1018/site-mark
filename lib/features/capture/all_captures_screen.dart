@@ -9,16 +9,16 @@ import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
+import 'package:sitemark/features/capture/capture_active_filter_chips.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
-import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
 import 'package:sitemark/features/capture/capture_detail_screen.dart';
+import 'package:sitemark/features/capture/capture_filter_sheet.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_paged_list.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_search_field.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
-import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 
@@ -270,25 +270,26 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                             : Icons.select_all_outlined,
                       ),
               ),
-            IconButton(
-              key: const Key('edit-captures'),
-              onPressed: () {
-                if (_selectionController.editing) {
-                  _invalidateSelectionRequests();
-                  _selectionController.exit();
-                } else {
-                  _selectionController.enter();
-                }
-              },
-              tooltip: editing ? strings.done : strings.editRecords,
-              icon: AnimatedSwitcher(
-                duration: AppMotion.durationOf(context, AppMotion.short4),
-                child: Icon(
-                  editing ? Icons.done : Icons.edit_outlined,
-                  key: ValueKey(editing),
+            if (!_searching)
+              IconButton(
+                key: const Key('edit-captures'),
+                onPressed: () {
+                  if (_selectionController.editing) {
+                    _invalidateSelectionRequests();
+                    _selectionController.exit();
+                  } else {
+                    _selectionController.enter();
+                  }
+                },
+                tooltip: editing ? strings.done : strings.editRecords,
+                icon: AnimatedSwitcher(
+                  duration: AppMotion.durationOf(context, AppMotion.short4),
+                  child: Icon(
+                    editing ? Icons.done : Icons.edit_outlined,
+                    key: ValueKey(editing),
+                  ),
                 ),
               ),
-            ),
           ],
         ),
         body: StreamBuilder<List<Project>>(
@@ -297,7 +298,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
             final projects = snapshot.data ?? const <Project>[];
             return Column(
               children: [
-                _filterBar(context, strings, projects),
+                if (!_searching) _filterBar(context, strings, projects),
                 Expanded(
                   child: CapturePagedList(
                     controller: _pagerController,
@@ -306,6 +307,8 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                         ? strings.filteredEmpty
                         : strings.noCaptures,
                     itemBuilder: _buildCaptureCard,
+                    groupKey: _captureDateKey,
+                    groupHeaderBuilder: _buildDateHeader,
                   ),
                 ),
               ],
@@ -381,39 +384,73 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     AppStrings strings,
     List<Project> projects,
   ) {
-    final projectEntries = <(String?, String)>[(null, strings.allProjects)];
-    for (final project in projects) {
-      projectEntries.add((project.id, project.name));
-    }
-    var projectLabel = strings.allProjects;
-    for (final project in projects) {
-      if (project.id == _filter.projectId) projectLabel = project.name;
-    }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
-          Expanded(
-            child: CompactFilterMenu<String?>(
-              key: const Key('project-filter'),
-              label: projectLabel,
-              selectedValue: _filter.projectId,
-              entries: projectEntries,
-              onSelected: (value) =>
-                  _onFilterChanged(CaptureFilter(projectId: value)),
-            ),
+          OutlinedButton.icon(
+            key: const Key('filter-sheet-trigger'),
+            onPressed: () => unawaited(_openFilterSheet(projects)),
+            icon: const Icon(Icons.filter_list_outlined),
+            label: Text(strings.filterAction),
           ),
-          const SizedBox(width: 6),
-          Expanded(
-            flex: 3,
-            child: CaptureDateFilterBar(
-              padding: EdgeInsets.zero,
-              filter: _filter,
-              options: _dateOptions,
-              onChanged: _onFilterChanged,
+          if (_hasFilter) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: CaptureActiveFilterChips(
+                filter: _filter,
+                projects: projects,
+                onChanged: _onFilterChanged,
+              ),
             ),
-          ),
+          ],
         ],
+      ),
+    );
+  }
+
+  bool get _hasFilter =>
+      _filter.projectId != null ||
+      _filter.year != null ||
+      _filter.month != null ||
+      _filter.day != null;
+
+  Future<void> _openFilterSheet(List<Project> projects) async {
+    if (_searching) return;
+    final next = await showCaptureFilterSheet(
+      context: context,
+      initial: _filter,
+      projects: projects,
+      options: _dateOptions,
+    );
+    if (!mounted || next == null || _searching) return;
+    _onFilterChanged(next);
+  }
+
+  String _captureDateKey(CaptureSummary summary) {
+    final time = summary.capture.capturedAt ?? summary.capture.createdAt;
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${time.year}-${two(time.month)}-${two(time.day)}';
+  }
+
+  Widget _buildDateHeader(BuildContext context, String dateKey) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Semantics(
+      header: true,
+      label: dateKey,
+      child: ColoredBox(
+        color: colorScheme.surface,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            dateKey,
+            key: Key('capture-date-$dateKey'),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }

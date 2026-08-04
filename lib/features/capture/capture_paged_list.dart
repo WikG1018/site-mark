@@ -17,6 +17,10 @@ typedef CapturePagedItemBuilder =
       List<CaptureSummary> visibleRows,
     );
 
+typedef CapturePagedGroupKey = String Function(CaptureSummary summary);
+typedef CapturePagedGroupHeaderBuilder =
+    Widget Function(BuildContext context, String groupKey);
+
 /// Lazy capture list that owns scrolling, loaded-row watches, and page chrome.
 class CapturePagedList extends StatefulWidget {
   const CapturePagedList({
@@ -31,7 +35,12 @@ class CapturePagedList extends StatefulWidget {
     this.contentKey = const Key('capture-list-content'),
     this.skeletonItemCount = 6,
     this.forceInitialLoading = false,
-  });
+    this.groupKey,
+    this.groupHeaderBuilder,
+  }) : assert(
+         (groupKey == null) == (groupHeaderBuilder == null),
+         'groupKey and groupHeaderBuilder must be provided together',
+       );
 
   final CapturePagerController controller;
   final CaptureQuerySource source;
@@ -43,6 +52,8 @@ class CapturePagedList extends StatefulWidget {
   final Key contentKey;
   final int skeletonItemCount;
   final bool forceInitialLoading;
+  final CapturePagedGroupKey? groupKey;
+  final CapturePagedGroupHeaderBuilder? groupHeaderBuilder;
 
   @override
   State<CapturePagedList> createState() => _CapturePagedListState();
@@ -273,22 +284,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
                   ),
                 )
               else if (showContent)
-                SliverPadding(
-                  key: widget.contentKey,
-                  padding: widget.padding,
-                  sliver: SliverList.separated(
-                    itemCount: state.rows.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      _scheduleLoadMore(index, state);
-                      return widget.itemBuilder(
-                        context,
-                        state.rows[index],
-                        state.rows,
-                      );
-                    },
-                  ),
-                ),
+                ..._buildContentSlivers(context, state),
               if (showContent && state.loadingMore)
                 const SliverToBoxAdapter(
                   child: Padding(
@@ -337,6 +333,77 @@ class _CapturePagedListState extends State<CapturePagedList> {
     );
   }
 
+  List<Widget> _buildContentSlivers(
+    BuildContext context,
+    CapturePagerState state,
+  ) {
+    final groupKey = widget.groupKey;
+    final groupHeaderBuilder = widget.groupHeaderBuilder;
+    if (groupKey == null || groupHeaderBuilder == null) {
+      return [
+        SliverPadding(
+          key: widget.contentKey,
+          padding: widget.padding,
+          sliver: SliverList.separated(
+            itemCount: state.rows.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, index) => _buildRow(context, state, index),
+          ),
+        ),
+      ];
+    }
+
+    final groups = <_CaptureRowGroup>[];
+    for (var index = 0; index < state.rows.length; index++) {
+      final key = groupKey(state.rows[index]);
+      if (groups.isEmpty || groups.last.key != key) {
+        groups.add(_CaptureRowGroup(key: key, startIndex: index, length: 1));
+      } else {
+        groups.last.length++;
+      }
+    }
+    final padding = widget.padding.resolve(Directionality.of(context));
+    return [
+      for (var groupIndex = 0; groupIndex < groups.length; groupIndex++)
+        SliverPadding(
+          key: groupIndex == 0 ? widget.contentKey : null,
+          padding: EdgeInsets.fromLTRB(
+            padding.left,
+            groupIndex == 0 ? padding.top : 0,
+            padding.right,
+            groupIndex == groups.length - 1 ? padding.bottom : 12,
+          ),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _CaptureGroupHeaderDelegate(
+                  child: groupHeaderBuilder(context, groups[groupIndex].key),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.only(top: 8),
+                sliver: SliverList.separated(
+                  itemCount: groups[groupIndex].length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, localIndex) => _buildRow(
+                    context,
+                    state,
+                    groups[groupIndex].startIndex + localIndex,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
+  }
+
+  Widget _buildRow(BuildContext context, CapturePagerState state, int index) {
+    _scheduleLoadMore(index, state);
+    return widget.itemBuilder(context, state.rows[index], state.rows);
+  }
+
   Widget _buildSkeletonStatus() {
     return Skeletonizer(
       key: widget.skeletonKey,
@@ -380,6 +447,42 @@ class _CapturePagedListState extends State<CapturePagedList> {
       ),
     );
   }
+}
+
+final class _CaptureRowGroup {
+  _CaptureRowGroup({
+    required this.key,
+    required this.startIndex,
+    required this.length,
+  });
+
+  final String key;
+  final int startIndex;
+  int length;
+}
+
+class _CaptureGroupHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _CaptureGroupHeaderDelegate({required this.child});
+
+  static const double _height = 40;
+  final Widget child;
+
+  @override
+  double get minExtent => _height;
+
+  @override
+  double get maxExtent => _height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => SizedBox.expand(child: child);
+
+  @override
+  bool shouldRebuild(covariant _CaptureGroupHeaderDelegate oldDelegate) =>
+      oldDelegate.child != child;
 }
 
 class _CaptureCardSkeleton extends StatelessWidget {
