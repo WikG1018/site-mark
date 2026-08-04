@@ -15,16 +15,46 @@ ColorScheme _buildDarkScheme(Color seedColor, {ColorScheme? dynamicColor}) {
 }
 
 /// Builds a complete [ThemeData] from the given [colorScheme].
-///
-/// When [isDark] is `true` the input-decoration border is omitted to match
-/// the original per-mode styling.
-ThemeData _buildThemeData(ColorScheme colorScheme, {bool isDark = false}) {
+ThemeData _buildThemeData(ColorScheme colorScheme) {
   return ThemeData(
     colorScheme: colorScheme,
     useMaterial3: true,
-    inputDecorationTheme: isDark
-        ? null
-        : const InputDecorationTheme(border: OutlineInputBorder()),
+    scaffoldBackgroundColor: colorScheme.surfaceContainerLowest,
+    cardTheme: CardThemeData(
+      color: colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(20)),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: .72),
+      border: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(16)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: const BorderRadius.all(Radius.circular(16)),
+        borderSide: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: const BorderRadius.all(Radius.circular(16)),
+        borderSide: BorderSide(color: colorScheme.primary, width: 2),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+        ),
+      ),
+    ),
   );
 }
 
@@ -49,5 +79,5 @@ ThemeData buildDarkTheme({
   ColorScheme? dynamicColor,
 }) {
   final scheme = _buildDarkScheme(seedColor, dynamicColor: dynamicColor);
-  return _buildThemeData(scheme, isDark: true);
+  return _buildThemeData(scheme);
 }
