@@ -31,7 +31,7 @@ class CaptureActiveFilterChips extends StatelessWidget {
             Icons.close,
             key: Key('remove-filter-project'),
           ),
-          deleteButtonTooltipMessage: strings.removeFilter,
+          deleteButtonTooltipMessage: strings.removeProjectFilter,
           onDeleted: () => onChanged(const CaptureFilter()),
         ),
       );
@@ -42,7 +42,7 @@ class CaptureActiveFilterChips extends StatelessWidget {
           key: const Key('active-filter-year'),
           label: Text('${filter.year}'),
           deleteIcon: const Icon(Icons.close, key: Key('remove-filter-year')),
-          deleteButtonTooltipMessage: strings.removeFilter,
+          deleteButtonTooltipMessage: strings.removeYearFilter,
           onDeleted: () => onChanged(filter.selectYear(null)),
         ),
       );
@@ -51,9 +51,9 @@ class CaptureActiveFilterChips extends StatelessWidget {
       chips.add(
         InputChip(
           key: const Key('active-filter-month'),
-          label: Text('${filter.month}${strings.monthSuffix}'),
+          label: Text(strings.monthFilterLabel(filter.month!)),
           deleteIcon: const Icon(Icons.close, key: Key('remove-filter-month')),
-          deleteButtonTooltipMessage: strings.removeFilter,
+          deleteButtonTooltipMessage: strings.removeMonthFilter,
           onDeleted: () => onChanged(filter.selectMonth(null)),
         ),
       );
@@ -62,9 +62,9 @@ class CaptureActiveFilterChips extends StatelessWidget {
       chips.add(
         InputChip(
           key: const Key('active-filter-day'),
-          label: Text('${filter.day}${strings.daySuffix}'),
+          label: Text(strings.dayFilterLabel(filter.day!)),
           deleteIcon: const Icon(Icons.close, key: Key('remove-filter-day')),
-          deleteButtonTooltipMessage: strings.removeFilter,
+          deleteButtonTooltipMessage: strings.removeDayFilter,
           onDeleted: () => onChanged(filter.selectDay(null)),
         ),
       );

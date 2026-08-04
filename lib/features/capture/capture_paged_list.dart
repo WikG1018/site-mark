@@ -363,6 +363,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
       }
     }
     final padding = widget.padding.resolve(Directionality.of(context));
+    final groupHeaderExtent = _groupHeaderExtent(context);
     return [
       for (var groupIndex = 0; groupIndex < groups.length; groupIndex++)
         SliverPadding(
@@ -379,6 +380,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
                 pinned: true,
                 delegate: _CaptureGroupHeaderDelegate(
                   child: groupHeaderBuilder(context, groups[groupIndex].key),
+                  extent: groupHeaderExtent,
                 ),
               ),
               SliverPadding(
@@ -397,6 +399,22 @@ class _CapturePagedListState extends State<CapturePagedList> {
           ),
         ),
     ];
+  }
+
+  double _groupHeaderExtent(BuildContext context) {
+    final style =
+        (Theme.of(context).textTheme.titleSmall ??
+                DefaultTextStyle.of(context).style)
+            .copyWith(fontWeight: FontWeight.w600);
+    final painter = TextPainter(
+      text: TextSpan(text: '0000-00-00', style: style),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final extent = painter.height + 16;
+    painter.dispose();
+    return extent;
   }
 
   Widget _buildRow(BuildContext context, CapturePagerState state, int index) {
@@ -462,27 +480,30 @@ final class _CaptureRowGroup {
 }
 
 class _CaptureGroupHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _CaptureGroupHeaderDelegate({required this.child});
+  const _CaptureGroupHeaderDelegate({
+    required this.child,
+    required this.extent,
+  });
 
-  static const double _height = 40;
   final Widget child;
+  final double extent;
 
   @override
-  double get minExtent => _height;
+  double get minExtent => extent;
 
   @override
-  double get maxExtent => _height;
+  double get maxExtent => extent;
 
   @override
   Widget build(
     BuildContext context,
     double shrinkOffset,
     bool overlapsContent,
-  ) => SizedBox.expand(child: child);
+  ) => child;
 
   @override
   bool shouldRebuild(covariant _CaptureGroupHeaderDelegate oldDelegate) =>
-      oldDelegate.child != child;
+      oldDelegate.child != child || oldDelegate.extent != extent;
 }
 
 class _CaptureCardSkeleton extends StatelessWidget {

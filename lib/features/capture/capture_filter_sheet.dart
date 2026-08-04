@@ -4,11 +4,15 @@ import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
+typedef CaptureDateOptionsLoader =
+    Future<CaptureDateOptions> Function(CaptureFilter draft);
+
 Future<CaptureFilter?> showCaptureFilterSheet({
   required BuildContext context,
   required CaptureFilter initial,
   required List<Project> projects,
   required CaptureDateOptions options,
+  required CaptureDateOptionsLoader optionsLoader,
 }) {
   return showModalBottomSheet<CaptureFilter>(
     context: context,
@@ -22,6 +26,7 @@ Future<CaptureFilter?> showCaptureFilterSheet({
       initial: initial,
       projects: projects,
       options: options,
+      optionsLoader: optionsLoader,
       disableAnimations: MediaQuery.disableAnimationsOf(context),
     ),
   );
@@ -33,12 +38,14 @@ class CaptureFilterSheet extends StatefulWidget {
     required this.initial,
     required this.projects,
     required this.options,
+    required this.optionsLoader,
     this.disableAnimations = false,
   });
 
   final CaptureFilter initial;
   final List<Project> projects;
   final CaptureDateOptions options;
+  final CaptureDateOptionsLoader optionsLoader;
   final bool disableAnimations;
 
   @override
@@ -47,51 +54,47 @@ class CaptureFilterSheet extends StatefulWidget {
 
 class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
   late CaptureFilter _draft = widget.initial;
+  late CaptureDateOptions _options = widget.options;
+  int _optionsGeneration = 0;
 
   void _update(CaptureFilter next) => setState(() => _draft = next);
 
+  Future<void> _updateAndReload(CaptureFilter next) async {
+    final generation = ++_optionsGeneration;
+    setState(() {
+      _draft = next;
+      _options = const CaptureDateOptions();
+    });
+    try {
+      final options = await widget.optionsLoader(next);
+      if (!mounted || generation != _optionsGeneration) return;
+      setState(() => _options = options);
+    } catch (_) {
+      if (!mounted || generation != _optionsGeneration) return;
+      setState(() => _options = const CaptureDateOptions());
+    }
+  }
+
+  @override
+  void dispose() {
+    _optionsGeneration++;
+    super.dispose();
+  }
+
   List<int> get _years {
-    final values = {...widget.options.years, ?_draft.year}.toList()..sort();
+    final values = {..._options.years, ?_draft.year}.toList()..sort();
     return values;
   }
 
   List<int> get _months {
     if (_draft.year == null) return const [];
-    final optionsStillMatchDraft =
-        _draft.projectId == widget.initial.projectId &&
-        _draft.year == widget.initial.year;
-    final available = optionsStillMatchDraft
-        ? widget.options.months
-        : const <int>[];
-    final values = {
-      ...(available.isEmpty
-          ? List<int>.generate(12, (index) => index + 1)
-          : available),
-      ?_draft.month,
-    }.toList()..sort();
+    final values = {..._options.months, ?_draft.month}.toList()..sort();
     return values;
   }
 
   List<int> get _days {
-    final year = _draft.year;
-    final month = _draft.month;
-    if (year == null || month == null) return const [];
-    final optionsStillMatchDraft =
-        _draft.projectId == widget.initial.projectId &&
-        _draft.year == widget.initial.year &&
-        _draft.month == widget.initial.month;
-    final available = optionsStillMatchDraft
-        ? widget.options.days
-        : const <int>[];
-    final values = {
-      ...(available.isEmpty
-          ? List<int>.generate(
-              DateTime(year, month + 1, 0).day,
-              (index) => index + 1,
-            )
-          : available),
-      ?_draft.day,
-    }.toList()..sort();
+    if (_draft.year == null || _draft.month == null) return const [];
+    final values = {..._options.days, ?_draft.day}.toList()..sort();
     return values;
   }
 
@@ -132,7 +135,7 @@ class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
                           value: null,
                           selected: _draft.projectId == null,
                           onSelected: (value) =>
-                              _update(CaptureFilter(projectId: value)),
+                              _updateAndReload(CaptureFilter(projectId: value)),
                         ),
                         for (final project in widget.projects)
                           _choice<String?>(
@@ -140,8 +143,9 @@ class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
                             label: project.name,
                             value: project.id,
                             selected: _draft.projectId == project.id,
-                            onSelected: (value) =>
-                                _update(CaptureFilter(projectId: value)),
+                            onSelected: (value) => _updateAndReload(
+                              CaptureFilter(projectId: value),
+                            ),
                           ),
                       ],
                     ),
@@ -157,7 +161,7 @@ class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
                           value: null,
                           selected: _draft.year == null,
                           onSelected: (value) =>
-                              _update(_draft.selectYear(value)),
+                              _updateAndReload(_draft.selectYear(value)),
                         ),
                         for (final year in _years)
                           _choice<int?>(
@@ -166,7 +170,7 @@ class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
                             value: year,
                             selected: _draft.year == year,
                             onSelected: (value) =>
-                                _update(_draft.selectYear(value)),
+                                _updateAndReload(_draft.selectYear(value)),
                           ),
                       ],
                     ),
@@ -182,7 +186,7 @@ class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
                           value: null,
                           selected: _draft.month == null,
                           onSelected: (value) =>
-                              _update(_draft.selectMonth(value)),
+                              _updateAndReload(_draft.selectMonth(value)),
                         ),
                         for (final month in _months)
                           _choice<int?>(
@@ -191,7 +195,7 @@ class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
                             value: month,
                             selected: _draft.month == month,
                             onSelected: (value) =>
-                                _update(_draft.selectMonth(value)),
+                                _updateAndReload(_draft.selectMonth(value)),
                           ),
                       ],
                     ),
@@ -231,7 +235,7 @@ class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
                   Expanded(
                     child: TextButton(
                       key: const Key('filter-reset'),
-                      onPressed: () => _update(const CaptureFilter()),
+                      onPressed: () => _updateAndReload(const CaptureFilter()),
                       child: Text(strings.resetFilters),
                     ),
                   ),

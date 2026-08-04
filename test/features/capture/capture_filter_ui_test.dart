@@ -217,13 +217,126 @@ void main() {
     expect(filter.value.day, isNull);
   });
 
-  testWidgets('filter draft drops stale date options after project changes', (
+  testWidgets('filter draft reloads real date options for each parent choice', (
     tester,
   ) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
-    final first = await database.createProject(id: 'project-1', name: '甲项目');
-    final second = await database.createProject(id: 'project-2', name: '乙项目');
+    await database.createProject(id: 'project-a', name: '甲项目');
+    await database.createProject(id: 'project-b', name: '乙项目');
+
+    Future<void> seed({
+      required String id,
+      required String projectId,
+      required DateTime capturedAt,
+    }) async {
+      final pending = await database.createPendingCapture(
+        id: id,
+        projectId: projectId,
+        originalPath: '/private/$id.jpg',
+        workLocation: 'A 区',
+        workContent: '风管',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: capturedAt,
+      );
+      final captured = await database.markCaptured(
+        captureId: pending.id,
+        capturedAt: capturedAt,
+      );
+      final rendering = await database.markRendering(
+        captureId: captured.id,
+        originalSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      await database.markReady(
+        captureId: rendering.id,
+        publishedUri: 'content://media/site-mark/$id',
+      );
+    }
+
+    await seed(
+      id: 'capture-a',
+      projectId: 'project-a',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+    await seed(
+      id: 'capture-b',
+      projectId: 'project-b',
+      capturedAt: DateTime(2025, 6, 1, 9),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const AllCapturesScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-project-project-a')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('filter-year-2026')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year-2025')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-month-7')), findsOneWidget);
+    expect(find.byKey(const Key('filter-month-8')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-month-7')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-day-16')), findsOneWidget);
+    expect(find.byKey(const Key('filter-day-15')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-project-project-b')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-year-2025')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year-2026')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-year-2025')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-month-6')), findsOneWidget);
+    expect(find.byKey(const Key('filter-month-7')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-month-6')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-day-1')), findsOneWidget);
+    expect(find.byKey(const Key('filter-day-2')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('active-filter-project')), findsNothing);
+    expect(find.byKey(const Key('active-filter-year')), findsNothing);
+    expect(find.byKey(const ValueKey('capture-a')), findsOneWidget);
+    expect(find.byKey(const ValueKey('capture-b')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('filter option loader ignores a stale slower project response', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final projectA = await database.createProject(id: 'project-a', name: '甲项目');
+    final projectB = await database.createProject(id: 'project-b', name: '乙项目');
+    final responseA = Completer<CaptureDateOptions>();
+    final responseB = Completer<CaptureDateOptions>();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -237,17 +350,60 @@ void main() {
         ],
         home: Scaffold(
           body: CaptureFilterSheet(
-            initial: const CaptureFilter(
-              projectId: 'project-1',
-              year: 2026,
-              month: 7,
-              day: 16,
-            ),
-            projects: [first, second],
-            options: const CaptureDateOptions(
-              years: [2026],
-              months: [7],
-              days: [16],
+            initial: const CaptureFilter(),
+            projects: [projectA, projectB],
+            options: const CaptureDateOptions(years: [2024]),
+            optionsLoader: (draft) => switch (draft.projectId) {
+              'project-a' => responseA.future,
+              'project-b' => responseB.future,
+              _ => Future.value(const CaptureDateOptions()),
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('filter-project-project-a')));
+    await tester.pump();
+    expect(find.byKey(const Key('filter-year-2024')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-project-project-b')));
+    await tester.pump();
+    responseB.complete(const CaptureDateOptions(years: [2025]));
+    await tester.pump();
+    expect(find.byKey(const Key('filter-year-2025')), findsOneWidget);
+
+    responseA.complete(const CaptureDateOptions(years: [2026]));
+    await tester.pump();
+    expect(find.byKey(const Key('filter-year-2025')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year-2026')), findsNothing);
+  });
+
+  testWidgets('filter option loader failure clears stale choices safely', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final project = await database.createProject(id: 'project-b', name: '乙项目');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureFilterSheet(
+            initial: const CaptureFilter(),
+            projects: [project],
+            options: const CaptureDateOptions(years: [2026]),
+            optionsLoader: (_) => Future<CaptureDateOptions>.error(
+              StateError('date options failed'),
             ),
           ),
         ),
@@ -255,13 +411,78 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('filter-project-project-2')));
-    await tester.pump();
-    expect(find.byKey(const Key('filter-month-7')), findsNothing);
+    await tester.tap(find.byKey(const Key('filter-project-project-b')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-year-2026')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
-    await tester.tap(find.byKey(const Key('filter-year-2026')));
+  testWidgets('filter option loader completion after dispose is ignored', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final project = await database.createProject(id: 'project-a', name: '甲项目');
+    final response = Completer<CaptureDateOptions>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureFilterSheet(
+            initial: const CaptureFilter(),
+            projects: [project],
+            options: const CaptureDateOptions(years: [2026]),
+            optionsLoader: (_) => response.future,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-project-project-a')));
     await tester.pump();
-    expect(find.byKey(const Key('filter-month-8')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    response.complete(const CaptureDateOptions(years: [2025]));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('filter keeps a selected date missing from current records', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureFilterSheet(
+            initial: const CaptureFilter(year: 2026, month: 7, day: 16),
+            projects: const [],
+            options: const CaptureDateOptions(),
+            optionsLoader: (_) async => const CaptureDateOptions(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('filter-year-2026')), findsOneWidget);
+    expect(find.byKey(const Key('filter-month-7')), findsOneWidget);
+    expect(find.byKey(const Key('filter-day-16')), findsOneWidget);
   });
 
   testWidgets('active chips label deleted projects and fit at 360dp', (
@@ -303,10 +524,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('已删除项目'), findsOneWidget);
+    expect(find.text('8月'), findsOneWidget);
+    expect(find.text('4日'), findsOneWidget);
     expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
     expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
     expect(find.byKey(const Key('active-filter-month')), findsOneWidget);
     expect(find.byKey(const Key('active-filter-day')), findsOneWidget);
+    expect(
+      tester
+          .widget<InputChip>(find.byKey(const Key('active-filter-project')))
+          .deleteButtonTooltipMessage,
+      '移除项目筛选',
+    );
+    expect(
+      tester
+          .widget<InputChip>(find.byKey(const Key('active-filter-year')))
+          .deleteButtonTooltipMessage,
+      '移除年份筛选',
+    );
+    expect(
+      tester
+          .widget<InputChip>(find.byKey(const Key('active-filter-month')))
+          .deleteButtonTooltipMessage,
+      '移除月份筛选',
+    );
+    expect(
+      tester
+          .widget<InputChip>(find.byKey(const Key('active-filter-day')))
+          .deleteButtonTooltipMessage,
+      '移除日期筛选',
+    );
     expect(tester.takeException(), isNull);
 
     await tester.drag(
@@ -321,6 +568,66 @@ void main() {
     expect(filter.value.month, 8);
     expect(filter.value.day, isNull);
   });
+
+  testWidgets(
+    'English active chips name month and day with distinct delete semantics',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: CaptureActiveFilterChips(
+              filter: const CaptureFilter(
+                projectId: 'deleted-project',
+                year: 2026,
+                month: 8,
+                day: 4,
+              ),
+              projects: const [],
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Month 8'), findsOneWidget);
+      expect(find.text('Day 4'), findsOneWidget);
+      const expectations = <String, String>{
+        'project': 'Remove project filter',
+        'year': 'Remove year filter',
+        'month': 'Remove month filter',
+        'day': 'Remove day filter',
+      };
+      for (final entry in expectations.entries) {
+        final chip = find.byKey(Key('active-filter-${entry.key}'));
+        expect(
+          tester.widget<InputChip>(chip).deleteButtonTooltipMessage,
+          entry.value,
+        );
+      }
+
+      final monthSemantics = tester
+          .getSemantics(find.byKey(const Key('active-filter-month')))
+          .label;
+      final daySemantics = tester
+          .getSemantics(find.byKey(const Key('active-filter-day')))
+          .label;
+      expect(RegExp('Month 8').allMatches(monthSemantics).length, 1);
+      expect(RegExp('Day 4').allMatches(daySemantics).length, 1);
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    },
+  );
 
   testWidgets(
     'all-records changing project clears year/month/day date filters',

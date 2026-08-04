@@ -78,13 +78,16 @@ Widget _localized({
   required Widget home,
   AppDatabase? database,
   bool disableAnimations = false,
+  Size size = const Size(400, 800),
+  TextScaler textScaler = TextScaler.noScaling,
+  Locale locale = const Locale('zh'),
 }) {
   return ProviderScope(
     overrides: [
       if (database != null) databaseProvider.overrideWithValue(database),
     ],
     child: MaterialApp(
-      locale: const Locale('zh'),
+      locale: locale,
       supportedLocales: AppStrings.supportedLocales,
       localizationsDelegates: const [
         AppStrings.delegate,
@@ -94,7 +97,8 @@ Widget _localized({
       ],
       home: MediaQuery(
         data: MediaQueryData(
-          size: const Size(400, 800),
+          size: size,
+          textScaler: textScaler,
           disableAnimations: disableAnimations,
         ),
         child: home,
@@ -108,9 +112,15 @@ Widget _pagedHarness(
   CaptureQuerySource source, {
   bool disableAnimations = false,
   bool grouped = false,
+  Size size = const Size(400, 800),
+  TextScaler textScaler = TextScaler.noScaling,
+  Locale locale = const Locale('zh'),
 }) {
   return _localized(
     disableAnimations: disableAnimations,
+    size: size,
+    textScaler: textScaler,
+    locale: locale,
     home: Scaffold(
       body: CapturePagedList(
         controller: controller,
@@ -124,8 +134,21 @@ Widget _pagedHarness(
         groupKey: grouped ? _dateKey : null,
         groupHeaderBuilder: grouped
             ? (context, key) => ColoredBox(
+                key: Key('test-date-container-$key'),
                 color: Theme.of(context).colorScheme.surface,
-                child: Text(key, key: Key('test-date-$key')),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      key,
+                      key: Key('test-date-$key'),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               )
             : null,
       ),
@@ -622,6 +645,70 @@ void main() {
       await _unmount(tester);
     },
   );
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets(
+      'pinned date header fits 3x text at 360dp in ${locale.languageCode}',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(360, 800));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final source = _FakeCaptureQuerySource(
+          defaultPage: _page([
+            _summary(0, capturedAt: DateTime(2026, 8, 4, 12)),
+            _summary(1, capturedAt: DateTime(2026, 8, 3, 12)),
+          ], hasMore: false),
+        );
+        final controller = CapturePagerController(source);
+        unawaited(controller.setQuery(const CaptureListQuery()));
+        addTearDown(() {
+          controller.dispose();
+          unawaited(source.dispose());
+        });
+
+        await tester.pumpWidget(
+          _pagedHarness(
+            controller,
+            source,
+            grouped: true,
+            size: const Size(360, 800),
+            textScaler: const TextScaler.linear(3),
+            locale: locale,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final text = find.byKey(const Key('test-date-2026-08-04'));
+        final header = find.byKey(const Key('test-date-container-2026-08-04'));
+        final firstRow = find.byKey(const Key('row-capture-0'));
+        final persistentHeader = tester
+            .widgetList<SliverPersistentHeader>(
+              find.byType(SliverPersistentHeader),
+            )
+            .first;
+
+        expect(persistentHeader.pinned, isTrue);
+        expect(tester.getSize(header).height, greaterThanOrEqualTo(58));
+        expect(
+          tester.getRect(header).contains(tester.getRect(text).topLeft),
+          isTrue,
+        );
+        expect(
+          tester.getRect(text).bottom,
+          lessThanOrEqualTo(tester.getRect(header).bottom),
+        );
+        expect(
+          tester.getRect(text).right,
+          lessThanOrEqualTo(tester.getRect(header).right),
+        );
+        expect(
+          tester.getRect(header).bottom,
+          lessThanOrEqualTo(tester.getRect(firstRow).top),
+        );
+        expect(tester.takeException(), isNull);
+        await _unmount(tester);
+      },
+    );
+  }
 
   testWidgets(
     'watched edit that no longer matches the search refreshes the page',

@@ -422,6 +422,9 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
       initial: _filter,
       projects: projects,
       options: _dateOptions,
+      optionsLoader: (draft) => _querySource.loadDateOptions(
+        CaptureListQuery(filter: draft, searchText: _searchText),
+      ),
     );
     if (!mounted || next == null || _searching) return;
     _onFilterChanged(next);
@@ -442,12 +445,15 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
         color: colorScheme.surface,
         child: Align(
           alignment: Alignment.centerLeft,
-          child: Text(
-            dateKey,
-            key: Key('capture-date-$dateKey'),
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              dateKey,
+              key: Key('capture-date-$dateKey'),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ),
