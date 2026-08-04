@@ -281,16 +281,6 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                   child: const Icon(Icons.search),
                 ),
               ),
-              IconButton(
-                onPressed: () => context.go('/records'),
-                tooltip: strings.allRecords,
-                icon: const Icon(Icons.photo_library_outlined),
-              ),
-              IconButton(
-                onPressed: () => context.go('/settings'),
-                tooltip: strings.settings,
-                icon: const Icon(Icons.settings_outlined),
-              ),
             ],
           ],
         ),
@@ -356,11 +346,6 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
               },
             );
           },
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => context.push('/projects/new'),
-          icon: const Icon(Icons.add),
-          label: Text(strings.newProject),
         ),
       ),
     );

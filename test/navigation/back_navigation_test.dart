@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -6,7 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
+import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -14,6 +18,71 @@ import 'package:sitemark/workflow/capture_template_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
+  testWidgets(
+    'system back returns from project detail then closes preserved search',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      await database.createProject(id: 'project-1', name: 'Project');
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(database)],
+      );
+      try {
+        final router = container.read(routerProvider);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp.router(
+              locale: const Locale('en'),
+              supportedLocales: AppStrings.supportedLocales,
+              localizationsDelegates: const [
+                AppStrings.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+              ],
+              routerConfig: router,
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(AppMotion.pageTransition);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(find.text('Projects'), findsOneWidget);
+        await tester.tap(find.byKey(const Key('search-projects')));
+        await tester.pump();
+        expect(find.byKey(const Key('project-search-field')), findsOneWidget);
+
+        unawaited(router.push('/projects/project-1'));
+        await tester.pump();
+        await tester.pump(AppMotion.pageTransition);
+        await tester.pump();
+        expect(find.byType(ProjectDetailScreen), findsOneWidget);
+        expect(find.byKey(const Key('root-dock')), findsNothing);
+
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        await tester.pump(AppMotion.pageTransition);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(router.routeInformationProvider.value.uri.path, '/');
+        expect(find.byType(ProjectDetailScreen), findsNothing);
+        expect(find.byKey(const Key('root-dock')), findsOneWidget);
+        expect(find.byKey(const Key('project-search-field')), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        await tester.pump(AppMotion.short4);
+        await tester.pump();
+        expect(find.byKey(const Key('project-search-field')), findsNothing);
+        expect(find.byKey(const Key('root-dock')), findsOneWidget);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        container.dispose();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.runAsync(database.close);
+      }
+    },
+  );
+
   testWidgets(
     'system back closes confirmation then template sheet then capture page',
     (tester) async {

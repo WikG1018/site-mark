@@ -294,6 +294,7 @@ class AppStrings {
       : '拍摄时间、定位结果、照片编号和原图哈希不会被修改。';
   String get regenerationFailed => _english ? 'Regeneration failed' : '重新生成失败';
   String get allRecords => _english ? 'All records' : '全部记录';
+  String get projects => _english ? 'Projects' : '项目';
   String get searchCaptures => _english ? 'Search records' : '搜索记录';
   String get searchCapturesHint => _english
       ? 'Search project, location, content, photographer, notes, address, or photo number'

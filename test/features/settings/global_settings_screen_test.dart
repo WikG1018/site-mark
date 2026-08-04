@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
@@ -11,18 +10,35 @@ import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/app_storage_service.dart';
 
 void main() {
   late AppDatabase database;
+  late bool databaseClosed;
 
   setUp(() {
     database = AppDatabase.forTesting(NativeDatabase.memory());
+    databaseClosed = false;
   });
 
   tearDown(() async {
-    await database.close();
+    if (!databaseClosed) await database.close();
   });
+
+  Future<void> closeRouterFixture(
+    WidgetTester tester,
+    ProviderContainer container,
+  ) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    container.dispose();
+    // Drift schedules a zero-duration cleanup timer when watched queries are
+    // cancelled. Flush it before closing on the real event loop.
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.runAsync(database.close);
+    databaseClosed = true;
+  }
 
   /// Pumps the [GlobalSettingsScreen] in a localized Material harness wired to
   /// the in-memory [database] via Riverpod overrides.
@@ -64,40 +80,41 @@ void main() {
 
   testWidgets('settings route is reachable from the app shell', (tester) async {
     await database.getAppSettings();
-    final router = GoRouter(
-      routes: [
-        GoRoute(
-          path: '/',
-          builder: (context, state) => const Scaffold(body: SizedBox.shrink()),
-          routes: [
-            GoRoute(
-              path: 'settings',
-              builder: (context, state) => const GlobalSettingsScreen(),
-            ),
-          ],
-        ),
-      ],
+    final container = ProviderContainer(
+      overrides: [databaseProvider.overrideWithValue(database)],
     );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(database)],
-        child: MaterialApp.router(
-          locale: const Locale('zh'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: const [
-            AppStrings.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          routerConfig: router,
+    try {
+      final router = container.read(routerProvider);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
         ),
-      ),
-    );
-    router.go('/settings');
-    await tester.pumpAndSettle();
+      );
+      router.go('/settings');
+      await tester.pump();
+      await tester.pump(AppMotion.rootSwitch);
+      await tester.pump();
 
-    expect(find.byType(GlobalSettingsScreen), findsOneWidget);
+      expect(find.byType(GlobalSettingsScreen), findsOneWidget);
+      expect(find.byKey(const Key('root-dock')), findsOneWidget);
+      expect(
+        find.byKey(const Key('root-destination-settings')),
+        findsOneWidget,
+      );
+    } finally {
+      await closeRouterFixture(tester, container);
+    }
   });
 
   testWidgets('backup and nested selection routes are registered', (
@@ -106,36 +123,41 @@ void main() {
     final container = ProviderContainer(
       overrides: [databaseProvider.overrideWithValue(database)],
     );
-    final router = container.read(routerProvider);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp.router(
-          locale: const Locale('zh'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: const [
-            AppStrings.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          routerConfig: router,
+    try {
+      final router = container.read(routerProvider);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            routerConfig: router,
+          ),
         ),
-      ),
-    );
+      );
 
-    router.go('/settings/backup-restore');
-    await tester.pumpAndSettle();
-    expect(find.byType(BackupRestoreSectionScreen), findsOneWidget);
+      router.go('/settings/backup-restore');
+      await tester.pump();
+      await tester.pump(AppMotion.pageTransition);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.byType(BackupRestoreSectionScreen), findsOneWidget);
+      expect(find.byKey(const Key('root-dock')), findsNothing);
 
-    router.go('/settings/backup-restore/backup');
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(find.byType(ProjectBackupSelectionScreen), findsOneWidget);
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 1));
-    container.dispose();
+      router.go('/settings/backup-restore/backup');
+      await tester.pump();
+      await tester.pump(AppMotion.pageTransition);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.byType(ProjectBackupSelectionScreen), findsOneWidget);
+      expect(find.byKey(const Key('root-dock')), findsNothing);
+    } finally {
+      await closeRouterFixture(tester, container);
+    }
   });
 
   test(

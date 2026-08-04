@@ -199,7 +199,8 @@ void main() {
 
     expect(find.text('工程印记'), findsOneWidget);
     expect(find.text('暂无进行中的项目'), findsOneWidget);
-    expect(find.text('新建项目'), findsOneWidget);
+    expect(find.text('项目'), findsOneWidget);
+    expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
     await disposeApp(tester);
   });
 
@@ -216,7 +217,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('新建项目'));
+    await tester.tap(find.byKey(const Key('new-project-fab')));
     await tester.pumpAndSettle();
 
     expect(find.text('创建项目'), findsOneWidget);
@@ -242,7 +243,8 @@ void main() {
 
     expect(find.text('SiteMark'), findsOneWidget);
     expect(find.text('No active projects'), findsOneWidget);
-    expect(find.text('New project'), findsOneWidget);
+    expect(find.text('Projects'), findsOneWidget);
+    expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
     await disposeApp(tester);
   });
 
@@ -658,7 +660,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('新建项目'));
+    await tester.tap(find.byKey(const Key('new-project-fab')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('project-name')), name);
     await tester.tap(find.text('保存'));
@@ -695,7 +697,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('新建项目'));
+    await tester.tap(find.byKey(const Key('new-project-fab')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('project-name')),
