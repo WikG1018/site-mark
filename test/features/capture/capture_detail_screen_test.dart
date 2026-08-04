@@ -554,7 +554,7 @@ void main() {
                   : 'unknown reason',
               nextStep: locale.languageCode == 'zh'
                   ? '点击“重新处理”'
-                  : 'select Retry processing',
+                  : 'Select Retry processing',
             ),
           };
 
@@ -590,6 +590,107 @@ void main() {
           entry.value.retry ? findsOneWidget : findsNothing,
           reason: entry.key.name,
         );
+        await disposeDetail(tester);
+      }
+    });
+  }
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('processing failure guidance matches final actions in '
+        '${locale.languageCode}', (tester) async {
+      final cases =
+          <
+            ({
+              String name,
+              bool originalExists,
+              bool originalDeleted,
+              ProjectLifecycleStatus projectStatus,
+              bool retry,
+              String nextStep,
+            })
+          >[
+            (
+              name: 'retained-active',
+              originalExists: true,
+              originalDeleted: false,
+              projectStatus: ProjectLifecycleStatus.active,
+              retry: true,
+              nextStep: locale.languageCode == 'zh'
+                  ? '点击“重新处理”'
+                  : 'Select Retry processing',
+            ),
+            (
+              name: 'missing-active',
+              originalExists: false,
+              originalDeleted: false,
+              projectStatus: ProjectLifecycleStatus.active,
+              retry: false,
+              nextStep: locale.languageCode == 'zh'
+                  ? '原图当前缺失'
+                  : 'The original is currently missing',
+            ),
+            (
+              name: 'cleared-active',
+              originalExists: false,
+              originalDeleted: true,
+              projectStatus: ProjectLifecycleStatus.active,
+              retry: false,
+              nextStep: locale.languageCode == 'zh'
+                  ? '原图已清理'
+                  : 'The original has been cleared',
+            ),
+            (
+              name: 'retained-read-only',
+              originalExists: true,
+              originalDeleted: false,
+              projectStatus: ProjectLifecycleStatus.completed,
+              retry: false,
+              nextStep: locale.languageCode == 'zh'
+                  ? '项目当前为只读状态'
+                  : 'The project is read-only',
+            ),
+          ];
+
+      for (final item in cases) {
+        await pumpReadyDetail(
+          tester,
+          originalExists: item.originalExists,
+          originalDeleted: item.originalDeleted,
+          status: CaptureStatus.failed,
+          failureCode: CaptureFailureCode.processingFailed,
+          projectStatus: item.projectStatus,
+          locale: locale,
+        );
+
+        final guidance = find.byKey(const Key('capture-failure-guidance'));
+        expect(guidance, findsOneWidget, reason: item.name);
+        expect(
+          find.descendant(
+            of: guidance,
+            matching: find.textContaining(item.nextStep),
+          ),
+          findsOneWidget,
+          reason: item.name,
+        );
+        expect(
+          find.byKey(const Key('capture-retry-processing')),
+          item.retry ? findsOneWidget : findsNothing,
+          reason: item.name,
+        );
+        if (!item.retry) {
+          expect(
+            find.descendant(
+              of: guidance,
+              matching: find.textContaining(
+                locale.languageCode == 'zh'
+                    ? '点击“重新处理”'
+                    : 'Select Retry processing',
+              ),
+            ),
+            findsNothing,
+            reason: item.name,
+          );
+        }
         await disposeDetail(tester);
       }
     });

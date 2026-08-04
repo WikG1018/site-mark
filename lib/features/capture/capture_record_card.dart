@@ -8,6 +8,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_failure_guidance.dart';
 import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
@@ -133,6 +134,133 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
         ),
       ),
     );
+    final selectionControl = AnimatedSize(
+      duration: AppMotion.durationOf(context, AppMotion.medium2),
+      curve: AppMotion.standard,
+      child: widget.selectionMode
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: widget.selected,
+                  onChanged: widget.selectable
+                      ? (value) {
+                          HapticFeedback.selectionClick();
+                          widget.onSelectedChanged?.call(value ?? false);
+                        }
+                      : null,
+                ),
+                const SizedBox(width: 4),
+              ],
+            )
+          : const SizedBox.shrink(),
+    );
+    final preview = Semantics(
+      image: true,
+      label: strings.photoSemanticsLabel(
+        capture.photoNumber ?? capture.workLocation,
+      ),
+      child: thumbnail,
+    );
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                captureListDisplayName(
+                  capturedAt: capture.capturedAt,
+                  photoNumber: capture.photoNumber,
+                  fallback: capture.workLocation,
+                ),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            Semantics(
+              label: '${strings.statusSemanticsPrefix}: $label',
+              child: ExcludeSemantics(
+                child: AnimatedSwitcher(
+                  duration: AppMotion.durationOf(context, AppMotion.short4),
+                  child: Row(
+                    key: ValueKey(capture.status),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 18, color: color),
+                      const SizedBox(width: 4),
+                      Text(label, style: TextStyle(color: color)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (widget.showProjectName) ...[
+          Text(
+            widget.summary.projectName,
+            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+        ],
+        Text(
+          '${capture.workLocation} · ${capture.workContent}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          capture.photographer,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        if (searchSnippet != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            searchSnippet,
+            key: const Key('capture-search-snippet'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ],
+        if (capture.failureReason != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            strings.captureFailureGuidanceMessage(
+              captureFailureGuidanceForList(
+                CaptureFailureCode.fromStorage(capture.failureReason),
+              ),
+            ),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+        FutureBuilder<OriginalPhotoState>(
+          future: _originalState,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const SizedBox.shrink();
+            }
+            final state = snapshot.data;
+            if (state == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                _originalStateLabel(state, strings),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            );
+          },
+        ),
+      ],
+    );
+    final useStackedLayout = MediaQuery.textScalerOf(context).scale(14) >= 21;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -145,147 +273,24 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
             : null,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AnimatedSize(
-                duration: AppMotion.durationOf(context, AppMotion.medium2),
-                curve: AppMotion.standard,
-                child: widget.selectionMode
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Checkbox(
-                            value: widget.selected,
-                            onChanged: widget.selectable
-                                ? (value) {
-                                    HapticFeedback.selectionClick();
-                                    widget.onSelectedChanged?.call(
-                                      value ?? false,
-                                    );
-                                  }
-                                : null,
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              Semantics(
-                image: true,
-                label: strings.photoSemanticsLabel(
-                  capture.photoNumber ?? capture.workLocation,
-                ),
-                child: thumbnail,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
+          child: useStackedLayout
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            captureListDisplayName(
-                              capturedAt: capture.capturedAt,
-                              photoNumber: capture.photoNumber,
-                              fallback: capture.workLocation,
-                            ),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        Semantics(
-                          label: '${strings.statusSemanticsPrefix}: $label',
-                          child: ExcludeSemantics(
-                            child: AnimatedSwitcher(
-                              duration: AppMotion.durationOf(
-                                context,
-                                AppMotion.short4,
-                              ),
-                              child: Row(
-                                key: ValueKey(capture.status),
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(icon, size: 18, color: color),
-                                  const SizedBox(width: 4),
-                                  Text(label, style: TextStyle(color: color)),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    if (widget.showProjectName) ...[
-                      Text(
-                        widget.summary.projectName,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                    ],
-                    Text(
-                      '${capture.workLocation} · ${capture.workContent}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      capture.photographer,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    if (searchSnippet != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        searchSnippet,
-                        key: const Key('capture-search-snippet'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    ],
-                    if (capture.failureReason != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        AppStrings.of(context).captureFailureMessage(
-                          CaptureFailureCode.fromStorage(capture.failureReason),
-                        ),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ],
-                    FutureBuilder<OriginalPhotoState>(
-                      future: _originalState,
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState != ConnectionState.done) {
-                          return const SizedBox.shrink();
-                        }
-                        final state = snapshot.data;
-                        if (state == null) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            _originalStateLabel(state, strings),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        );
-                      },
-                    ),
+                    Row(children: [selectionControl, preview]),
+                    const SizedBox(height: 8),
+                    details,
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    selectionControl,
+                    preview,
+                    const SizedBox(width: 12),
+                    Expanded(child: details),
                   ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

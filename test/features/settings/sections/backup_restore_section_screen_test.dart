@@ -469,12 +469,13 @@ void main() {
     }
   });
 
-  testWidgets(
-    'finalization pending keeps committed restore and shows exact message',
-    (tester) async {
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('finalization pending keeps committed restore in '
+        '${locale.languageCode}', (tester) async {
       var discardCalls = 0;
       await pumpScreen(
         tester,
+        locale: locale,
         dependencies: ProjectRestoreFlowDependencies(
           pickZip: () async => '/tmp/backup.zip',
           prepareRestore: (_) async => _prepared(bundle: true),
@@ -497,14 +498,23 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('恢复数据已安全保存，但尚未完成显示。请重启 SiteMark，应用会自动完成恢复。'),
+        find.text(
+          locale.languageCode == 'zh'
+              ? '恢复数据已安全保存，但尚未完成显示。请重启 SiteMark，应用会自动完成恢复。'
+              : 'Restore data is safely saved but is not visible yet. Restart SiteMark to finish the restore automatically.',
+        ),
         findsOneWidget,
       );
-      expect(find.textContaining('已回滚'), findsNothing);
+      expect(
+        find.textContaining(
+          locale.languageCode == 'zh' ? '已回滚' : 'rolled back',
+        ),
+        findsNothing,
+      );
       expect(find.textContaining('raw finalization'), findsNothing);
       expect(discardCalls, 0);
-    },
-  );
+    });
+  }
 
   testWidgets(
     'successful restore returns home and keeps its success snackbar',

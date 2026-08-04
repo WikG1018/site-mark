@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/domain/app_links.dart';
 import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_failure_guidance.dart';
+import 'package:sitemark/domain/original_photo_state.dart';
 
 class AppStrings {
   const AppStrings(this.locale);
@@ -241,6 +243,92 @@ class AppStrings {
           ? 'The photo could not be processed for an unknown reason. If the original is retained, select Retry processing; otherwise take the photo again.'
           : '照片因未知原因处理失败。若原图仍保留，请点击“重新处理”；否则请重新拍摄。',
   };
+  String captureFailureGuidanceMessage(CaptureFailureGuidance guidance) {
+    if (guidance.surface == CaptureFailureGuidanceSurface.list) {
+      return switch (guidance.code) {
+        CaptureFailureCode.cameraUnavailable =>
+          _english
+              ? 'The system camera was unavailable. Open the record to see available actions.'
+              : '系统相机当时不可用。请打开记录查看可用操作。',
+        CaptureFailureCode.queueUnavailable =>
+          _english
+              ? 'Background processing was delayed. Open the record to see available actions.'
+              : '后台处理曾延迟。请打开记录查看可用操作。',
+        CaptureFailureCode.originalMissing =>
+          _english
+              ? 'The original is missing, so no watermarked photo was created. Open the record to see available actions.'
+              : '原图已缺失，无法生成水印照片。请打开记录查看可用操作。',
+        CaptureFailureCode.originalModified =>
+          _english
+              ? 'The original checksum does not match, so processing stopped. Open the record to see available actions.'
+              : '原图校验值不一致，处理已停止。请打开记录查看可用操作。',
+        CaptureFailureCode.processingFailed =>
+          _english
+              ? 'Photo processing failed. Open the record to see available actions.'
+              : '照片处理失败。请打开记录查看可用操作。',
+        CaptureFailureCode.unexpected =>
+          _english
+              ? 'The photo could not be processed. Open the record to see available actions.'
+              : '照片因未知原因处理失败。请打开记录查看可用操作。',
+      };
+    }
+
+    final reason = switch (guidance.code) {
+      CaptureFailureCode.cameraUnavailable =>
+        _english ? 'The system camera was unavailable.' : '系统相机当时不可用。',
+      CaptureFailureCode.queueUnavailable =>
+        _english ? 'Background processing was delayed.' : '后台处理曾延迟。',
+      CaptureFailureCode.originalMissing =>
+        _english
+            ? 'The original is missing, so no watermarked photo was created.'
+            : '原图已缺失，无法生成水印照片。',
+      CaptureFailureCode.originalModified =>
+        _english
+            ? 'The original does not match its capture-time checksum, so processing stopped.'
+            : '原图内容与拍摄时校验值不一致，处理已停止。',
+      CaptureFailureCode.processingFailed =>
+        _english ? 'Photo processing failed.' : '照片处理失败。',
+      CaptureFailureCode.unexpected =>
+        _english
+            ? 'The photo could not be processed for an unknown reason.'
+            : '照片因未知原因处理失败。',
+    };
+
+    if (!guidance.projectActive) {
+      return _english
+          ? '$reason The project is read-only, so the record cannot be retried or deleted. Keep the record, or restore the project to active and open it again to see available actions.'
+          : '$reason 项目当前为只读状态，不能重新处理或删除记录。可保留此记录，或先将项目恢复为进行中，再打开记录查看可用操作。';
+    }
+    if (guidance.originalState == OriginalPhotoState.missing) {
+      return _english
+          ? '$reason The original is currently missing, so retry is unavailable. Return to the project and take the photo again; you can keep this failed record or use the top-right menu to delete it.'
+          : '$reason 原图当前缺失，无法重新处理。请返回项目重新拍摄；也可保留此失败记录，或使用右上角菜单删除记录。';
+    }
+    if (guidance.originalState == OriginalPhotoState.cleared) {
+      return _english
+          ? '$reason The original has been cleared, so retry is unavailable. Return to the project and take the photo again; you can keep this failed record or use the top-right menu to delete it.'
+          : '$reason 原图已清理，无法重新处理。请返回项目重新拍摄；也可保留此失败记录，或使用右上角菜单删除记录。';
+    }
+    if (guidance.code == CaptureFailureCode.originalMissing) {
+      return _english
+          ? '$reason Return to the project and take the photo again; you can keep this failed record or use the top-right menu to delete it.'
+          : '$reason 请返回项目重新拍摄；也可保留此失败记录，或使用右上角菜单删除记录。';
+    }
+    if (guidance.code == CaptureFailureCode.originalModified) {
+      return _english
+          ? '$reason Keep the current original as evidence and take the photo again, or use the top-right menu to delete this failed record.'
+          : '$reason 请保留现有原图作为证据并重新拍摄，或使用右上角菜单删除此失败记录。';
+    }
+    if (guidance.canRetry) {
+      return _english
+          ? '$reason The original is retained. Select Retry processing; if it still fails, keep the original and take the photo again.'
+          : '$reason 原图仍保留。请点击“重新处理”；若仍失败，请保留原图并重新拍摄。';
+    }
+    return _english
+        ? '$reason Keep the record or use the top-right menu to delete it; return to the project to take the photo again.'
+        : '$reason 可保留此记录或使用右上角菜单删除，并返回项目重新拍摄。';
+  }
+
   String get captureQueuedContinue => _english
       ? 'Photo queued for background processing. Continue shooting.'
       : '照片已加入后台处理，可继续拍摄';

@@ -8,6 +8,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_failure_guidance.dart';
 import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
@@ -144,10 +145,17 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                 final failureCode = capture.status == CaptureStatus.failed
                     ? CaptureFailureCode.fromStorage(capture.failureReason)
                     : null;
-                final canRetry =
-                    projectActive &&
-                    failureCode?.canRetryProcessing == true &&
-                    originalRetained;
+                final failureGuidance =
+                    failureCode != null &&
+                        info != null &&
+                        projectSnapshot.hasData
+                    ? captureFailureGuidanceForDetail(
+                        code: failureCode,
+                        originalState: info.originalState,
+                        projectActive: projectActive,
+                      )
+                    : null;
+                final canRetry = failureGuidance?.canRetry == true;
                 final settled =
                     capture.status == CaptureStatus.ready ||
                     capture.status == CaptureStatus.failed;
@@ -236,7 +244,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (failureCode != null)
+                          if (failureGuidance != null)
                             Container(
                               key: const Key('capture-failure-guidance'),
                               margin: const EdgeInsets.only(bottom: 12),
@@ -259,8 +267,8 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
-                                      strings.captureFailureMessage(
-                                        failureCode,
+                                      strings.captureFailureGuidanceMessage(
+                                        failureGuidance,
                                       ),
                                       style: TextStyle(
                                         color: Theme.of(

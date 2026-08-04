@@ -16,10 +16,13 @@ Baseline: `9b53b720b084a834c2a8866af15964912748d7da`
   surface moves from loading to data/empty state.
 - Added reason-plus-next-step guidance for every typed project restore failure
   shown by the real restore Snackbar flow in Chinese and English.
-- Added shared, state-matched photo-processing guidance to capture cards and
-  details. Permanent evidence failures never offer a misleading processing
-  retry; transient and unknown processing failures only offer it when the
-  original is actually retained.
+- Added shared, state-matched photo-processing guidance. List cards use a short
+  reason plus "open the record" action and never promise retry. Detail guidance
+  derives retry availability from the final failure code, original-photo state,
+  and project lifecycle, so Retry processing is named only when its button is
+  present.
+- Made narrow cards switch to a stacked layout for large text, keeping failed
+  records readable and tappable at 360 dp with 2x text scaling in both locales.
 - Added regression coverage for final rendered text/icon foregrounds under a
   hostile inherited theme, explicit foreground overrides, and the tappable
   semantics action on `GlassCard`.
@@ -44,6 +47,11 @@ RED was established before production changes:
 - Invalid `min`/`max` combinations returned a plausible count instead of
   rejecting an undefined contract, and `CapturePagedList` accepted maxima of
   `-1` and `1`.
+- The first final-action tests found processing-failure copy that promised
+  retry even when the original was missing, and the English 360 dp / 2x failed
+  card produced a 906-pixel bottom overflow. After shortening the list copy,
+  the same test still exposed the underlying narrow-column layout before the
+  card switched to its large-text stacked layout.
 
 GREEN coverage includes:
 
@@ -60,6 +68,13 @@ GREEN coverage includes:
   without leaking raw exceptions.
 - Real capture detail and card surfaces for `originalMissing`,
   `originalModified`, `processingFailed`, and legacy/unknown failures.
+- Chinese and English detail cases for retained/active, missing/active,
+  cleared/active, and retained/read-only processing failures, including exact
+  agreement between guidance and Retry processing button presence.
+- Chinese and English failed-card tests at 360 dp / 2x, covering no overflow,
+  no list-level retry promise, and tap-through to the detail/actions surface.
+- The real `finalizationPending` restore Snackbar in both locales, not only a
+  localization snapshot.
 
 ## Copy audit
 
@@ -68,10 +83,11 @@ GREEN coverage includes:
 | Permission | Yes | Open system settings / retry | Existing copy accepted |
 | Backup creation | Yes | Retry / isolate one project / save or share again | UI copy accepted |
 | Restore preparation | Typed reason | Choose a SiteMark project backup, upgrade the app, choose a compatible archive, or free storage as appropriate | Nine typed mappings covered by zh/en contracts and real Snackbar tests |
-| Restore execution | Typed reason | Rename conflicts in preview, restart after safe finalization, restore again, or use single-project backups as appropriate | Real Snackbar tests cover name conflict, rollback, general failure, and finalization pending |
-| Photo original missing | Original evidence file is gone | Return to the project and retake; keep or delete the failed record | Shown in list and detail; retry hidden |
-| Photo original modified | Capture-time checksum no longer matches | Keep the current original as evidence and retake, or delete the failed record | Shown in list and detail; retry hidden |
-| Photo processing/unknown | Processing failed while original may remain | Retry only when the original is retained; otherwise retake | Error-code contract and detail controls tested |
+| Restore execution | Typed reason | Rename conflicts in preview, restart after safe finalization, restore again, or use single-project backups as appropriate | Real zh/en Snackbar tests cover name conflict, rollback, general failure, and finalization pending |
+| Capture-card failure summary | Code-specific short reason | Open the record to see available actions | Lists do not claim retry or menu availability without final state/lifecycle data |
+| Photo original missing | Original evidence file is gone | Detail says retake; keep or use the top-right menu to delete | Retry hidden |
+| Photo original modified | Capture-time checksum no longer matches | Detail says preserve evidence and retake, or use the top-right menu to delete | Retry hidden |
+| Photo processing/unknown | Processing failed while original state and project lifecycle may vary | Detail offers retry only for a retryable code with retained original in an active project; otherwise gives the actual missing, cleared, or read-only recovery | Guidance/button agreement tested in zh/en |
 | Capture list | Local-record read failure | Retry | Message fixed |
 
 ## Design-decision acceptance
@@ -93,15 +109,20 @@ targeted final check: 14 tests passed.
 
 | Gate | Result |
 | --- | --- |
-| `dart format --output=none --set-exit-if-changed lib test` | PASS, 191 files checked, 0 changed |
-| Selected Task 10 and independent-review widget/unit tests | PASS, 82 tests |
+| `dart format --output=none --set-exit-if-changed lib test` | PASS, 193 files checked, 0 changed |
+| Selected final-action widget/unit tests | PASS, 60 tests |
 | `flutter analyze` | PASS, no issues |
-| `flutter test` | PASS, 853 tests |
+| `flutter test` | PASS, 860 tests |
 | `cargo fmt --manifest-path rust/Cargo.toml -- --check` | PASS |
 | `cargo test --manifest-path rust/Cargo.toml` | PASS, 54 tests |
 | `android/gradlew.bat testDebugUnitTest` | PASS, 285 actionable tasks |
 | `flutter build apk --debug` | PASS |
 | `git diff --check` | PASS |
+
+Rust and Android unit gates were not rerun for this final Dart-only increment.
+Their immediately preceding Task 10 results above remain fresh: Rust passed 54
+tests and Android passed with the process-local JDK 21. The APK was rebuilt
+after the Dart changes, and its size/hash below are from that fresh artifact.
 
 The Android unit gate requires a complete JDK 21 because Robolectric for API
 36 does not run on Java 17. DevEco's Java 21 runtime was also insufficient
@@ -113,8 +134,8 @@ configuration were not changed.
 ## APK
 
 - Path: `C:\tmp\sitemark-pr30-review\build\app\outputs\flutter-apk\app-debug.apk`
-- Size: 265,843,928 bytes
-- SHA-256: `38FEA9E1519DDA0DC8D1D17A1DB5B75AACC36FA0C7B8088F116FECFD4981B330`
+- Size: 265,849,258 bytes
+- SHA-256: `E15B0D77B52AEB82A382004818027A7BAF61C5BA728AE7ECCD91BEA8472D02DA`
 
 ## Device acceptance
 
