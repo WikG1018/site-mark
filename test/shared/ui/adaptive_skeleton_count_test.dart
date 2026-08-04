@@ -56,4 +56,26 @@ void main() {
       );
     }
   });
+
+  test('rejects invalid skeleton-count bounds', () {
+    expect(
+      () =>
+          adaptiveSkeletonCount(viewportHeight: 640, itemExtent: 118, min: -1),
+      throwsArgumentError,
+    );
+    expect(
+      () => adaptiveSkeletonCount(
+        viewportHeight: 640,
+        itemExtent: 118,
+        min: 4,
+        max: 3,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () =>
+          adaptiveSkeletonCount(viewportHeight: 640, itemExtent: 118, max: -1),
+      throwsArgumentError,
+    );
+  });
 }

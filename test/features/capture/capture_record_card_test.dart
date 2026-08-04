@@ -127,6 +127,19 @@ void main() {
       ),
     );
     expect(find.textContaining('原图已缺失'), findsOneWidget);
+    expect(find.textContaining('返回项目重新拍摄'), findsOneWidget);
+    expect(find.textContaining('删除记录'), findsOneWidget);
+
+    await pumpCard(
+      tester,
+      capture: record(
+        id: 'capture-modified',
+        status: CaptureStatus.failed,
+        failureReason: CaptureFailureCode.originalModified.storageCode,
+      ),
+    );
+    expect(find.textContaining('校验值不一致'), findsOneWidget);
+    expect(find.textContaining('保留现有原图作为证据并重新拍摄'), findsOneWidget);
 
     await pumpCard(
       tester,

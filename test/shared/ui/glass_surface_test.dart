@@ -1,6 +1,5 @@
-import 'dart:ui' show SemanticsAction;
-
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
@@ -57,40 +56,58 @@ void main() {
   testWidgets('explicit text and icon foregrounds override glass defaults', (
     tester,
   ) async {
+    const hostileForeground = Color(0xff00ff00);
     const textColor = Color(0xff7b1fa2);
     const iconColor = Color(0xffe65100);
     const nestedIconColor = Color(0xff1565c0);
+    final scheme = ColorScheme.fromSeed(seedColor: const Color(0xff005a9c));
     await tester.pumpWidget(
       MaterialApp(
-        home: GlassSurface(
-          child: const Column(
-            children: [
-              Text(
-                'explicit text',
-                key: Key('explicit-text'),
-                style: TextStyle(color: textColor),
+        theme: ThemeData(colorScheme: scheme),
+        home: DefaultTextStyle(
+          style: const TextStyle(color: hostileForeground),
+          child: IconTheme(
+            data: const IconThemeData(color: hostileForeground),
+            child: GlassSurface(
+              child: const Column(
+                children: [
+                  Text('default text', key: Key('default-text')),
+                  Text(
+                    'explicit text',
+                    key: Key('explicit-text'),
+                    style: TextStyle(color: textColor),
+                  ),
+                  Icon(Icons.image, key: Key('default-icon')),
+                  Icon(
+                    Icons.photo,
+                    key: Key('explicit-icon'),
+                    color: iconColor,
+                  ),
+                  IconTheme(
+                    data: IconThemeData(color: nestedIconColor),
+                    child: Icon(Icons.settings, key: Key('nested-icon-theme')),
+                  ),
+                ],
               ),
-              Icon(Icons.photo, key: Key('explicit-icon'), color: iconColor),
-              IconTheme(
-                data: IconThemeData(color: nestedIconColor),
-                child: Icon(Icons.settings, key: Key('nested-icon-theme')),
-              ),
-            ],
+            ),
           ),
         ),
       ),
     );
 
-    final text = tester.widget<Text>(find.byKey(const Key('explicit-text')));
-    expect(text.style?.color, textColor);
-    final icon = tester.widget<Icon>(find.byKey(const Key('explicit-icon')));
-    expect(icon.color, iconColor);
-    expect(
-      IconTheme.of(
-        tester.element(find.byKey(const Key('nested-icon-theme'))),
-      ).color,
-      nestedIconColor,
-    );
+    Color? renderedForeground(Key key) {
+      final richText = find.descendant(
+        of: find.byKey(key),
+        matching: find.byType(RichText),
+      );
+      return tester.renderObject<RenderParagraph>(richText).text.style?.color;
+    }
+
+    expect(renderedForeground(const Key('default-text')), scheme.onSurface);
+    expect(renderedForeground(const Key('explicit-text')), textColor);
+    expect(renderedForeground(const Key('default-icon')), scheme.onSurface);
+    expect(renderedForeground(const Key('explicit-icon')), iconColor);
+    expect(renderedForeground(const Key('nested-icon-theme')), nestedIconColor);
   });
 
   for (final brightness in Brightness.values) {

@@ -226,20 +226,20 @@ class AppStrings {
           : '照片已安全保留，后台处理会自动重试',
     CaptureFailureCode.originalMissing =>
       _english
-          ? 'The original is missing, so the watermarked photo cannot be created.'
-          : '原图已缺失，无法生成水印照片',
+          ? 'The original is missing, so the watermarked photo cannot be created. Return to the project and take the photo again; you can keep this failed record or delete it from the top-right menu.'
+          : '原图已缺失，无法生成水印照片。请返回项目重新拍摄；也可保留此失败记录，或从右上角菜单删除记录。',
     CaptureFailureCode.originalModified =>
       _english
-          ? 'The original has changed. Processing stopped to protect the record.'
-          : '原图已发生变化，为保护工程记录已停止处理',
+          ? 'The original does not match its capture-time checksum, so processing stopped. Keep the current original as evidence and take the photo again, or delete this failed record from the top-right menu.'
+          : '原图内容与拍摄时校验值不一致，处理已停止。请保留现有原图作为证据并重新拍摄，或从右上角菜单删除此失败记录。',
     CaptureFailureCode.processingFailed =>
       _english
-          ? 'Photo processing failed. Keep the original and try processing again.'
-          : '照片处理失败，请保留原图并重新处理',
+          ? 'Photo processing failed, but the original is retained. Select Retry processing; if it still fails, keep the original and take the photo again.'
+          : '照片处理失败，但原图仍保留。请点击“重新处理”；若仍失败，请保留原图并重新拍摄。',
     CaptureFailureCode.unexpected =>
       _english
-          ? 'The photo could not be processed. Please try again.'
-          : '照片处理失败，请重试',
+          ? 'The photo could not be processed for an unknown reason. If the original is retained, select Retry processing; otherwise take the photo again.'
+          : '照片因未知原因处理失败。若原图仍保留，请点击“重新处理”；否则请重新拍摄。',
   };
   String get captureQueuedContinue => _english
       ? 'Photo queued for background processing. Continue shooting.'
@@ -596,33 +596,36 @@ class AppStrings {
   String restoringProgress(int completed, int total) =>
       _english ? 'Restoring $completed/$total' : '正在恢复 $completed/$total';
   String get restoreComplete => _english ? 'Restore complete' : '恢复完成';
-  String get backupInvalidArchive =>
-      _english ? 'Not a valid SiteMark backup' : '不是有效的 SiteMark 备份';
-  String get backupNotSiteMark =>
-      _english ? 'This is not a SiteMark backup file' : '不是 SiteMark 备份文件';
-  String get backupUnsupportedVersion =>
-      _english ? 'This backup version is not supported' : '此备份版本暂不支持';
+  String get backupInvalidArchive => _english
+      ? 'The selected ZIP is not a valid SiteMark project backup. Choose a ZIP created with Back up projects in SiteMark.'
+      : '所选 ZIP 不是有效的 SiteMark 项目备份。请选择由 SiteMark“备份项目”生成的 ZIP。';
+  String get backupNotSiteMark => _english
+      ? 'The selected ZIP is not a project backup exported by SiteMark. Choose a ZIP created with Back up projects in SiteMark.'
+      : '所选 ZIP 不是 SiteMark 导出的项目备份。请选择由 SiteMark“备份项目”生成的 ZIP。';
+  String get backupUnsupportedVersion => _english
+      ? 'This backup is newer than this app can read. Update SiteMark, then choose the backup again.'
+      : '此备份版本高于当前应用支持范围。请先升级 SiteMark，再重新选择该备份。';
   String get backupCorrupted => _english
       ? 'The backup is corrupted or its checksum does not match. Choose another SiteMark backup and try again.'
       : '备份已损坏或校验不一致。请选择其他 SiteMark 备份后重试。';
   String get backupSelectionNotRestorable => _english
-      ? 'Photo sharing ZIP files cannot restore projects'
-      : '照片分享 ZIP 不能用于恢复项目';
+      ? 'The selected ZIP is a photo-sharing archive and contains no restorable project data. Choose a ZIP created with Back up projects.'
+      : '所选 ZIP 是照片分享包，不含可恢复的项目数据。请选择通过“备份项目”生成的 ZIP。';
   String get backupRestoreNameConflict => _english
-      ? 'A project name conflicts with an existing or selected project'
-      : '项目名称与已有或所选项目冲突';
+      ? 'A restore project name conflicts with an existing project or another selected name. Start restore again, change each conflicting name in the preview, then restore.'
+      : '恢复项目名称与现有项目或本次所选名称冲突。请重新开始恢复，并在预览中修改冲突名称后再恢复。';
   String get backupStorageInsufficient => _english
       ? 'Not enough storage space to complete this operation. Free some space and try again.'
       : '存储空间不足，无法完成操作。请释放空间后重试。';
   String get restoreFinalizationPending => _english
-      ? 'Restore data is safely saved. Publication and visibility will finish automatically the next time the app starts.'
-      : '恢复数据已安全保存，将在下次启动应用时自动完成发布和显示';
+      ? 'Restore data is safely saved but is not visible yet. Restart SiteMark to finish the restore automatically.'
+      : '恢复数据已安全保存，但尚未完成显示。请重启 SiteMark，应用会自动完成恢复。';
   String get restoreFailedRollback => _english
-      ? 'Restore failed. Any changes from this restore were rolled back.'
-      : '恢复失败，本次产生的内容已回滚';
+      ? 'One or more projects could not be restored, so all changes from this restore were rolled back. Choose the original backup and restore again; if it still fails, restore single-project backups one at a time.'
+      : '一个或多个项目恢复失败，本次更改已全部回滚。请重新选择原备份进行恢复；若仍失败，请改用单项目备份逐个恢复。';
   String get restoreFailedGeneral => _english
-      ? 'Could not complete the restore. Please try again.'
-      : '无法完成恢复，请重试';
+      ? 'An error prevented the restore from completing. Choose the backup and restore again; if it still fails, restore single-project backups one at a time.'
+      : '恢复过程中发生错误，未能完成恢复。请重新选择备份进行恢复；若仍失败，请改用单项目备份逐个恢复。';
   String get restoreUsesBackupWatermark =>
       _english ? 'Use watermark settings from this backup' : '使用备份中的水印设置';
   String restoreWatermarkSummary(

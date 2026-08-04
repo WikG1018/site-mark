@@ -257,8 +257,6 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                         AppStrings.of(context).captureFailureMessage(
                           CaptureFailureCode.fromStorage(capture.failureReason),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.error,
                         ),

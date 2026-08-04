@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 typedef _StringReader = String Function(AppStrings strings);
@@ -55,6 +56,22 @@ final _stringReaders = <String, _StringReader>{
   'backupProjectFailed': (strings) => strings.backupProjectFailed(_projectName),
   'backupStorageInsufficient': (strings) => strings.backupStorageInsufficient,
   'backupCorrupted': (strings) => strings.backupCorrupted,
+  'backupNotSiteMark': (strings) => strings.backupNotSiteMark,
+  'backupUnsupportedVersion': (strings) => strings.backupUnsupportedVersion,
+  'backupSelectionNotRestorable': (strings) =>
+      strings.backupSelectionNotRestorable,
+  'backupRestoreNameConflict': (strings) => strings.backupRestoreNameConflict,
+  'restoreFinalizationPending': (strings) => strings.restoreFinalizationPending,
+  'restoreFailedRollback': (strings) => strings.restoreFailedRollback,
+  'restoreFailedGeneral': (strings) => strings.restoreFailedGeneral,
+  'captureOriginalMissing': (strings) =>
+      strings.captureFailureMessage(CaptureFailureCode.originalMissing),
+  'captureOriginalModified': (strings) =>
+      strings.captureFailureMessage(CaptureFailureCode.originalModified),
+  'captureProcessingFailed': (strings) =>
+      strings.captureFailureMessage(CaptureFailureCode.processingFailed),
+  'captureUnexpectedFailure': (strings) =>
+      strings.captureFailureMessage(CaptureFailureCode.unexpected),
   'captureListLoadFailed': (strings) => strings.captureListLoadFailed,
   'projectStatusActive': (strings) => strings.projectStatusActive,
   'projectStatusCompleted': (strings) => strings.projectStatusCompleted,
@@ -108,6 +125,20 @@ const expectedZh = <String, String>{
   'backupProjectFailed': '无法备份项目“Project Alpha”。请重试；若仍失败，请单独选择该项目备份。',
   'backupStorageInsufficient': '存储空间不足，无法完成操作。请释放空间后重试。',
   'backupCorrupted': '备份已损坏或校验不一致。请选择其他 SiteMark 备份后重试。',
+  'backupNotSiteMark': '所选 ZIP 不是 SiteMark 导出的项目备份。请选择由 SiteMark“备份项目”生成的 ZIP。',
+  'backupUnsupportedVersion': '此备份版本高于当前应用支持范围。请先升级 SiteMark，再重新选择该备份。',
+  'backupSelectionNotRestorable':
+      '所选 ZIP 是照片分享包，不含可恢复的项目数据。请选择通过“备份项目”生成的 ZIP。',
+  'backupRestoreNameConflict': '恢复项目名称与现有项目或本次所选名称冲突。请重新开始恢复，并在预览中修改冲突名称后再恢复。',
+  'restoreFinalizationPending': '恢复数据已安全保存，但尚未完成显示。请重启 SiteMark，应用会自动完成恢复。',
+  'restoreFailedRollback':
+      '一个或多个项目恢复失败，本次更改已全部回滚。请重新选择原备份进行恢复；若仍失败，请改用单项目备份逐个恢复。',
+  'restoreFailedGeneral': '恢复过程中发生错误，未能完成恢复。请重新选择备份进行恢复；若仍失败，请改用单项目备份逐个恢复。',
+  'captureOriginalMissing': '原图已缺失，无法生成水印照片。请返回项目重新拍摄；也可保留此失败记录，或从右上角菜单删除记录。',
+  'captureOriginalModified':
+      '原图内容与拍摄时校验值不一致，处理已停止。请保留现有原图作为证据并重新拍摄，或从右上角菜单删除此失败记录。',
+  'captureProcessingFailed': '照片处理失败，但原图仍保留。请点击“重新处理”；若仍失败，请保留原图并重新拍摄。',
+  'captureUnexpectedFailure': '照片因未知原因处理失败。若原图仍保留，请点击“重新处理”；否则请重新拍摄。',
   'captureListLoadFailed': '无法读取本机拍摄记录，请重试。',
   'projectStatusActive': '进行中',
   'projectStatusCompleted': '已完成',
@@ -167,6 +198,28 @@ const expectedEn = <String, String>{
       'Not enough storage space to complete this operation. Free some space and try again.',
   'backupCorrupted':
       'The backup is corrupted or its checksum does not match. Choose another SiteMark backup and try again.',
+  'backupNotSiteMark':
+      'The selected ZIP is not a project backup exported by SiteMark. Choose a ZIP created with Back up projects in SiteMark.',
+  'backupUnsupportedVersion':
+      'This backup is newer than this app can read. Update SiteMark, then choose the backup again.',
+  'backupSelectionNotRestorable':
+      'The selected ZIP is a photo-sharing archive and contains no restorable project data. Choose a ZIP created with Back up projects.',
+  'backupRestoreNameConflict':
+      'A restore project name conflicts with an existing project or another selected name. Start restore again, change each conflicting name in the preview, then restore.',
+  'restoreFinalizationPending':
+      'Restore data is safely saved but is not visible yet. Restart SiteMark to finish the restore automatically.',
+  'restoreFailedRollback':
+      'One or more projects could not be restored, so all changes from this restore were rolled back. Choose the original backup and restore again; if it still fails, restore single-project backups one at a time.',
+  'restoreFailedGeneral':
+      'An error prevented the restore from completing. Choose the backup and restore again; if it still fails, restore single-project backups one at a time.',
+  'captureOriginalMissing':
+      'The original is missing, so the watermarked photo cannot be created. Return to the project and take the photo again; you can keep this failed record or delete it from the top-right menu.',
+  'captureOriginalModified':
+      'The original does not match its capture-time checksum, so processing stopped. Keep the current original as evidence and take the photo again, or delete this failed record from the top-right menu.',
+  'captureProcessingFailed':
+      'Photo processing failed, but the original is retained. Select Retry processing; if it still fails, keep the original and take the photo again.',
+  'captureUnexpectedFailure':
+      'The photo could not be processed for an unknown reason. If the original is retained, select Retry processing; otherwise take the photo again.',
   'captureListLoadFailed':
       'Local capture records could not be read. Please try again.',
   'projectStatusActive': 'Active',

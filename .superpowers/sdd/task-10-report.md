@@ -7,16 +7,22 @@ Baseline: `9b53b720b084a834c2a8866af15964912748d7da`
 ## Delivered changes
 
 - Added `adaptiveSkeletonCount` with finite-input validation, ceiling division,
-  and configurable minimum/maximum clamping.
+  configurable minimum/maximum clamping, and an explicit `0 <= min <= max`
+  contract. `CapturePagedList` also rejects a skeleton maximum below its
+  adaptive minimum.
 - Made the project list and paged capture list derive their first-frame
   skeleton count from the available viewport through `LayoutBuilder`.
 - Kept the project and capture content-container `Element` stable while the
   surface moves from loading to data/empty state.
-- Added the missing reason-plus-next-step guidance to capture-list and backup
-  errors. Permission and processing messages already supplied both pieces and
-  were intentionally left unchanged.
-- Added regression coverage for explicit text/icon theme overrides and the
-  tappable semantics action on `GlassCard`.
+- Added reason-plus-next-step guidance for every typed project restore failure
+  shown by the real restore Snackbar flow in Chinese and English.
+- Added shared, state-matched photo-processing guidance to capture cards and
+  details. Permanent evidence failures never offer a misleading processing
+  retry; transient and unknown processing failures only offer it when the
+  original is actually retained.
+- Added regression coverage for final rendered text/icon foregrounds under a
+  hostile inherited theme, explicit foreground overrides, and the tappable
+  semantics action on `GlassCard`.
 - Synchronized the README feature table with the implemented primary
   navigation, filters, continuous capture, photo details, settings groups,
   glass surfaces, and reduced-motion behavior. Version and download links were
@@ -31,24 +37,41 @@ RED was established before production changes:
 - Capture loading rendered the fixed six rows instead of the expected seven.
 - Localization snapshots exposed the old messages that lacked a concrete
   reason or recovery action.
+- Independent-review tests then exposed five restore messages without a
+  concrete next step, a detail screen with no failure guidance, and
+  `originalModified` incorrectly satisfying the old original-present retry
+  condition.
+- Invalid `min`/`max` combinations returned a plausible count instead of
+  rejecting an undefined contract, and `CapturePagedList` accepted maxima of
+  `-1` and `1`.
 
 GREEN coverage includes:
 
 - Ceiling boundaries, min/max clamping, custom bounds, zero/negative values,
-  `NaN`, positive infinity, and negative infinity.
+  `NaN`, positive infinity, negative infinity, invalid bounds, and invalid
+  paged-list constructor maxima.
 - Real Chinese and English app roots at 360 dp width with 2x text scaling,
   switching across Projects, All records, and Settings without overflow.
 - Stable content-container `Element` identity across loading-to-ready changes.
-- Glass explicit `TextStyle`, `Icon.color`, and nested `IconTheme` overrides.
+- Final `RenderParagraph` foregrounds for glass defaults, explicit
+  `TextStyle`/`Icon.color`, and nested `IconTheme` overrides.
 - `GlassCard` exposes `SemanticsAction.tap` and remains physically tappable.
+- Real restore Snackbar flows for every typed failure class, in both locales,
+  without leaking raw exceptions.
+- Real capture detail and card surfaces for `originalMissing`,
+  `originalModified`, `processingFailed`, and legacy/unknown failures.
 
 ## Copy audit
 
 | Area | Reason present | Next step present | Result |
 | --- | --- | --- | --- |
 | Permission | Yes | Open system settings / retry | Existing copy accepted |
-| Backup | Gaps found | Gaps found | Corrupt, storage, generic backup messages fixed |
-| Processing | Failure code/reason | Preserve original / retry | Existing copy accepted |
+| Backup creation | Yes | Retry / isolate one project / save or share again | UI copy accepted |
+| Restore preparation | Typed reason | Choose a SiteMark project backup, upgrade the app, choose a compatible archive, or free storage as appropriate | Nine typed mappings covered by zh/en contracts and real Snackbar tests |
+| Restore execution | Typed reason | Rename conflicts in preview, restart after safe finalization, restore again, or use single-project backups as appropriate | Real Snackbar tests cover name conflict, rollback, general failure, and finalization pending |
+| Photo original missing | Original evidence file is gone | Return to the project and retake; keep or delete the failed record | Shown in list and detail; retry hidden |
+| Photo original modified | Capture-time checksum no longer matches | Keep the current original as evidence and retake, or delete the failed record | Shown in list and detail; retry hidden |
+| Photo processing/unknown | Processing failed while original may remain | Retry only when the original is retained; otherwise retake | Error-code contract and detail controls tested |
 | Capture list | Local-record read failure | Retry | Message fixed |
 
 ## Design-decision acceptance
@@ -71,9 +94,9 @@ targeted final check: 14 tests passed.
 | Gate | Result |
 | --- | --- |
 | `dart format --output=none --set-exit-if-changed lib test` | PASS, 191 files checked, 0 changed |
-| Selected Task 10 widget/unit tests | PASS, 82 tests |
+| Selected Task 10 and independent-review widget/unit tests | PASS, 82 tests |
 | `flutter analyze` | PASS, no issues |
-| `flutter test` | PASS, 847 tests |
+| `flutter test` | PASS, 853 tests |
 | `cargo fmt --manifest-path rust/Cargo.toml -- --check` | PASS |
 | `cargo test --manifest-path rust/Cargo.toml` | PASS, 54 tests |
 | `android/gradlew.bat testDebugUnitTest` | PASS, 285 actionable tasks |
@@ -90,8 +113,8 @@ configuration were not changed.
 ## APK
 
 - Path: `C:\tmp\sitemark-pr30-review\build\app\outputs\flutter-apk\app-debug.apk`
-- Size: 265,840,819 bytes
-- SHA-256: `DC14AFB6EB39D1B6F8E1606625057D43E40FC28BE7D6D5F61BA819B5EB6D75B3`
+- Size: 265,843,928 bytes
+- SHA-256: `38FEA9E1519DDA0DC8D1D17A1DB5B75AACC36FA0C7B8088F116FECFD4981B330`
 
 ## Device acceptance
 

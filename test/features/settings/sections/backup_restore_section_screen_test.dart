@@ -218,30 +218,71 @@ void main() {
     expect(discardCalls, 1);
   });
 
-  testWidgets('invalid archives use friendly copy without raw exceptions', (
+  testWidgets('preparation failures show actionable localized snackbars', (
     tester,
   ) async {
-    await pumpScreen(
-      tester,
-      dependencies: ProjectRestoreFlowDependencies(
-        pickZip: () async => '/tmp/not-a-backup.zip',
-        prepareRestore: (_) async => throw const ProjectBundleRestoreException(
-          'raw internal parser failure',
-          failure: ProjectBundleRestoreFailure.notSiteMarkBackup,
-        ),
-        restorePrepared:
-            ({required prepared, required projectNames, onProgress}) async =>
-                const [],
-        discardPrepared: (_) async {},
-      ),
-    );
-    await tester.tap(find.byKey(const Key('restore-projects')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('choose-restore-zip')));
-    await tester.pumpAndSettle();
+    final expectations = <Locale, Map<ProjectBundleRestoreFailure, String>>{
+      const Locale('zh'): {
+        ProjectBundleRestoreFailure.notSiteMarkBackup:
+            '请选择由 SiteMark“备份项目”生成的 ZIP',
+        ProjectBundleRestoreFailure.unsupportedVersion: '请先升级 SiteMark',
+        ProjectBundleRestoreFailure.corrupted: '请选择其他 SiteMark 备份后重试',
+        ProjectBundleRestoreFailure.selectionArchive: '请选择通过“备份项目”生成的 ZIP',
+        ProjectBundleRestoreFailure.insufficientStorage: '请释放空间后重试',
+      },
+      const Locale('en'): {
+        ProjectBundleRestoreFailure.notSiteMarkBackup:
+            'Choose a ZIP created with Back up projects in SiteMark',
+        ProjectBundleRestoreFailure.unsupportedVersion: 'Update SiteMark',
+        ProjectBundleRestoreFailure.corrupted:
+            'Choose another SiteMark backup and try again',
+        ProjectBundleRestoreFailure.selectionArchive:
+            'Choose a ZIP created with Back up projects',
+        ProjectBundleRestoreFailure.insufficientStorage:
+            'Free some space and try again',
+      },
+    };
 
-    expect(find.text('不是 SiteMark 备份文件'), findsOneWidget);
-    expect(find.textContaining('raw internal'), findsNothing);
+    for (final localeEntry in expectations.entries) {
+      for (final failureEntry in localeEntry.value.entries) {
+        await pumpScreen(
+          tester,
+          locale: localeEntry.key,
+          dependencies: ProjectRestoreFlowDependencies(
+            pickZip: () async => '/tmp/not-a-backup.zip',
+            prepareRestore: (_) async => throw ProjectBundleRestoreException(
+              'raw internal parser failure',
+              failure: failureEntry.key,
+            ),
+            restorePrepared:
+                ({
+                  required prepared,
+                  required projectNames,
+                  onProgress,
+                }) async => const [],
+            discardPrepared: (_) async {},
+          ),
+        );
+        await tester.tap(find.byKey(const Key('restore-projects')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('choose-restore-zip')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: find.byType(SnackBar),
+            matching: find.textContaining(failureEntry.value),
+          ),
+          findsOneWidget,
+          reason: failureEntry.key.name,
+        );
+        expect(find.textContaining('raw internal'), findsNothing);
+        ScaffoldMessenger.of(
+          tester.element(find.byType(Scaffold).first),
+        ).clearSnackBars();
+        await tester.pumpAndSettle();
+      }
+    }
   });
 
   testWidgets('preview explains when a backup has no watermark settings', (
@@ -330,17 +371,24 @@ void main() {
   test('typed restore failures have distinct localized messages', () {
     final strings = AppStrings(const Locale('zh'));
     final expected = <ProjectBundleRestoreFailure, String>{
-      ProjectBundleRestoreFailure.notSiteMarkBackup: '不是 SiteMark 备份文件',
-      ProjectBundleRestoreFailure.unsupportedVersion: '此备份版本暂不支持',
+      ProjectBundleRestoreFailure.notSiteMarkBackup:
+          '所选 ZIP 不是 SiteMark 导出的项目备份。请选择由 SiteMark“备份项目”生成的 ZIP。',
+      ProjectBundleRestoreFailure.unsupportedVersion:
+          '此备份版本高于当前应用支持范围。请先升级 SiteMark，再重新选择该备份。',
       ProjectBundleRestoreFailure.corrupted:
           '备份已损坏或校验不一致。请选择其他 SiteMark 备份后重试。',
-      ProjectBundleRestoreFailure.selectionArchive: '照片分享 ZIP 不能用于恢复项目',
-      ProjectBundleRestoreFailure.nameConflict: '项目名称与已有或所选项目冲突',
+      ProjectBundleRestoreFailure.selectionArchive:
+          '所选 ZIP 是照片分享包，不含可恢复的项目数据。请选择通过“备份项目”生成的 ZIP。',
+      ProjectBundleRestoreFailure.nameConflict:
+          '恢复项目名称与现有项目或本次所选名称冲突。请重新开始恢复，并在预览中修改冲突名称后再恢复。',
       ProjectBundleRestoreFailure.insufficientStorage:
           '存储空间不足，无法完成操作。请释放空间后重试。',
       ProjectBundleRestoreFailure.finalizationPending:
-          '恢复数据已安全保存，将在下次启动应用时自动完成发布和显示',
-      ProjectBundleRestoreFailure.rolledBack: '恢复失败，本次产生的内容已回滚',
+          '恢复数据已安全保存，但尚未完成显示。请重启 SiteMark，应用会自动完成恢复。',
+      ProjectBundleRestoreFailure.rolledBack:
+          '一个或多个项目恢复失败，本次更改已全部回滚。请重新选择原备份进行恢复；若仍失败，请改用单项目备份逐个恢复。',
+      ProjectBundleRestoreFailure.general:
+          '恢复过程中发生错误，未能完成恢复。请重新选择备份进行恢复；若仍失败，请改用单项目备份逐个恢复。',
     };
     final actual = <String>{};
     for (final entry in expected.entries) {
@@ -357,6 +405,68 @@ void main() {
       actual.add(message);
     }
     expect(actual, hasLength(expected.length));
+  });
+
+  testWidgets('restore failures show actionable localized snackbars', (
+    tester,
+  ) async {
+    final expectations = <Locale, Map<ProjectBundleRestoreFailure, String>>{
+      const Locale('zh'): {
+        ProjectBundleRestoreFailure.nameConflict: '在预览中修改冲突名称后再恢复',
+        ProjectBundleRestoreFailure.rolledBack: '请重新选择原备份进行恢复',
+        ProjectBundleRestoreFailure.general: '请重新选择备份进行恢复',
+      },
+      const Locale('en'): {
+        ProjectBundleRestoreFailure.nameConflict:
+            'change each conflicting name in the preview, then restore',
+        ProjectBundleRestoreFailure.rolledBack:
+            'Choose the original backup and restore again',
+        ProjectBundleRestoreFailure.general:
+            'Choose the backup and restore again',
+      },
+    };
+
+    for (final localeEntry in expectations.entries) {
+      for (final failureEntry in localeEntry.value.entries) {
+        await pumpScreen(
+          tester,
+          locale: localeEntry.key,
+          dependencies: ProjectRestoreFlowDependencies(
+            pickZip: () async => '/tmp/backup.zip',
+            prepareRestore: (_) async => _prepared(),
+            restorePrepared:
+                ({required prepared, required projectNames, onProgress}) async {
+                  throw ProjectBundleRestoreException(
+                    'raw internal restore failure',
+                    failure: failureEntry.key,
+                  );
+                },
+            discardPrepared: (_) async {},
+          ),
+        );
+        await tester.tap(find.byKey(const Key('restore-projects')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('choose-restore-zip')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('restore-confirm')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(
+          find.descendant(
+            of: find.byType(SnackBar),
+            matching: find.textContaining(failureEntry.value),
+          ),
+          findsOneWidget,
+          reason: failureEntry.key.name,
+        );
+        expect(find.textContaining('raw internal'), findsNothing);
+        ScaffoldMessenger.of(
+          tester.element(find.byType(Scaffold).first),
+        ).clearSnackBars();
+        await tester.pumpAndSettle();
+      }
+    }
   });
 
   testWidgets(
@@ -386,7 +496,10 @@ void main() {
       await tester.tap(find.byKey(const Key('restore-confirm')));
       await tester.pumpAndSettle();
 
-      expect(find.text('恢复数据已安全保存，将在下次启动应用时自动完成发布和显示'), findsOneWidget);
+      expect(
+        find.text('恢复数据已安全保存，但尚未完成显示。请重启 SiteMark，应用会自动完成恢复。'),
+        findsOneWidget,
+      );
       expect(find.textContaining('已回滚'), findsNothing);
       expect(find.textContaining('raw finalization'), findsNothing);
       expect(discardCalls, 0);

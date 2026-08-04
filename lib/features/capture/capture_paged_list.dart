@@ -41,6 +41,10 @@ class CapturePagedList extends StatefulWidget {
   }) : assert(
          (groupKey == null) == (groupHeaderBuilder == null),
          'groupKey and groupHeaderBuilder must be provided together',
+       ),
+       assert(
+         skeletonItemCount >= 2,
+         'skeletonItemCount must be at least the adaptive minimum of 2',
        );
 
   final CapturePagerController controller;

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
@@ -33,6 +34,7 @@ void main() {
     bool originalDeleted = false,
     Locale locale = const Locale('zh'),
     CaptureStatus status = CaptureStatus.ready,
+    CaptureFailureCode failureCode = CaptureFailureCode.processingFailed,
     ProjectLifecycleStatus projectStatus = ProjectLifecycleStatus.active,
   }) async {
     database = _DetailDatabase();
@@ -65,7 +67,10 @@ void main() {
         publishedUri: 'content://media/site-mark/1',
       );
     } else if (status == CaptureStatus.failed) {
-      await database.markFailed(captureId: pending.id, reason: 'test failure');
+      await database.markFailed(
+        captureId: pending.id,
+        reason: failureCode.storageCode,
+      );
     }
     if (originalDeleted) {
       await database.markOriginalDeleted(pending.id);
@@ -502,6 +507,93 @@ void main() {
     expect(find.byKey(const Key('delete-record')), findsOneWidget);
     await disposeDetail(tester);
   });
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('failed detail gives code-matched guidance and retry controls in '
+        '${locale.languageCode}', (tester) async {
+      final expectations =
+          <
+            CaptureFailureCode,
+            ({bool originalExists, bool retry, String reason, String nextStep})
+          >{
+            CaptureFailureCode.originalMissing: (
+              originalExists: false,
+              retry: false,
+              reason: locale.languageCode == 'zh'
+                  ? '原图已缺失'
+                  : 'original is missing',
+              nextStep: locale.languageCode == 'zh'
+                  ? '返回项目重新拍摄'
+                  : 'Return to the project and take the photo again',
+            ),
+            CaptureFailureCode.originalModified: (
+              originalExists: true,
+              retry: false,
+              reason: locale.languageCode == 'zh'
+                  ? '校验值不一致'
+                  : 'does not match its capture-time checksum',
+              nextStep: locale.languageCode == 'zh'
+                  ? '保留现有原图作为证据并重新拍摄'
+                  : 'Keep the current original as evidence and take the photo again',
+            ),
+            CaptureFailureCode.processingFailed: (
+              originalExists: true,
+              retry: true,
+              reason: locale.languageCode == 'zh'
+                  ? '照片处理失败'
+                  : 'Photo processing failed',
+              nextStep: locale.languageCode == 'zh'
+                  ? '点击“重新处理”'
+                  : 'Select Retry processing',
+            ),
+            CaptureFailureCode.unexpected: (
+              originalExists: true,
+              retry: true,
+              reason: locale.languageCode == 'zh'
+                  ? '未知原因处理失败'
+                  : 'unknown reason',
+              nextStep: locale.languageCode == 'zh'
+                  ? '点击“重新处理”'
+                  : 'select Retry processing',
+            ),
+          };
+
+      for (final entry in expectations.entries) {
+        await pumpReadyDetail(
+          tester,
+          originalExists: entry.value.originalExists,
+          status: CaptureStatus.failed,
+          failureCode: entry.key,
+          locale: locale,
+        );
+
+        final guidance = find.byKey(const Key('capture-failure-guidance'));
+        expect(guidance, findsOneWidget, reason: entry.key.name);
+        expect(
+          find.descendant(
+            of: guidance,
+            matching: find.textContaining(entry.value.reason),
+          ),
+          findsOneWidget,
+          reason: entry.key.name,
+        );
+        expect(
+          find.descendant(
+            of: guidance,
+            matching: find.textContaining(entry.value.nextStep),
+          ),
+          findsOneWidget,
+          reason: entry.key.name,
+        );
+        expect(
+          find.byKey(const Key('capture-retry-processing')),
+          entry.value.retry ? findsOneWidget : findsNothing,
+          reason: entry.key.name,
+        );
+        await disposeDetail(tester);
+      }
+    });
+  }
 
   testWidgets('processing and read-only details expose no mutation menu', (
     tester,

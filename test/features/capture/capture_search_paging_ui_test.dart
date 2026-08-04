@@ -115,6 +115,7 @@ Widget _pagedHarness(
   Size size = const Size(400, 800),
   TextScaler textScaler = TextScaler.noScaling,
   Locale locale = const Locale('zh'),
+  int skeletonItemCount = 8,
 }) {
   return _localized(
     disableAnimations: disableAnimations,
@@ -126,6 +127,7 @@ Widget _pagedHarness(
         controller: controller,
         source: source,
         emptyMessage: '没有记录',
+        skeletonItemCount: skeletonItemCount,
         itemBuilder: (context, summary, visibleRows) => SizedBox(
           key: Key('row-${summary.capture.id}'),
           height: 64,
@@ -174,6 +176,24 @@ Future<void> _unmount(WidgetTester tester) async {
 }
 
 void main() {
+  test('capture paged list rejects a skeleton maximum below its minimum', () {
+    final source = _FakeCaptureQuerySource();
+    final controller = CapturePagerController(source);
+    addTearDown(() async {
+      controller.dispose();
+      await source.dispose();
+    });
+
+    expect(
+      () => _pagedHarness(controller, source, skeletonItemCount: -1),
+      throwsAssertionError,
+    );
+    expect(
+      () => _pagedHarness(controller, source, skeletonItemCount: 1),
+      throwsAssertionError,
+    );
+  });
+
   testWidgets(
     'all records debounces search for exactly 250ms and back exits search',
     (tester) async {

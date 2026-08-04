@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_display_name.dart';
+import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
@@ -140,9 +141,12 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                     : originalRetained
                     ? _previewSource
                     : CapturePreviewSource.watermarked;
+                final failureCode = capture.status == CaptureStatus.failed
+                    ? CaptureFailureCode.fromStorage(capture.failureReason)
+                    : null;
                 final canRetry =
                     projectActive &&
-                    capture.status == CaptureStatus.failed &&
+                    failureCode?.canRetryProcessing == true &&
                     originalRetained;
                 final settled =
                     capture.status == CaptureStatus.ready ||
@@ -232,10 +236,47 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (failureCode != null)
+                            Container(
+                              key: const Key('capture-failure-guidance'),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.errorContainer,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.error_outline,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onErrorContainer,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      strings.captureFailureMessage(
+                                        failureCode,
+                                      ),
+                                      style: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onErrorContainer,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           if (canRetry)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: FilledButton.icon(
+                                key: const Key('capture-retry-processing'),
                                 onPressed: _retry,
                                 icon: const Icon(Icons.refresh),
                                 label: Text(strings.retryProcessing),
