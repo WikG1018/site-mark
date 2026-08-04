@@ -21,6 +21,8 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 
+import 'photo_test_wait.dart';
+
 final class _RouteOutputPaths implements CaptureOutputPaths {
   _RouteOutputPaths(this.initialPath);
 
@@ -87,18 +89,70 @@ bool hasDecodedImage(WidgetTester tester, Finder ancestor) => tester
     )
     .any((image) => image.image != null);
 
-Future<void> pumpDecodedFileFrames(WidgetTester tester) async {
-  for (var frame = 0; frame < 8; frame++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump(const Duration(milliseconds: 20));
-  }
+String decodedImageState(WidgetTester tester, Finder scope) {
+  final rawImages = tester.widgetList<RawImage>(
+    find.descendant(of: scope, matching: find.byType(RawImage)),
+  );
+  return 'scope=${scope.evaluate().length}, rawImages=${rawImages.length}, '
+      'decoded=${rawImages.where((image) => image.image != null).length}, '
+      'flights=${find.byKey(const Key('capture-photo-hero-flight')).evaluate().length}';
 }
 
 void main() {
   late Directory temporaryDirectory;
   late String photoPath;
+
+  testWidgets(
+    'photo condition wait returns after its first satisfied attempt',
+    (tester) async {
+      var attempts = 0;
+
+      final completedAttempt = await pumpUntilPhotoCondition(
+        tester,
+        condition: 'immediate decoded image',
+        isSatisfied: () => true,
+        maxAttempts: 3,
+        onAttempt: (_) => attempts++,
+      );
+
+      expect(completedAttempt, 1);
+      expect(attempts, 1);
+    },
+  );
+
+  testWidgets('photo condition wait timeout reports condition and last state', (
+    tester,
+  ) async {
+    var checks = 0;
+
+    await expectLater(
+      pumpUntilPhotoCondition(
+        tester,
+        condition: 'decoded image in record card',
+        isSatisfied: () {
+          checks++;
+          return false;
+        },
+        describeState: () => 'checks=$checks, decoded=false',
+        maxAttempts: 2,
+      ),
+      throwsA(
+        isA<TestFailure>()
+            .having(
+              (error) => error.message,
+              'message',
+              contains('decoded image in record card'),
+            )
+            .having((error) => error.message, 'message', contains('2 attempts'))
+            .having(
+              (error) => error.message,
+              'message',
+              contains('checks=2, decoded=false'),
+            ),
+      ),
+    );
+    expect(checks, 2);
+  });
 
   setUp(() async {
     temporaryDirectory = await Directory.systemTemp.createTemp(
@@ -259,12 +313,14 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    await pumpDecodedFileFrames(tester);
-    expect(
-      hasDecodedImage(tester, find.byKey(const Key('record-card'))),
-      isTrue,
+    final record = find.byKey(const Key('record-card'));
+    await pumpUntilPhotoCondition(
+      tester,
+      condition: 'decoded record-card image before navigation',
+      isSatisfied: () => hasDecodedImage(tester, record),
+      describeState: () => decodedImageState(tester, record),
     );
+    expect(hasDecodedImage(tester, record), isTrue);
     return (router: router, paths: paths, navigationContext: navigationContext);
   }
 
@@ -305,11 +361,22 @@ void main() {
     expect(flight, findsOneWidget);
     expect(hasDecodedImage(tester, flight), isTrue);
 
-    await tester.pumpAndSettle();
+    final detail = find.byKey(const Key('detail-preview'));
+    await pumpUntilPhotoCondition(
+      tester,
+      condition: 'decoded detail image after forward Hero handoff',
+      isSatisfied: () =>
+          find
+              .byKey(const Key('capture-photo-hero-flight'))
+              .evaluate()
+              .isEmpty &&
+          hasDecodedImage(tester, detail),
+      describeState: () => decodedImageState(tester, detail),
+      maxAttempts: 40,
+    );
 
     expect(find.byKey(const Key('capture-photo-hero-flight')), findsNothing);
     expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
-    final detail = find.byKey(const Key('detail-preview'));
     expect(detail, findsOneWidget);
     expect(hasDecodedImage(tester, detail), isTrue);
     expect(
@@ -339,8 +406,20 @@ void main() {
     expect(flight, findsOneWidget);
     expect(hasDecodedImage(tester, flight), isTrue);
     expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
-    await tester.pumpAndSettle();
     final record = find.byKey(const Key('record-card'));
+    await pumpUntilPhotoCondition(
+      tester,
+      condition: 'decoded record image after rapid reverse Hero handoff',
+      isSatisfied: () =>
+          find
+              .byKey(const Key('capture-photo-hero-flight'))
+              .evaluate()
+              .isEmpty &&
+          hasDecodedImage(tester, record),
+      describeState: () => decodedImageState(tester, record),
+      maxAttempts: 40,
+    );
+
     expect(record, findsOneWidget);
     expect(hasDecodedImage(tester, record), isTrue);
 

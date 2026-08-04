@@ -11,6 +11,8 @@ import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
+import 'photo_test_wait.dart';
+
 /// Host page that pushes [CaptureFullscreenScreen] the same way the detail
 /// preview does, so pop-based dismissal lands back on a stable route. The
 /// photo path intentionally does not exist: the viewer's errorBuilder renders
@@ -125,17 +127,42 @@ final class _FailingImageProvider extends ImageProvider<_FailingImageProvider> {
 
 ImageProvider<Object> corruptPreview(int seed) => _FailingImageProvider(seed);
 
-Future<List<Object>> pumpImageFrames(WidgetTester tester) async {
-  final errors = <Object>[];
-  for (var frame = 0; frame < 8; frame++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump(const Duration(milliseconds: 20));
-    final error = tester.takeException();
-    if (error != null) errors.add(error as Object);
-  }
-  return errors;
+bool hasDecodedImage(WidgetTester tester, Finder scope) => tester
+    .widgetList<RawImage>(
+      find.descendant(of: scope, matching: find.byType(RawImage)),
+    )
+    .any((image) => image.image != null);
+
+String fullscreenPhotoState(WidgetTester tester, Finder scope) {
+  final rawImages = tester.widgetList<RawImage>(
+    find.descendant(of: scope, matching: find.byType(RawImage)),
+  );
+  return 'scope=${scope.evaluate().length}, rawImages=${rawImages.length}, '
+      'decoded=${rawImages.where((image) => image.image != null).length}, '
+      'missingIcons=${find.byIcon(Icons.broken_image_outlined).evaluate().length}';
+}
+
+Finder fileImageForPath(String path) => find.byWidgetPredicate(
+  (widget) =>
+      widget is Image &&
+      widget.image is FileImage &&
+      (widget.image as FileImage).file.path == path,
+);
+
+bool hasRenderedError(Finder image) => find
+    .descendant(
+      of: image,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is SizedBox && widget.width == 0 && widget.height == 0,
+      ),
+    )
+    .evaluate()
+    .isNotEmpty;
+
+Future<void> expectNoLateImageException(WidgetTester tester) async {
+  await tester.pump();
+  expect(tester.takeException(), isNull);
 }
 
 void main() {
@@ -150,9 +177,16 @@ void main() {
         resolvePath: () async => null,
       ),
     );
-    final errors = await pumpImageFrames(tester);
+    final screen = find.byType(CaptureFullscreenScreen);
+    await pumpUntilPhotoCondition(
+      tester,
+      condition: 'missing icon after corrupt preview and null target',
+      isSatisfied: () =>
+          find.byIcon(Icons.broken_image_outlined).evaluate().length == 1,
+      describeState: () => fullscreenPhotoState(tester, screen),
+    );
+    await expectNoLateImageException(tester);
 
-    expect(errors, isEmpty);
     expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
   });
 
@@ -167,9 +201,16 @@ void main() {
         resolvePath: () async => '/definitely/missing/photo.jpg',
       ),
     );
-    final errors = await pumpImageFrames(tester);
+    final screen = find.byType(CaptureFullscreenScreen);
+    await pumpUntilPhotoCondition(
+      tester,
+      condition: 'missing icon after corrupt preview and missing target',
+      isSatisfied: () =>
+          find.byIcon(Icons.broken_image_outlined).evaluate().length == 1,
+      describeState: () => fullscreenPhotoState(tester, screen),
+    );
+    await expectNoLateImageException(tester);
 
-    expect(errors, isEmpty);
     expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
   });
 
@@ -186,9 +227,15 @@ void main() {
         resolvePath: () async => validTarget.path,
       ),
     );
-    final errors = await pumpImageFrames(tester);
+    final screen = find.byType(CaptureFullscreenScreen);
+    await pumpUntilPhotoCondition(
+      tester,
+      condition: 'decoded fullscreen target after corrupt preview',
+      isSatisfied: () => hasDecodedImage(tester, screen),
+      describeState: () => fullscreenPhotoState(tester, screen),
+    );
+    await expectNoLateImageException(tester);
 
-    expect(errors, isEmpty);
     expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
     expect(
       tester
@@ -285,9 +332,20 @@ void main() {
         ),
       ),
     );
-    final errors = await pumpImageFrames(tester);
+    final screen = find.byType(CaptureFullscreenScreen);
+    final target = fileImageForPath('/deleted-after-open.jpg');
+    await pumpUntilPhotoCondition(
+      tester,
+      condition: 'failed fullscreen target while preview remains decoded',
+      isSatisfied: () =>
+          hasRenderedError(target) && hasDecodedImage(tester, screen),
+      describeState: () =>
+          '${fullscreenPhotoState(tester, screen)}, '
+          'targetImages=${target.evaluate().length}, '
+          'targetError=${hasRenderedError(target)}',
+    );
+    await expectNoLateImageException(tester);
 
-    expect(errors, isEmpty);
     expect(
       find.byWidgetPredicate(
         (widget) => widget is Image && identical(widget.image, preview),
