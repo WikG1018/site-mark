@@ -82,6 +82,136 @@ List<String> paintedFilePaths(WidgetTester tester) => tester
     .toList(growable: false);
 
 void main() {
+  testWidgets('fullscreen paints preview on its first black frame', (
+    tester,
+  ) async {
+    final resolvedPath = Completer<String?>();
+    final preview = MemoryImage(
+      Uint8List.fromList(
+        base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
+          'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen(
+            photos: [
+              CaptureFullscreenPhoto(
+                id: 'capture-1',
+                previewImage: preview,
+                resolvePath: () => resolvedPath.future,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Image && identical(widget.image, preview),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+
+    resolvedPath.completeError(StateError('resolution failed'));
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Image && identical(widget.image, preview),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+  });
+
+  testWidgets('deleted target file keeps preview instead of broken icon', (
+    tester,
+  ) async {
+    final preview = MemoryImage(
+      Uint8List.fromList(
+        base64Decode(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC'
+          'AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen.single(
+            path: '/deleted-after-open.jpg',
+            previewImage: preview,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Image && identical(widget.image, preview),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+  });
+
+  testWidgets('missing icon appears only without preview and resolved path', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: CaptureFullscreenScreen(
+            photos: [
+              CaptureFullscreenPhoto(
+                id: 'capture-1',
+                resolvePath: () async => null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+  });
+
   testWidgets('shows current immediately and prefetches both directions', (
     tester,
   ) async {

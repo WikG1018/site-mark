@@ -255,6 +255,9 @@ Image previewImage(WidgetTester tester) =>
 ResizeImage previewResizeImage(WidgetTester tester) =>
     previewImage(tester).image as ResizeImage;
 
+String previewFilePath(WidgetTester tester) =>
+    (previewResizeImage(tester).imageProvider as FileImage).file.path;
+
 void main() {
   testWidgets('thumbnail preview keeps a 192 pixel cache dimension', (
     tester,
@@ -388,6 +391,47 @@ void main() {
     );
   });
 
+  testWidgets('Hero thumbnail shares the high-DPI flight cache key', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 3;
+    tester.view.physicalSize = const Size(1200, 2400);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: SizedBox(
+            width: 96,
+            height: 96,
+            child: CaptureImagePreview(
+              capture: capture,
+              outputPaths: _FakeOutputPaths(),
+              thumbnail: true,
+              heroTag: 'capture-photo-capture-1',
+              fileExists: (_) => true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(previewResizeImage(tester).width, 1200);
+    expect(previewResizeImage(tester).height, isNull);
+    expect(previewFilePath(tester), '/private/rendered/capture-1.jpg');
+  });
+
   testWidgets(
     'Hero destination paints the list-resolved image before async lookup',
     (tester) async {
@@ -424,6 +468,53 @@ void main() {
       expect(find.text('失败'), findsNothing);
 
       paths.renderedPath.complete('/private/rendered/capture-1.jpg');
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'same-ID handoff path update paints the new path before lookup completes',
+    (tester) async {
+      final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+      final paths = _DelayedOutputPaths();
+      var initialPath = '/private/rendered/capture-1-a.jpg';
+      late StateSetter rebuild;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                rebuild = setState;
+                return CaptureImagePreview(
+                  capture: capture,
+                  outputPaths: paths,
+                  heroDestination: true,
+                  initialImagePath: initialPath,
+                  fileExists: (_) => true,
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      expect(previewFilePath(tester), '/private/rendered/capture-1-a.jpg');
+
+      rebuild(() => initialPath = '/private/rendered/capture-1-b.jpg');
+      await tester.pump();
+
+      expect(previewFilePath(tester), '/private/rendered/capture-1-b.jpg');
+      expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+
+      paths.renderedPath.complete('/private/rendered/capture-1-b.jpg');
       await tester.pumpAndSettle();
     },
   );
@@ -763,6 +854,57 @@ void main() {
     },
   );
 
+  testWidgets('same-ID logical deletion invalidates an original handoff', (
+    tester,
+  ) async {
+    var capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+    var source = CapturePreviewSource.original;
+    late StateSetter rebuild;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return CaptureImagePreview(
+                capture: capture,
+                outputPaths: _FakeOutputPaths(),
+                source: source,
+                initialImagePath: capture.originalPath,
+                fileExists: (path) => path == capture.originalPath,
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('original-preview-capture-1')), findsOneWidget);
+
+    rebuild(() {
+      capture = _record(
+        id: 'capture-1',
+        status: CaptureStatus.ready,
+        originalDeletedAt: DateTime(2026, 8, 4, 12),
+      );
+      source = CapturePreviewSource.watermarked;
+    });
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('original-preview-capture-1')), findsNothing);
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+  });
+
   testWidgets('failed capture shows original with failure overlay', (
     tester,
   ) async {
@@ -944,64 +1086,95 @@ void main() {
     );
   });
 
-  testWidgets(
-    'source change hides the previous image until delayed resolution',
-    (tester) async {
-      final paths = _DelayedOutputPaths();
-      final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
-      var source = CapturePreviewSource.original;
-      late StateSetter rebuild;
+  testWidgets('source change keeps the handoff image through delayed failure', (
+    tester,
+  ) async {
+    final paths = _DelayedOutputPaths();
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+    final originalExists = Completer<bool>();
+    var source = CapturePreviewSource.watermarked;
+    late StateSetter rebuild;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          locale: const Locale('zh'),
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: const [
-            AppStrings.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          home: Scaffold(
-            body: StatefulBuilder(
-              builder: (context, setState) {
-                rebuild = setState;
-                return SizedBox(
-                  width: 96,
-                  height: 96,
-                  child: CaptureImagePreview(
-                    capture: capture,
-                    outputPaths: paths,
-                    thumbnail: true,
-                    source: source,
-                    fileExists: (path) => true,
-                  ),
-                );
-              },
-            ),
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) {
+              rebuild = setState;
+              return SizedBox(
+                width: 96,
+                height: 96,
+                child: CaptureImagePreview(
+                  capture: capture,
+                  outputPaths: paths,
+                  thumbnail: true,
+                  source: source,
+                  initialImagePath: '/private/rendered/capture-1.jpg',
+                  fileExists: (path) => path == capture.originalPath
+                      ? originalExists.future
+                      : true,
+                ),
+              );
+            },
           ),
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('original-preview-capture-1')),
-        findsOneWidget,
-      );
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
 
-      rebuild(() => source = CapturePreviewSource.watermarked);
-      await tester.pump();
+    rebuild(() => source = CapturePreviewSource.original);
+    await tester.pump();
 
-      expect(find.byKey(const Key('original-preview-capture-1')), findsNothing);
-      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+    expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
 
-      paths.renderedPath.complete('/private/rendered/capture-1.jpg');
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const Key('rendered-preview-capture-1')),
-        findsOneWidget,
-      );
-    },
-  );
+    originalExists.complete(false);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('rendered-preview-capture-1')), findsOneWidget);
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+
+    paths.renderedPath.complete('/private/rendered/capture-1.jpg');
+    await tester.pump();
+  });
+
+  testWidgets('disposing preview ignores a late path result', (tester) async {
+    final paths = _DelayedOutputPaths();
+    final capture = _record(id: 'capture-1', status: CaptureStatus.ready);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: CaptureImagePreview(
+          capture: capture,
+          outputPaths: paths,
+          initialImagePath: '/private/rendered/capture-1.jpg',
+          fileExists: (_) => true,
+        ),
+      ),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    paths.renderedPath.complete('/private/rendered/capture-1-late.jpg');
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'capture change hides the previous image until delayed resolution',

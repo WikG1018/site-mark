@@ -37,9 +37,9 @@ void main() {
                 key: const Key('open-hero-detail'),
                 onTap: () => Navigator.of(context).push(
                   PageRouteBuilder<void>(
-                    transitionDuration: const Duration(milliseconds: 300),
+                    transitionDuration: const Duration(milliseconds: 240),
                     reverseTransitionDuration: const Duration(
-                      milliseconds: 300,
+                      milliseconds: 240,
                     ),
                     pageBuilder: (context, animation, secondaryAnimation) =>
                         Scaffold(
@@ -108,6 +108,36 @@ void main() {
     );
   });
 
+  testWidgets('forward hero never exposes a failure frame at handoff', (
+    tester,
+  ) async {
+    await pumpHeroPair(tester);
+    await tester.tap(find.byKey(const Key('open-hero-detail')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 260));
+
+    expect(find.byKey(const Key('capture-photo-hero-flight')), findsNothing);
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+    expect(find.byType(Image), findsWidgets);
+  });
+
+  testWidgets('rapid forward and return keeps a painted endpoint', (
+    tester,
+  ) async {
+    await pumpHeroPair(tester);
+    await tester.tap(find.byKey(const Key('open-hero-detail')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tap(find.byType(BackButton));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+    expect(find.byType(Image), findsWidgets);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('record-thumbnail-content')), findsOneWidget);
+  });
+
   testWidgets('hero remains in the overlay until reverse flight completes', (
     tester,
   ) async {
@@ -134,5 +164,29 @@ void main() {
     await tester.pump(const Duration(milliseconds: 150));
 
     expect(find.byKey(const Key('record-thumbnail-content')), findsOneWidget);
+  });
+
+  testWidgets('reduce animations keeps the child without creating a Hero', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: CapturePhotoHero(
+            tag: 'capture-photo-test',
+            path: photoPath,
+            child: Image.file(File(photoPath)),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(Hero), findsNothing);
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
   });
 }

@@ -52,29 +52,45 @@ class CaptureImagePreview extends StatefulWidget {
 
 class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   late Future<_PreviewResolution> _resolution;
-  _PreviewResolution? _initialResolution;
-  bool _useInitialWhileWaiting = false;
+  _PreviewResolution? _handoffResolution;
+  int _resolutionGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     final initialImagePath = widget.initialImagePath;
     if (initialImagePath != null) {
-      _initialResolution = _PreviewResolution.image(
+      _handoffResolution = _PreviewResolution.image(
         initialImagePath,
         status: null,
       );
-      _useInitialWhileWaiting = true;
     }
-    _resolution = _resolveAndReport();
+    _resolution = _startResolution();
   }
 
   @override
   void didUpdateWidget(covariant CaptureImagePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_resolutionInputsChanged(oldWidget)) {
-      _useInitialWhileWaiting = false;
-      _resolution = _resolveAndReport();
+    final captureChanged = oldWidget.capture.id != widget.capture.id;
+    final handoffChanged =
+        oldWidget.initialImagePath != widget.initialImagePath;
+    if (captureChanged) {
+      final initialImagePath = widget.initialImagePath;
+      _handoffResolution = initialImagePath == null
+          ? null
+          : _PreviewResolution.image(initialImagePath, status: null);
+    } else if (handoffChanged && widget.initialImagePath != null) {
+      _handoffResolution = _PreviewResolution.image(
+        widget.initialImagePath!,
+        status: null,
+      );
+    }
+    if (widget.capture.originalDeletedAt != null &&
+        _handoffResolution?.path == widget.capture.originalPath) {
+      _handoffResolution = null;
+    }
+    if (_resolutionInputsChanged(oldWidget) || handoffChanged) {
+      _resolution = _startResolution();
     }
   }
 
@@ -155,12 +171,19 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     }
   }
 
-  Future<_PreviewResolution> _resolveAndReport() async {
+  Future<_PreviewResolution> _startResolution() {
+    final generation = ++_resolutionGeneration;
+    return _resolveAndReport(generation);
+  }
+
+  Future<_PreviewResolution> _resolveAndReport(int generation) async {
     final captureId = widget.capture.id;
     final resolution = await _resolve();
-    if (mounted && widget.capture.id == captureId) {
-      _useInitialWhileWaiting = false;
+    if (mounted &&
+        generation == _resolutionGeneration &&
+        widget.capture.id == captureId) {
       if (resolution.kind == _PreviewResolutionKind.image) {
+        _handoffResolution = resolution;
         widget.onImageResolved?.call(resolution.path!);
       }
     }
@@ -172,12 +195,16 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     final strings = AppStrings.of(context);
     final preview = FutureBuilder<_PreviewResolution>(
       future: _resolution,
-      initialData: _initialResolution,
       builder: (context, snapshot) {
-        final resolution = snapshot.data;
-        if (resolution == null ||
-            (snapshot.connectionState != ConnectionState.done &&
-                !_useInitialWhileWaiting)) {
+        final resolved = snapshot.data;
+        final resolution = switch (snapshot.connectionState) {
+          ConnectionState.done
+              when resolved?.kind == _PreviewResolutionKind.image =>
+            resolved,
+          ConnectionState.done => _handoffResolution ?? resolved,
+          _ => _handoffResolution,
+        };
+        if (resolution == null) {
           return AnimatedSwitcher(
             duration: widget.heroDestination
                 ? Duration.zero
@@ -273,14 +300,17 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
   }) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cacheWidth = widget.thumbnail
-            ? 192
-            : widget.heroDestination
+        final heroEndpoint =
+            widget.heroDestination ||
+            (widget.thumbnail && widget.heroTag != null);
+        final cacheWidth = heroEndpoint
             ? CapturePhotoHero.flightCacheWidth(context)
+            : widget.thumbnail
+            ? 192
             : _detailCacheWidth(context, constraints);
         final provider = ResizeImage.resizeIfNeeded(
           cacheWidth,
-          widget.thumbnail ? 192 : null,
+          widget.thumbnail && !heroEndpoint ? 192 : null,
           FileImage(File(path)),
         );
         final image = Image(
