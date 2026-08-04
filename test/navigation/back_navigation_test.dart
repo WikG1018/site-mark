@@ -71,20 +71,19 @@ void main() {
         await tester.pump();
         expect(find.byKey(const Key('capture-search-field')), findsOneWidget);
 
-        await tester.binding.handlePopRoute();
-        await tester.pump();
-        await tester.pump(AppMotion.short4);
-        await tester.pump();
-        expect(find.byKey(const Key('capture-search-field')), findsNothing);
-        expect(find.byType(ProjectDetailScreen), findsOneWidget);
-
         await tester.tap(find.byKey(const Key('edit-captures')));
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('select-all-captures')), findsOneWidget);
+        expect(find.byKey(const Key('capture-search-field')), findsOneWidget);
 
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('select-all-captures')), findsNothing);
+        expect(find.byKey(const Key('capture-search-field')), findsOneWidget);
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('capture-search-field')), findsNothing);
         expect(find.byType(ProjectDetailScreen), findsOneWidget);
 
         await tester.binding.handlePopRoute();

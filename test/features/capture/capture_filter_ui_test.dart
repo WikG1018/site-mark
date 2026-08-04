@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' show max, min;
+import 'dart:ui' show SemanticsAction;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -13,6 +14,7 @@ import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
+import 'package:sitemark/features/projects/project_action_sheet.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
@@ -695,6 +697,67 @@ void main() {
     );
   }
 
+  Widget pumpSwitchableProjectDetail(
+    AppDatabase database,
+    ValueNotifier<String> projectId,
+  ) {
+    return ProviderScope(
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ValueListenableBuilder<String>(
+          valueListenable: projectId,
+          builder: (_, value, _) => ProjectDetailScreen(projectId: value),
+        ),
+      ),
+    );
+  }
+
+  Widget pumpSwitchableProjectDetailWithRouter(
+    AppDatabase database,
+    ValueNotifier<String> projectId,
+  ) {
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => ValueListenableBuilder<String>(
+            valueListenable: projectId,
+            builder: (_, value, _) => ProjectDetailScreen(projectId: value),
+          ),
+        ),
+        GoRoute(
+          path: '/settings/backup-restore/backup',
+          builder: (_, _) => const Scaffold(
+            body: SizedBox(key: Key('stale-backup-destination')),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    return ProviderScope(
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: MaterialApp.router(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        routerConfig: router,
+      ),
+    );
+  }
+
   Future<void> unmountTree(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
@@ -1043,6 +1106,245 @@ void main() {
     );
     await unmountTree(tester);
   });
+
+  testWidgets('stale action sheet cannot pin a project after detail switches', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-a', name: '项目 A');
+    await database.createProject(id: 'project-b', name: '项目 B');
+    final projectId = ValueNotifier('project-a');
+    addTearDown(projectId.dispose);
+
+    await tester.pumpWidget(pumpSwitchableProjectDetail(database, projectId));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+
+    projectId.value = 'project-b';
+    await tester.pumpAndSettle();
+    expect(find.text('项目 B'), findsWidgets);
+    expect(find.byKey(const Key('project-action-sheet')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('pin-project')));
+    await tester.pumpAndSettle();
+
+    expect((await database.projectById('project-a'))?.isPinned, isFalse);
+    expect((await database.projectById('project-b'))?.isPinned, isFalse);
+    await unmountTree(tester);
+  });
+
+  testWidgets(
+    'stale action sheet cannot navigate to backup after detail switches',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-a', name: '项目 A');
+      await database.createProject(id: 'project-b', name: '项目 B');
+      final projectId = ValueNotifier('project-a');
+      addTearDown(projectId.dispose);
+
+      await tester.pumpWidget(
+        pumpSwitchableProjectDetailWithRouter(database, projectId),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+
+      projectId.value = 'project-b';
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-backup-action')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('stale-backup-destination')), findsNothing);
+      expect(find.text('项目 B'), findsWidgets);
+      await unmountTree(tester);
+    },
+  );
+
+  testWidgets('action sheet uses the latest project when rename is selected', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '旧名称');
+
+    await tester.pumpWidget(pumpProjectDetail(database, 'project-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+
+    await database.renameProject(projectId: 'project-1', name: '外部更新名称');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rename-project')));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextFormField>(
+      find.byKey(const Key('rename-project-name')),
+    );
+    expect(field.controller?.text, '外部更新名称');
+    await unmountTree(tester);
+  });
+
+  testWidgets(
+    'stale lifecycle action is rejected after external state change',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-1', name: '项目');
+
+      await tester.pumpWidget(pumpProjectDetail(database, 'project-1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+
+      await database.updateProjectLifecycleStatus(
+        projectId: 'project-1',
+        expectedStatus: ProjectLifecycleStatus.active,
+        targetStatus: ProjectLifecycleStatus.archived,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('complete-project')));
+      await tester.pumpAndSettle();
+
+      expect(
+        (await database.projectById('project-1'))?.lifecycleStatus,
+        ProjectLifecycleStatus.archived,
+      );
+      expect(find.text('项目状态已变化，请重试'), findsNothing);
+      await unmountTree(tester);
+    },
+  );
+
+  testWidgets('project actions apply pin, unpin, complete, and archive', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'pin', name: '置顶目标');
+    await database.createProject(id: 'unpin', name: '取消置顶目标', isPinned: true);
+    await database.createProject(id: 'complete', name: '完成目标');
+    await database.createProject(id: 'archive', name: '归档目标');
+
+    Future<void> selectAction(String projectId, Key actionKey) async {
+      await tester.pumpWidget(pumpProjectDetail(database, projectId));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(actionKey));
+      await tester.pumpAndSettle();
+    }
+
+    await selectAction('pin', const Key('pin-project'));
+    expect((await database.projectById('pin'))?.isPinned, isTrue);
+
+    await selectAction('unpin', const Key('unpin-project'));
+    expect((await database.projectById('unpin'))?.isPinned, isFalse);
+
+    await selectAction('complete', const Key('complete-project'));
+    expect(
+      (await database.projectById('complete'))?.lifecycleStatus,
+      ProjectLifecycleStatus.completed,
+    );
+
+    await selectAction('archive', const Key('archive-project'));
+    expect(
+      (await database.projectById('archive'))?.lifecycleStatus,
+      ProjectLifecycleStatus.archived,
+    );
+    await unmountTree(tester);
+  });
+
+  testWidgets(
+    'project action sheet remains scrollable and semantic at 360dp with 3x text',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final project = await database.createProject(id: 'project-1', name: '项目');
+      final semantics = tester.ensureSemantics();
+      try {
+        for (final (locale, deleteLabel) in const [
+          (Locale('zh'), '删除项目'),
+          (Locale('en'), 'Delete project'),
+        ]) {
+          ProjectAction? selected;
+          await tester.pumpWidget(
+            MaterialApp(
+              locale: locale,
+              supportedLocales: AppStrings.supportedLocales,
+              localizationsDelegates: const [
+                AppStrings.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(3)),
+                child: child!,
+              ),
+              home: Builder(
+                builder: (context) => Scaffold(
+                  body: FilledButton(
+                    key: const Key('open-project-actions'),
+                    onPressed: () async {
+                      selected = await showProjectActionSheet(context, project);
+                    },
+                    child: const Text('Open'),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.byKey(const Key('open-project-actions')));
+          await tester.pumpAndSettle();
+
+          final sheet = find.byKey(const Key('project-action-sheet'));
+          final scrollable = find.descendant(
+            of: sheet,
+            matching: find.byType(Scrollable),
+          );
+          await tester.scrollUntilVisible(
+            find.byKey(const Key('delete-project')),
+            160,
+            scrollable: scrollable,
+          );
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          final deleteRow = find.byKey(const Key('delete-project'));
+          expect(tester.getSemantics(deleteRow).label, deleteLabel);
+          expect(
+            tester
+                .getSemantics(deleteRow)
+                .getSemanticsData()
+                .hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+          final deleteIcon = tester.widget<Icon>(
+            find.descendant(
+              of: deleteRow,
+              matching: find.byIcon(Icons.delete_outline),
+            ),
+          );
+          expect(
+            deleteIcon.color,
+            Theme.of(tester.element(deleteRow)).colorScheme.error,
+          );
+
+          await tester.tap(deleteRow);
+          await tester.pumpAndSettle();
+          expect(selected, ProjectAction.delete);
+        }
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
 
   testWidgets(
     'project actions rename while preserving historical capture evidence',

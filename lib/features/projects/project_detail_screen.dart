@@ -504,35 +504,56 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   }
 
   Future<void> _showProjectActions(Project project) async {
+    final openedProjectId = widget.projectId;
     final action = await showProjectActionSheet(context, project);
-    if (!mounted || action == null) return;
+    if (!mounted || action == null || widget.projectId != openedProjectId) {
+      return;
+    }
+    final database = ref.read(databaseProvider);
+    final latestProject = await database.projectById(openedProjectId);
+    if (!mounted ||
+        widget.projectId != openedProjectId ||
+        latestProject == null) {
+      return;
+    }
+    final actionIsStillAllowed = projectActionsFor(
+      latestProject,
+      AppStrings.of(context),
+    ).any((item) => item.action == action);
+    if (!actionIsStillAllowed) return;
     switch (action) {
       case ProjectAction.watermark:
-        await context.push('/projects/${project.id}/settings');
+        await context.push('/projects/${latestProject.id}/settings');
       case ProjectAction.backup:
         await context.push(
           '/settings/backup-restore/backup',
           extra: ProjectBackupSelectionArguments(
-            initialProjectIds: {project.id},
+            initialProjectIds: {latestProject.id},
           ),
         );
       case ProjectAction.rename:
-        await _renameProject(project);
+        await _renameProject(latestProject);
       case ProjectAction.pin:
-        await ref.read(databaseProvider).setProjectPinned(project.id, true);
+        await database.setProjectPinned(latestProject.id, true);
       case ProjectAction.unpin:
-        await ref.read(databaseProvider).setProjectPinned(project.id, false);
+        await database.setProjectPinned(latestProject.id, false);
       case ProjectAction.complete:
         await _transitionLifecycle(
-          project.id,
+          latestProject.id,
           ProjectLifecycleStatus.completed,
         );
       case ProjectAction.archive:
-        await _transitionLifecycle(project.id, ProjectLifecycleStatus.archived);
+        await _transitionLifecycle(
+          latestProject.id,
+          ProjectLifecycleStatus.archived,
+        );
       case ProjectAction.reopen:
-        await _transitionLifecycle(project.id, ProjectLifecycleStatus.active);
+        await _transitionLifecycle(
+          latestProject.id,
+          ProjectLifecycleStatus.active,
+        );
       case ProjectAction.delete:
-        await _deleteProject(project);
+        await _deleteProject(latestProject);
     }
   }
 
