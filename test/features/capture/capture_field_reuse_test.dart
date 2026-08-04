@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -2293,6 +2294,45 @@ void main() {
       }
     },
   );
+
+  testWidgets('notes expander exposes one readable expanded-state semantic', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final rig = await _CaptureFormTestRig.create();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await rig.dispose();
+    });
+    await rig.pump(tester);
+    final expander = find.byKey(const Key('notes-expander'));
+
+    SemanticsNode node() => tester.getSemantics(expander);
+    expect(
+      node(),
+      isSemantics(
+        label: 'Notes (optional)',
+        isButton: true,
+        hasTapAction: true,
+        hasExpandedState: true,
+        isExpanded: false,
+      ),
+    );
+    expect(node().childrenCount, 0);
+    expect(find.byKey(const Key('notes')), findsNothing);
+
+    await tester.tap(expander);
+    await tester.pumpAndSettle();
+    expect(node(), isSemantics(hasExpandedState: true, isExpanded: true));
+    expect(find.byKey(const Key('notes')), findsOneWidget);
+
+    await tester.tap(expander);
+    await tester.pumpAndSettle();
+    expect(node(), isSemantics(hasExpandedState: true, isExpanded: false));
+    expect(find.byKey(const Key('notes')), findsNothing);
+    semantics.dispose();
+  });
 
   for (final outcome in [
     CaptureWorkflowOutcome.cancelled,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -323,6 +325,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         ..showSnackBar(SnackBar(content: Text(strings.captureReadOnlyMessage)));
       return;
     }
+    unawaited(HapticFeedback.lightImpact());
     final projectId = project.id;
     final generation = _initGeneration;
     final operation = ++_captureOperation;
@@ -669,6 +672,8 @@ class CaptureNotesField extends StatefulWidget {
 class _CaptureNotesFieldState extends State<CaptureNotesField> {
   var _expanded = false;
 
+  void _toggleExpanded() => setState(() => _expanded = !_expanded);
+
   @override
   Widget build(BuildContext context) {
     final child = _expanded
@@ -685,14 +690,23 @@ class _CaptureNotesFieldState extends State<CaptureNotesField> {
     final duration = AppMotion.durationOf(context, AppMotion.short4);
     return Column(
       children: [
-        ListTile(
+        Semantics(
           key: const Key('notes-expander'),
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          title: Text(AppStrings.of(context).notesOptional),
-          trailing: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
-          onTap: () => setState(() => _expanded = !_expanded),
+          container: true,
+          button: true,
+          label: AppStrings.of(context).notesOptional,
+          expanded: _expanded,
+          onTap: _toggleExpanded,
+          child: ExcludeSemantics(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: Text(AppStrings.of(context).notesOptional),
+              trailing: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+              onTap: _toggleExpanded,
+            ),
+          ),
         ),
         if (duration == Duration.zero)
           KeyedSubtree(key: const Key('notes-animation'), child: child)
@@ -723,12 +737,7 @@ class CaptureSubmitButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return FilledButton.icon(
       key: const Key('capture-button'),
-      onPressed: working
-          ? null
-          : () {
-              HapticFeedback.lightImpact();
-              onPressed();
-            },
+      onPressed: working ? null : onPressed,
       icon: working
           ? const SizedBox.square(
               key: ValueKey('capture-button-busy'),
