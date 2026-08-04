@@ -49,8 +49,10 @@ Thumbs.db
 /pr18-metadata.json
 /pr18-status-now.json
 
-# Code review artifacts
-/docs/superpowers/reviews/
+# Code review artifacts (temp files only, not review records)
+/docs/superpowers/reviews/*.diff
+/docs/superpowers/reviews/*.patch
+/docs/superpowers/reviews/*.json
 
 # Temporary analysis/test output
 /analyze_out.txt
