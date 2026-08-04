@@ -58,6 +58,7 @@ Future<void> runProjectImportFlow(BuildContext context, WidgetRef ref) async {
 
   // 3. Restore, reporting per-photo progress.
   final progress = ValueNotifier<(int, int)>((0, preview.photos.length));
+  // ignore: unawaited_futures
   showDialog<void>(
     context: context,
     barrierDismissible: false,

@@ -53,6 +53,7 @@ import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 import 'package:sitemark/workflow/project_lifecycle_service.dart';
+import 'package:sitemark/app_theme.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -772,18 +773,6 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
         final seedColor = Color(
           settings?.appSeedColorArgb ?? kDefaultSeedColorArgb,
         );
-        final lightScheme = useDynamicColor
-            ? lightDynamic
-            : ColorScheme.fromSeed(
-                seedColor: seedColor,
-                brightness: Brightness.light,
-              );
-        final darkScheme = useDynamicColor
-            ? darkDynamic
-            : ColorScheme.fromSeed(
-                seedColor: seedColor,
-                brightness: Brightness.dark,
-              );
         return MaterialApp.router(
           debugShowCheckedModeBanner: false,
           title: 'SiteMark 工程印记',
@@ -798,14 +787,14 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          theme: ThemeData(
-            colorScheme: lightScheme,
-            useMaterial3: true,
-            inputDecorationTheme: const InputDecorationTheme(
-              border: OutlineInputBorder(),
-            ),
+          theme: buildLightTheme(
+            seedColor: seedColor,
+            dynamicColor: useDynamicColor ? lightDynamic : null,
           ),
-          darkTheme: ThemeData(colorScheme: darkScheme, useMaterial3: true),
+          darkTheme: buildDarkTheme(
+            seedColor: seedColor,
+            dynamicColor: useDynamicColor ? darkDynamic : null,
+          ),
           routerConfig: ref.watch(routerProvider),
         );
       },

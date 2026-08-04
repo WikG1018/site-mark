@@ -141,6 +141,7 @@ class _ProjectBackupSelectionScreenState
     setState(() => _submitting = true);
     final initialTotal = _selectedIds.length == 1 ? 1 : _selectedIds.length + 1;
     final progress = ValueNotifier<(int, int)>((0, initialTotal));
+    // ignore: unawaited_futures
     showDialog<void>(
       context: context,
       barrierDismissible: false,

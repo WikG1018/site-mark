@@ -37,3 +37,29 @@ Thumbs.db
 .env
 *.secret
 
+# IDE / AI agent
+.trae/
+.codex-remote-attachments/
+
+# Temporary diff / patch files
+/pr18.diff
+/pr18-diff-gh.patch
+/pr18-diff.patch
+/pr18-metadata-gh.json
+/pr18-metadata.json
+/pr18-status-now.json
+
+# Code review artifacts (temp files only, not review records)
+/docs/superpowers/reviews/*.diff
+/docs/superpowers/reviews/*.patch
+/docs/superpowers/reviews/*.json
+
+# Temporary analysis/test output
+/analyze_out.txt
+/dart_ver.txt
+/dart_ver2.txt
+/flutter_analyze_output.txt
+/flutter_ver.txt
+/flutter_ver_err.txt
+/test_out.txt
+
