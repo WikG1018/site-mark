@@ -69,6 +69,52 @@ void main() {
     }
   }
 
+  double renderedBranchOpacity(WidgetTester tester, Key branchKey) {
+    final animatedOpacity = find.ancestor(
+      of: find.byKey(branchKey),
+      matching: find.byType(AnimatedOpacity),
+    );
+    expect(animatedOpacity, findsOneWidget);
+    final fadeTransition = find.descendant(
+      of: animatedOpacity,
+      matching: find.byType(FadeTransition),
+    );
+    expect(fadeTransition, findsOneWidget);
+    return tester.widget<FadeTransition>(fadeTransition).opacity.value;
+  }
+
+  Future<void> expectCompletedReverseTransition(
+    WidgetTester tester, {
+    required int fromIndex,
+  }) async {
+    Widget buildContainer(int currentIndex) => MaterialApp(
+      home: RootBranchContainer(
+        currentIndex: currentIndex,
+        children: const [
+          SizedBox(key: Key('opacity-branch-0')),
+          SizedBox(key: Key('opacity-branch-1')),
+          SizedBox(key: Key('opacity-branch-2')),
+        ],
+      ),
+    );
+
+    await runWithRouter(tester, (_) async {
+      await tester.pumpWidget(buildContainer(fromIndex));
+      expect(
+        renderedBranchOpacity(tester, Key('opacity-branch-$fromIndex')),
+        1,
+      );
+
+      await tester.pumpWidget(buildContainer(0));
+      await tester.pump(AppMotion.rootSwitch);
+      await tester.pump();
+
+      expect(renderedBranchOpacity(tester, const Key('opacity-branch-0')), 1);
+      expect(renderedBranchOpacity(tester, const Key('opacity-branch-1')), 0);
+      expect(renderedBranchOpacity(tester, const Key('opacity-branch-2')), 0);
+    });
+  }
+
   testWidgets('dock switches three preserved root branches', (tester) async {
     await runWithRouter(tester, (_) async {
       expect(find.byKey(const Key('root-dock')), findsOneWidget);
@@ -192,5 +238,17 @@ void main() {
         semantics.dispose();
       }
     });
+  });
+
+  testWidgets('switching branch 2 to 0 completes both opacity transitions', (
+    tester,
+  ) async {
+    await expectCompletedReverseTransition(tester, fromIndex: 2);
+  });
+
+  testWidgets('switching branch 1 to 0 completes both opacity transitions', (
+    tester,
+  ) async {
+    await expectCompletedReverseTransition(tester, fromIndex: 1);
   });
 }

@@ -87,15 +87,15 @@ class RootBranchContainer extends StatelessWidget {
     children: [
       for (final (index, child) in children.indexed)
         Positioned.fill(
-          child: TickerMode(
-            enabled: index == currentIndex,
-            child: IgnorePointer(
-              ignoring: index != currentIndex,
-              child: ExcludeSemantics(
-                excluding: index != currentIndex,
-                child: AnimatedOpacity(
-                  opacity: index == currentIndex ? 1 : 0,
-                  duration: AppMotion.durationOf(context, AppMotion.rootSwitch),
+          child: AnimatedOpacity(
+            opacity: index == currentIndex ? 1 : 0,
+            duration: AppMotion.durationOf(context, AppMotion.rootSwitch),
+            child: TickerMode(
+              enabled: index == currentIndex,
+              child: IgnorePointer(
+                ignoring: index != currentIndex,
+                child: ExcludeSemantics(
+                  excluding: index != currentIndex,
                   child: child,
                 ),
               ),
