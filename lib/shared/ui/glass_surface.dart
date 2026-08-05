@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 /// The reduced-motion fallback keeps the same colors and border but avoids the
 /// live blur layer, so callers should not rely on blur for content contrast.
 ///
-/// Optional top highlight, inset border and extremely subtle noise increase
-/// perceived glass thickness without a second live blur pass.
+/// Optional top highlight, inset border and extremely subtle overlay tint
+/// increase perceived glass thickness without a second live blur pass.
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
@@ -17,7 +17,7 @@ class GlassSurface extends StatelessWidget {
     this.padding,
     this.opacity = .72,
     this.blurSigma = 16,
-    this.enableNoise = true,
+    this.enableOverlay = true,
   });
 
   final Widget child;
@@ -26,9 +26,10 @@ class GlassSurface extends StatelessWidget {
   final double opacity;
   final double blurSigma;
 
-  /// When true (default), a very low-opacity noise overlay is applied.
-  /// Set to false to skip the noise layer entirely.
-  final bool enableNoise;
+  /// When true (default), a very low-opacity flat tint overlay is applied
+  /// with [BlendMode.overlay]. This is not grain/noise texture.
+  /// Set to false to skip the overlay layer entirely.
+  final bool enableOverlay;
 
   @override
   Widget build(BuildContext context) {
@@ -36,28 +37,23 @@ class GlassSurface extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final blurEnabled =
         blurSigma > 0 && !MediaQuery.disableAnimationsOf(context);
-    final noiseEnabled =
-        enableNoise && !MediaQuery.disableAnimationsOf(context);
+    final effectiveOpacity = blurEnabled
+        ? opacity
+        : (opacity + 0.10).clamp(0.58, 0.94);
+    final overlayEnabled =
+        enableOverlay && !MediaQuery.disableAnimationsOf(context);
 
     final highlightAlpha = isDark ? 0.09 : 0.14;
     final insetAlpha = isDark ? 0.10 : 0.12;
 
+    // Nested DecoratedBox: outer color fill + border; inner highlight gradient
+    // + inset border. BoxDecoration ignores [color] when [gradient] is set, so
+    // they cannot share one decoration (same pattern as root_navigation_dock).
     Widget content = DecoratedBox(
       decoration: BoxDecoration(
-        color: scheme.surface.withValues(
-          alpha: opacity.clamp(.58, .92).toDouble(),
-        ),
+        color: scheme.surface.withValues(alpha: effectiveOpacity.toDouble()),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: .55)),
         borderRadius: borderRadius,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white.withValues(alpha: highlightAlpha),
-            Colors.white.withValues(alpha: 0),
-          ],
-          stops: const [0.0, 0.38],
-        ),
       ),
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -65,6 +61,15 @@ class GlassSurface extends StatelessWidget {
           border: Border.all(
             color: scheme.onSurface.withValues(alpha: insetAlpha),
             width: 1,
+          ),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withValues(alpha: highlightAlpha),
+              Colors.white.withValues(alpha: 0),
+            ],
+            stops: const [0.0, 0.38],
           ),
         ),
         child: DefaultTextStyle.merge(
@@ -77,7 +82,7 @@ class GlassSurface extends StatelessWidget {
       ),
     );
 
-    if (noiseEnabled) {
+    if (overlayEnabled) {
       content = Stack(
         fit: StackFit.passthrough,
         children: [

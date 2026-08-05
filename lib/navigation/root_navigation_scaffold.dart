@@ -131,48 +131,55 @@ class _RootBranchContainerState extends State<RootBranchContainer>
     return ClipRect(
       child: AnimatedBuilder(
         animation: _controller,
-        builder: (context, _) {
+        // Branch page trees are passed as [child] so animation ticks only
+        // rebuild the transform wrappers, not the branch content.
+        builder: (context, child) {
           final progress = AppMotion.emphasized.transform(_controller.value);
           final transitioning =
               !_disableAnimations &&
               _controller.value < 1 &&
               _fromIndex != _currentIndex;
           final direction = _currentIndex > _fromIndex ? 1.0 : -1.0;
+          // Mode wrappers stay in the builder so _currentIndex/_fromIndex
+          // update every tick. Page content lives in [child] and is stable.
+          final branches = (child! as Stack).children;
           return Stack(
             fit: StackFit.expand,
             children: [
-              for (final (index, child) in widget.children.indexed)
+              for (final (index, branchChild) in branches.indexed)
                 Offstage(
                   key: Key('root-branch-offstage-$index'),
                   offstage:
                       index != _currentIndex &&
                       !(transitioning && index == _fromIndex),
-                  child: Transform.scale(
-                    scale: switch (index) {
-                      _ when index == _currentIndex && transitioning =>
-                        0.94 + progress * 0.06,
-                      _ when index == _fromIndex && transitioning =>
-                        1.0 - progress * 0.015,
-                      _ => 1.0,
-                    },
-                    child: FractionalTranslation(
-                      key: Key('root-branch-translation-$index'),
-                      translation: Offset(switch (index) {
+                  child: RepaintBoundary(
+                    child: Transform.scale(
+                      scale: switch (index) {
                         _ when index == _currentIndex && transitioning =>
-                          direction * (1 - progress) * 0.16,
+                          0.97 + progress * 0.03,
                         _ when index == _fromIndex && transitioning =>
-                          -direction * progress * 0.09,
-                        _ => 0,
-                      }, 0),
-                      child: HeroMode(
-                        enabled: index == _currentIndex,
-                        child: TickerMode(
+                          1.0 - progress * 0.01,
+                        _ => 1.0,
+                      },
+                      child: FractionalTranslation(
+                        key: Key('root-branch-translation-$index'),
+                        translation: Offset(switch (index) {
+                          _ when index == _currentIndex && transitioning =>
+                            direction * (1 - progress) * 0.16,
+                          _ when index == _fromIndex && transitioning =>
+                            -direction * progress * 0.09,
+                          _ => 0,
+                        }, 0),
+                        child: HeroMode(
                           enabled: index == _currentIndex,
-                          child: IgnorePointer(
-                            ignoring: index != _currentIndex,
-                            child: ExcludeSemantics(
-                              excluding: index != _currentIndex,
-                              child: child,
+                          child: TickerMode(
+                            enabled: index == _currentIndex,
+                            child: IgnorePointer(
+                              ignoring: index != _currentIndex,
+                              child: ExcludeSemantics(
+                                excluding: index != _currentIndex,
+                                child: branchChild,
+                              ),
                             ),
                           ),
                         ),
@@ -183,6 +190,7 @@ class _RootBranchContainerState extends State<RootBranchContainer>
             ],
           );
         },
+        child: Stack(children: widget.children),
       ),
     );
   }

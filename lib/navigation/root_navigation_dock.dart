@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 
@@ -61,8 +62,9 @@ class RootNavigationDock extends StatelessWidget {
                         end: Alignment.bottomCenter,
                         colors: [
                           scheme.surface.withValues(alpha: isDark ? .48 : .42),
-                          scheme.surfaceContainerHighest
-                              .withValues(alpha: isDark ? .28 : .22),
+                          scheme.surfaceContainerHighest.withValues(
+                            alpha: isDark ? .28 : .22,
+                          ),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(18),
@@ -165,7 +167,10 @@ class _RootDestinationButton extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             key: Key('root-destination-${destination.keyName}'),
-            onTap: onTap,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onTap();
+            },
             borderRadius: radius,
             child: Center(
               child: ConstrainedBox(
