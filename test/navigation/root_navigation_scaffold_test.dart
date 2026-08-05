@@ -139,7 +139,7 @@ void main() {
       expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
       expect(
-        find.byKey(const Key('root-destination-projects-selected-surface')),
+        find.byKey(const Key('root-dock-glass-indicator')),
         findsOneWidget,
       );
 
@@ -149,7 +149,7 @@ void main() {
       await tester.pump();
       expect(find.byType(AllCapturesScreen), findsOneWidget);
       expect(
-        find.byKey(const Key('root-destination-records-selected-surface')),
+        find.byKey(const Key('root-dock-glass-indicator')),
         findsOneWidget,
       );
       expect(find.byKey(const Key('new-project-fab')), findsNothing);
@@ -160,7 +160,7 @@ void main() {
       await tester.pump();
       expect(find.byType(GlobalSettingsScreen), findsOneWidget);
       expect(
-        find.byKey(const Key('root-destination-settings-selected-surface')),
+        find.byKey(const Key('root-dock-glass-indicator')),
         findsOneWidget,
       );
     });
