@@ -3,6 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 
 void main() {
+  test('root dock uses the compact 68dp height', () {
+    expect(floatingDockHeight, 68);
+  });
+
   testWidgets('reserved content space includes safe area and FAB clearance', (
     tester,
   ) async {

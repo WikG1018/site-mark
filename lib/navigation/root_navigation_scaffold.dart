@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
+import 'package:sitemark/navigation/root_navigation_dock.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
@@ -29,11 +30,10 @@ class RootNavigationScaffold extends ConsumerWidget {
             dock: showRootNavigation && !hideForSelection
                 ? GlassSurface(
                     key: const Key('root-dock'),
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(22),
                     child: SizedBox(
                       height: floatingDockHeight,
-                      child: NavigationBar(
-                        backgroundColor: Colors.transparent,
+                      child: RootNavigationDock(
                         selectedIndex: navigationShell.currentIndex,
                         onDestinationSelected: (index) =>
                             navigationShell.goBranch(
@@ -41,23 +41,6 @@ class RootNavigationScaffold extends ConsumerWidget {
                               initialLocation:
                                   index == navigationShell.currentIndex,
                             ),
-                        destinations: [
-                          NavigationDestination(
-                            key: const Key('root-destination-projects'),
-                            icon: const Icon(Icons.domain_outlined),
-                            label: strings.projects,
-                          ),
-                          NavigationDestination(
-                            key: const Key('root-destination-records'),
-                            icon: const Icon(Icons.photo_library_outlined),
-                            label: strings.allRecords,
-                          ),
-                          NavigationDestination(
-                            key: const Key('root-destination-settings'),
-                            icon: const Icon(Icons.settings_outlined),
-                            label: strings.settings,
-                          ),
-                        ],
                       ),
                     ),
                   )

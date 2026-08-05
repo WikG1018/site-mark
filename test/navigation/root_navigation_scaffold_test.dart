@@ -106,6 +106,11 @@ void main() {
       expect(find.text('项目'), findsOneWidget);
       expect(find.byType(ProjectListScreen), findsOneWidget);
       expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(
+        find.byKey(const Key('root-destination-projects-selected-surface')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('root-destination-records')));
       await tester.pump();
@@ -113,8 +118,8 @@ void main() {
       await tester.pump();
       expect(find.byType(AllCapturesScreen), findsOneWidget);
       expect(
-        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-        1,
+        find.byKey(const Key('root-destination-records-selected-surface')),
+        findsOneWidget,
       );
       expect(find.byKey(const Key('new-project-fab')), findsNothing);
 
@@ -124,8 +129,8 @@ void main() {
       await tester.pump();
       expect(find.byType(GlobalSettingsScreen), findsOneWidget);
       expect(
-        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-        2,
+        find.byKey(const Key('root-destination-settings-selected-surface')),
+        findsOneWidget,
       );
     });
   });

@@ -3,9 +3,9 @@ import 'package:sitemark/motion.dart';
 
 const double floatingDockHorizontalInset = 14;
 const double floatingDockBottomInset = 12;
-const double floatingDockHeight = 80;
-const double floatingDockReservedSpace = 112;
-const double floatingDockFabReservedSpace = 176;
+const double floatingDockHeight = 68;
+const double floatingDockReservedSpace = 100;
+const double floatingDockFabReservedSpace = 164;
 
 /// Bottom content inset that keeps the final item scrollable above root
 /// chrome on devices with any gesture-navigation safe area.
