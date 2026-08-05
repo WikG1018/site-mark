@@ -304,6 +304,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
           ],
         ),
         body: FloatingDockLayout(
+          animateDock: false,
           dock: editing
               ? CaptureBatchActionBar(
                   key: const Key('batch-bar'),
@@ -328,11 +329,11 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                           ? strings.filteredEmpty
                           : strings.noCaptures,
                       itemBuilder: _buildCaptureCard,
-                      padding: const EdgeInsets.fromLTRB(
+                      padding: EdgeInsets.fromLTRB(
                         16,
                         4,
                         16,
-                        floatingDockReservedSpace,
+                        floatingDockReservedSpaceOf(context),
                       ),
                       groupKey: _captureDateKey,
                       onVisibleGroupChanged: _onVisibleDateChanged,

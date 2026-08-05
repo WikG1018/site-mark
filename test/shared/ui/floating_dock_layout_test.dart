@@ -3,6 +3,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 
 void main() {
+  testWidgets('reserved content space includes safe area and FAB clearance', (
+    tester,
+  ) async {
+    late double dockOnly;
+    late double dockAndFab;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(padding: EdgeInsets.only(bottom: 34)),
+          child: Builder(
+            builder: (context) {
+              dockOnly = floatingDockReservedSpaceOf(context);
+              dockAndFab = floatingDockReservedSpaceOf(
+                context,
+                avoidFloatingActionButton: true,
+              );
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(dockOnly, floatingDockReservedSpace + 34);
+    expect(dockAndFab, floatingDockFabReservedSpace + 34);
+    expect(dockAndFab, greaterThan(dockOnly));
+  });
+
   testWidgets('dock overlays content without shortening the page', (
     tester,
   ) async {
@@ -74,6 +102,27 @@ void main() {
               dock: SizedBox(key: Key('test-dock'), height: floatingDockHeight),
               child: SizedBox.expand(),
             ),
+          ),
+        ),
+      ),
+    );
+
+    final switcher = tester.widget<AnimatedSwitcher>(
+      find.byKey(const Key('floating-dock-slot')),
+    );
+    expect(switcher.duration, Duration.zero);
+  });
+
+  testWidgets('dock animation can be disabled for synchronized replacement', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: FloatingDockLayout(
+            animateDock: false,
+            dock: SizedBox(key: Key('test-dock'), height: floatingDockHeight),
+            child: SizedBox.expand(),
           ),
         ),
       ),

@@ -421,7 +421,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         16,
         4,
         16,
-        _selectionController.editing ? floatingDockReservedSpace : 96,
+        floatingDockReservedSpaceOf(context),
       ),
       sliversBefore: [
         SliverToBoxAdapter(

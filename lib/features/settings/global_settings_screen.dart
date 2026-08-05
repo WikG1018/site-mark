@@ -36,11 +36,11 @@ class GlobalSettingsScreen extends ConsumerWidget {
         title: Text(strings.settings),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           12,
           0,
           12,
-          floatingDockReservedSpace,
+          floatingDockReservedSpaceOf(context),
         ),
         children: [
           SettingsGroup(

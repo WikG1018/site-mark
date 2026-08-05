@@ -5,6 +5,19 @@ const double floatingDockHorizontalInset = 14;
 const double floatingDockBottomInset = 12;
 const double floatingDockHeight = 80;
 const double floatingDockReservedSpace = 112;
+const double floatingDockFabReservedSpace = 176;
+
+/// Bottom content inset that keeps the final item scrollable above root
+/// chrome on devices with any gesture-navigation safe area.
+double floatingDockReservedSpaceOf(
+  BuildContext context, {
+  bool avoidFloatingActionButton = false,
+}) {
+  final base = avoidFloatingActionButton
+      ? floatingDockFabReservedSpace
+      : floatingDockReservedSpace;
+  return base + MediaQuery.paddingOf(context).bottom;
+}
 
 /// Keeps page content full-height while positioning bottom chrome above the
 /// system safe area.
@@ -14,18 +27,22 @@ class FloatingDockLayout extends StatelessWidget {
     required this.child,
     this.dock,
     this.floatingActionButton,
+    this.animateDock = true,
     this.dockKey = const Key('floating-dock-slot'),
   });
 
   final Widget child;
   final Widget? dock;
   final Widget? floatingActionButton;
+  final bool animateDock;
   final Key dockKey;
 
   @override
   Widget build(BuildContext context) {
     final bottomSafeArea = MediaQuery.paddingOf(context).bottom;
-    final duration = AppMotion.durationOf(context, AppMotion.medium4);
+    final duration = animateDock
+        ? AppMotion.durationOf(context, AppMotion.medium4)
+        : Duration.zero;
     return Stack(
       clipBehavior: Clip.none,
       children: [

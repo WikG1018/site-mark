@@ -67,6 +67,7 @@ class CapturePagedList extends StatefulWidget {
 class _CapturePagedListState extends State<CapturePagedList> {
   final GlobalKey _viewportKey = GlobalKey();
   final Map<String, GlobalKey> _rowKeys = <String, GlobalKey>{};
+  final Map<String, String> _rowGroups = <String, String>{};
   late final ScrollController _scrollController = ScrollController(
     keepScrollOffset: true,
   );
@@ -97,6 +98,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
       _watchedIds = const [];
       _lastReportedGroup = null;
       _rowKeys.clear();
+      _rowGroups.clear();
       _syncWatchedRows();
     } else if (oldWidget.source != widget.source) {
       _watchedIds = const [];
@@ -105,6 +107,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
     if (oldWidget.groupKey != widget.groupKey ||
         oldWidget.onVisibleGroupChanged != widget.onVisibleGroupChanged) {
       _lastReportedGroup = null;
+      _rowGroups.clear();
       _scheduleVisibleGroupReport();
     }
   }
@@ -125,6 +128,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
         .map((summary) => summary.capture.id)
         .toSet();
     _rowKeys.removeWhere((id, _) => !visibleIds.contains(id));
+    _rowGroups.removeWhere((id, _) => !visibleIds.contains(id));
     _syncWatchedRows();
     if (mounted) {
       setState(() {});
@@ -155,31 +159,36 @@ class _CapturePagedListState extends State<CapturePagedList> {
     final callback = widget.onVisibleGroupChanged;
     final groupKey = widget.groupKey;
     if (callback == null || groupKey == null) return;
-    final rows = widget.controller.state.rows;
-    if (rows.isEmpty) {
+    if (widget.controller.state.rows.isEmpty) {
       _emitVisibleGroup(null);
       return;
     }
     final viewport = _viewportKey.currentContext?.findRenderObject();
     if (viewport is! RenderBox || !viewport.attached) return;
     final viewportTop = viewport.localToGlobal(Offset.zero).dy;
-    final candidates = <({double top, CaptureSummary row})>[];
-    for (final row in rows) {
-      final renderObject = _rowKeys[row.capture.id]?.currentContext
-          ?.findRenderObject();
+    var nearestTop = double.infinity;
+    String? nearestGroup;
+    final detachedIds = <String>[];
+    for (final entry in _rowKeys.entries) {
+      final renderObject = entry.value.currentContext?.findRenderObject();
       if (renderObject is! RenderBox ||
           !renderObject.attached ||
           !renderObject.hasSize) {
+        detachedIds.add(entry.key);
         continue;
       }
       final top = renderObject.localToGlobal(Offset.zero).dy;
-      if (top + renderObject.size.height > viewportTop + .5) {
-        candidates.add((top: top, row: row));
+      if (top + renderObject.size.height > viewportTop + .5 &&
+          top < nearestTop) {
+        nearestTop = top;
+        nearestGroup = _rowGroups[entry.key];
       }
     }
-    if (candidates.isEmpty) return;
-    candidates.sort((a, b) => a.top.compareTo(b.top));
-    _emitVisibleGroup(groupKey(candidates.first.row));
+    for (final id in detachedIds) {
+      _rowKeys.remove(id);
+      _rowGroups.remove(id);
+    }
+    if (nearestGroup != null) _emitVisibleGroup(nearestGroup);
   }
 
   void _emitVisibleGroup(String? value) {
@@ -465,7 +474,14 @@ class _CapturePagedListState extends State<CapturePagedList> {
   Widget _buildRow(BuildContext context, CapturePagerState state, int index) {
     _scheduleLoadMore(index, state);
     final summary = state.rows[index];
-    final rowKey = _rowKeys.putIfAbsent(summary.capture.id, GlobalKey.new);
+    final id = summary.capture.id;
+    final rowKey = _rowKeys.putIfAbsent(id, GlobalKey.new);
+    final groupKey = widget.groupKey;
+    if (groupKey == null) {
+      _rowGroups.remove(id);
+    } else {
+      _rowGroups[id] = groupKey(summary);
+    }
     return KeyedSubtree(
       key: rowKey,
       child: widget.itemBuilder(context, summary, state.rows),

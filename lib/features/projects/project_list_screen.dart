@@ -9,6 +9,7 @@ import 'package:sitemark/features/projects/project_status_filter_sheet.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/adaptive_skeleton_count.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
@@ -198,7 +199,15 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                     return Skeletonizer(
                       key: const Key('project-list-skeleton'),
                       child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          16,
+                          16,
+                          floatingDockReservedSpaceOf(
+                            context,
+                            avoidFloatingActionButton: true,
+                          ),
+                        ),
                         itemCount: skeletonCount,
                         separatorBuilder: (_, _) => const SizedBox(height: 12),
                         itemBuilder: (_, _) => const _ProjectCardSkeleton(),
@@ -228,7 +237,15 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                           : 'project-list-${_status.name}',
                     ),
                     controller: listController,
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      16,
+                      16,
+                      floatingDockReservedSpaceOf(
+                        context,
+                        avoidFloatingActionButton: true,
+                      ),
+                    ),
                     itemCount: summaries.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
