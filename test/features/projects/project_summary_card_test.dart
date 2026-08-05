@@ -85,6 +85,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> waitForThumbnail(WidgetTester tester, String captureId) async {
+    final finder = find.byKey(Key('project-thumbnail-$captureId'));
+    for (var attempt = 0; attempt < 50; attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+      if (finder.evaluate().isNotEmpty) {
+        await tester.pumpAndSettle();
+        return;
+      }
+    }
+    throw TestFailure('Timed out waiting for thumbnail $captureId');
+  }
+
   String renderedPath(WidgetTester tester, String captureId) {
     final image = tester.widget<Image>(
       find.byKey(Key('project-thumbnail-$captureId')),
@@ -148,7 +163,7 @@ void main() {
         ),
       ),
     );
-    await settleAsyncWork(tester);
+    await waitForThumbnail(tester, 'three');
     expect(renderedPath(tester, 'three'), photoPaths['three']);
 
     update(() => captureIds = ['four', 'three', 'two']);
@@ -156,7 +171,7 @@ void main() {
 
     expect(find.byKey(const Key('project-thumbnail-four')), findsNothing);
     outputPaths.complete('four', photoPaths['four']!);
-    await settleAsyncWork(tester);
+    await waitForThumbnail(tester, 'four');
     expect(renderedPath(tester, 'four'), photoPaths['four']);
   });
 
@@ -181,7 +196,7 @@ void main() {
         ),
       ),
     );
-    await settleAsyncWork(tester);
+    await waitForThumbnail(tester, 'one');
     expect(renderedPath(tester, 'one'), photoPaths['one']);
 
     update(() => outputPaths = secondPaths);
@@ -190,7 +205,7 @@ void main() {
     expect(secondPaths.calls['one'], 1);
     expect(find.byKey(const Key('project-thumbnail-one')), findsNothing);
     secondPaths.complete('one', photoPaths['one-alt']!);
-    await settleAsyncWork(tester);
+    await waitForThumbnail(tester, 'one');
     expect(renderedPath(tester, 'one'), photoPaths['one-alt']);
   });
 
@@ -241,7 +256,7 @@ void main() {
         ),
       ),
     );
-    await settleAsyncWork(tester);
+    await waitForThumbnail(tester, 'one');
 
     final thumbnail = find.byKey(const Key('project-thumbnail-one'));
     final image = tester.widget<Image>(thumbnail);
