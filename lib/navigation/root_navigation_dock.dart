@@ -15,6 +15,8 @@ class RootNavigationDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final destinations = [
       _RootDestination(
         keyName: 'projects',
@@ -39,16 +41,82 @@ class RootNavigationDock extends StatelessWidget {
       maxScaleFactor: 1.5,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Row(
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            for (final (index, destination) in destinations.indexed)
-              Expanded(
-                child: _RootDestinationButton(
-                  destination: destination,
-                  selected: selectedIndex == index,
-                  onTap: () => onDestinationSelected(index),
+            AnimatedAlign(
+              alignment: Alignment(-1 + selectedIndex.toDouble(), 0),
+              duration: AppMotion.durationOf(context, AppMotion.rootSwitch),
+              curve: AppMotion.emphasized,
+              child: FractionallySizedBox(
+                widthFactor: 1 / destinations.length,
+                heightFactor: 1,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: DecoratedBox(
+                    key: const Key('root-dock-glass-indicator'),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          scheme.surface.withValues(alpha: isDark ? .48 : .42),
+                          scheme.surfaceContainerHighest
+                              .withValues(alpha: isDark ? .28 : .22),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: scheme.onSurface.withValues(alpha: .14),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: scheme.shadow.withValues(
+                            alpha: isDark ? .14 : .08,
+                          ),
+                          blurRadius: isDark ? 14 : 12,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withValues(
+                            alpha: isDark ? 0.08 : 0.18,
+                          ),
+                          width: 1,
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withValues(
+                              alpha: isDark ? 0.10 : 0.16,
+                            ),
+                            Colors.white.withValues(alpha: 0),
+                          ],
+                          stops: const [0.0, 0.45],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
+            ),
+            Row(
+              children: [
+                for (final (index, destination) in destinations.indexed)
+                  Expanded(
+                    child: _RootDestinationButton(
+                      destination: destination,
+                      selected: selectedIndex == index,
+                      onTap: () => onDestinationSelected(index),
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
       ),
@@ -86,6 +154,7 @@ class _RootDestinationButton extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final radius = BorderRadius.circular(18);
     final duration = AppMotion.durationOf(context, AppMotion.short4);
+    final foreground = selected ? colors.onSurface : colors.onSurfaceVariant;
     return Tooltip(
       message: destination.label,
       child: Semantics(
@@ -99,53 +168,51 @@ class _RootDestinationButton extends StatelessWidget {
             onTap: onTap,
             borderRadius: radius,
             child: Center(
-              child: AnimatedContainer(
-                key: selected
-                    ? Key(
-                        'root-destination-${destination.keyName}-selected-surface',
-                      )
-                    : null,
-                duration: duration,
-                curve: AppMotion.standard,
+              child: ConstrainedBox(
                 constraints: const BoxConstraints(minWidth: 76),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? colors.secondaryContainer
-                      : Colors.transparent,
-                  borderRadius: radius,
-                ),
-                child: ExcludeSemantics(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        selected ? destination.selectedIcon : destination.icon,
-                        size: 22,
-                        color: selected
-                            ? colors.onSecondaryContainer
-                            : colors.onSurfaceVariant,
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        destination.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: selected
-                              ? colors.onSecondaryContainer
-                              : colors.onSurfaceVariant,
-                          fontWeight: selected
-                              ? FontWeight.w600
-                              : FontWeight.w500,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  child: ExcludeSemantics(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TweenAnimationBuilder<Color?>(
+                          tween: ColorTween(end: foreground),
+                          duration: duration,
+                          curve: AppMotion.standard,
+                          builder: (context, color, _) => Icon(
+                            selected
+                                ? destination.selectedIcon
+                                : destination.icon,
+                            size: 22,
+                            color: color,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 1),
+                        AnimatedDefaultTextStyle(
+                          duration: duration,
+                          curve: AppMotion.standard,
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: foreground,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                              ) ??
+                              TextStyle(color: foreground),
+                          child: Text(
+                            destination.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
