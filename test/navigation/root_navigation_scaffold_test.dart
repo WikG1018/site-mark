@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -143,7 +145,7 @@ void main() {
       await tester.pumpAndSettle();
       router.go('/');
       await tester.pumpAndSettle();
-      router.push('/projects/project-1');
+      unawaited(router.push('/projects/project-1'));
       await tester.pumpAndSettle();
 
       router.pop();
