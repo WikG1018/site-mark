@@ -367,6 +367,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
                         children: [
                           Expanded(
                             child: _ActionButton(
+                              actionKey: 'export',
                               icon: Icons.archive_outlined,
                               label: strings.exportSelection,
                               enabled: !empty && ready && !_busy,
@@ -375,6 +376,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
                           ),
                           Expanded(
                             child: _ActionButton(
+                              actionKey: 'gallery',
                               icon: Icons.save_outlined,
                               label: strings.saveToGallery,
                               enabled: !empty && ready && !_busy,
@@ -383,6 +385,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
                           ),
                           Expanded(
                             child: _ActionButton(
+                              actionKey: 'originals',
                               icon: Icons.cleaning_services_outlined,
                               label: strings.clearOriginals,
                               enabled: !empty && !_busy,
@@ -391,6 +394,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
                           ),
                           Expanded(
                             child: _ActionButton(
+                              actionKey: 'delete',
                               icon: Icons.delete_outline,
                               label: strings.deleteAll,
                               enabled: !empty && !_busy,
@@ -454,6 +458,7 @@ class _CompactProgress extends StatelessWidget {
 
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
+    required this.actionKey,
     required this.icon,
     required this.label,
     required this.enabled,
@@ -461,6 +466,7 @@ class _ActionButton extends StatelessWidget {
     this.errorAction = false,
   });
 
+  final String actionKey;
   final IconData icon;
   final String label;
   final bool enabled;
@@ -474,12 +480,7 @@ class _ActionButton extends StatelessWidget {
         ? scheme.onSurface.withValues(alpha: .38)
         : errorAction
         ? scheme.error
-        : scheme.onSecondaryContainer;
-    final background = !enabled
-        ? scheme.onSurface.withValues(alpha: .08)
-        : errorAction
-        ? scheme.errorContainer
-        : scheme.secondaryContainer;
+        : scheme.onSurfaceVariant;
     return Tooltip(
       message: label,
       child: Semantics(
@@ -487,11 +488,13 @@ class _ActionButton extends StatelessWidget {
         enabled: enabled,
         label: label,
         child: Material(
-          color: background,
-          borderRadius: BorderRadius.circular(13),
+          key: Key('batch-action-$actionKey-surface'),
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: enabled ? onPressed : null,
+            borderRadius: BorderRadius.circular(12),
             child: Center(
               child: ExcludeSemantics(
                 child: Column(

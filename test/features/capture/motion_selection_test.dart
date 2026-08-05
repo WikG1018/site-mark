@@ -164,6 +164,12 @@ void main() {
     expect(find.text('保存到相册'), findsOneWidget);
     expect(find.text('清理原图'), findsOneWidget);
     expect(find.text('全部删除'), findsOneWidget);
+    for (final name in ['export', 'gallery', 'originals', 'delete']) {
+      final surface = tester.widget<Material>(
+        find.byKey(Key('batch-action-$name-surface')),
+      );
+      expect(surface.color, Colors.transparent);
+    }
     expect(tester.takeException(), isNull);
 
     await disposeTree(tester);
