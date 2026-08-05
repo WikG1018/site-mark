@@ -12,6 +12,7 @@ import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/root_chrome_controller.dart';
 import 'package:sitemark/navigation/root_navigation_scaffold.dart';
 
 void main() {
@@ -142,6 +143,32 @@ void main() {
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
         2,
       );
+    });
+  });
+
+  testWidgets('root dock overlays content and selection mode hides it', (
+    tester,
+  ) async {
+    await runWithRouter(tester, (_) async {
+      await tester.tap(find.byKey(const Key('root-destination-records')));
+      await tester.pumpAndSettle();
+      final rootScaffold = tester.widget<Scaffold>(
+        find.ancestor(
+          of: find.byKey(const Key('root-dock')),
+          matching: find.byType(Scaffold),
+        ),
+      );
+      expect(rootScaffold.bottomNavigationBar, isNull);
+
+      container.read(allCapturesSelectionModeProvider.notifier).setActive(true);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('root-dock')), findsNothing);
+
+      container
+          .read(allCapturesSelectionModeProvider.notifier)
+          .setActive(false);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('root-dock')), findsOneWidget);
     });
   });
 

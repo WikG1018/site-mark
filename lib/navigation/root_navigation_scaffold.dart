@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/root_chrome_controller.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
-class RootNavigationScaffold extends StatelessWidget {
+class RootNavigationScaffold extends ConsumerWidget {
   const RootNavigationScaffold({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final router = GoRouter.of(context);
     return ListenableBuilder(
       listenable: router.routeInformationProvider,
@@ -19,53 +22,57 @@ class RootNavigationScaffold extends StatelessWidget {
         final path = router.routeInformationProvider.value.uri.path;
         final showRootNavigation =
             path == '/' || path == '/records' || path == '/settings';
+        final recordsSelecting = ref.watch(allCapturesSelectionModeProvider);
+        final hideForSelection = path == '/records' && recordsSelecting;
         return Scaffold(
-          body: navigationShell,
-          floatingActionButton:
-              showRootNavigation && navigationShell.currentIndex == 0
-              ? FloatingActionButton(
-                  key: const Key('new-project-fab'),
-                  onPressed: () => context.push('/projects/new'),
-                  tooltip: strings.newProject,
-                  child: const Icon(Icons.add),
-                )
-              : null,
-          bottomNavigationBar: showRootNavigation
-              ? SafeArea(
-                  minimum: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                  child: GlassSurface(
+          body: FloatingDockLayout(
+            child: navigationShell,
+            dock: showRootNavigation && !hideForSelection
+                ? GlassSurface(
                     key: const Key('root-dock'),
                     borderRadius: BorderRadius.circular(24),
-                    child: NavigationBar(
-                      backgroundColor: Colors.transparent,
-                      selectedIndex: navigationShell.currentIndex,
-                      onDestinationSelected: (index) =>
-                          navigationShell.goBranch(
-                            index,
-                            initialLocation:
-                                index == navigationShell.currentIndex,
+                    child: SizedBox(
+                      height: floatingDockHeight,
+                      child: NavigationBar(
+                        backgroundColor: Colors.transparent,
+                        selectedIndex: navigationShell.currentIndex,
+                        onDestinationSelected: (index) =>
+                            navigationShell.goBranch(
+                              index,
+                              initialLocation:
+                                  index == navigationShell.currentIndex,
+                            ),
+                        destinations: [
+                          NavigationDestination(
+                            key: const Key('root-destination-projects'),
+                            icon: const Icon(Icons.domain_outlined),
+                            label: strings.projects,
                           ),
-                      destinations: [
-                        NavigationDestination(
-                          key: const Key('root-destination-projects'),
-                          icon: const Icon(Icons.domain_outlined),
-                          label: strings.projects,
-                        ),
-                        NavigationDestination(
-                          key: const Key('root-destination-records'),
-                          icon: const Icon(Icons.photo_library_outlined),
-                          label: strings.allRecords,
-                        ),
-                        NavigationDestination(
-                          key: const Key('root-destination-settings'),
-                          icon: const Icon(Icons.settings_outlined),
-                          label: strings.settings,
-                        ),
-                      ],
+                          NavigationDestination(
+                            key: const Key('root-destination-records'),
+                            icon: const Icon(Icons.photo_library_outlined),
+                            label: strings.allRecords,
+                          ),
+                          NavigationDestination(
+                            key: const Key('root-destination-settings'),
+                            icon: const Icon(Icons.settings_outlined),
+                            label: strings.settings,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                )
-              : null,
+                  )
+                : null,
+            floatingActionButton:
+                showRootNavigation && navigationShell.currentIndex == 0
+                ? FloatingActionButton(
+                    key: const Key('new-project-fab'),
+                    onPressed: () => context.push('/projects/new'),
+                    tooltip: strings.newProject,
+                    child: const Icon(Icons.add),
+                  )
+                : null,
+          ),
         );
       },
     );
