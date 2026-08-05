@@ -24,8 +24,8 @@ import 'package:sitemark/motion.dart';
 /// stays tappable even when the preview file is missing -- the preview renders a
 /// placeholder instead.
 ///
-/// When [selectionMode] is `true`, a [Checkbox] is prepended to the row (its
-/// column expands with an [AnimatedSize]) and card taps toggle selection (via
+/// When [selectionMode] is `true`, a [Checkbox] overlays the thumbnail without
+/// shifting the preview or metadata, and card taps toggle selection (via
 /// [onSelectedChanged]) instead of navigating. A long press outside selection
 /// mode enters selection and selects the row ([HapticFeedback.mediumImpact]);
 /// every selection toggle fires [HapticFeedback.selectionClick]. Busy rows
