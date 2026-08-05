@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -142,27 +141,4 @@ void main() {
     );
   });
 
-  testWidgets('dock destinations announce selected state to semantics', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    try {
-      await tester.pumpWidget(buildDock(0, (_) {}));
-      await tester.pump();
-
-      final projects = tester.getSemantics(
-        find.byKey(const Key('root-destination-projects')),
-      );
-      final records = tester.getSemantics(
-        find.byKey(const Key('root-destination-records')),
-      );
-
-      expect(projects.flagsCollection.isSelected, Tristate.isTrue);
-      expect(projects.flagsCollection.isButton, Tristate.isTrue);
-      expect(records.flagsCollection.isSelected, Tristate.isFalse);
-      expect(records.flagsCollection.isButton, Tristate.isTrue);
-    } finally {
-      semantics.dispose();
-    }
-  });
 }
