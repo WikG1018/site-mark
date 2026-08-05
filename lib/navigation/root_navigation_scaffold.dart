@@ -50,6 +50,7 @@ class RootNavigationScaffold extends ConsumerWidget {
                 showRootNavigation && navigationShell.currentIndex == 0
                 ? FloatingActionButton(
                     key: const Key('new-project-fab'),
+                    heroTag: 'new-project-fab',
                     onPressed: () => context.push('/projects/new'),
                     tooltip: strings.newProject,
                     child: const Icon(Icons.add),
@@ -155,13 +156,16 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                         -direction * progress * .04,
                       _ => 0,
                     }, 0),
-                    child: TickerMode(
+                    child: HeroMode(
                       enabled: index == _currentIndex,
-                      child: IgnorePointer(
-                        ignoring: index != _currentIndex,
-                        child: ExcludeSemantics(
-                          excluding: index != _currentIndex,
-                          child: child,
+                      child: TickerMode(
+                        enabled: index == _currentIndex,
+                        child: IgnorePointer(
+                          ignoring: index != _currentIndex,
+                          child: ExcludeSemantics(
+                            excluding: index != _currentIndex,
+                            child: child,
+                          ),
                         ),
                       ),
                     ),
