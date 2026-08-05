@@ -160,6 +160,10 @@ void main() {
     expect(find.byTooltip('保存到相册'), findsOneWidget);
     expect(find.byTooltip('清理原图'), findsOneWidget);
     expect(find.byTooltip('全部删除'), findsOneWidget);
+    expect(find.text('导出所选'), findsOneWidget);
+    expect(find.text('保存到相册'), findsOneWidget);
+    expect(find.text('清理原图'), findsOneWidget);
+    expect(find.text('全部删除'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await disposeTree(tester);

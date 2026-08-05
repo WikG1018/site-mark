@@ -134,33 +134,40 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
         ),
       ),
     );
-    final selectionControl = AnimatedSize(
-      duration: AppMotion.durationOf(context, AppMotion.medium2),
-      curve: AppMotion.standard,
-      child: widget.selectionMode
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Checkbox(
-                  value: widget.selected,
-                  onChanged: widget.selectable
-                      ? (value) {
-                          HapticFeedback.selectionClick();
-                          widget.onSelectedChanged?.call(value ?? false);
-                        }
-                      : null,
-                ),
-                const SizedBox(width: 4),
-              ],
-            )
-          : const SizedBox.shrink(),
-    );
     final preview = Semantics(
       image: true,
       label: strings.photoSemanticsLabel(
         capture.photoNumber ?? capture.workLocation,
       ),
-      child: thumbnail,
+      child: Stack(
+        children: [
+          thumbnail,
+          if (widget.selectionMode)
+            Positioned(
+              key: const Key('capture-selection-overlay'),
+              left: 4,
+              top: 4,
+              child: Material(
+                color: Theme.of(
+                  context,
+                ).colorScheme.surface.withValues(alpha: .92),
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox.square(
+                  dimension: 40,
+                  child: Checkbox(
+                    value: widget.selected,
+                    onChanged: widget.selectable
+                        ? (value) {
+                            HapticFeedback.selectionClick();
+                            widget.onSelectedChanged?.call(value ?? false);
+                          }
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,8 +268,18 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
       ],
     );
     final useStackedLayout = MediaQuery.textScalerOf(context).scale(14) >= 21;
+    final colors = Theme.of(context).colorScheme;
     return Card(
       clipBehavior: Clip.antiAlias,
+      color: widget.selected
+          ? colors.secondaryContainer.withValues(alpha: .45)
+          : null,
+      shape: widget.selected
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: colors.primary, width: 2),
+            )
+          : null,
       child: InkWell(
         onTap: cardTap,
         onLongPress: !widget.selectionMode && widget.selectable
@@ -277,7 +294,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(children: [selectionControl, preview]),
+                    Row(children: [preview]),
                     const SizedBox(height: 8),
                     details,
                   ],
@@ -285,7 +302,6 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    selectionControl,
                     preview,
                     const SizedBox(width: 12),
                     Expanded(child: details),

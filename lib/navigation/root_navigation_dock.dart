@@ -86,61 +86,67 @@ class _RootDestinationButton extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final radius = BorderRadius.circular(18);
     final duration = AppMotion.durationOf(context, AppMotion.short4);
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: destination.label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          key: Key('root-destination-${destination.keyName}'),
-          onTap: onTap,
-          borderRadius: radius,
-          child: Center(
-            child: AnimatedContainer(
-              key: selected
-                  ? Key(
-                      'root-destination-${destination.keyName}-selected-surface',
-                    )
-                  : null,
-              duration: duration,
-              curve: AppMotion.standard,
-              constraints: const BoxConstraints(minWidth: 76),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: selected
-                    ? colors.secondaryContainer
-                    : Colors.transparent,
-                borderRadius: radius,
-              ),
-              child: ExcludeSemantics(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      selected ? destination.selectedIcon : destination.icon,
-                      size: 22,
-                      color: selected
-                          ? colors.onSecondaryContainer
-                          : colors.onSurfaceVariant,
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      destination.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+    return Tooltip(
+      message: destination.label,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: destination.label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: Key('root-destination-${destination.keyName}'),
+            onTap: onTap,
+            borderRadius: radius,
+            child: Center(
+              child: AnimatedContainer(
+                key: selected
+                    ? Key(
+                        'root-destination-${destination.keyName}-selected-surface',
+                      )
+                    : null,
+                duration: duration,
+                curve: AppMotion.standard,
+                constraints: const BoxConstraints(minWidth: 76),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? colors.secondaryContainer
+                      : Colors.transparent,
+                  borderRadius: radius,
+                ),
+                child: ExcludeSemantics(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        selected ? destination.selectedIcon : destination.icon,
+                        size: 22,
                         color: selected
                             ? colors.onSecondaryContainer
                             : colors.onSurfaceVariant,
-                        fontWeight: selected
-                            ? FontWeight.w600
-                            : FontWeight.w500,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 1),
+                      Text(
+                        destination.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: selected
+                              ? colors.onSecondaryContainer
+                              : colors.onSurfaceVariant,
+                          fontWeight: selected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

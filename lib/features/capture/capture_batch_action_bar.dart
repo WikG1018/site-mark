@@ -332,67 +332,77 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         final useCountOnly = MediaQuery.textScalerOf(context).scale(14) > 22;
         return GlassSurface(
           key: const Key('batch-action-bar'),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(22),
           child: SizedBox(
             height: floatingDockHeight,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 64,
-                    child: _busy
-                        ? _CompactProgress(
-                            exporting: _exporting,
-                            completed: _completed,
-                            total: _total,
-                          )
-                        : Semantics(
-                            label: selectedLabel,
-                            child: Text(
-                              useCountOnly ? '${ids.length}' : selectedLabel,
-                              key: const Key('batch-selected-count'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.labelMedium,
+            child: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.1,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 56,
+                      child: _busy
+                          ? _CompactProgress(
+                              exporting: _exporting,
+                              completed: _completed,
+                              total: _total,
+                            )
+                          : Semantics(
+                              label: selectedLabel,
+                              child: Text(
+                                useCountOnly ? '${ids.length}' : selectedLabel,
+                                key: const Key('batch-selected-count'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                            ),
+                    ),
+                    const VerticalDivider(width: 6, indent: 14, endIndent: 14),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _ActionButton(
+                              icon: Icons.archive_outlined,
+                              label: strings.exportSelection,
+                              enabled: !empty && ready && !_busy,
+                              onPressed: _export,
                             ),
                           ),
-                  ),
-                  const VerticalDivider(width: 8, indent: 16, endIndent: 16),
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _ActionButton(
-                          icon: Icons.archive_outlined,
-                          label: strings.exportSelection,
-                          enabled: !empty && ready && !_busy,
-                          onPressed: _export,
-                        ),
-                        _ActionButton(
-                          icon: Icons.save_outlined,
-                          label: strings.saveToGallery,
-                          enabled: !empty && ready && !_busy,
-                          onPressed: _republish,
-                        ),
-                        _ActionButton(
-                          icon: Icons.cleaning_services_outlined,
-                          label: strings.clearOriginals,
-                          enabled: !empty && !_busy,
-                          onPressed: _clearOriginals,
-                        ),
-                        _ActionButton(
-                          icon: Icons.delete_outline,
-                          label: strings.deleteAll,
-                          enabled: !empty && !_busy,
-                          errorAction: true,
-                          onPressed: _deleteAll,
-                        ),
-                      ],
+                          Expanded(
+                            child: _ActionButton(
+                              icon: Icons.save_outlined,
+                              label: strings.saveToGallery,
+                              enabled: !empty && ready && !_busy,
+                              onPressed: _republish,
+                            ),
+                          ),
+                          Expanded(
+                            child: _ActionButton(
+                              icon: Icons.cleaning_services_outlined,
+                              label: strings.clearOriginals,
+                              enabled: !empty && !_busy,
+                              onPressed: _clearOriginals,
+                            ),
+                          ),
+                          Expanded(
+                            child: _ActionButton(
+                              icon: Icons.delete_outline,
+                              label: strings.deleteAll,
+                              enabled: !empty && !_busy,
+                              errorAction: true,
+                              onPressed: _deleteAll,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -460,19 +470,53 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return IconButton.filledTonal(
-      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-      onPressed: enabled ? onPressed : null,
-      icon: Icon(icon),
-      tooltip: label,
-      style: errorAction
-          ? IconButton.styleFrom(
-              foregroundColor: scheme.error,
-              backgroundColor: scheme.errorContainer,
-              disabledForegroundColor: scheme.onSurface.withValues(alpha: .38),
-              disabledBackgroundColor: scheme.onSurface.withValues(alpha: .12),
-            )
-          : null,
+    final foreground = !enabled
+        ? scheme.onSurface.withValues(alpha: .38)
+        : errorAction
+        ? scheme.error
+        : scheme.onSecondaryContainer;
+    final background = !enabled
+        ? scheme.onSurface.withValues(alpha: .08)
+        : errorAction
+        ? scheme.errorContainer
+        : scheme.secondaryContainer;
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: label,
+        child: Material(
+          color: background,
+          borderRadius: BorderRadius.circular(13),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: enabled ? onPressed : null,
+            child: Center(
+              child: ExcludeSemantics(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, size: 21, color: foreground),
+                    const SizedBox(height: 2),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: foreground,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

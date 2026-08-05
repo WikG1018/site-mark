@@ -275,22 +275,26 @@ void main() {
     expect(inkWell.onLongPress, isNull);
   });
 
-  testWidgets('selection mode expands the checkbox column with AnimatedSize', (
+  testWidgets('selection mode overlays the checkbox without shifting preview', (
     tester,
   ) async {
     final selections = <bool>[];
+    final capture = record(id: 'capture-1', status: CaptureStatus.ready);
+    await pumpCard(tester, capture: capture);
+    final normalPreviewLeft = tester
+        .getTopLeft(find.byType(CaptureImagePreview))
+        .dx;
+
     await pumpCard(
       tester,
-      capture: record(id: 'capture-1', status: CaptureStatus.ready),
+      capture: capture,
       selectionMode: true,
       onSelectedChanged: selections.add,
     );
+    expect(find.byKey(const Key('capture-selection-overlay')), findsOneWidget);
     expect(
-      find.descendant(
-        of: find.byType(CaptureRecordCard),
-        matching: find.byType(AnimatedSize),
-      ),
-      findsOneWidget,
+      tester.getTopLeft(find.byType(CaptureImagePreview)).dx,
+      normalPreviewLeft,
     );
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
