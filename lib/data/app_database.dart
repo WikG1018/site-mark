@@ -15,6 +15,19 @@ import 'package:sitemark/shared/theme/accent_swatches.dart';
 part 'app_database.g.dart';
 part 'app_database_migration.dart';
 
+List<String> decodeRecentCaptureIds(String? encoded) {
+  if (encoded == null || encoded.isEmpty) return const [];
+  try {
+    final decoded = jsonDecode(encoded);
+    if (decoded is! List || decoded.any((value) => value is! String)) {
+      return const [];
+    }
+    return List<String>.unmodifiable(decoded.cast<String>());
+  } on FormatException {
+    return const [];
+  }
+}
+
 class CaptureStatusConverter extends TypeConverter<CaptureStatus, String> {
   const CaptureStatusConverter();
 
@@ -445,11 +458,7 @@ ORDER BY
               project: projects.map(row.data),
               captureCount: row.read<int>('capture_count'),
               lastCaptureAt: row.readNullable<DateTime>('last_capture_at'),
-              recentCaptureIds:
-                  recentCaptureIds == null || recentCaptureIds.isEmpty
-                  ? const []
-                  : (jsonDecode(recentCaptureIds) as List<dynamic>)
-                        .cast<String>(),
+              recentCaptureIds: decodeRecentCaptureIds(recentCaptureIds),
             );
           })
           .toList(growable: false),

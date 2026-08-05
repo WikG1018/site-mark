@@ -26,6 +26,35 @@ void main() {
   late _DetailPaths paths;
   late _DetailMediaService media;
 
+  Widget buildDetailApp({
+    required CaptureMediaService mediaService,
+    CaptureRecord? initialCapture,
+    Locale locale = const Locale('zh'),
+  }) {
+    return ProviderScope(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        captureOutputPathsProvider.overrideWithValue(paths),
+        captureMediaServiceProvider.overrideWithValue(mediaService),
+      ],
+      child: MaterialApp(
+        locale: locale,
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: CaptureDetailScreen(
+          projectId: 'project-1',
+          captureId: 'capture-1',
+          initialCapture: initialCapture,
+        ),
+      ),
+    );
+  }
+
   Future<void> pumpReadyDetail(
     WidgetTester tester, {
     required bool originalExists,
@@ -110,27 +139,10 @@ void main() {
     )..inspectError = inspectError;
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          databaseProvider.overrideWithValue(database),
-          captureOutputPathsProvider.overrideWithValue(paths),
-          captureMediaServiceProvider.overrideWithValue(media),
-        ],
-        child: MaterialApp(
-          locale: locale,
-          supportedLocales: AppStrings.supportedLocales,
-          localizationsDelegates: const [
-            AppStrings.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          home: CaptureDetailScreen(
-            projectId: 'project-1',
-            captureId: 'capture-1',
-            initialCapture: includeInitialCapture ? readyCapture : null,
-          ),
-        ),
+      buildDetailApp(
+        mediaService: media,
+        initialCapture: includeInitialCapture ? readyCapture : null,
+        locale: locale,
       ),
     );
     if (settle) await tester.pumpAndSettle();
@@ -827,6 +839,32 @@ void main() {
       );
     }
   }
+
+  testWidgets('file info refreshes when the media service is replaced', (
+    tester,
+  ) async {
+    await pumpReadyDetail(tester, originalExists: true);
+    final originalMedia = media;
+    expect(originalMedia.inspectCalls, 1);
+
+    final replacementMedia = _DetailMediaService(
+      database: database,
+      platform: platform,
+      outputPaths: paths,
+      files: files,
+    );
+    await tester.pumpWidget(
+      buildDetailApp(
+        mediaService: replacementMedia,
+        initialCapture: await database.captureById('capture-1'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(originalMedia.inspectCalls, 1);
+    expect(replacementMedia.inspectCalls, 1);
+    await disposeDetail(tester);
+  });
 
   testWidgets('processing and read-only details expose no mutation menu', (
     tester,

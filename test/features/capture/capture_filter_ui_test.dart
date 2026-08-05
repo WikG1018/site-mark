@@ -1276,7 +1276,7 @@ void main() {
     await unmountTree(tester);
   });
 
-  testWidgets('filter sheet keeps a draft until apply and chips cascade', (
+  testWidgets('filter sheet keeps a draft and chips remove independently', (
     tester,
   ) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -1347,7 +1347,7 @@ void main() {
     await tester.tap(find.byKey(const Key('remove-filter-project')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('active-filter-project')), findsNothing);
-    expect(find.byKey(const Key('active-filter-year')), findsNothing);
+    expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
     expect(find.byKey(const Key('capture-b')), findsOneWidget);
     await unmountTree(tester);
   });

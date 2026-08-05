@@ -32,7 +32,7 @@ class CaptureActiveFilterChips extends StatelessWidget {
             key: Key('remove-filter-project'),
           ),
           deleteButtonTooltipMessage: strings.removeProjectFilter,
-          onDeleted: () => onChanged(const CaptureFilter()),
+          onDeleted: () => onChanged(filter.selectProject(null)),
         ),
       );
     }

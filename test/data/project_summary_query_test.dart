@@ -6,6 +6,18 @@ import 'package:sitemark/domain/project_lifecycle.dart';
 void main() {
   late AppDatabase database;
 
+  test('decodes recent capture ids and rejects malformed aggregate data', () {
+    expect(decodeRecentCaptureIds('["capture-1","capture-2"]'), [
+      'capture-1',
+      'capture-2',
+    ]);
+    expect(decodeRecentCaptureIds(null), isEmpty);
+    expect(decodeRecentCaptureIds(''), isEmpty);
+    expect(decodeRecentCaptureIds('{"id":"capture-1"}'), isEmpty);
+    expect(decodeRecentCaptureIds('["capture-1", 2]'), isEmpty);
+    expect(decodeRecentCaptureIds('not-json'), isEmpty);
+  });
+
   setUp(() {
     database = AppDatabase.forTesting(NativeDatabase.memory());
   });

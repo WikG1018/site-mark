@@ -57,6 +57,8 @@ class CapturePagedList extends StatefulWidget {
   final Key contentKey;
   final int skeletonItemCount;
   final bool forceInitialLoading;
+
+  /// Groups adjacent rows. The source must order equal keys contiguously.
   final CapturePagedGroupKey? groupKey;
   final CapturePagedGroupHeaderBuilder? groupHeaderBuilder;
 

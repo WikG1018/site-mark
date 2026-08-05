@@ -2,6 +2,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+/// A translucent surface that drops backdrop blur when reduced motion is on.
+///
+/// The reduced-motion fallback keeps the same colors and border but avoids the
+/// live blur layer, so callers should not rely on blur for content contrast.
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
