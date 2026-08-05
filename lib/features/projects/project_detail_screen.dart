@@ -374,6 +374,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   ? const SizedBox.shrink()
                   : FloatingActionButton.extended(
                       key: const ValueKey('capture-fab'),
+                      heroTag: 'project-capture-fab-${widget.projectId}',
                       onPressed: () =>
                           context.push('/projects/${widget.projectId}/capture'),
                       icon: const Icon(Icons.photo_camera_outlined),
