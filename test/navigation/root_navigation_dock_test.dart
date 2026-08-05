@@ -156,10 +156,10 @@ void main() {
         find.byKey(const Key('root-destination-records')),
       );
 
-      expect(projects.hasFlag(SemanticsFlag.isSelected), isTrue);
-      expect(projects.hasFlag(SemanticsFlag.isButton), isTrue);
-      expect(records.hasFlag(SemanticsFlag.isSelected), isFalse);
-      expect(records.hasFlag(SemanticsFlag.isButton), isTrue);
+      expect(projects.flagsCollection.isSelected, isTrue);
+      expect(projects.flagsCollection.isButton, isTrue);
+      expect(records.flagsCollection.isSelected, isFalse);
+      expect(records.flagsCollection.isButton, isTrue);
     } finally {
       semantics.dispose();
     }
