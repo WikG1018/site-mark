@@ -140,5 +140,4 @@ void main() {
       reason: 'dock tap should fire HapticFeedback.selectionClick',
     );
   });
-
 }
