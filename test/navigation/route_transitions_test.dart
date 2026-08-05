@@ -1,7 +1,6 @@
 import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 import 'package:sitemark/navigation/route_transitions.dart';
 import 'package:sitemark/motion.dart';
 
@@ -36,95 +35,61 @@ void main() {
     );
   });
 
-  testWidgets('imperative photo push freezes only the project capture list', (
+  testWidgets(
+    'project detail route uses a clipped slide and fade instead of shared axis',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => buildProjectDetailRouteTransition(
+              context: context,
+              animation: const AlwaysStoppedAnimation(0.5),
+              child: const SizedBox(key: Key('project-detail-content')),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byKey(const Key('project-detail-content')), findsOneWidget);
+      expect(
+        find.byKey(const Key('project-detail-route-clip')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('project-detail-route-slide')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('project-detail-route-fade')),
+        findsOneWidget,
+      );
+      expect(find.byType(SharedAxisTransition), findsNothing);
+    },
+  );
+
+  testWidgets('reduce-motion skips the project detail transition widgets', (
     tester,
   ) async {
-    var freezeProjectList = false;
-    late GoRouter router;
-    router = GoRouter(
-      initialLocation: '/projects/p-1',
-      routes: [
-        GoRoute(
-          path: '/projects/:projectId',
-          pageBuilder: (context, state) {
-            freezeProjectList = shouldFreezeProjectCaptureList(state);
-            return NoTransitionPage<void>(
-              child: Scaffold(
-                body: Column(
-                  children: [
-                    TextButton(
-                      key: const Key('open-settings'),
-                      onPressed: () => context.push('/projects/p-1/settings'),
-                      child: const Text('settings'),
-                    ),
-                    TextButton(
-                      key: const Key('open-capture-form'),
-                      onPressed: () => context.push('/projects/p-1/capture'),
-                      child: const Text('capture'),
-                    ),
-                    TextButton(
-                      key: const Key('open-photo'),
-                      onPressed: () =>
-                          context.push('/projects/p-1/captures/c-1'),
-                      child: const Text('photo'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-          routes: [
-            GoRoute(
-              path: 'settings',
-              builder: (context, state) =>
-                  const Scaffold(body: Text('project settings')),
-            ),
-            GoRoute(
-              path: 'capture',
-              builder: (context, state) =>
-                  const Scaffold(body: Text('capture form')),
-            ),
-            GoRoute(
-              path: 'captures/:captureId',
-              builder: (context, state) =>
-                  const Scaffold(body: Text('photo detail')),
-              routes: [
-                GoRoute(
-                  path: 'edit',
-                  builder: (context, state) =>
-                      const Scaffold(body: Text('photo editor')),
-                ),
-              ],
-            ),
-          ],
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
         ),
-      ],
+        home: Builder(
+          builder: (context) => buildProjectDetailRouteTransition(
+            context: context,
+            animation: const AlwaysStoppedAnimation(0.5),
+            child: const SizedBox(key: Key('reduced-project-detail')),
+          ),
+        ),
+      ),
     );
-    addTearDown(router.dispose);
 
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    expect(freezeProjectList, isFalse);
-
-    await tester.tap(find.byKey(const Key('open-settings')));
-    await tester.pumpAndSettle();
-    expect(freezeProjectList, isFalse);
-    router.pop();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('open-capture-form')));
-    await tester.pumpAndSettle();
-    expect(freezeProjectList, isFalse);
-    router.pop();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('open-photo')));
-    await tester.pumpAndSettle();
-    expect(freezeProjectList, isTrue);
-
-    // ignore: unawaited_futures
-    router.push('/projects/p-1/captures/c-1/edit');
-    await tester.pumpAndSettle();
-    expect(freezeProjectList, isTrue);
+    expect(find.byKey(const Key('reduced-project-detail')), findsOneWidget);
+    expect(find.byKey(const Key('project-detail-route-clip')), findsNothing);
+    expect(find.byKey(const Key('project-detail-route-slide')), findsNothing);
+    expect(find.byKey(const Key('project-detail-route-fade')), findsNothing);
   });
 
   testWidgets('covered shared-axis capture list stays fully opaque', (

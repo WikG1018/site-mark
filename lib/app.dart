@@ -402,6 +402,26 @@ CustomTransitionPage<void> _sharedAxisPage(
   );
 }
 
+/// Project detail uses a short clipped slide over a stable project list.
+CustomTransitionPage<void> _projectDetailPage(
+  GoRouterState state,
+  Widget child,
+) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    transitionDuration: AppMotion.medium2,
+    reverseTransitionDuration: AppMotion.medium2,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return buildProjectDetailRouteTransition(
+        context: context,
+        animation: animation,
+        child: child,
+      );
+    },
+    child: child,
+  );
+}
+
 /// Photo detail and its editor use a position-only transition so the Hero
 /// overlay is not also handed between two independently fading image trees.
 CustomTransitionPage<void> _captureDetailPage(
@@ -459,7 +479,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     parentNavigatorKey: rootNavigatorKey,
                     path: 'projects/:projectId',
-                    pageBuilder: (context, state) => _sharedAxisPage(
+                    pageBuilder: (context, state) => _projectDetailPage(
                       state,
                       ProjectDetailScreen(
                         projectId: state.pathParameters['projectId']!,
@@ -467,7 +487,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                             ? state.extra! as Project
                             : null,
                       ),
-                      freezeSecondary: shouldFreezeProjectCaptureList(state),
                     ),
                     routes: [
                       GoRoute(
