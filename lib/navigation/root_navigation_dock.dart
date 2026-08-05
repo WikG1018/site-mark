@@ -15,6 +15,8 @@ class RootNavigationDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final destinations = [
       _RootDestination(
         keyName: 'projects',
@@ -58,28 +60,46 @@ class RootNavigationDock extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Theme.of(
-                            context,
-                          ).colorScheme.surface.withValues(alpha: .42),
-                          Theme.of(context).colorScheme.surfaceContainerHighest
-                              .withValues(alpha: .22),
+                          scheme.surface.withValues(alpha: isDark ? .48 : .42),
+                          scheme.surfaceContainerHighest
+                              .withValues(alpha: isDark ? .28 : .22),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: .12),
+                        color: scheme.onSurface.withValues(alpha: .14),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.shadow.withValues(alpha: .08),
-                          blurRadius: 12,
+                          color: scheme.shadow.withValues(
+                            alpha: isDark ? .14 : .08,
+                          ),
+                          blurRadius: isDark ? 14 : 12,
                           offset: const Offset(0, 3),
                         ),
                       ],
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withValues(
+                            alpha: isDark ? 0.08 : 0.18,
+                          ),
+                          width: 1,
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withValues(
+                              alpha: isDark ? 0.10 : 0.16,
+                            ),
+                            Colors.white.withValues(alpha: 0),
+                          ],
+                          stops: const [0.0, 0.45],
+                        ),
+                      ),
                     ),
                   ),
                 ),

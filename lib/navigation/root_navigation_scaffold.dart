@@ -147,24 +147,33 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                   offstage:
                       index != _currentIndex &&
                       !(transitioning && index == _fromIndex),
-                  child: FractionalTranslation(
-                    key: Key('root-branch-translation-$index'),
-                    translation: Offset(switch (index) {
+                  child: Transform.scale(
+                    scale: switch (index) {
                       _ when index == _currentIndex && transitioning =>
-                        direction * (1 - progress) * .08,
+                        0.94 + progress * 0.06,
                       _ when index == _fromIndex && transitioning =>
-                        -direction * progress * .04,
-                      _ => 0,
-                    }, 0),
-                    child: HeroMode(
-                      enabled: index == _currentIndex,
-                      child: TickerMode(
+                        1.0 - progress * 0.015,
+                      _ => 1.0,
+                    },
+                    child: FractionalTranslation(
+                      key: Key('root-branch-translation-$index'),
+                      translation: Offset(switch (index) {
+                        _ when index == _currentIndex && transitioning =>
+                          direction * (1 - progress) * 0.16,
+                        _ when index == _fromIndex && transitioning =>
+                          -direction * progress * 0.09,
+                        _ => 0,
+                      }, 0),
+                      child: HeroMode(
                         enabled: index == _currentIndex,
-                        child: IgnorePointer(
-                          ignoring: index != _currentIndex,
-                          child: ExcludeSemantics(
-                            excluding: index != _currentIndex,
-                            child: child,
+                        child: TickerMode(
+                          enabled: index == _currentIndex,
+                          child: IgnorePointer(
+                            ignoring: index != _currentIndex,
+                            child: ExcludeSemantics(
+                              excluding: index != _currentIndex,
+                              child: child,
+                            ),
                           ),
                         ),
                       ),

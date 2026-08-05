@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 ///
 /// The reduced-motion fallback keeps the same colors and border but avoids the
 /// live blur layer, so callers should not rely on blur for content contrast.
+///
+/// Optional top highlight, inset border and extremely subtle noise increase
+/// perceived glass thickness without a second live blur pass.
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
@@ -14,6 +17,7 @@ class GlassSurface extends StatelessWidget {
     this.padding,
     this.opacity = .72,
     this.blurSigma = 16,
+    this.enableNoise = true,
   });
 
   final Widget child;
@@ -22,11 +26,22 @@ class GlassSurface extends StatelessWidget {
   final double opacity;
   final double blurSigma;
 
+  /// When true (default), a very low-opacity noise overlay is applied.
+  /// Set to false to skip the noise layer entirely.
+  final bool enableNoise;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final blurEnabled =
         blurSigma > 0 && !MediaQuery.disableAnimationsOf(context);
+    final noiseEnabled =
+        enableNoise && !MediaQuery.disableAnimationsOf(context);
+
+    final highlightAlpha = isDark ? 0.09 : 0.14;
+    final insetAlpha = isDark ? 0.10 : 0.12;
+
     Widget content = DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.surface.withValues(
@@ -34,15 +49,54 @@ class GlassSurface extends StatelessWidget {
         ),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: .55)),
         borderRadius: borderRadius,
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withValues(alpha: highlightAlpha),
+            Colors.white.withValues(alpha: 0),
+          ],
+          stops: const [0.0, 0.38],
+        ),
       ),
-      child: DefaultTextStyle.merge(
-        style: TextStyle(color: scheme.onSurface),
-        child: IconTheme.merge(
-          data: IconThemeData(color: scheme.onSurface),
-          child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          border: Border.all(
+            color: scheme.onSurface.withValues(alpha: insetAlpha),
+            width: 1,
+          ),
+        ),
+        child: DefaultTextStyle.merge(
+          style: TextStyle(color: scheme.onSurface),
+          child: IconTheme.merge(
+            data: IconThemeData(color: scheme.onSurface),
+            child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+          ),
         ),
       ),
     );
+
+    if (noiseEnabled) {
+      content = Stack(
+        fit: StackFit.passthrough,
+        children: [
+          content,
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: borderRadius,
+                  color: scheme.onSurface.withValues(alpha: 0.035),
+                  backgroundBlendMode: BlendMode.overlay,
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     if (blurEnabled) {
       content = BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
