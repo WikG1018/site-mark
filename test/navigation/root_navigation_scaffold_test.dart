@@ -70,21 +70,7 @@ void main() {
     }
   }
 
-  double renderedBranchOpacity(WidgetTester tester, Key branchKey) {
-    final animatedOpacity = find.ancestor(
-      of: find.byKey(branchKey),
-      matching: find.byType(AnimatedOpacity),
-    );
-    expect(animatedOpacity, findsOneWidget);
-    final fadeTransition = find.descendant(
-      of: animatedOpacity,
-      matching: find.byType(FadeTransition),
-    );
-    expect(fadeTransition, findsOneWidget);
-    return tester.widget<FadeTransition>(fadeTransition).opacity.value;
-  }
-
-  Future<void> expectCompletedReverseTransition(
+  Future<void> expectPaintedBranchSwitch(
     WidgetTester tester, {
     required int fromIndex,
   }) async {
@@ -92,9 +78,9 @@ void main() {
       home: RootBranchContainer(
         currentIndex: currentIndex,
         children: const [
-          SizedBox(key: Key('opacity-branch-0')),
-          SizedBox(key: Key('opacity-branch-1')),
-          SizedBox(key: Key('opacity-branch-2')),
+          SizedBox(key: Key('indexed-branch-0')),
+          SizedBox(key: Key('indexed-branch-1')),
+          SizedBox(key: Key('indexed-branch-2')),
         ],
       ),
     );
@@ -102,17 +88,15 @@ void main() {
     await runWithRouter(tester, (_) async {
       await tester.pumpWidget(buildContainer(fromIndex));
       expect(
-        renderedBranchOpacity(tester, Key('opacity-branch-$fromIndex')),
-        1,
+        tester.widget<IndexedStack>(find.byType(IndexedStack)).index,
+        fromIndex,
       );
 
       await tester.pumpWidget(buildContainer(0));
-      await tester.pump(AppMotion.rootSwitch);
       await tester.pump();
 
-      expect(renderedBranchOpacity(tester, const Key('opacity-branch-0')), 1);
-      expect(renderedBranchOpacity(tester, const Key('opacity-branch-1')), 0);
-      expect(renderedBranchOpacity(tester, const Key('opacity-branch-2')), 0);
+      expect(tester.widget<IndexedStack>(find.byType(IndexedStack)).index, 0);
+      expect(find.byType(AnimatedOpacity), findsNothing);
     });
   }
 
@@ -142,6 +126,38 @@ void main() {
       expect(
         tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
         2,
+      );
+    });
+  });
+
+  testWidgets('visited records branch stays hidden after project detail pop', (
+    tester,
+  ) async {
+    await runWithRouter(tester, (router) async {
+      router.go('/records');
+      await tester.pumpAndSettle();
+      router.go('/');
+      await tester.pumpAndSettle();
+      router.push('/projects/project-1');
+      await tester.pumpAndSettle();
+
+      router.pop();
+      await tester.pump();
+      await tester.pump(AppMotion.pageTransition ~/ 2);
+
+      final stack = tester.widget<IndexedStack>(
+        find.descendant(
+          of: find.byType(RootBranchContainer),
+          matching: find.byType(IndexedStack),
+        ),
+      );
+      expect(stack.index, 0);
+      expect(
+        find.descendant(
+          of: find.byType(RootBranchContainer),
+          matching: find.byType(AnimatedOpacity),
+        ),
+        findsNothing,
       );
     });
   });
@@ -264,8 +280,11 @@ void main() {
 
         final inactiveTickerModes = find
             .ancestor(
-              of: find.byKey(const Key('inactive-branch-action')),
-              matching: find.byType(TickerMode),
+              of: find.byKey(
+                const Key('inactive-branch-action'),
+                skipOffstage: false,
+              ),
+              matching: find.byType(TickerMode, skipOffstage: false),
             )
             .evaluate()
             .map((element) => element.widget)
@@ -276,7 +295,7 @@ void main() {
 
         await tester.tap(find.byKey(const Key('active-branch-action')));
         await tester.tap(
-          find.byKey(const Key('inactive-branch-action')),
+          find.byKey(const Key('inactive-branch-action'), skipOffstage: false),
           warnIfMissed: false,
         );
         expect(activeTaps, 1);
@@ -287,15 +306,15 @@ void main() {
     });
   });
 
-  testWidgets('switching branch 2 to 0 completes both opacity transitions', (
+  testWidgets('switching branch 2 to 0 changes the painted indexed branch', (
     tester,
   ) async {
-    await expectCompletedReverseTransition(tester, fromIndex: 2);
+    await expectPaintedBranchSwitch(tester, fromIndex: 2);
   });
 
-  testWidgets('switching branch 1 to 0 completes both opacity transitions', (
+  testWidgets('switching branch 1 to 0 changes the painted indexed branch', (
     tester,
   ) async {
-    await expectCompletedReverseTransition(tester, fromIndex: 1);
+    await expectPaintedBranchSwitch(tester, fromIndex: 1);
   });
 }

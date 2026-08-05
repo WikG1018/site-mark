@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/l10n/app_strings.dart';
-import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
@@ -91,22 +90,18 @@ class RootBranchContainer extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Stack(
+  Widget build(BuildContext context) => IndexedStack(
+    index: currentIndex,
+    sizing: StackFit.expand,
     children: [
       for (final (index, child) in children.indexed)
-        Positioned.fill(
-          child: AnimatedOpacity(
-            opacity: index == currentIndex ? 1 : 0,
-            duration: AppMotion.durationOf(context, AppMotion.rootSwitch),
-            child: TickerMode(
-              enabled: index == currentIndex,
-              child: IgnorePointer(
-                ignoring: index != currentIndex,
-                child: ExcludeSemantics(
-                  excluding: index != currentIndex,
-                  child: child,
-                ),
-              ),
+        TickerMode(
+          enabled: index == currentIndex,
+          child: IgnorePointer(
+            ignoring: index != currentIndex,
+            child: ExcludeSemantics(
+              excluding: index != currentIndex,
+              child: child,
             ),
           ),
         ),
