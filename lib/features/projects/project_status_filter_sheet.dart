@@ -9,6 +9,7 @@ Future<ProjectLifecycleStatus?> showProjectStatusFilterSheet(
   final strings = AppStrings.of(context);
   return showModalBottomSheet<ProjectLifecycleStatus>(
     context: context,
+    useRootNavigator: true,
     showDragHandle: true,
     builder: (sheetContext) {
       return SafeArea(

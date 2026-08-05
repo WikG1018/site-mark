@@ -172,6 +172,26 @@ void main() {
     });
   });
 
+  testWidgets('all-records selection replaces the root dock in place', (
+    tester,
+  ) async {
+    await runWithRouter(tester, (_) async {
+      await tester.tap(find.byKey(const Key('root-destination-records')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('root-dock')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('edit-captures')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('root-dock')), findsNothing);
+      expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('edit-captures')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+      expect(find.byKey(const Key('root-dock')), findsOneWidget);
+    });
+  });
+
   testWidgets('switching branches preserves project search state', (
     tester,
   ) async {

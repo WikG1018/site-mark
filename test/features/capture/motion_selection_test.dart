@@ -16,6 +16,7 @@ import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:skeletonizer/skeletonizer.dart';
@@ -106,6 +107,64 @@ void main() {
     );
   }
 
+  testWidgets('batch actions use one compact dock at large text scale', (
+    tester,
+  ) async {
+    final controller = CaptureSelectionController()
+      ..enter()
+      ..replaceAll(const ['capture-1'], allReady: true);
+    final media = CaptureMediaService(
+      database: database,
+      platform: _TestPlatform(),
+      outputPaths: _TestOutputPaths(),
+      files: _TestFileStore(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(3)),
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                width: 332,
+                child: CaptureBatchActionBar(
+                  controller: controller,
+                  mediaService: media,
+                  exportService: buildTestExportService(database),
+                  shareService: _TestShareService(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BottomAppBar), findsNothing);
+    expect(
+      tester.getSize(find.byKey(const Key('batch-action-bar'))).height,
+      floatingDockHeight,
+    );
+    expect(find.byTooltip('导出所选'), findsOneWidget);
+    expect(find.byTooltip('保存到相册'), findsOneWidget);
+    expect(find.byTooltip('清理原图'), findsOneWidget);
+    expect(find.byTooltip('全部删除'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await disposeTree(tester);
+  });
+
   testWidgets('system back cancels project record selection mode', (
     tester,
   ) async {
@@ -122,6 +181,31 @@ void main() {
     expect(find.text('拍摄记录'), findsOneWidget);
     expect(find.byType(Checkbox), findsNothing);
     expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+    await disposeTree(tester);
+  });
+
+  testWidgets('project selection dock overlays the list from zero selected', (
+    tester,
+  ) async {
+    await seedReadyCapture();
+    await tester.pumpWidget(buildProjectDetail());
+    await tester.pumpAndSettle();
+    final heightBefore = tester
+        .getSize(find.byKey(const Key('project-capture-list-content')))
+        .height;
+
+    await tester.tap(find.byKey(const Key('edit-captures')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.byType(BottomAppBar), findsNothing);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('project-capture-list-content')))
+          .height,
+      heightBefore,
+    );
+    expect(find.text('已选 0 张'), findsOneWidget);
     await disposeTree(tester);
   });
 
@@ -158,6 +242,30 @@ void main() {
     expect(find.byType(Checkbox), findsNothing);
     await disposeTree(tester);
   });
+
+  testWidgets(
+    'all-records selection dock overlays the list from zero selected',
+    (tester) async {
+      await seedReadyCapture();
+      await tester.pumpWidget(buildAllCaptures());
+      await tester.pumpAndSettle();
+      final heightBefore = tester
+          .getSize(find.byKey(const Key('capture-list-content')))
+          .height;
+
+      await tester.tap(find.byKey(const Key('edit-captures')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+      expect(find.byType(BottomAppBar), findsNothing);
+      expect(
+        tester.getSize(find.byKey(const Key('capture-list-content'))).height,
+        heightBefore,
+      );
+      expect(find.text('已选 0 张'), findsOneWidget);
+      await disposeTree(tester);
+    },
+  );
 
   // ─── Test 1: 底部栏滑入 ────────────────────────────────────────────────
   testWidgets(

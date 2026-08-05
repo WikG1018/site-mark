@@ -1056,7 +1056,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(Checkbox), findsWidgets);
-    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.text('已选 0 张'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('select-all-captures')));
     await tester.pumpAndSettle();

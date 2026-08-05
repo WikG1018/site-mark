@@ -24,6 +24,7 @@ import 'package:sitemark/features/projects/project_action_sheet.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 import 'package:sitemark/workflow/project_lifecycle_service.dart';
@@ -337,39 +338,23 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   ),
               ],
             ),
-            body: waitingForProject
-                ? _projectLoadingList(strings)
-                : projectLoadFailed
-                ? _ProjectUnavailableState(
-                    key: const Key('project-load-error'),
-                    icon: Icons.cloud_off_outlined,
-                    message: strings.projectLoadFailed,
-                  )
-                : projectMissing
-                ? _ProjectUnavailableState(
-                    key: const Key('project-not-found'),
-                    icon: Icons.folder_off_outlined,
-                    message: strings.projectNotFound,
-                  )
-                : _projectCaptureList(context, strings, project!, filter),
-            bottomNavigationBar: AnimatedSwitcher(
-              duration: AppMotion.durationOf(context, AppMotion.medium4),
-              transitionBuilder: (child, animation) {
-                final curved = animation.drive(
-                  CurveTween(curve: AppMotion.emphasizedDecelerate),
-                );
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 1),
-                    end: Offset.zero,
-                  ).animate(curved),
-                  child: FadeTransition(opacity: curved, child: child),
-                );
-              },
-              child:
-                  project != null &&
-                      editing &&
-                      _selectionController.selectedIds.isNotEmpty
+            body: FloatingDockLayout(
+              child: waitingForProject
+                  ? _projectLoadingList(strings)
+                  : projectLoadFailed
+                  ? _ProjectUnavailableState(
+                      key: const Key('project-load-error'),
+                      icon: Icons.cloud_off_outlined,
+                      message: strings.projectLoadFailed,
+                    )
+                  : projectMissing
+                  ? _ProjectUnavailableState(
+                      key: const Key('project-not-found'),
+                      icon: Icons.folder_off_outlined,
+                      message: strings.projectNotFound,
+                    )
+                  : _projectCaptureList(context, strings, project!, filter),
+              dock: project != null && editing
                   ? CaptureBatchActionBar(
                       key: const Key('batch-bar'),
                       controller: _selectionController,
@@ -377,7 +362,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       exportService: ref.watch(projectExportServiceProvider),
                       shareService: ref.watch(shareFileServiceProvider),
                     )
-                  : const SizedBox.shrink(key: Key('batch-bar-empty')),
+                  : null,
             ),
             floatingActionButton: AnimatedSwitcher(
               duration: AppMotion.durationOf(context, AppMotion.medium2),
@@ -432,6 +417,12 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       skeletonKey: const Key('project-capture-list-skeleton'),
       contentKey: const Key('project-capture-list-content'),
       skeletonItemCount: 4,
+      padding: EdgeInsets.fromLTRB(
+        16,
+        4,
+        16,
+        _selectionController.editing ? floatingDockReservedSpace : 96,
+      ),
       sliversBefore: [
         SliverToBoxAdapter(
           child: Padding(

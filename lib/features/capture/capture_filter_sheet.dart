@@ -18,6 +18,7 @@ Future<CaptureFilter?> showCaptureFilterSheet({
 }) {
   return showModalBottomSheet<CaptureFilter>(
     context: context,
+    useRootNavigator: true,
     useSafeArea: true,
     isScrollControlled: true,
     showDragHandle: true,

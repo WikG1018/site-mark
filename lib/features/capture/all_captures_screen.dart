@@ -21,6 +21,8 @@ import 'package:sitemark/features/capture/capture_search_field.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/root_chrome_controller.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 
 /// Global capture-records surface backed by a fixed-size cursor pager.
 class AllCapturesScreen extends ConsumerStatefulWidget {
@@ -46,6 +48,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   late final Stream<List<Project>> _projectsStream;
   late final CaptureQuerySource _querySource;
   late final CapturePagerController _pagerController;
+  late final AllCapturesSelectionModeController _rootChromeController;
   CaptureListQuery get _query =>
       CaptureListQuery(filter: _filter, searchText: _searchText);
 
@@ -56,6 +59,8 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     _querySource =
         widget.querySource ?? ref.read(captureQueryRepositoryProvider);
     _pagerController = CapturePagerController(_querySource, pageSize: 50);
+    _rootChromeController = ref.read(allCapturesSelectionModeProvider.notifier);
+    _rootChromeController.setActive(false);
     _startQuery();
     _pagerController.addListener(_onPagerChanged);
     _selectionController.addListener(_onSelectionChanged);
@@ -73,6 +78,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     } else if (_selectionController.selectedIds.isEmpty) {
       _allQuerySelected = false;
     }
+    _rootChromeController.setActive(_selectionController.editing);
     if (mounted) setState(() {});
   }
 
@@ -84,6 +90,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     _pagerController.dispose();
     _selectionController.removeListener(_onSelectionChanged);
     _selectionController.dispose();
+    _rootChromeController.setActive(false);
     super.dispose();
   }
 
@@ -294,44 +301,37 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
               ),
           ],
         ),
-        body: StreamBuilder<List<Project>>(
-          stream: _projectsStream,
-          builder: (context, snapshot) {
-            final projects = snapshot.data ?? const <Project>[];
-            return Column(
-              children: [
-                if (!_searching) _filterBar(context, strings, projects),
-                Expanded(
-                  child: CapturePagedList(
-                    controller: _pagerController,
-                    source: _querySource,
-                    emptyMessage: _hasActiveQuery
-                        ? strings.filteredEmpty
-                        : strings.noCaptures,
-                    itemBuilder: _buildCaptureCard,
-                    groupKey: _captureDateKey,
-                    groupHeaderBuilder: _buildDateHeader,
+        body: FloatingDockLayout(
+          child: StreamBuilder<List<Project>>(
+            stream: _projectsStream,
+            builder: (context, snapshot) {
+              final projects = snapshot.data ?? const <Project>[];
+              return Column(
+                children: [
+                  if (!_searching) _filterBar(context, strings, projects),
+                  Expanded(
+                    child: CapturePagedList(
+                      controller: _pagerController,
+                      source: _querySource,
+                      emptyMessage: _hasActiveQuery
+                          ? strings.filteredEmpty
+                          : strings.noCaptures,
+                      itemBuilder: _buildCaptureCard,
+                      padding: const EdgeInsets.fromLTRB(
+                        16,
+                        4,
+                        16,
+                        floatingDockReservedSpace,
+                      ),
+                      groupKey: _captureDateKey,
+                      groupHeaderBuilder: _buildDateHeader,
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
-        ),
-        bottomNavigationBar: AnimatedSwitcher(
-          duration: AppMotion.durationOf(context, AppMotion.medium4),
-          transitionBuilder: (child, animation) {
-            final curved = animation.drive(
-              CurveTween(curve: AppMotion.emphasizedDecelerate),
-            );
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 1),
-                end: Offset.zero,
-              ).animate(curved),
-              child: FadeTransition(opacity: curved, child: child),
-            );
-          },
-          child: editing && _selectionController.selectedIds.isNotEmpty
+                ],
+              );
+            },
+          ),
+          dock: editing
               ? CaptureBatchActionBar(
                   key: const Key('batch-bar'),
                   controller: _selectionController,
@@ -339,7 +339,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                   exportService: ref.watch(projectExportServiceProvider),
                   shareService: ref.watch(shareFileServiceProvider),
                 )
-              : const SizedBox.shrink(key: Key('batch-bar-empty')),
+              : null,
         ),
       ),
     );

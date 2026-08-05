@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
+import 'package:sitemark/shared/ui/glass_surface.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 
@@ -326,81 +328,116 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         final ids = _selectedIds;
         final empty = ids.isEmpty;
         final ready = widget.controller.allSelectedReady;
-        final exporting = _exporting;
-        return BottomAppBar(
+        final selectedLabel = strings.selectedCount(ids.length);
+        final useCountOnly = MediaQuery.textScalerOf(context).scale(14) > 22;
+        return GlassSurface(
           key: const Key('batch-action-bar'),
-          height: _busy ? 136 : 104,
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  strings.selectedCount(ids.length),
-                  key: const Key('batch-selected-count'),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.labelMedium,
-                ),
-                const SizedBox(height: 2),
-                if (_busy)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Column(
+          borderRadius: BorderRadius.circular(24),
+          child: SizedBox(
+            height: floatingDockHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 64,
+                    child: _busy
+                        ? _CompactProgress(
+                            exporting: _exporting,
+                            completed: _completed,
+                            total: _total,
+                          )
+                        : Semantics(
+                            label: selectedLabel,
+                            child: Text(
+                              useCountOnly ? '${ids.length}' : selectedLabel,
+                              key: const Key('batch-selected-count'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.labelMedium,
+                            ),
+                          ),
+                  ),
+                  const VerticalDivider(width: 8, indent: 16, endIndent: 16),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        LinearProgressIndicator(
-                          value: _total == 0 ? null : _completed / _total,
+                        _ActionButton(
+                          icon: Icons.archive_outlined,
+                          label: strings.exportSelection,
+                          enabled: !empty && ready && !_busy,
+                          onPressed: _export,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          exporting
-                              ? strings.exportSelection
-                              : strings.actionProgress(_completed, _total),
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall,
+                        _ActionButton(
+                          icon: Icons.save_outlined,
+                          label: strings.saveToGallery,
+                          enabled: !empty && ready && !_busy,
+                          onPressed: _republish,
+                        ),
+                        _ActionButton(
+                          icon: Icons.cleaning_services_outlined,
+                          label: strings.clearOriginals,
+                          enabled: !empty && !_busy,
+                          onPressed: _clearOriginals,
+                        ),
+                        _ActionButton(
+                          icon: Icons.delete_outline,
+                          label: strings.deleteAll,
+                          enabled: !empty && !_busy,
+                          errorAction: true,
+                          onPressed: _deleteAll,
                         ),
                       ],
                     ),
                   ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _ActionButton(
-                        icon: Icons.archive_outlined,
-                        label: strings.exportSelection,
-                        enabled: !empty && ready && !_busy,
-                        onPressed: _export,
-                      ),
-                    ),
-                    Expanded(
-                      child: _ActionButton(
-                        icon: Icons.save_outlined,
-                        label: strings.saveToGallery,
-                        enabled: !empty && ready && !_busy,
-                        onPressed: _republish,
-                      ),
-                    ),
-                    Expanded(
-                      child: _ActionButton(
-                        icon: Icons.cleaning_services_outlined,
-                        label: strings.clearOriginals,
-                        enabled: !empty && !_busy,
-                        onPressed: _clearOriginals,
-                      ),
-                    ),
-                    Expanded(
-                      child: _ActionButton(
-                        icon: Icons.delete_outline,
-                        label: strings.deleteAll,
-                        enabled: !empty && !_busy,
-                        onPressed: _deleteAll,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
       },
+    );
+  }
+}
+
+class _CompactProgress extends StatelessWidget {
+  const _CompactProgress({
+    required this.exporting,
+    required this.completed,
+    required this.total,
+  });
+
+  final bool exporting;
+  final int completed;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final label = exporting
+        ? strings.exportSelection
+        : strings.actionProgress(completed, total);
+    return Semantics(
+      label: label,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          LinearProgressIndicator(
+            minHeight: 2,
+            value: total == 0 ? null : completed / total,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -411,34 +448,31 @@ class _ActionButton extends StatelessWidget {
     required this.label,
     required this.enabled,
     required this.onPressed,
+    this.errorAction = false,
   });
 
   final IconData icon;
   final String label;
   final bool enabled;
   final VoidCallback onPressed;
+  final bool errorAction;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton.filledTonal(
-            onPressed: enabled ? onPressed : null,
-            icon: Icon(icon),
-            tooltip: label,
-            visualDensity: VisualDensity.compact,
-          ),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-        ],
-      ),
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton.filledTonal(
+      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+      onPressed: enabled ? onPressed : null,
+      icon: Icon(icon),
+      tooltip: label,
+      style: errorAction
+          ? IconButton.styleFrom(
+              foregroundColor: scheme.error,
+              backgroundColor: scheme.errorContainer,
+              disabledForegroundColor: scheme.onSurface.withValues(alpha: .38),
+              disabledBackgroundColor: scheme.onSurface.withValues(alpha: .12),
+            )
+          : null,
     );
   }
 }

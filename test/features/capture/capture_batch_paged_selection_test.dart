@@ -144,7 +144,8 @@ void main() {
 
       await tester.tap(find.byKey(const Key('select-all-captures')));
       await _pumpUi(tester);
-      expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+      expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+      expect(find.text('已选 0 张'), findsOneWidget);
       await _unmount(tester);
     },
   );
@@ -250,7 +251,8 @@ void main() {
     await _pumpUi(tester);
 
     expect(source.selectableQueries, hasLength(1));
-    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.text('已选 0 张'), findsOneWidget);
     await _unmount(tester);
   });
 
@@ -332,7 +334,8 @@ void main() {
     await _pumpUi(tester);
 
     expect(source.selectableQueries, hasLength(2));
-    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.text('已选 0 张'), findsOneWidget);
     await _unmount(tester);
   });
 
