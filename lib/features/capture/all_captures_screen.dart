@@ -43,6 +43,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   int _selectionGeneration = 0;
   bool _selectAllLoading = false;
   bool _allQuerySelected = false;
+  String? _visibleDateKey;
   final CaptureSelectionController _selectionController =
       CaptureSelectionController();
   late final Stream<List<Project>> _projectsStream;
@@ -109,6 +110,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
   void _startQuery() {
     final query = _query;
     _dateOptions = const CaptureDateOptions();
+    _visibleDateKey = null;
     unawaited(_pagerController.setQuery(query));
     unawaited(_loadDateOptions(query));
   }
@@ -324,7 +326,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                         floatingDockReservedSpace,
                       ),
                       groupKey: _captureDateKey,
-                      groupHeaderBuilder: _buildDateHeader,
+                      onVisibleGroupChanged: _onVisibleDateChanged,
                     ),
                   ),
                 ],
@@ -386,6 +388,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     AppStrings strings,
     List<Project> projects,
   ) {
+    final dateKey = _exactFilteredDateKey ?? _visibleDateKey;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
@@ -396,16 +399,48 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
             icon: const Icon(Icons.filter_list_outlined),
             label: Text(strings.filterAction),
           ),
-          if (_hasFilter) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: CaptureActiveFilterChips(
-                filter: _filter,
-                projects: projects,
-                onChanged: _onFilterChanged,
-              ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              children: [
+                if (_hasFilter)
+                  Expanded(
+                    child: CaptureActiveFilterChips(
+                      filter: _filter,
+                      projects: projects,
+                      onChanged: _onFilterChanged,
+                    ),
+                  )
+                else
+                  const Spacer(),
+                if (dateKey != null) ...[
+                  if (_hasFilter) const SizedBox(width: 8),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Semantics(
+                        label: strings.currentVisibleDate(dateKey),
+                        child: Text(
+                          dateKey,
+                          key: const Key('visible-capture-date'),
+                          maxLines: 1,
+                          overflow: TextOverflow.fade,
+                          softWrap: false,
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -438,28 +473,17 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     return '${time.year}-${two(time.month)}-${two(time.day)}';
   }
 
-  Widget _buildDateHeader(BuildContext context, String dateKey) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Semantics(
-      header: true,
-      label: dateKey,
-      child: ColoredBox(
-        color: colorScheme.surface,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              dateKey,
-              key: Key('capture-date-$dateKey'),
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+  String? get _exactFilteredDateKey {
+    final year = _filter.year;
+    final month = _filter.month;
+    final day = _filter.day;
+    if (year == null || month == null || day == null) return null;
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '$year-${two(month)}-${two(day)}';
+  }
+
+  void _onVisibleDateChanged(String? value) {
+    if (!mounted || _visibleDateKey == value) return;
+    setState(() => _visibleDateKey = value);
   }
 }

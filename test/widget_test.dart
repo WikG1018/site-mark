@@ -618,7 +618,7 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('home opens all records with filter sheet and date groups', (
+  testWidgets('home opens all records with filter sheet and visible date', (
     tester,
   ) async {
     await pumpAppWithRecords(tester);
@@ -627,7 +627,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
-    expect(find.byKey(const Key('capture-date-2026-07-16')), findsOneWidget);
+    expect(find.byKey(const Key('visible-capture-date')), findsOneWidget);
+    expect(find.text('2026-07-16'), findsOneWidget);
     expect(find.byType(CaptureRecordCard), findsWidgets);
     await disposeApp(tester);
   });

@@ -116,6 +116,7 @@ Widget _pagedHarness(
   TextScaler textScaler = TextScaler.noScaling,
   Locale locale = const Locale('zh'),
   int skeletonItemCount = 8,
+  ValueChanged<String?>? onVisibleGroupChanged,
 }) {
   return _localized(
     disableAnimations: disableAnimations,
@@ -134,25 +135,7 @@ Widget _pagedHarness(
           child: Text(summary.capture.workLocation),
         ),
         groupKey: grouped ? _dateKey : null,
-        groupHeaderBuilder: grouped
-            ? (context, key) => ColoredBox(
-                key: Key('test-date-container-$key'),
-                color: Theme.of(context).colorScheme.surface,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      key,
-                      key: Key('test-date-$key'),
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            : null,
+        onVisibleGroupChanged: onVisibleGroupChanged,
       ),
     ),
   );
@@ -655,38 +638,79 @@ void main() {
           ),
         );
       final controller = CapturePagerController(source);
+      final reported = <String?>[];
       unawaited(controller.setQuery(const CaptureListQuery()));
       addTearDown(() {
         controller.dispose();
         unawaited(source.dispose());
       });
 
-      await tester.pumpWidget(_pagedHarness(controller, source, grouped: true));
+      await tester.pumpWidget(
+        _pagedHarness(
+          controller,
+          source,
+          grouped: true,
+          onVisibleGroupChanged: reported.add,
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(source.pageQueries, hasLength(2));
-      expect(find.byKey(const Key('test-date-2026-08-04')), findsOneWidget);
-      expect(find.byKey(const Key('test-date-2026-08-03')), findsOneWidget);
+      expect(reported.last, '2026-08-04');
       expect(find.byKey(const Key('row-capture-0')), findsOneWidget);
       expect(find.byKey(const Key('row-capture-1')), findsOneWidget);
       expect(find.byKey(const Key('row-capture-2')), findsOneWidget);
       expect(find.byKey(const Key('row-capture-3')), findsOneWidget);
       expect(source.watchedIdSets.last, hasLength(4));
-      expect(
-        tester
-            .widgetList<SliverPersistentHeader>(
-              find.byType(SliverPersistentHeader),
-            )
-            .every((header) => header.pinned),
-        isTrue,
-      );
+      expect(find.byType(SliverPersistentHeader), findsNothing);
       await _unmount(tester);
     },
   );
 
+  testWidgets('grouped list reports the topmost visible date while scrolling', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 320));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final rows = [
+      for (var index = 0; index < 3; index++)
+        _summary(index, capturedAt: DateTime(2026, 8, 4, 12 - index)),
+      for (var index = 3; index < 6; index++)
+        _summary(index, capturedAt: DateTime(2026, 8, 3, 15 - index)),
+      for (var index = 6; index < 9; index++)
+        _summary(index, capturedAt: DateTime(2026, 8, 2, 18 - index)),
+    ];
+    final source = _FakeCaptureQuerySource(
+      defaultPage: _page(rows, hasMore: false),
+    );
+    final controller = CapturePagerController(source);
+    final reported = <String?>[];
+    unawaited(controller.setQuery(const CaptureListQuery()));
+    addTearDown(() {
+      controller.dispose();
+      unawaited(source.dispose());
+    });
+
+    await tester.pumpWidget(
+      _pagedHarness(
+        controller,
+        source,
+        grouped: true,
+        size: const Size(360, 320),
+        onVisibleGroupChanged: reported.add,
+      ),
+    );
+    await _pumpUntil(tester, () => reported.isNotEmpty);
+    expect(reported.last, '2026-08-04');
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -330));
+    await tester.pumpAndSettle();
+    expect(reported.last, '2026-08-03');
+  });
+
   for (final locale in const [Locale('zh'), Locale('en')]) {
     testWidgets(
-      'pinned date header fits 3x text at 360dp in ${locale.languageCode}',
+      'grouped rows have no date strip at 3x text in ${locale.languageCode}',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(360, 800));
         addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -715,33 +739,9 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final text = find.byKey(const Key('test-date-2026-08-04'));
-        final header = find.byKey(const Key('test-date-container-2026-08-04'));
         final firstRow = find.byKey(const Key('row-capture-0'));
-        final persistentHeader = tester
-            .widgetList<SliverPersistentHeader>(
-              find.byType(SliverPersistentHeader),
-            )
-            .first;
-
-        expect(persistentHeader.pinned, isTrue);
-        expect(tester.getSize(header).height, greaterThanOrEqualTo(58));
-        expect(
-          tester.getRect(header).contains(tester.getRect(text).topLeft),
-          isTrue,
-        );
-        expect(
-          tester.getRect(text).bottom,
-          lessThanOrEqualTo(tester.getRect(header).bottom),
-        );
-        expect(
-          tester.getRect(text).right,
-          lessThanOrEqualTo(tester.getRect(header).right),
-        );
-        expect(
-          tester.getRect(header).bottom,
-          lessThanOrEqualTo(tester.getRect(firstRow).top),
-        );
+        expect(find.byType(SliverPersistentHeader), findsNothing);
+        expect(firstRow, findsOneWidget);
         expect(tester.takeException(), isNull);
         await _unmount(tester);
       },

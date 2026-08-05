@@ -19,8 +19,6 @@ typedef CapturePagedItemBuilder =
     );
 
 typedef CapturePagedGroupKey = String Function(CaptureSummary summary);
-typedef CapturePagedGroupHeaderBuilder =
-    Widget Function(BuildContext context, String groupKey);
 
 /// Lazy capture list that owns scrolling, loaded-row watches, and page chrome.
 class CapturePagedList extends StatefulWidget {
@@ -37,10 +35,10 @@ class CapturePagedList extends StatefulWidget {
     this.skeletonItemCount = 8,
     this.forceInitialLoading = false,
     this.groupKey,
-    this.groupHeaderBuilder,
+    this.onVisibleGroupChanged,
   }) : assert(
-         (groupKey == null) == (groupHeaderBuilder == null),
-         'groupKey and groupHeaderBuilder must be provided together',
+         groupKey != null || onVisibleGroupChanged == null,
+         'onVisibleGroupChanged requires groupKey',
        ),
        assert(
          skeletonItemCount >= 2,
@@ -60,13 +58,15 @@ class CapturePagedList extends StatefulWidget {
 
   /// Groups adjacent rows. The source must order equal keys contiguously.
   final CapturePagedGroupKey? groupKey;
-  final CapturePagedGroupHeaderBuilder? groupHeaderBuilder;
+  final ValueChanged<String?>? onVisibleGroupChanged;
 
   @override
   State<CapturePagedList> createState() => _CapturePagedListState();
 }
 
 class _CapturePagedListState extends State<CapturePagedList> {
+  final GlobalKey _viewportKey = GlobalKey();
+  final Map<String, GlobalKey> _rowKeys = <String, GlobalKey>{};
   late final ScrollController _scrollController = ScrollController(
     keepScrollOffset: true,
   );
@@ -75,6 +75,8 @@ class _CapturePagedListState extends State<CapturePagedList> {
   CaptureListQuery? _visibleQuery;
   int _watchGeneration = 0;
   bool _loadMoreScheduled = false;
+  bool _visibleGroupReportScheduled = false;
+  String? _lastReportedGroup;
 
   @override
   void initState() {
@@ -93,10 +95,17 @@ class _CapturePagedListState extends State<CapturePagedList> {
       widget.controller.addListener(_onPagerChanged);
       _visibleQuery = widget.controller.state.query;
       _watchedIds = const [];
+      _lastReportedGroup = null;
+      _rowKeys.clear();
       _syncWatchedRows();
     } else if (oldWidget.source != widget.source) {
       _watchedIds = const [];
       _syncWatchedRows();
+    }
+    if (oldWidget.groupKey != widget.groupKey ||
+        oldWidget.onVisibleGroupChanged != widget.onVisibleGroupChanged) {
+      _lastReportedGroup = null;
+      _scheduleVisibleGroupReport();
     }
   }
 
@@ -104,6 +113,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
     final query = widget.controller.state.query;
     if (!identical(query, _visibleQuery)) {
       _visibleQuery = query;
+      _lastReportedGroup = null;
       widget.controller.setAtTop(true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _scrollController.hasClients) {
@@ -111,13 +121,71 @@ class _CapturePagedListState extends State<CapturePagedList> {
         }
       });
     }
+    final visibleIds = widget.controller.state.rows
+        .map((summary) => summary.capture.id)
+        .toSet();
+    _rowKeys.removeWhere((id, _) => !visibleIds.contains(id));
     _syncWatchedRows();
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _scheduleVisibleGroupReport();
+    }
   }
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     widget.controller.setAtTop(_scrollController.offset <= 0.5);
+    _scheduleVisibleGroupReport();
+  }
+
+  void _scheduleVisibleGroupReport() {
+    if (_visibleGroupReportScheduled ||
+        widget.groupKey == null ||
+        widget.onVisibleGroupChanged == null) {
+      return;
+    }
+    _visibleGroupReportScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _visibleGroupReportScheduled = false;
+      if (mounted) _reportVisibleGroup();
+    });
+  }
+
+  void _reportVisibleGroup() {
+    final callback = widget.onVisibleGroupChanged;
+    final groupKey = widget.groupKey;
+    if (callback == null || groupKey == null) return;
+    final rows = widget.controller.state.rows;
+    if (rows.isEmpty) {
+      _emitVisibleGroup(null);
+      return;
+    }
+    final viewport = _viewportKey.currentContext?.findRenderObject();
+    if (viewport is! RenderBox || !viewport.attached) return;
+    final viewportTop = viewport.localToGlobal(Offset.zero).dy;
+    final candidates = <({double top, CaptureSummary row})>[];
+    for (final row in rows) {
+      final renderObject = _rowKeys[row.capture.id]?.currentContext
+          ?.findRenderObject();
+      if (renderObject is! RenderBox ||
+          !renderObject.attached ||
+          !renderObject.hasSize) {
+        continue;
+      }
+      final top = renderObject.localToGlobal(Offset.zero).dy;
+      if (top + renderObject.size.height > viewportTop + .5) {
+        candidates.add((top: top, row: row));
+      }
+    }
+    if (candidates.isEmpty) return;
+    candidates.sort((a, b) => a.top.compareTo(b.top));
+    _emitVisibleGroup(groupKey(candidates.first.row));
+  }
+
+  void _emitVisibleGroup(String? value) {
+    if (_lastReportedGroup == value) return;
+    _lastReportedGroup = value;
+    widget.onVisibleGroupChanged?.call(value);
   }
 
   bool _sameIds(List<String> next) {
@@ -253,6 +321,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
         !showSkeleton && state.initialError != null && state.rows.isEmpty;
     final showContent = !showSkeleton && !showInitialError;
     final strings = AppStrings.of(context);
+    _scheduleVisibleGroupReport();
     return LayoutBuilder(
       key: widget.contentKey,
       builder: (context, constraints) => AnimatedSwitcher(
@@ -262,6 +331,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
           key: const ValueKey('capture-page-surface'),
           children: [
             CustomScrollView(
+              key: _viewportKey,
               controller: _scrollController,
               slivers: [
                 ...widget.sliversBefore,
@@ -347,8 +417,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
     CapturePagerState state,
   ) {
     final groupKey = widget.groupKey;
-    final groupHeaderBuilder = widget.groupHeaderBuilder;
-    if (groupKey == null || groupHeaderBuilder == null) {
+    if (groupKey == null) {
       return [
         SliverPadding(
           padding: widget.padding,
@@ -371,7 +440,6 @@ class _CapturePagedListState extends State<CapturePagedList> {
       }
     }
     final padding = widget.padding.resolve(Directionality.of(context));
-    final groupHeaderExtent = _groupHeaderExtent(context);
     return [
       for (var groupIndex = 0; groupIndex < groups.length; groupIndex++)
         SliverPadding(
@@ -381,52 +449,27 @@ class _CapturePagedListState extends State<CapturePagedList> {
             padding.right,
             groupIndex == groups.length - 1 ? padding.bottom : 12,
           ),
-          sliver: SliverMainAxisGroup(
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _CaptureGroupHeaderDelegate(
-                  child: groupHeaderBuilder(context, groups[groupIndex].key),
-                  extent: groupHeaderExtent,
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.only(top: 8),
-                sliver: SliverList.separated(
-                  itemCount: groups[groupIndex].length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, localIndex) => _buildRow(
-                    context,
-                    state,
-                    groups[groupIndex].startIndex + localIndex,
-                  ),
-                ),
-              ),
-            ],
+          sliver: SliverList.separated(
+            itemCount: groups[groupIndex].length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, localIndex) => _buildRow(
+              context,
+              state,
+              groups[groupIndex].startIndex + localIndex,
+            ),
           ),
         ),
     ];
   }
 
-  double _groupHeaderExtent(BuildContext context) {
-    final style =
-        (Theme.of(context).textTheme.titleSmall ??
-                DefaultTextStyle.of(context).style)
-            .copyWith(fontWeight: FontWeight.w600);
-    final painter = TextPainter(
-      text: TextSpan(text: '0000-00-00', style: style),
-      maxLines: 1,
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-    )..layout();
-    final extent = painter.height + 16;
-    painter.dispose();
-    return extent;
-  }
-
   Widget _buildRow(BuildContext context, CapturePagerState state, int index) {
     _scheduleLoadMore(index, state);
-    return widget.itemBuilder(context, state.rows[index], state.rows);
+    final summary = state.rows[index];
+    final rowKey = _rowKeys.putIfAbsent(summary.capture.id, GlobalKey.new);
+    return KeyedSubtree(
+      key: rowKey,
+      child: widget.itemBuilder(context, summary, state.rows),
+    );
   }
 
   Widget _buildSkeletonStatus(double viewportHeight) {
@@ -489,33 +532,6 @@ final class _CaptureRowGroup {
   final String key;
   final int startIndex;
   int length;
-}
-
-class _CaptureGroupHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _CaptureGroupHeaderDelegate({
-    required this.child,
-    required this.extent,
-  });
-
-  final Widget child;
-  final double extent;
-
-  @override
-  double get minExtent => extent;
-
-  @override
-  double get maxExtent => extent;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) => child;
-
-  @override
-  bool shouldRebuild(covariant _CaptureGroupHeaderDelegate oldDelegate) =>
-      oldDelegate.child != child || oldDelegate.extent != extent;
 }
 
 class _CaptureCardSkeleton extends StatelessWidget {

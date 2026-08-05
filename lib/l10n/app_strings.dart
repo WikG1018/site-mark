@@ -544,6 +544,8 @@ class AppStrings {
   String get saveToGallery => _english ? 'Save to gallery' : '保存到相册';
   String get clearOriginals => _english ? 'Clear originals' : '清理原图';
   String get deleteAll => _english ? 'Delete all' : '全部删除';
+  String currentVisibleDate(String date) =>
+      _english ? 'Current visible date: $date' : '当前可见日期：$date';
   String selectedCount(int n) => _english ? '$n selected' : '已选 $n 张';
   String actionProgress(int completed, int total) =>
       _english ? 'Processing $completed/$total' : '正在处理 $completed/$total';

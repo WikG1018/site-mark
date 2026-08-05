@@ -1240,7 +1240,7 @@ void main() {
     await unmountTree(tester);
   });
 
-  testWidgets('all records uses one filter trigger and date group headers', (
+  testWidgets('all records shows current date beside the filter trigger', (
     tester,
   ) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -1271,8 +1271,32 @@ void main() {
     expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
     expect(find.byKey(const Key('project-filter')), findsNothing);
     expect(find.byKey(const Key('filter-year')), findsNothing);
-    expect(find.byKey(const Key('capture-date-2026-08-04')), findsOneWidget);
-    expect(find.byKey(const Key('capture-date-2026-08-03')), findsOneWidget);
+    expect(find.byKey(const Key('visible-capture-date')), findsOneWidget);
+    expect(find.text('2026-08-04'), findsOneWidget);
+    expect(find.byType(SliverPersistentHeader), findsNothing);
+    final filterRect = tester.getRect(
+      find.byKey(const Key('filter-sheet-trigger')),
+    );
+    final dateRect = tester.getRect(
+      find.byKey(const Key('visible-capture-date')),
+    );
+    expect(dateRect.left, greaterThan(filterRect.right));
+    expect((dateRect.center.dy - filterRect.center.dy).abs(), lessThan(2));
+    await unmountTree(tester);
+  });
+
+  testWidgets('all records hides the visible date when there are no rows', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '空项目');
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('visible-capture-date')), findsNothing);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
     await unmountTree(tester);
   });
 
@@ -1334,6 +1358,8 @@ void main() {
     expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
     expect(find.byKey(const Key('active-filter-month')), findsOneWidget);
     expect(find.byKey(const Key('active-filter-day')), findsOneWidget);
+    expect(find.byKey(const Key('visible-capture-date')), findsOneWidget);
+    expect(find.text('2026-08-04'), findsOneWidget);
     expect(find.byKey(const Key('capture-a')), findsOneWidget);
     expect(find.byKey(const Key('capture-b')), findsNothing);
 
