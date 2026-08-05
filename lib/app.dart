@@ -477,7 +477,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                         _sharedAxisPage(state, const ProjectFormScreen()),
                   ),
                   GoRoute(
-                    parentNavigatorKey: rootNavigatorKey,
                     path: 'projects/:projectId',
                     pageBuilder: (context, state) => _projectDetailPage(
                       state,

@@ -137,6 +137,25 @@ void main() {
     });
   });
 
+  testWidgets('project detail stays inside the projects branch navigator', (
+    tester,
+  ) async {
+    await runWithRouter(tester, (_) async {
+      await tester.tap(find.byKey(const Key('root-destination-records')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('root-destination-projects')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-card-project-1')));
+      await tester.pumpAndSettle();
+
+      final detailContext = tester.element(find.byType(ProjectDetailScreen));
+      expect(
+        Navigator.of(detailContext),
+        isNot(same(rootNavigatorKey.currentState)),
+      );
+    });
+  });
+
   testWidgets('visited records branch stays hidden after project detail pop', (
     tester,
   ) async {
