@@ -20,13 +20,14 @@ import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_search_field.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
+import 'package:sitemark/features/projects/project_action_sheet.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
+import 'package:sitemark/shared/ui/glass_surface.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 import 'package:sitemark/workflow/project_lifecycle_service.dart';
-
-enum _ProjectAction { rename, delete, pin, unpin, complete, archive, reopen }
 
 class ProjectDetailScreen extends ConsumerStatefulWidget {
   const ProjectDetailScreen({
@@ -149,6 +150,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     _startQuery();
   }
 
+  bool get _hasAppliedDateFilter =>
+      _filter?.year != null || _filter?.month != null || _filter?.day != null;
+
+  void _clearAppliedDateFilter() {
+    _onFilterChanged(CaptureFilter(projectId: widget.projectId));
+  }
+
   void _onSearchChanged(String value) {
     _invalidateSelectionRequests();
     _searchText = value;
@@ -243,7 +251,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     final allEligibleSelected =
         _allQuerySelected && _selectionController.selectedIds.isNotEmpty;
     return PopScope(
-      canPop: !editing && !_searching,
+      canPop: !editing && !_searching && !_hasAppliedDateFilter,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_selectionController.editing) {
@@ -251,6 +259,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           _selectionController.exit();
         } else if (_searching) {
           _exitSearch();
+        } else if (_hasAppliedDateFilter) {
+          _clearAppliedDateFilter();
         }
       },
       child: StreamBuilder<Project?>(
@@ -300,158 +310,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     tooltip: strings.searchCaptures,
                     icon: const Icon(Icons.search),
                   ),
-                if (project != null && !editing && !_searching) ...[
+                if (project != null && !editing && !_searching)
                   IconButton(
-                    onPressed: () =>
-                        context.push('/projects/${project.id}/settings'),
-                    tooltip: strings.projectWatermarkSettings,
-                    icon: const Icon(Icons.tune_outlined),
-                  ),
-                  IconButton(
-                    onPressed: () => context.push(
-                      '/settings/backup-restore/backup',
-                      extra: ProjectBackupSelectionArguments(
-                        initialProjectIds: {project.id},
-                      ),
-                    ),
-                    tooltip: strings.backupProjects,
-                    icon: const Icon(Icons.archive_outlined),
-                  ),
-                  PopupMenuButton<_ProjectAction>(
                     key: const Key('project-actions'),
                     tooltip: strings.projectActions,
                     icon: const Icon(Icons.more_vert),
-                    onSelected: (action) async {
-                      switch (action) {
-                        case _ProjectAction.rename:
-                          await _renameProject(project);
-                        case _ProjectAction.delete:
-                          await _deleteProject(project);
-                        case _ProjectAction.pin:
-                          await ref
-                              .read(databaseProvider)
-                              .setProjectPinned(project.id, true);
-                        case _ProjectAction.unpin:
-                          await ref
-                              .read(databaseProvider)
-                              .setProjectPinned(project.id, false);
-                        case _ProjectAction.complete:
-                          await _transitionLifecycle(
-                            project.id,
-                            ProjectLifecycleStatus.completed,
-                          );
-                        case _ProjectAction.archive:
-                          await _transitionLifecycle(
-                            project.id,
-                            ProjectLifecycleStatus.archived,
-                          );
-                        case _ProjectAction.reopen:
-                          await _transitionLifecycle(
-                            project.id,
-                            ProjectLifecycleStatus.active,
-                          );
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        key: Key('project-pin-${project.id}'),
-                        value: project.isPinned
-                            ? _ProjectAction.unpin
-                            : _ProjectAction.pin,
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            project.isPinned
-                                ? Icons.push_pin
-                                : Icons.push_pin_outlined,
-                          ),
-                          title: Text(
-                            project.isPinned
-                                ? strings.unpinProject
-                                : strings.pinProject,
-                          ),
-                        ),
-                      ),
-                      ...switch (project.lifecycleStatus) {
-                        ProjectLifecycleStatus.active => [
-                          PopupMenuItem(
-                            key: Key('project-lifecycle-${project.id}'),
-                            value: _ProjectAction.complete,
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.check_circle_outline),
-                              title: Text(strings.markProjectCompleted),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: _ProjectAction.archive,
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.archive_outlined),
-                              title: Text(strings.archiveProject),
-                            ),
-                          ),
-                        ],
-                        ProjectLifecycleStatus.completed => [
-                          PopupMenuItem(
-                            key: Key('project-lifecycle-${project.id}'),
-                            value: _ProjectAction.reopen,
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.replay_outlined),
-                              title: Text(strings.reopenProject),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: _ProjectAction.archive,
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.archive_outlined),
-                              title: Text(strings.archiveProject),
-                            ),
-                          ),
-                        ],
-                        ProjectLifecycleStatus.archived => [
-                          PopupMenuItem(
-                            key: Key('project-lifecycle-${project.id}'),
-                            value: _ProjectAction.reopen,
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(Icons.unarchive_outlined),
-                              title: Text(strings.restoreProjectToActive),
-                            ),
-                          ),
-                        ],
-                      },
-                      PopupMenuItem(
-                        key: const Key('rename-project'),
-                        value: _ProjectAction.rename,
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.drive_file_rename_outline),
-                          title: Text(strings.renameProject),
-                        ),
-                      ),
-                      PopupMenuItem(
-                        key: const Key('delete-project'),
-                        value: _ProjectAction.delete,
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            Icons.delete_outline,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                          title: Text(
-                            strings.deleteProject,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    onPressed: () => _showProjectActions(project),
                   ),
-                ],
                 if (project != null && editing)
                   IconButton(
                     key: const Key('select-all-captures'),
@@ -471,61 +336,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                                 : Icons.select_all_outlined,
                           ),
                   ),
-                if (project != null)
-                  IconButton(
-                    key: const Key('edit-captures'),
-                    onPressed: () {
-                      if (_selectionController.editing) {
-                        _invalidateSelectionRequests();
-                        _selectionController.exit();
-                      } else {
-                        _selectionController.enter();
-                      }
-                    },
-                    tooltip: editing ? strings.done : strings.editRecords,
-                    icon: AnimatedSwitcher(
-                      duration: AppMotion.durationOf(context, AppMotion.short4),
-                      child: Icon(
-                        editing ? Icons.done : Icons.edit_outlined,
-                        key: ValueKey(editing),
-                      ),
-                    ),
-                  ),
               ],
             ),
-            body: waitingForProject
-                ? _projectLoadingList(strings)
-                : projectLoadFailed
-                ? _ProjectUnavailableState(
-                    key: const Key('project-load-error'),
-                    icon: Icons.cloud_off_outlined,
-                    message: strings.projectLoadFailed,
-                  )
-                : projectMissing
-                ? _ProjectUnavailableState(
-                    key: const Key('project-not-found'),
-                    icon: Icons.folder_off_outlined,
-                    message: strings.projectNotFound,
-                  )
-                : _projectCaptureList(context, strings, project!, filter),
-            bottomNavigationBar: AnimatedSwitcher(
-              duration: AppMotion.durationOf(context, AppMotion.medium4),
-              transitionBuilder: (child, animation) {
-                final curved = animation.drive(
-                  CurveTween(curve: AppMotion.emphasizedDecelerate),
-                );
-                return SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0, 1),
-                    end: Offset.zero,
-                  ).animate(curved),
-                  child: FadeTransition(opacity: curved, child: child),
-                );
-              },
-              child:
-                  project != null &&
-                      editing &&
-                      _selectionController.selectedIds.isNotEmpty
+            body: FloatingDockLayout(
+              dock: project != null && editing
                   ? CaptureBatchActionBar(
                       key: const Key('batch-bar'),
                       controller: _selectionController,
@@ -533,7 +347,22 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       exportService: ref.watch(projectExportServiceProvider),
                       shareService: ref.watch(shareFileServiceProvider),
                     )
-                  : const SizedBox.shrink(key: Key('batch-bar-empty')),
+                  : null,
+              child: waitingForProject
+                  ? _projectLoadingList(strings)
+                  : projectLoadFailed
+                  ? _ProjectUnavailableState(
+                      key: const Key('project-load-error'),
+                      icon: Icons.cloud_off_outlined,
+                      message: strings.projectLoadFailed,
+                    )
+                  : projectMissing
+                  ? _ProjectUnavailableState(
+                      key: const Key('project-not-found'),
+                      icon: Icons.folder_off_outlined,
+                      message: strings.projectNotFound,
+                    )
+                  : _projectCaptureList(context, strings, project!, filter),
             ),
             floatingActionButton: AnimatedSwitcher(
               duration: AppMotion.durationOf(context, AppMotion.medium2),
@@ -588,26 +417,38 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       skeletonKey: const Key('project-capture-list-skeleton'),
       contentKey: const Key('project-capture-list-content'),
       skeletonItemCount: 4,
+      padding: EdgeInsets.fromLTRB(
+        16,
+        4,
+        16,
+        floatingDockReservedSpaceOf(context),
+      ),
       sliversBefore: [
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-            child: _ProjectHeader(project: project),
+            child: _ProjectHeader(
+              project: project,
+              captureCount:
+                  _pagerController.state.totalCount ??
+                  _pagerController.state.rows.length,
+              editing: _selectionController.editing,
+              onToggleSelection: () {
+                if (_selectionController.editing) {
+                  _invalidateSelectionRequests();
+                  _selectionController.exit();
+                } else {
+                  _selectionController.enter();
+                }
+              },
+            ),
           ),
         ),
         if (project.lifecycleStatus != ProjectLifecycleStatus.active)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: _ProjectStatusBanner(
-                project: project,
-                onReopen: () => unawaited(
-                  _transitionLifecycle(
-                    project.id,
-                    ProjectLifecycleStatus.active,
-                  ),
-                ),
-              ),
+              child: _ProjectStatusBanner(project: project),
             ),
           ),
         SliverToBoxAdapter(
@@ -660,6 +501,60 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         );
       },
     );
+  }
+
+  Future<void> _showProjectActions(Project project) async {
+    final openedProjectId = widget.projectId;
+    final action = await showProjectActionSheet(context, project);
+    if (!mounted || action == null || widget.projectId != openedProjectId) {
+      return;
+    }
+    final database = ref.read(databaseProvider);
+    final latestProject = await database.projectById(openedProjectId);
+    if (!mounted ||
+        widget.projectId != openedProjectId ||
+        latestProject == null) {
+      return;
+    }
+    final actionIsStillAllowed = projectActionsFor(
+      latestProject,
+      AppStrings.of(context),
+    ).any((item) => item.action == action);
+    if (!actionIsStillAllowed) return;
+    switch (action) {
+      case ProjectAction.watermark:
+        await context.push('/projects/${latestProject.id}/settings');
+      case ProjectAction.backup:
+        await context.push(
+          '/settings/backup-restore/backup',
+          extra: ProjectBackupSelectionArguments(
+            initialProjectIds: {latestProject.id},
+          ),
+        );
+      case ProjectAction.rename:
+        await _renameProject(latestProject);
+      case ProjectAction.pin:
+        await database.setProjectPinned(latestProject.id, true);
+      case ProjectAction.unpin:
+        await database.setProjectPinned(latestProject.id, false);
+      case ProjectAction.complete:
+        await _transitionLifecycle(
+          latestProject.id,
+          ProjectLifecycleStatus.completed,
+        );
+      case ProjectAction.archive:
+        await _transitionLifecycle(
+          latestProject.id,
+          ProjectLifecycleStatus.archived,
+        );
+      case ProjectAction.reopen:
+        await _transitionLifecycle(
+          latestProject.id,
+          ProjectLifecycleStatus.active,
+        );
+      case ProjectAction.delete:
+        await _deleteProject(latestProject);
+    }
   }
 
   Future<void> _renameProject(Project project) async {
@@ -1035,51 +930,88 @@ class _ProjectUnavailableState extends StatelessWidget {
 }
 
 class _ProjectHeader extends StatelessWidget {
-  const _ProjectHeader({required this.project});
+  const _ProjectHeader({
+    required this.project,
+    required this.captureCount,
+    required this.editing,
+    required this.onToggleSelection,
+  });
 
   final Project project;
+  final int captureCount;
+  final bool editing;
+  final VoidCallback onToggleSelection;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Theme.of(context).colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Icon(
-              Icons.apartment_outlined,
-              size: 42,
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    project.name,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  if (project.description != null) ...[
-                    const SizedBox(height: 4),
-                    Text(project.description!),
+    final strings = AppStrings.of(context);
+    final status = switch (project.lifecycleStatus) {
+      ProjectLifecycleStatus.active => strings.projectStatusActive,
+      ProjectLifecycleStatus.completed => strings.projectStatusCompleted,
+      ProjectLifecycleStatus.archived => strings.projectStatusArchived,
+    };
+    return GlassSurface(
+      key: const Key('project-summary'),
+      borderRadius: BorderRadius.circular(18),
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      child: Row(
+        children: [
+          Icon(
+            Icons.apartment_outlined,
+            size: 32,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  project.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    Text(status, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      strings.projectPhotoCount(captureCount),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
+                ),
+                if (project.description case final description?) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    description,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            key: const Key('edit-captures'),
+            onPressed: onToggleSelection,
+            child: Text(editing ? strings.done : strings.selectRecords),
+          ),
+        ],
       ),
     );
   }
 }
 
 class _ProjectStatusBanner extends StatelessWidget {
-  const _ProjectStatusBanner({required this.project, required this.onReopen});
+  const _ProjectStatusBanner({required this.project});
 
   final Project project;
-  final VoidCallback onReopen;
 
   @override
   Widget build(BuildContext context) {
@@ -1102,27 +1034,11 @@ class _ProjectStatusBanner extends StatelessWidget {
             Icon(Icons.info_outline, color: colors.onSecondaryContainer),
             const SizedBox(width: 12),
             Expanded(
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Text(
-                    message,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colors.onSecondaryContainer,
-                    ),
-                  ),
-                  TextButton(
-                    key: const Key('reopen-project'),
-                    onPressed: onReopen,
-                    child: Text(
-                      project.lifecycleStatus == ProjectLifecycleStatus.archived
-                          ? strings.restoreProjectToActive
-                          : strings.reopenProject,
-                    ),
-                  ),
-                ],
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.onSecondaryContainer,
+                ),
               ),
             ),
           ],

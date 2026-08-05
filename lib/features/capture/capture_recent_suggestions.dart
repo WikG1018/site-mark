@@ -204,7 +204,7 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
     final child = !visible
         ? const SizedBox.shrink()
         : Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: 4),
             child: _loading
                 ? const SizedBox(
                     height: 24,
@@ -250,6 +250,7 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
                                 'recent-suggestion-${widget.field.name}-${entry.$1}',
                               ),
                               label: Text(entry.$2),
+                              visualDensity: VisualDensity.compact,
                               onPressed: () => _select(entry.$2),
                             ),
                           ),
@@ -257,6 +258,7 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
                         ActionChip(
                           key: const Key('recent-suggestions-more'),
                           label: Text(strings.more),
+                          visualDensity: VisualDensity.compact,
                           onPressed: _showMore,
                         ),
                     ],

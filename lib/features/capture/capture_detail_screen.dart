@@ -6,9 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_display_name.dart';
+import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_failure_guidance.dart';
 import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
+import 'package:sitemark/features/capture/capture_detail_action_sheet.dart';
+import 'package:sitemark/features/capture/capture_detail_tabs.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -70,9 +76,20 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
   static const Duration _clearOriginalsWindow = Duration(seconds: 5);
 
   CapturePreviewSource _previewSource = CapturePreviewSource.bestAvailable;
+  CaptureDetailSection _section = CaptureDetailSection.fieldRecord;
   Future<CaptureFileInfo>? _fileInfoFuture;
   String? _fileInfoKey;
+  CaptureMediaService? _fileInfoMediaService;
   Timer? _clearOriginalsTimer;
+
+  @override
+  void didUpdateWidget(covariant CaptureDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId ||
+        oldWidget.captureId != widget.captureId) {
+      _invalidateFileInfo();
+    }
+  }
 
   @override
   void dispose() {
@@ -91,11 +108,25 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
         '${capture.id}:${capture.status.name}:'
         '${capture.originalDeletedAt?.microsecondsSinceEpoch}:'
         '${capture.publishedUri}';
-    if (_fileInfoFuture == null || _fileInfoKey != key) {
+    if (_fileInfoFuture == null ||
+        _fileInfoKey != key ||
+        !identical(_fileInfoMediaService, mediaService)) {
       _fileInfoKey = key;
+      _fileInfoMediaService = mediaService;
       _fileInfoFuture = mediaService.inspect(capture);
     }
     return _fileInfoFuture!;
+  }
+
+  void _invalidateFileInfo() {
+    _fileInfoKey = null;
+    _fileInfoMediaService = null;
+    _fileInfoFuture = null;
+  }
+
+  void _retryFileInfo() {
+    if (!mounted) return;
+    setState(_invalidateFileInfo);
   }
 
   @override
@@ -105,188 +136,265 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     final mediaService = ref.watch(captureMediaServiceProvider);
     final outputPaths = ref.watch(captureOutputPathsProvider);
     final querySource = ref.watch(captureQueryRepositoryProvider);
-    return StreamBuilder<CaptureRecord?>(
-      stream: database.watchCaptureById(_captureId),
-      initialData: widget.initialCapture,
-      builder: (context, snapshot) {
-        final capture = snapshot.data;
-        if (capture == null) {
-          return Scaffold(
-            appBar: AppBar(title: Text(strings.captureDetail)),
-            body: const Center(child: CircularProgressIndicator()),
-          );
-        }
-        return FutureBuilder<CaptureFileInfo>(
-          future: _fileInfoFor(capture, mediaService),
-          builder: (context, infoSnapshot) {
-            final info = infoSnapshot.data;
-            final originalRetained =
-                info?.originalState == OriginalPhotoState.retained;
-            final effectiveSource = info == null
-                ? capture.originalDeletedAt != null
-                      ? CapturePreviewSource.watermarked
-                      : CapturePreviewSource.bestAvailable
-                : originalRetained
-                ? _previewSource
-                : CapturePreviewSource.watermarked;
-            final canRetry =
-                capture.status == CaptureStatus.failed && originalRetained;
-            final isBusy =
-                capture.status == CaptureStatus.captured ||
-                capture.status == CaptureStatus.rendering;
-            final heroTag = capture.status == CaptureStatus.ready
-                ? 'capture-photo-${capture.id}'
-                : null;
-            Widget preview = AspectRatio(
-              aspectRatio: 4 / 3,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AnimatedSwitcher(
-                  duration: AppMotion.medium2,
-                  child: CaptureImagePreview(
-                    // Keep the destination element alive if an unexpected
-                    // missing original makes bestAvailable resolve to the
-                    // same rendered file as the explicit watermarked source.
-                    key: ValueKey('capture-preview-${capture.id}'),
-                    capture: capture,
-                    outputPaths: outputPaths,
-                    source: effectiveSource,
-                    heroDestination: heroTag != null,
-                    initialImagePath: widget.initialImagePath,
-                    navigationContext: widget.navigationContext,
-                    querySource: querySource,
-                  ),
-                ),
-              ),
-            );
-            if (heroTag != null) {
-              // Keep one HeroState alive while file metadata and preview
-              // resolution arrive. Replacing the Hero during a forward flight
-              // makes Flutter abandon the destination and fade the shuttle.
-              preview = Hero(
-                key: ValueKey('capture-photo-slot-${capture.id}'),
-                tag: heroTag,
-                child: preview,
+    return StreamBuilder<Project?>(
+      stream: database.watchProjectById(_projectId),
+      builder: (context, projectSnapshot) {
+        final projectActive =
+            projectSnapshot.data?.lifecycleStatus ==
+            ProjectLifecycleStatus.active;
+        return StreamBuilder<CaptureRecord?>(
+          stream: database.watchCaptureById(_captureId),
+          initialData: widget.initialCapture,
+          builder: (context, snapshot) {
+            final capture = snapshot.data;
+            if (capture == null) {
+              return Scaffold(
+                appBar: AppBar(title: Text(strings.captureDetail)),
+                body: const Center(child: CircularProgressIndicator()),
               );
             }
-            return Scaffold(
-              appBar: AppBar(
-                title: Text(capture.photoNumber ?? strings.captureDetail),
-                actions: [
-                  if (!isBusy && originalRetained)
-                    IconButton(
-                      onPressed: () => context.push(
-                        '/projects/$_projectId/captures/$_captureId/edit',
+            return FutureBuilder<CaptureFileInfo>(
+              future: _fileInfoFor(capture, mediaService),
+              builder: (context, infoSnapshot) {
+                final info = infoSnapshot.data;
+                final originalRetained =
+                    info?.originalState == OriginalPhotoState.retained;
+                final effectiveSource = info == null
+                    ? capture.originalDeletedAt != null
+                          ? CapturePreviewSource.watermarked
+                          : CapturePreviewSource.bestAvailable
+                    : originalRetained
+                    ? _previewSource
+                    : CapturePreviewSource.watermarked;
+                final failureCode = capture.status == CaptureStatus.failed
+                    ? CaptureFailureCode.fromStorage(capture.failureReason)
+                    : null;
+                final failureGuidance =
+                    failureCode != null &&
+                        projectSnapshot.hasData &&
+                        (info != null || infoSnapshot.hasError)
+                    ? captureFailureGuidanceForDetail(
+                        code: failureCode,
+                        originalState: info?.originalState,
+                        projectActive: projectActive,
+                      )
+                    : null;
+                final canRetry = failureGuidance?.canRetry == true;
+                final settled =
+                    capture.status == CaptureStatus.ready ||
+                    capture.status == CaptureStatus.failed;
+                final canDeleteRecord = projectActive && settled;
+                final canEdit =
+                    projectActive &&
+                    capture.status == CaptureStatus.ready &&
+                    originalRetained;
+                final canDeleteOriginal =
+                    projectActive && settled && originalRetained;
+                final heroTag = capture.status == CaptureStatus.ready
+                    ? 'capture-photo-${capture.id}'
+                    : null;
+                Widget preview = AspectRatio(
+                  aspectRatio: 4 / 3,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AnimatedSwitcher(
+                      duration: AppMotion.medium2,
+                      child: CaptureImagePreview(
+                        // Keep the destination element alive if an unexpected
+                        // missing original makes bestAvailable resolve to the
+                        // same rendered file as the explicit watermarked source.
+                        key: ValueKey('capture-preview-${capture.id}'),
+                        capture: capture,
+                        outputPaths: outputPaths,
+                        source: effectiveSource,
+                        heroDestination: heroTag != null,
+                        initialImagePath: widget.initialImagePath,
+                        navigationContext: widget.navigationContext,
+                        querySource: querySource,
                       ),
-                      tooltip: strings.editRecord,
-                      icon: const Icon(Icons.edit_outlined),
                     ),
-                  if (!isBusy && originalRetained)
-                    IconButton(
-                      key: const Key('delete-original'),
-                      onPressed: () => _deleteOriginal(capture),
-                      tooltip: strings.deleteOriginal,
-                      icon: const Icon(Icons.cleaning_services_outlined),
-                    ),
-                  if (!isBusy)
-                    IconButton(
-                      key: const Key('delete-all'),
-                      onPressed: () => _deleteAll(capture),
-                      tooltip: strings.deleteAll,
-                      icon: const Icon(Icons.delete_sweep_outlined),
-                    ),
-                ],
-              ),
-              body: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (canRetry)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: FilledButton.icon(
-                            onPressed: _retry,
-                            icon: const Icon(Icons.refresh),
-                            label: Text(strings.retryProcessing),
+                  ),
+                );
+                if (heroTag != null) {
+                  // Keep one HeroState alive while file metadata and preview
+                  // resolution arrive. Replacing the Hero during a forward
+                  // flight makes Flutter abandon the destination shuttle.
+                  preview = Hero(
+                    key: ValueKey('capture-photo-slot-${capture.id}'),
+                    tag: heroTag,
+                    child: preview,
+                  );
+                }
+                final title = captureListDisplayName(
+                  capturedAt: capture.capturedAt,
+                  photoNumber: capture.photoNumber,
+                  fallback: strings.captureDetail,
+                );
+                return Scaffold(
+                  appBar: AppBar(
+                    title: Text(title),
+                    actions: [
+                      if (canDeleteRecord)
+                        Semantics(
+                          key: const Key('capture-detail-actions'),
+                          label: MaterialLocalizations.of(
+                            context,
+                          ).moreButtonTooltip,
+                          button: true,
+                          onTap: () => _openActions(
+                            capture,
+                            canEdit: canEdit,
+                            canDeleteOriginal: canDeleteOriginal,
+                          ),
+                          child: ExcludeSemantics(
+                            child: IconButton(
+                              onPressed: () => _openActions(
+                                capture,
+                                canEdit: canEdit,
+                                canDeleteOriginal: canDeleteOriginal,
+                              ),
+                              tooltip: MaterialLocalizations.of(
+                                context,
+                              ).moreButtonTooltip,
+                              icon: const Icon(Icons.more_vert),
+                            ),
                           ),
                         ),
-                      if (originalRetained)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _PreviewSourceToggle(
-                            source: _previewSource,
-                            onChanged: (source) => setState(() {
-                              _previewSource = source;
+                    ],
+                  ),
+                  body: ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (failureGuidance != null)
+                            Container(
+                              key: const Key('capture-failure-guidance'),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.errorContainer,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    Icons.error_outline,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onErrorContainer,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      strings.captureFailureGuidanceMessage(
+                                        failureGuidance,
+                                      ),
+                                      style: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onErrorContainer,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (canRetry)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: FilledButton.icon(
+                                key: const Key('capture-retry-processing'),
+                                onPressed: _retry,
+                                icon: const Icon(Icons.refresh),
+                                label: Text(strings.retryProcessing),
+                              ),
+                            ),
+                          if (originalRetained)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _PreviewSourceToggle(
+                                source: _previewSource,
+                                onChanged: (source) => setState(() {
+                                  _previewSource = source;
+                                }),
+                              ),
+                            ),
+                          preview,
+                          const SizedBox(height: 14),
+                          CaptureDetailTabs(
+                            value: _section,
+                            onChanged: (section) => setState(() {
+                              _section = section;
                             }),
                           ),
-                        ),
-                      preview,
-                      const SizedBox(height: 14),
-                      if (info != null)
-                        _DetailCard(
-                          children: _fileInfoRows(strings, capture, info),
-                        ),
-                      const SizedBox(height: 14),
-                      _DetailCard(
-                        children: [
-                          _DetailRow(
-                            icon: Icons.place_outlined,
-                            label: strings.workLocation,
-                            value: capture.workLocation,
-                          ),
-                          _DetailRow(
-                            icon: Icons.construction_outlined,
-                            label: strings.workContent,
-                            value: capture.workContent,
-                          ),
-                          _DetailRow(
-                            icon: Icons.person_outline,
-                            label: strings.photographer,
-                            value: capture.photographer,
-                          ),
-                          if (capture.notes != null)
-                            _DetailRow(
-                              icon: Icons.notes_outlined,
-                              label: strings.notesOptional,
-                              value: capture.notes!,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      _DetailCard(
-                        children: [
-                          _DetailRow(
-                            icon: Icons.schedule_outlined,
-                            label: strings.capturedAt,
-                            value: capture.capturedAt?.toIso8601String() ?? '-',
-                          ),
-                          if (capture.latitude != null)
-                            _DetailRow(
-                              icon: Icons.my_location_outlined,
-                              label: strings.coordinates,
-                              value:
-                                  '${capture.latitude!.toStringAsFixed(6)}, '
-                                  '${capture.longitude!.toStringAsFixed(6)}',
-                            ),
-                          _DetailRow(
-                            icon: Icons.fingerprint,
-                            label: strings.originalSha256,
-                            value: capture.originalSha256 ?? '-',
-                            selectable: true,
-                          ),
+                          const SizedBox(height: 14),
+                          if (_section == CaptureDetailSection.fieldRecord)
+                            _DetailCard(
+                              children: _fieldRecordRows(strings, capture),
+                            )
+                          else if (info != null)
+                            _DetailCard(
+                              children: _fileInfoRows(strings, capture, info),
+                            )
+                          else if (infoSnapshot.hasError)
+                            _FileInfoInspectionError(onRetry: _retryFileInfo)
+                          else
+                            const Center(child: CircularProgressIndicator()),
                         ],
                       ),
                     ],
                   ),
-                ],
-              ),
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  List<Widget> _fieldRecordRows(AppStrings strings, CaptureRecord capture) {
+    return [
+      _DetailRow(
+        icon: Icons.place_outlined,
+        label: strings.workLocation,
+        value: capture.workLocation,
+      ),
+      _DetailRow(
+        icon: Icons.construction_outlined,
+        label: strings.workContent,
+        value: capture.workContent,
+      ),
+      _DetailRow(
+        icon: Icons.person_outline,
+        label: strings.photographer,
+        value: capture.photographer,
+      ),
+      if (capture.notes != null)
+        _DetailRow(
+          icon: Icons.notes_outlined,
+          label: strings.notesOptional,
+          value: capture.notes!,
+        ),
+      _DetailRow(
+        icon: Icons.schedule_outlined,
+        label: strings.capturedAt,
+        value: capture.capturedAt?.toIso8601String() ?? '-',
+      ),
+      if (capture.latitude != null && capture.longitude != null)
+        _DetailRow(
+          icon: Icons.my_location_outlined,
+          label: strings.coordinates,
+          value:
+              '${capture.latitude!.toStringAsFixed(6)}, '
+              '${capture.longitude!.toStringAsFixed(6)}',
+        ),
+    ];
   }
 
   List<Widget> _fileInfoRows(
@@ -295,6 +403,16 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     CaptureFileInfo info,
   ) {
     final rows = <Widget>[
+      _DetailRow(
+        icon: Icons.badge_outlined,
+        label: strings.fullFileName,
+        value: capture.photoNumber == null
+            ? '-'
+            : capture.photoNumber!.toLowerCase().endsWith('.jpg')
+            ? capture.photoNumber!
+            : '${capture.photoNumber}.jpg',
+        selectable: true,
+      ),
       _DetailRow(
         icon: Icons.photo_library_outlined,
         label: strings.originalPhoto,
@@ -360,8 +478,136 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
             : strings.publishedNo,
       ),
     );
+    rows.add(
+      _DetailRow(
+        icon: Icons.fingerprint,
+        label: strings.originalSha256,
+        value: capture.originalSha256 ?? '-',
+        selectable: true,
+      ),
+    );
     return rows;
   }
+
+  Future<void> _openActions(
+    CaptureRecord capture, {
+    required bool canEdit,
+    required bool canDeleteOriginal,
+  }) async {
+    final projectId = _projectId;
+    final captureId = capture.id;
+    final action = await showCaptureDetailActionSheet(
+      context,
+      canEdit: canEdit,
+      canDeleteOriginal: canDeleteOriginal,
+    );
+    if (!mounted || action == null) return;
+    if (_projectId != projectId || _captureId != captureId) return;
+
+    final current = await _currentCaptureForAction(
+      action,
+      projectId: projectId,
+      captureId: captureId,
+    );
+    if (!mounted || current == null) return;
+    switch (action) {
+      case CaptureDetailAction.edit:
+        unawaited(
+          context.push('/projects/$projectId/captures/$captureId/edit'),
+        );
+        return;
+      case CaptureDetailAction.deleteOriginal:
+        _deleteOriginal(current);
+        return;
+      case CaptureDetailAction.deleteRecord:
+        await _deleteAll(current);
+        return;
+    }
+  }
+
+  Future<CaptureRecord?> _currentCaptureForAction(
+    CaptureDetailAction action, {
+    required String projectId,
+    required String captureId,
+  }) async {
+    final database = ref.read(databaseProvider);
+    final mediaService = ref.read(captureMediaServiceProvider);
+    final project = await database.projectById(projectId);
+    if (!_matchesActionScope(projectId, captureId)) return null;
+    final capture = await database.captureById(captureId);
+    if (!_matchesActionScope(projectId, captureId)) return null;
+    if (!_baseActionAllowed(action, project, capture)) return null;
+
+    OriginalPhotoState? inspectedOriginalState;
+    if (_requiresRetainedOriginal(action)) {
+      final info = await mediaService.inspect(capture!);
+      if (!_matchesActionScope(projectId, captureId)) return null;
+      inspectedOriginalState = info.originalState;
+      if (inspectedOriginalState != OriginalPhotoState.retained) return null;
+    }
+
+    // Keep the final database consistency window short. File inspection above
+    // never runs inside this transaction.
+    final latest = await database.transaction(() async {
+      final latestProject = await database.projectById(projectId);
+      if (!_matchesActionScope(projectId, captureId)) return null;
+      final latestCapture = await database.captureById(captureId);
+      if (!_matchesActionScope(projectId, captureId)) return null;
+      if (latestProject == null || latestCapture == null) return null;
+      return (project: latestProject, capture: latestCapture);
+    });
+    if (!_matchesActionScope(projectId, captureId) || latest == null) {
+      return null;
+    }
+    if (!_finalActionAllowed(
+      action,
+      latest.project,
+      latest.capture,
+      inspectedOriginalState,
+    )) {
+      return null;
+    }
+    return latest.capture;
+  }
+
+  bool _matchesActionScope(String projectId, String captureId) =>
+      mounted && _projectId == projectId && _captureId == captureId;
+
+  bool _baseActionAllowed(
+    CaptureDetailAction action,
+    Project? project,
+    CaptureRecord? capture,
+  ) {
+    if (project?.lifecycleStatus != ProjectLifecycleStatus.active ||
+        capture == null ||
+        capture.projectId != project?.id) {
+      return false;
+    }
+    final statusAllowed = switch (action) {
+      CaptureDetailAction.edit => capture.status == CaptureStatus.ready,
+      CaptureDetailAction.deleteOriginal || CaptureDetailAction.deleteRecord =>
+        capture.status == CaptureStatus.ready ||
+            capture.status == CaptureStatus.failed,
+    };
+    if (!statusAllowed) return false;
+    return !_requiresRetainedOriginal(action) ||
+        capture.originalDeletedAt == null;
+  }
+
+  bool _finalActionAllowed(
+    CaptureDetailAction action,
+    Project project,
+    CaptureRecord capture,
+    OriginalPhotoState? inspectedOriginalState,
+  ) {
+    return _baseActionAllowed(action, project, capture) &&
+        (!_requiresRetainedOriginal(action) ||
+            inspectedOriginalState == OriginalPhotoState.retained);
+  }
+
+  bool _requiresRetainedOriginal(CaptureDetailAction action) =>
+      action == CaptureDetailAction.edit ||
+      action == CaptureDetailAction.deleteOriginal;
 
   Future<void> _retry() async {
     await ref.read(captureBackgroundSchedulerProvider).retry(_captureId);
@@ -393,12 +639,18 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
   }
 
   Future<void> _executeClearOriginals(CaptureRecord capture) async {
+    final current = await _currentCaptureForAction(
+      CaptureDetailAction.deleteOriginal,
+      projectId: capture.projectId,
+      captureId: capture.id,
+    );
+    if (!mounted || current == null) return;
     final strings = AppStrings.of(context);
     final result = await ref.read(captureMediaServiceProvider).clearOriginals([
-      capture.id,
+      current.id,
     ]);
     if (!mounted) return;
-    final failure = result.failures[capture.id];
+    final failure = result.failures[current.id];
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -439,16 +691,22 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       ),
     );
     if (confirmed != true) return;
+    final current = await _currentCaptureForAction(
+      CaptureDetailAction.deleteRecord,
+      projectId: capture.projectId,
+      captureId: capture.id,
+    );
+    if (!mounted || current == null) return;
     final result = await ref.read(captureMediaServiceProvider).deleteAll([
-      capture.id,
+      current.id,
     ]);
     if (!mounted) return;
-    if (result.succeededIds.contains(capture.id)) {
+    if (result.succeededIds.contains(current.id)) {
       context.go('/projects/$_projectId');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.failures[capture.id] ?? strings.deleteRecord),
+          content: Text(result.failures[current.id] ?? strings.deleteRecord),
         ),
       );
     }
@@ -512,6 +770,58 @@ class _DetailCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(children: children),
+      ),
+    );
+  }
+}
+
+class _FileInfoInspectionError extends StatelessWidget {
+  const _FileInfoInspectionError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      key: const Key('file-info-inspection-error'),
+      color: colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.error_outline, color: colorScheme.onErrorContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    strings.fileInfoInspectionFailed,
+                    style: TextStyle(color: colorScheme.onErrorContainer),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton(
+              key: const Key('file-info-retry'),
+              onPressed: onRetry,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  const Icon(Icons.refresh),
+                  Text(strings.recheckFileInfo),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

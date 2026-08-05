@@ -310,7 +310,7 @@ void main() {
         await tester.tap(find.byKey(const Key('exclude-private-originals')));
         await tester.pumpAndSettle();
 
-        expect(find.text('存储空间不足，无法完成操作'), findsOneWidget);
+        expect(find.text('存储空间不足，无法完成操作。请释放空间后重试。'), findsOneWidget);
         expect(find.textContaining('请单独选择'), findsNothing);
         expect(find.textContaining('private-template-value'), findsNothing);
         expect(find.textContaining(r'C:\private\database'), findsNothing);

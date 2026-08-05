@@ -26,6 +26,7 @@ Future<void> pumpCard(
   bool selectable = true,
   ValueChanged<bool>? onSelectedChanged,
   ValueChanged<String?>? onTap,
+  Locale locale = const Locale('zh'),
 }) async {
   final database = AppDatabase.forTesting(NativeDatabase.memory());
   addTearDown(database.close);
@@ -43,7 +44,7 @@ Future<void> pumpCard(
         captureMediaServiceProvider.overrideWithValue(media),
       ],
       child: MaterialApp(
-        locale: const Locale('zh'),
+        locale: locale,
         supportedLocales: AppStrings.supportedLocales,
         localizationsDelegates: const [
           AppStrings.delegate,
@@ -127,6 +128,20 @@ void main() {
       ),
     );
     expect(find.textContaining('原图已缺失'), findsOneWidget);
+    expect(find.textContaining('打开记录查看可用操作'), findsOneWidget);
+    expect(find.textContaining('重试处理'), findsNothing);
+    expect(find.textContaining('右上角菜单'), findsNothing);
+
+    await pumpCard(
+      tester,
+      capture: record(
+        id: 'capture-modified',
+        status: CaptureStatus.failed,
+        failureReason: CaptureFailureCode.originalModified.storageCode,
+      ),
+    );
+    expect(find.textContaining('校验值不一致'), findsOneWidget);
+    expect(find.textContaining('打开记录查看可用操作'), findsOneWidget);
 
     await pumpCard(
       tester,
@@ -137,8 +152,53 @@ void main() {
       ),
     );
     expect(find.textContaining('处理失败'), findsOneWidget);
+    expect(find.textContaining('打开记录查看可用操作'), findsOneWidget);
     expect(find.textContaining('native bridge'), findsNothing);
   });
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('failed card is actionable at 360dp and 2x text in '
+        '${locale.languageCode}', (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      String? openedPath;
+
+      await pumpCard(
+        tester,
+        locale: locale,
+        capture: record(
+          id: 'capture-failed',
+          status: CaptureStatus.failed,
+          failureReason: CaptureFailureCode.processingFailed.storageCode,
+        ),
+        onTap: (path) => openedPath = path,
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.textContaining(
+          locale.languageCode == 'zh'
+              ? '打开记录查看可用操作'
+              : 'Open the record to see available actions',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          locale.languageCode == 'zh' ? '点击“重新处理”' : 'Select Retry processing',
+        ),
+        findsNothing,
+      );
+
+      await tester.tap(find.byType(Card));
+      expect(openedPath, '/private/capture-failed.jpg');
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('tap forwards the exact image path already shown by the card', (
     tester,
@@ -215,22 +275,26 @@ void main() {
     expect(inkWell.onLongPress, isNull);
   });
 
-  testWidgets('selection mode expands the checkbox column with AnimatedSize', (
+  testWidgets('selection mode overlays the checkbox without shifting preview', (
     tester,
   ) async {
     final selections = <bool>[];
+    final capture = record(id: 'capture-1', status: CaptureStatus.ready);
+    await pumpCard(tester, capture: capture);
+    final normalPreviewLeft = tester
+        .getTopLeft(find.byType(CaptureImagePreview))
+        .dx;
+
     await pumpCard(
       tester,
-      capture: record(id: 'capture-1', status: CaptureStatus.ready),
+      capture: capture,
       selectionMode: true,
       onSelectedChanged: selections.add,
     );
+    expect(find.byKey(const Key('capture-selection-overlay')), findsOneWidget);
     expect(
-      find.descendant(
-        of: find.byType(CaptureRecordCard),
-        matching: find.byType(AnimatedSize),
-      ),
-      findsOneWidget,
+      tester.getTopLeft(find.byType(CaptureImagePreview)).dx,
+      normalPreviewLeft,
     );
     await tester.tap(find.byType(Checkbox));
     await tester.pump();

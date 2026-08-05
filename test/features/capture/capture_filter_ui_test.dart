@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' show max, min;
+import 'dart:ui' show SemanticsAction;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -8,12 +9,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
+import 'package:sitemark/features/capture/capture_active_filter_chips.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
+import 'package:sitemark/features/projects/project_action_sheet.dart';
 import 'package:sitemark/features/projects/project_detail_screen.dart';
+import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
+import 'package:sitemark/features/capture/capture_filter_sheet.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
@@ -211,6 +218,486 @@ void main() {
     expect(filter.value.day, isNull);
   });
 
+  testWidgets('filter draft reloads real date options for each parent choice', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-a', name: '甲项目');
+    await database.createProject(id: 'project-b', name: '乙项目');
+
+    Future<void> seed({
+      required String id,
+      required String projectId,
+      required DateTime capturedAt,
+    }) async {
+      final pending = await database.createPendingCapture(
+        id: id,
+        projectId: projectId,
+        originalPath: '/private/$id.jpg',
+        workLocation: 'A 区',
+        workContent: '风管',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: capturedAt,
+      );
+      final captured = await database.markCaptured(
+        captureId: pending.id,
+        capturedAt: capturedAt,
+      );
+      final rendering = await database.markRendering(
+        captureId: captured.id,
+        originalSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      await database.markReady(
+        captureId: rendering.id,
+        publishedUri: 'content://media/site-mark/$id',
+      );
+    }
+
+    await seed(
+      id: 'capture-a',
+      projectId: 'project-a',
+      capturedAt: DateTime(2026, 7, 16, 9),
+    );
+    await seed(
+      id: 'capture-b',
+      projectId: 'project-b',
+      capturedAt: DateTime(2025, 6, 1, 9),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const AllCapturesScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-project-project-a')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('filter-year-2026')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year-2025')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-month-7')), findsOneWidget);
+    expect(find.byKey(const Key('filter-month-8')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-month-7')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-day-16')), findsOneWidget);
+    expect(find.byKey(const Key('filter-day-15')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-project-project-b')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-year-2025')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year-2026')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-year-2025')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-month-6')), findsOneWidget);
+    expect(find.byKey(const Key('filter-month-7')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-month-6')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('filter-day-1')), findsOneWidget);
+    expect(find.byKey(const Key('filter-day-2')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-cancel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('active-filter-project')), findsNothing);
+    expect(find.byKey(const Key('active-filter-year')), findsNothing);
+    expect(find.byKey(const ValueKey('capture-a')), findsOneWidget);
+    expect(find.byKey(const ValueKey('capture-b')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 1));
+  });
+
+  testWidgets('filter ignores a slower initial response after project switch', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    final projectB = await database.createProject(id: 'project-b', name: '乙项目');
+    final initialResponse = Completer<CaptureDateOptions>();
+    final responseB = Completer<CaptureDateOptions>();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureFilterSheet(
+            initial: const CaptureFilter(),
+            projects: [projectB],
+            options: const CaptureDateOptions(years: [2024]),
+            optionsLoader: (draft) => switch (draft.projectId) {
+              'project-b' => responseB.future,
+              _ => initialResponse.future,
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('filter-year-2024')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('filter-project-project-b')));
+    await tester.pump();
+    responseB.complete(const CaptureDateOptions(years: [2025]));
+    await tester.pump();
+    expect(find.byKey(const Key('filter-year-2025')), findsOneWidget);
+
+    initialResponse.complete(const CaptureDateOptions(years: [2026]));
+    await tester.pump();
+    expect(find.byKey(const Key('filter-year-2025')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year-2026')), findsNothing);
+  });
+
+  testWidgets(
+    'initial filter option loader failure clears stale choices safely',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final project = await database.createProject(
+        id: 'project-b',
+        name: '乙项目',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: CaptureFilterSheet(
+              initial: const CaptureFilter(),
+              projects: [project],
+              options: const CaptureDateOptions(years: [2026]),
+              optionsLoader: (_) => Future<CaptureDateOptions>.error(
+                StateError('date options failed'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('filter-year-2026')), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'initial filter option loader completion after dispose is ignored',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final project = await database.createProject(
+        id: 'project-a',
+        name: '甲项目',
+      );
+      final response = Completer<CaptureDateOptions>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: CaptureFilterSheet(
+              initial: const CaptureFilter(),
+              projects: [project],
+              options: const CaptureDateOptions(years: [2026]),
+              optionsLoader: (_) => response.future,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      response.complete(const CaptureDateOptions(years: [2025]));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'reopening after apply never shows date options from the previous query',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-a', name: '甲项目');
+      final parentRefresh = Completer<CaptureDateOptions>();
+      final reopenedSheetRefresh = Completer<CaptureDateOptions>();
+      var projectACalls = 0;
+      final source = _DateOptionsQuerySource((query) {
+        if (query.filter.projectId == null) {
+          return Future.value(const CaptureDateOptions(years: [2025]));
+        }
+        projectACalls++;
+        return switch (projectACalls) {
+          1 => Future.value(const CaptureDateOptions(years: [2026])),
+          2 => parentRefresh.future,
+          3 => reopenedSheetRefresh.future,
+          _ => Future.value(const CaptureDateOptions(years: [2026])),
+        };
+      });
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [databaseProvider.overrideWithValue(database)],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: AllCapturesScreen(querySource: source),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-project-project-a')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('filter-year-2026')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('filter-apply')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('filter-year-2025')), findsNothing);
+      expect(find.byKey(const Key('filter-year-2026')), findsNothing);
+      expect(projectACalls, 3);
+
+      reopenedSheetRefresh.complete(const CaptureDateOptions(years: [2026]));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('filter-year-2026')), findsOneWidget);
+      expect(find.byKey(const Key('filter-year-2025')), findsNothing);
+
+      parentRefresh.complete(const CaptureDateOptions(years: [2026]));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('filter-cancel')));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 1));
+    },
+  );
+
+  testWidgets('filter keeps a selected date missing from current records', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: CaptureFilterSheet(
+            initial: const CaptureFilter(year: 2026, month: 7, day: 16),
+            projects: const [],
+            options: const CaptureDateOptions(),
+            optionsLoader: (_) async => const CaptureDateOptions(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('filter-year-2026')), findsOneWidget);
+    expect(find.byKey(const Key('filter-month-7')), findsOneWidget);
+    expect(find.byKey(const Key('filter-day-16')), findsOneWidget);
+  });
+
+  testWidgets('active chips label deleted projects and fit at 360dp', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final filter = ValueNotifier(
+      const CaptureFilter(
+        projectId: 'deleted-project',
+        year: 2026,
+        month: 8,
+        day: 4,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: ValueListenableBuilder<CaptureFilter>(
+            valueListenable: filter,
+            builder: (context, value, _) => CaptureActiveFilterChips(
+              filter: value,
+              projects: const [],
+              onChanged: (next) => filter.value = next,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('已删除项目'), findsOneWidget);
+    expect(find.text('8月'), findsOneWidget);
+    expect(find.text('4日'), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-month')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-day')), findsOneWidget);
+    expect(
+      tester
+          .widget<InputChip>(find.byKey(const Key('active-filter-project')))
+          .deleteButtonTooltipMessage,
+      '移除项目筛选',
+    );
+    expect(
+      tester
+          .widget<InputChip>(find.byKey(const Key('active-filter-year')))
+          .deleteButtonTooltipMessage,
+      '移除年份筛选',
+    );
+    expect(
+      tester
+          .widget<InputChip>(find.byKey(const Key('active-filter-month')))
+          .deleteButtonTooltipMessage,
+      '移除月份筛选',
+    );
+    expect(
+      tester
+          .widget<InputChip>(find.byKey(const Key('active-filter-day')))
+          .deleteButtonTooltipMessage,
+      '移除日期筛选',
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.drag(
+      find.byKey(const Key('active-filter-chips')),
+      const Offset(-200, 0),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('remove-filter-day')));
+    await tester.pump();
+    expect(filter.value.projectId, 'deleted-project');
+    expect(filter.value.year, 2026);
+    expect(filter.value.month, 8);
+    expect(filter.value.day, isNull);
+  });
+
+  testWidgets(
+    'English active chips name month and day with distinct delete semantics',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: CaptureActiveFilterChips(
+              filter: const CaptureFilter(
+                projectId: 'deleted-project',
+                year: 2026,
+                month: 8,
+                day: 4,
+              ),
+              projects: const [],
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Month 8'), findsOneWidget);
+      expect(find.text('Day 4'), findsOneWidget);
+      const expectations = <String, String>{
+        'project': 'Remove project filter',
+        'year': 'Remove year filter',
+        'month': 'Remove month filter',
+        'day': 'Remove day filter',
+      };
+      for (final entry in expectations.entries) {
+        final chip = find.byKey(Key('active-filter-${entry.key}'));
+        expect(
+          tester.widget<InputChip>(chip).deleteButtonTooltipMessage,
+          entry.value,
+        );
+      }
+
+      final monthSemantics = tester
+          .getSemantics(find.byKey(const Key('active-filter-month')))
+          .label;
+      final daySemantics = tester
+          .getSemantics(find.byKey(const Key('active-filter-day')))
+          .label;
+      expect(RegExp('Month 8').allMatches(monthSemantics).length, 1);
+      expect(RegExp('Day 4').allMatches(daySemantics).length, 1);
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    },
+  );
+
   testWidgets(
     'all-records changing project clears year/month/day date filters',
     (tester) async {
@@ -265,28 +752,27 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Select year 2026 from the date cascade.
-      await tester.tap(find.byKey(const Key('filter-year')));
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
       await tester.pumpAndSettle();
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(MenuItemButton, '2026'));
-      await tester.pumpAndSettle();
-
-      // The year menu now reflects the 2026 selection instead of "全部年份".
-      expect(find.text('全部年份'), findsNothing);
-
-      // Switch the project from "all projects" to project-2 (no captures).
-      await tester.tap(find.byKey(const Key('project-filter')));
-      await tester.pumpAndSettle();
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(MenuItemButton, '西区管线整改'));
+      await tester.tap(find.byKey(const Key('filter-year-2026')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('filter-apply')));
       await tester.pumpAndSettle();
 
-      // The project -> year -> month -> day cascade must clear: the year
-      // control drops back to the "all years" label.
-      expect(find.text('全部年份'), findsOneWidget);
-      expect(find.text('全部月份'), findsOneWidget);
-      expect(find.text('全部日期'), findsOneWidget);
+      expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-project-project-2')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('filter-apply')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+      expect(find.text('西区管线整改'), findsOneWidget);
+      expect(find.byKey(const Key('active-filter-year')), findsNothing);
+      expect(find.byKey(const Key('active-filter-month')), findsNothing);
+      expect(find.byKey(const Key('active-filter-day')), findsNothing);
 
       // Unmount the tree so the StreamBuilder subscriptions to the Drift
       // streams are cancelled before the database closes; otherwise pending
@@ -364,16 +850,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('project-filter')));
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '乙项目'));
+    await tester.tap(find.byKey(const Key('filter-project-project-b')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-apply')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('filter-year')));
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(MenuItemButton, '2026'), findsOneWidget);
-    expect(find.widgetWithText(MenuItemButton, '2025'), findsNothing);
+    expect(find.byKey(const Key('filter-year-2026')), findsOneWidget);
+    expect(find.byKey(const Key('filter-year-2025')), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
@@ -518,47 +1006,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final tops = [
-      tester.getTopLeft(find.byKey(const Key('project-filter'))).dy,
-      tester.getTopLeft(find.byKey(const Key('filter-year'))).dy,
-      tester.getTopLeft(find.byKey(const Key('filter-month'))).dy,
-      tester.getTopLeft(find.byKey(const Key('filter-day'))).dy,
-    ];
-    expect(tops.reduce(max) - tops.reduce(min), lessThan(1));
-    for (final key in const [
-      Key('project-filter'),
-      Key('filter-year'),
-      Key('filter-month'),
-      Key('filter-day'),
-    ]) {
-      expect(
-        find.descendant(
-          of: find.byKey(key),
-          matching: find.byIcon(Icons.arrow_drop_down),
-        ),
-        findsNothing,
-      );
-    }
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+    expect(find.byKey(const Key('project-filter')), findsNothing);
+    expect(find.byKey(const Key('filter-year')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('project-filter')));
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '东区厂房改造'));
+    await tester.tap(find.byKey(const Key('filter-project-project-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-apply')));
     await tester.pumpAndSettle();
 
-    final projectButton = find.descendant(
-      of: find.byKey(const Key('project-filter')),
-      matching: find.byType(OutlinedButton),
-    );
-    final projectLabel = find.descendant(
-      of: find.byKey(const Key('project-filter')),
-      matching: find.text('东区厂房改造'),
-    );
-    expect(projectLabel, findsOneWidget);
-    expect(
-      (tester.getCenter(projectButton).dx - tester.getCenter(projectLabel).dx)
-          .abs(),
-      lessThan(1),
-    );
+    expect(find.byKey(const Key('active-filter-chips')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // Unmount the tree so the StreamBuilder subscriptions to the Drift
@@ -645,6 +1105,20 @@ void main() {
               ),
             ],
           ),
+          GoRoute(
+            path: '/settings/backup-restore/backup',
+            builder: (_, state) {
+              final arguments = state.extra as ProjectBackupSelectionArguments;
+              return Scaffold(
+                body: Column(
+                  children: [
+                    for (final projectId in arguments.initialProjectIds)
+                      SizedBox(key: Key('backup-initial-$projectId')),
+                  ],
+                ),
+              );
+            },
+          ),
         ],
       );
       addTearDown(router.dispose);
@@ -679,6 +1153,67 @@ void main() {
     );
   }
 
+  Widget pumpSwitchableProjectDetail(
+    AppDatabase database,
+    ValueNotifier<String> projectId,
+  ) {
+    return ProviderScope(
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: ValueListenableBuilder<String>(
+          valueListenable: projectId,
+          builder: (_, value, _) => ProjectDetailScreen(projectId: value),
+        ),
+      ),
+    );
+  }
+
+  Widget pumpSwitchableProjectDetailWithRouter(
+    AppDatabase database,
+    ValueNotifier<String> projectId,
+  ) {
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => ValueListenableBuilder<String>(
+            valueListenable: projectId,
+            builder: (_, value, _) => ProjectDetailScreen(projectId: value),
+          ),
+        ),
+        GoRoute(
+          path: '/settings/backup-restore/backup',
+          builder: (_, _) => const Scaffold(
+            body: SizedBox(key: Key('stale-backup-destination')),
+          ),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    return ProviderScope(
+      overrides: [databaseProvider.overrideWithValue(database)],
+      child: MaterialApp.router(
+        locale: const Locale('zh'),
+        supportedLocales: AppStrings.supportedLocales,
+        localizationsDelegates: const [
+          AppStrings.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        routerConfig: router,
+      ),
+    );
+  }
+
   Future<void> unmountTree(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 1));
@@ -705,6 +1240,144 @@ void main() {
     await unmountTree(tester);
   });
 
+  testWidgets('all records shows current date beside the filter trigger', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 8, 4, 9),
+    );
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-b',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 8, 4, 8),
+    );
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-c',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 8, 3, 18),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+    expect(find.byKey(const Key('project-filter')), findsNothing);
+    expect(find.byKey(const Key('filter-year')), findsNothing);
+    expect(find.byKey(const Key('visible-capture-date')), findsOneWidget);
+    expect(find.text('2026-08-04'), findsOneWidget);
+    expect(find.byType(SliverPersistentHeader), findsNothing);
+    final filterRect = tester.getRect(
+      find.byKey(const Key('filter-sheet-trigger')),
+    );
+    final dateRect = tester.getRect(
+      find.byKey(const Key('visible-capture-date')),
+    );
+    expect(dateRect.left, greaterThan(filterRect.right));
+    expect((dateRect.center.dy - filterRect.center.dy).abs(), lessThan(2));
+    await unmountTree(tester);
+  });
+
+  testWidgets('all records hides the visible date when there are no rows', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '空项目');
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('visible-capture-date')), findsNothing);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
+  testWidgets('filter sheet keeps a draft and chips remove independently', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    await database.createProject(id: 'project-2', name: '西区管线整改');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 8, 4, 9),
+    );
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-b',
+      projectId: 'project-2',
+      capturedAt: DateTime(2026, 8, 3, 9),
+    );
+
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-project-project-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-month-8')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-day-4')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-cancel')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('active-filter-project')), findsNothing);
+    expect(find.byKey(const Key('active-filter-year')), findsNothing);
+    expect(find.byKey(const Key('capture-a')), findsOneWidget);
+    expect(find.byKey(const Key('capture-b')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('filter-project-project-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-month-8')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-day-4')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-apply')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-month')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-day')), findsOneWidget);
+    expect(find.byKey(const Key('visible-capture-date')), findsOneWidget);
+    expect(find.text('2026-08-04'), findsOneWidget);
+    expect(find.byKey(const Key('capture-a')), findsOneWidget);
+    expect(find.byKey(const Key('capture-b')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('remove-filter-month')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('active-filter-month')), findsNothing);
+    expect(find.byKey(const Key('active-filter-day')), findsNothing);
+    expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+    expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('remove-filter-project')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('active-filter-project')), findsNothing);
+    expect(find.byKey(const Key('active-filter-year')), findsOneWidget);
+    expect(find.byKey(const Key('capture-b')), findsOneWidget);
+    await unmountTree(tester);
+  });
+
   testWidgets('all-records edit mode shows checkboxes and batch bar', (
     tester,
   ) async {
@@ -725,7 +1398,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(Checkbox), findsWidgets);
-    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.text('已选 0 张'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('select-all-captures')));
     await tester.pumpAndSettle();
@@ -813,10 +1487,11 @@ void main() {
         .any((cb) => cb.value == true);
     expect(anyChecked(), isTrue);
 
-    await tester.tap(find.byKey(const Key('filter-year')));
+    await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(MenuItemButton, '2026'));
+    await tester.tap(find.byKey(const Key('filter-year-2026')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('filter-apply')));
     await tester.pumpAndSettle();
 
     expect(anyChecked(), isFalse);
@@ -869,7 +1544,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(Checkbox), findsWidgets);
-    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.text('已选 0 张'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('select-all-captures')));
     await tester.pumpAndSettle();
@@ -877,6 +1553,395 @@ void main() {
     expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
     await unmountTree(tester);
   });
+
+  testWidgets(
+    'project detail uses one compact action sheet and preselects only itself for backup',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-1', name: '东区项目');
+      await database.createProject(id: 'project-2', name: '西区项目');
+      await seedReadyCaptureForFilterTest(
+        database,
+        id: 'capture-a',
+        projectId: 'project-1',
+        capturedAt: DateTime(2026, 7, 16, 9),
+      );
+
+      await tester.pumpWidget(
+        pumpProjectDetail(database, 'project-1', withRouter: true),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('此项目水印设置'), findsNothing);
+      expect(find.byTooltip('备份项目'), findsNothing);
+      expect(find.byKey(const Key('project-watermark-action')), findsNothing);
+      expect(find.byKey(const Key('project-backup-action')), findsNothing);
+      expect(find.byKey(const Key('project-actions')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byKey(const Key('edit-captures')),
+        ),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('edit-captures')), findsOneWidget);
+      expect(find.byKey(const Key('project-summary')), findsOneWidget);
+      expect(find.text('1 张照片'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('project-action-sheet')), findsOneWidget);
+      expect(find.text('此项目水印设置'), findsOneWidget);
+      expect(find.text('备份项目'), findsOneWidget);
+      expect(find.text('重命名项目'), findsOneWidget);
+      expect(find.byKey(const Key('pin-project')), findsOneWidget);
+      expect(find.byKey(const Key('complete-project')), findsOneWidget);
+      expect(find.byKey(const Key('archive-project')), findsOneWidget);
+      expect(find.byKey(const Key('reopen-project')), findsNothing);
+
+      final bottomSheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
+      expect(bottomSheet.showDragHandle, isTrue);
+      expect(
+        find.ancestor(
+          of: find.byKey(const Key('project-action-sheet')),
+          matching: find.byType(SafeArea),
+        ),
+        findsWidgets,
+      );
+      final deleteIcon = tester.widget<Icon>(
+        find.descendant(
+          of: find.byKey(const Key('delete-project')),
+          matching: find.byIcon(Icons.delete_outline),
+        ),
+      );
+      expect(
+        deleteIcon.color,
+        Theme.of(tester.element(find.byType(Scaffold).first)).colorScheme.error,
+      );
+
+      await tester.tap(find.byKey(const Key('project-backup-action')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backup-initial-project-1')), findsOneWidget);
+      expect(find.byKey(const Key('backup-initial-project-2')), findsNothing);
+      await unmountTree(tester);
+    },
+  );
+
+  testWidgets('project action sheet follows lifecycle and pin state', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'active', name: '进行中');
+    await database.createProject(
+      id: 'completed',
+      name: '已完成',
+      lifecycleStatus: ProjectLifecycleStatus.completed,
+      isPinned: true,
+    );
+    await database.createProject(
+      id: 'archived',
+      name: '已归档',
+      lifecycleStatus: ProjectLifecycleStatus.archived,
+    );
+
+    Future<void> expectActions(
+      String projectId, {
+      required List<Key> present,
+      required List<Key> absent,
+    }) async {
+      await tester.pumpWidget(pumpProjectDetail(database, projectId));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('reopen-project')), findsNothing);
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+      final sheet = find.byKey(const Key('project-action-sheet'));
+      for (final key in present) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(key)),
+          findsOneWidget,
+        );
+      }
+      for (final key in absent) {
+        expect(
+          find.descendant(of: sheet, matching: find.byKey(key)),
+          findsNothing,
+        );
+      }
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+    }
+
+    await expectActions(
+      'active',
+      present: const [
+        Key('pin-project'),
+        Key('complete-project'),
+        Key('archive-project'),
+      ],
+      absent: const [Key('unpin-project'), Key('reopen-project')],
+    );
+    await expectActions(
+      'completed',
+      present: const [
+        Key('unpin-project'),
+        Key('reopen-project'),
+        Key('archive-project'),
+      ],
+      absent: const [Key('pin-project'), Key('complete-project')],
+    );
+    await expectActions(
+      'archived',
+      present: const [Key('pin-project'), Key('reopen-project')],
+      absent: const [
+        Key('unpin-project'),
+        Key('complete-project'),
+        Key('archive-project'),
+      ],
+    );
+    await unmountTree(tester);
+  });
+
+  testWidgets('stale action sheet cannot pin a project after detail switches', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-a', name: '项目 A');
+    await database.createProject(id: 'project-b', name: '项目 B');
+    final projectId = ValueNotifier('project-a');
+    addTearDown(projectId.dispose);
+
+    await tester.pumpWidget(pumpSwitchableProjectDetail(database, projectId));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+
+    projectId.value = 'project-b';
+    await tester.pumpAndSettle();
+    expect(find.text('项目 B'), findsWidgets);
+    expect(find.byKey(const Key('project-action-sheet')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('pin-project')));
+    await tester.pumpAndSettle();
+
+    expect((await database.projectById('project-a'))?.isPinned, isFalse);
+    expect((await database.projectById('project-b'))?.isPinned, isFalse);
+    await unmountTree(tester);
+  });
+
+  testWidgets(
+    'stale action sheet cannot navigate to backup after detail switches',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-a', name: '项目 A');
+      await database.createProject(id: 'project-b', name: '项目 B');
+      final projectId = ValueNotifier('project-a');
+      addTearDown(projectId.dispose);
+
+      await tester.pumpWidget(
+        pumpSwitchableProjectDetailWithRouter(database, projectId),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+
+      projectId.value = 'project-b';
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-backup-action')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('stale-backup-destination')), findsNothing);
+      expect(find.text('项目 B'), findsWidgets);
+      await unmountTree(tester);
+    },
+  );
+
+  testWidgets('action sheet uses the latest project when rename is selected', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '旧名称');
+
+    await tester.pumpWidget(pumpProjectDetail(database, 'project-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+
+    await database.renameProject(projectId: 'project-1', name: '外部更新名称');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('rename-project')));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextFormField>(
+      find.byKey(const Key('rename-project-name')),
+    );
+    expect(field.controller?.text, '外部更新名称');
+    await unmountTree(tester);
+  });
+
+  testWidgets(
+    'stale lifecycle action is rejected after external state change',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'project-1', name: '项目');
+
+      await tester.pumpWidget(pumpProjectDetail(database, 'project-1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+
+      await database.updateProjectLifecycleStatus(
+        projectId: 'project-1',
+        expectedStatus: ProjectLifecycleStatus.active,
+        targetStatus: ProjectLifecycleStatus.archived,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('complete-project')));
+      await tester.pumpAndSettle();
+
+      expect(
+        (await database.projectById('project-1'))?.lifecycleStatus,
+        ProjectLifecycleStatus.archived,
+      );
+      expect(find.text('项目状态已变化，请重试'), findsNothing);
+      await unmountTree(tester);
+    },
+  );
+
+  testWidgets('project actions apply pin, unpin, complete, and archive', (
+    tester,
+  ) async {
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'pin', name: '置顶目标');
+    await database.createProject(id: 'unpin', name: '取消置顶目标', isPinned: true);
+    await database.createProject(id: 'complete', name: '完成目标');
+    await database.createProject(id: 'archive', name: '归档目标');
+
+    Future<void> selectAction(String projectId, Key actionKey) async {
+      await tester.pumpWidget(pumpProjectDetail(database, projectId));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(actionKey));
+      await tester.pumpAndSettle();
+    }
+
+    await selectAction('pin', const Key('pin-project'));
+    expect((await database.projectById('pin'))?.isPinned, isTrue);
+
+    await selectAction('unpin', const Key('unpin-project'));
+    expect((await database.projectById('unpin'))?.isPinned, isFalse);
+
+    await selectAction('complete', const Key('complete-project'));
+    expect(
+      (await database.projectById('complete'))?.lifecycleStatus,
+      ProjectLifecycleStatus.completed,
+    );
+
+    await selectAction('archive', const Key('archive-project'));
+    expect(
+      (await database.projectById('archive'))?.lifecycleStatus,
+      ProjectLifecycleStatus.archived,
+    );
+    await unmountTree(tester);
+  });
+
+  testWidgets(
+    'project action sheet remains scrollable and semantic at 360dp with 3x text',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final project = await database.createProject(id: 'project-1', name: '项目');
+      final semantics = tester.ensureSemantics();
+      try {
+        for (final (locale, deleteLabel) in const [
+          (Locale('zh'), '删除项目'),
+          (Locale('en'), 'Delete project'),
+        ]) {
+          ProjectAction? selected;
+          await tester.pumpWidget(
+            MaterialApp(
+              locale: locale,
+              supportedLocales: AppStrings.supportedLocales,
+              localizationsDelegates: const [
+                AppStrings.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(3)),
+                child: child!,
+              ),
+              home: Builder(
+                builder: (context) => Scaffold(
+                  body: FilledButton(
+                    key: const Key('open-project-actions'),
+                    onPressed: () async {
+                      selected = await showProjectActionSheet(context, project);
+                    },
+                    child: const Text('Open'),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.byKey(const Key('open-project-actions')));
+          await tester.pumpAndSettle();
+
+          final sheet = find.byKey(const Key('project-action-sheet'));
+          final scrollable = find.descendant(
+            of: sheet,
+            matching: find.byType(Scrollable),
+          );
+          await tester.scrollUntilVisible(
+            find.byKey(const Key('delete-project')),
+            160,
+            scrollable: scrollable,
+          );
+          await tester.pumpAndSettle();
+
+          expect(tester.takeException(), isNull);
+          final deleteRow = find.byKey(const Key('delete-project'));
+          expect(tester.getSemantics(deleteRow).label, deleteLabel);
+          expect(
+            tester
+                .getSemantics(deleteRow)
+                .getSemanticsData()
+                .hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+          final deleteIcon = tester.widget<Icon>(
+            find.descendant(
+              of: deleteRow,
+              matching: find.byIcon(Icons.delete_outline),
+            ),
+          );
+          expect(
+            deleteIcon.color,
+            Theme.of(tester.element(deleteRow)).colorScheme.error,
+          );
+
+          await tester.tap(deleteRow);
+          await tester.pumpAndSettle();
+          expect(selected, ProjectAction.delete);
+        }
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
 
   testWidgets(
     'project actions rename while preserving historical capture evidence',
@@ -1184,6 +2249,52 @@ void main() {
     expect(tester.takeException(), isNull);
     await unmountTree(tester);
   });
+}
+
+final class _DateOptionsQuerySource implements CaptureQuerySource {
+  _DateOptionsQuerySource(this._loadOptions);
+
+  final Future<CaptureDateOptions> Function(CaptureListQuery query)
+  _loadOptions;
+
+  @override
+  Future<CapturePage> loadPage(
+    CaptureListQuery query, {
+    CapturePageCursor? after,
+    int limit = 50,
+  }) async => const CapturePage(rows: [], nextCursor: null, hasMore: false);
+
+  @override
+  Future<int> count(CaptureListQuery query) async => 0;
+
+  @override
+  Future<CaptureDateOptions> loadDateOptions(CaptureListQuery query) =>
+      _loadOptions(query);
+
+  @override
+  Future<CaptureSelectionSnapshot> loadSelectable(
+    CaptureListQuery query,
+  ) async => const CaptureSelectionSnapshot(ids: {}, allReady: false);
+
+  @override
+  Future<CaptureSelectionSnapshot> inspectSelection(Set<String> ids) async =>
+      CaptureSelectionSnapshot(ids: ids, allReady: ids.isNotEmpty);
+
+  @override
+  Future<List<CaptureSummary>> loadAdjacent(
+    CaptureListQuery query,
+    CapturePageCursor cursor, {
+    required bool newer,
+    int limit = 10,
+  }) async => const [];
+
+  @override
+  Stream<CapturePageCursor?> watchNewestCursor(CaptureListQuery query) =>
+      const Stream.empty();
+
+  @override
+  Stream<List<CaptureSummary>> watchByIds(Set<String> ids) =>
+      const Stream.empty();
 }
 
 class _FakeProjectDeletionService extends ProjectDeletionService {

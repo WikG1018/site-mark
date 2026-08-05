@@ -10,11 +10,9 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-![Version](https://img.shields.io/badge/release-v0.9.0-176B55)
+![Version](https://img.shields.io/badge/release-v1.0.0-176B55)
 
-**当前开发候选：v0.10.0+14（未发布）**
-
-**最新发布版本：[`v0.9.0` 预发布版](https://github.com/WikG1018/site-mark/releases/tag/v0.9.0)**
+**最新发布版本：[`v1.0.0` 预发布版](https://github.com/WikG1018/site-mark/releases/tag/v1.0.0)**
 
 支持 Android 12（API 31）及以上系统。当前仍属于预发布阶段，适合个人工程记录和现场试用；重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
@@ -22,9 +20,9 @@ manufacturer camera experience.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v0.9.0-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v0.9.0/sitemark-v0.9.0-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v0.9.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v0.9.0/sitemark-v0.9.0-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v0.9.0/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.0-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.0/sitemark-v1.0.0-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.0/sitemark-v1.0.0-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.0/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -37,41 +35,29 @@ manufacturer camera experience.
 4. Debug APK 与正式版签名不同，通常不能直接覆盖安装。
 5. 如果 Android 提示签名冲突，不要直接卸载保存着重要数据的旧版本；先完成项目备份并确认备份文件已复制到应用目录之外。
 
-## v0.10.0 候选新增内容
+## v1.0.0 重点更新
 
 - **项目生命周期**：项目分为进行中、已完成、已归档；已完成/已归档禁止新建拍摄，仍可查看、编辑、导出和管理已有记录。
 - **置顶与排序**：置顶与生命周期独立；首页按置顶、最近拍摄时间、创建时间、项目 ID 稳定排序。
 - **状态筛选与跨状态搜索**：首页默认显示进行中；底部弹层切换状态；搜索覆盖全部状态并显示状态标识。
 - **备份保留状态**：单项目 ZIP 升级至 schema v5，精确保留生命周期与置顶；v1–v4 恢复为进行中且未置顶；多项目外层 bundle 仍为 schema v1。
+- **全新悬浮导航**：项目、全部记录、设置使用更低、更紧凑的悬浮 Dock，选中背景完整覆盖图标和文字；根页面只绘制当前分支，避免返回时照片列表闪现。
+- **清晰的多选管理**：复选框覆盖缩略图而不挤压内容，悬浮操作栏同时显示图标和文字，支持导出、保存到相册、清理原图及全部删除。
 
 ## 从早期版本累计完成的改进
 
 | 范围 | 当前状态 |
 | --- | --- |
-| 拍摄 | 调用系统/厂商相机，连续拍摄时后台生成水印；支持最近字段建议和项目内命名模板；非进行中项目禁止新拍摄 |
-| 记录 | 缩略图预览、详情与全屏查看、文件大小、原图状态、编辑、删除和再次保存 |
-| 检索 | 首页状态筛选与跨状态项目搜索；全部记录和项目记录支持关键词搜索及年、月、日筛选 |
-| 批量操作 | 多选、按当前筛选结果全选/取消全选、导出、再次保存、清理原图和删除整条记录 |
+| 一级导航 | “项目 / 全部记录 / 设置”通过紧凑悬浮 Dock 切换，选中背景覆盖图标和文字；分别保留列表、搜索和筛选状态，但只绘制当前页面；进入详情等二级页面后 Dock 隐藏 |
+| 拍摄 | 调用系统/厂商相机，连续拍摄时后台生成水印；下一张保留工程部位、工作内容和拍摄人，仅清空备注；支持最近字段建议和项目内命名模板；非进行中项目禁止新拍摄 |
+| 记录 | 缩略图列表在筛选按钮右侧显示当前可见日期，并随滚动更新；详情支持“成片 / 原图”和“现场记录 / 文件信息”切换，点击照片可进入相邻照片全屏浏览；支持编辑、删除和再次保存 |
+| 检索 | 首页状态筛选与跨状态项目搜索；全部记录和项目记录支持关键词搜索，以及从紧凑底部面板选择项目、年、月、日，已生效条件可单独移除 |
+| 批量操作 | 复选框覆盖缩略图，不挤压照片和文字；多选时以带图标与文字的紧凑悬浮 Dock 替换一级导航；支持按当前筛选结果全选/取消全选、导出、再次保存、清理原图和删除整条记录 |
 | 水印 | 项目名称、现场字段、时间和可选位置；支持位置、透明度、字体大小和强调色 |
 | 项目 | 生命周期、置顶、同名/安全文件名冲突保护；支持重命名、删除和项目级水印设置 |
-| 设置 | 二级菜单、主题/动态颜色、语言、通知、定位、存储、备份恢复、诊断与关于 |
+| 设置 | 一级页按“拍摄与记录 / 数据与安全 / 应用”分组，集中进入水印默认值、定位、通知、备份恢复、存储、诊断、语言、外观与关于 |
 | 数据安全 | 项目备份恢复、原图 SHA-256 校验、恢复事务与文件回滚、异常中断清理 |
-| 体验 | 符合层级关系的页面转场、图片 Hero 动画、返回逻辑，以及可继续加载的记录和全屏图片列表 |
-
-## 实际效果
-
-<table>
-  <tr>
-    <td align="center"><img src="docs/images/readme/01-projects.png" alt="项目列表" width="260"><br><sub>项目列表与搜索入口</sub></td>
-    <td align="center"><img src="docs/images/readme/02-capture-form.png" alt="现场记录表单" width="260"><br><sub>现场记录表单</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/images/readme/03-system-camera.png" alt="Android 系统相机" width="260"><br><sub>Android 系统相机</sub></td>
-    <td align="center"><img src="docs/images/readme/04-watermarked-output.jpg" alt="工程水印成片" width="260"><br><sub>工程水印成片</sub></td>
-  </tr>
-</table>
-
-截图使用虚构工程数据。不同厂商系统相机的界面、镜头能力、启动速度和后台限制可能不同。
+| 体验 | 玻璃材质导航与卡片、稳定且符合层级关系的页面转场、图片 Hero 动画、无隐藏列表闪现的返回逻辑、减少动画适配，以及可继续加载的记录和全屏图片列表 |
 
 ## 产品定位
 
@@ -239,7 +225,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。下载和校验请以 [GitHub Release v0.9.0](https://github.com/WikG1018/site-mark/releases/tag/v0.9.0) 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。下载和校验请以 [GitHub Release v1.0.0](https://github.com/WikG1018/site-mark/releases/tag/v1.0.0) 中的实际资源为准。
 
 ## 本地构建
 

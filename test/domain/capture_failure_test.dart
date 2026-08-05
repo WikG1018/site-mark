@@ -15,4 +15,13 @@ void main() {
     );
     expect(CaptureFailureCode.fromStorage(null), CaptureFailureCode.unexpected);
   });
+
+  test('only transient or unknown processing failures allow manual retry', () {
+    expect(CaptureFailureCode.cameraUnavailable.canRetryProcessing, isFalse);
+    expect(CaptureFailureCode.queueUnavailable.canRetryProcessing, isFalse);
+    expect(CaptureFailureCode.originalMissing.canRetryProcessing, isFalse);
+    expect(CaptureFailureCode.originalModified.canRetryProcessing, isFalse);
+    expect(CaptureFailureCode.processingFailed.canRetryProcessing, isTrue);
+    expect(CaptureFailureCode.unexpected.canRetryProcessing, isTrue);
+  });
 }

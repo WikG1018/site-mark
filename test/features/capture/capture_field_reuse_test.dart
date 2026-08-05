@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -2248,6 +2249,91 @@ void main() {
     expect(rig.fieldText(tester, const Key('notes')), 'Project 2 notes');
   });
 
+  testWidgets('rapid repeated taps start only one capture while working', (
+    tester,
+  ) async {
+    final rig = await _CaptureFormTestRig.create();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await rig.dispose();
+    });
+    await rig.drafts.save(_draft('project-1', 'Rapid'));
+    await rig.pump(tester);
+    final button = find.byKey(const Key('capture-button')).hitTestable();
+
+    await tester.tap(button);
+    await tester.tap(button);
+    await tester.pump();
+
+    expect(rig.workflow.drafts, hasLength(1));
+    expect(rig.captureButton(tester).onPressed, isNull);
+  });
+
+  testWidgets(
+    'reduced motion notes expander defaults closed and uses no animation',
+    (tester) async {
+      final rig = await _CaptureFormTestRig.create();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        await rig.dispose();
+      });
+      rig.disableAnimations = true;
+      await rig.pump(tester);
+
+      expect(find.byKey(const Key('notes')), findsNothing);
+      await tester.tap(find.byKey(const Key('notes-expander')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('notes')), findsOneWidget);
+      final animation = find.byKey(const Key('notes-animation'));
+      expect(animation, findsOneWidget);
+      if (animation.evaluate().isNotEmpty) {
+        expect(tester.widget(animation), isNot(isA<AnimatedSize>()));
+      }
+    },
+  );
+
+  testWidgets('notes expander exposes one readable expanded-state semantic', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final rig = await _CaptureFormTestRig.create();
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await rig.dispose();
+    });
+    await rig.pump(tester);
+    final expander = find.byKey(const Key('notes-expander'));
+
+    SemanticsNode node() => tester.getSemantics(expander);
+    expect(
+      node(),
+      isSemantics(
+        label: 'Notes (optional)',
+        isButton: true,
+        hasTapAction: true,
+        hasExpandedState: true,
+        isExpanded: false,
+      ),
+    );
+    expect(node().childrenCount, 0);
+    expect(find.byKey(const Key('notes')), findsNothing);
+
+    await tester.tap(expander);
+    await tester.pumpAndSettle();
+    expect(node(), isSemantics(hasExpandedState: true, isExpanded: true));
+    expect(find.byKey(const Key('notes')), findsOneWidget);
+
+    await tester.tap(expander);
+    await tester.pumpAndSettle();
+    expect(node(), isSemantics(hasExpandedState: true, isExpanded: false));
+    expect(find.byKey(const Key('notes')), findsNothing);
+    semantics.dispose();
+  });
+
   for (final outcome in [
     CaptureWorkflowOutcome.cancelled,
     CaptureWorkflowOutcome.failed,
@@ -2546,11 +2632,52 @@ void main() {
 
           rig.expectFields(tester, prefix: 'Consecutive');
           expect(rig.fieldText(tester, const Key('notes')), isEmpty);
+          expect(rig.captureButton(tester).onPressed, isNotNull);
           expect(await rig.drafts.load('project-1'), isNull);
         },
       );
     }
   }
+
+  testWidgets(
+    'a restored non-empty KILL note is a visible editable field and cleared text is not submitted',
+    (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final rig = await _CaptureFormTestRig.create();
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        await rig.dispose();
+      });
+      rig.textScaler = const TextScaler.linear(2);
+      await rig.drafts.save(_draft('project-1', 'KILL restored'));
+
+      await rig.pump(tester);
+
+      final notes = find.byKey(const Key('notes'));
+      expect(notes, findsOneWidget);
+      expect(
+        tester.widget<TextFormField>(notes).controller!.text,
+        'KILL restored notes',
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.enterText(notes, '');
+      expect(tester.widget<TextFormField>(notes).controller!.text, isEmpty);
+      await tester.tap(find.byKey(const Key('notes-expander')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notes')), findsNothing);
+
+      await rig.capture(tester);
+      expect(rig.workflow.drafts, hasLength(1));
+      expect(rig.workflow.drafts.single.notes, isNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<void> _pumpTemplateSheetHost(
@@ -3144,6 +3271,7 @@ class _CaptureFormTestRig {
   CaptureTemplateService? templateService;
   Locale locale = const Locale('en');
   bool disableAnimations = false;
+  TextScaler textScaler = TextScaler.noScaling;
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -3160,9 +3288,10 @@ class _CaptureFormTestRig {
         child: MaterialApp(
           locale: locale,
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(disableAnimations: disableAnimations),
+            data: MediaQuery.of(context).copyWith(
+              disableAnimations: disableAnimations,
+              textScaler: textScaler,
+            ),
             child: child!,
           ),
           localizationsDelegates: const [
@@ -3247,6 +3376,7 @@ class _CaptureFormTestRig {
       find.byKey(const Key('photographer')),
       '$prefix photographer',
     );
+    await expandNotes(tester);
     await tester.enterText(find.byKey(const Key('notes')), '$prefix notes');
   }
 
@@ -3263,7 +3393,19 @@ class _CaptureFormTestRig {
   }
 
   String fieldText(WidgetTester tester, Key key) {
+    if (key == const Key('notes') && find.byKey(key).evaluate().isEmpty) {
+      return tester
+          .widget<CaptureNotesField>(find.byType(CaptureNotesField))
+          .controller
+          .text;
+    }
     return tester.widget<TextFormField>(find.byKey(key)).controller!.text;
+  }
+
+  Future<void> expandNotes(WidgetTester tester) async {
+    if (find.byKey(const Key('notes')).evaluate().isNotEmpty) return;
+    await tester.tap(find.byKey(const Key('notes-expander')));
+    await tester.pumpAndSettle();
   }
 
   void expectFields(WidgetTester tester, {required String prefix}) {

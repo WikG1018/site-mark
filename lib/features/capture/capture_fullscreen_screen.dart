@@ -454,66 +454,17 @@ class _CaptureFullscreenScreenState
                             child: Semantics(
                               label: strings.fullscreenPhotoSemantics,
                               liveRegion: index == _currentPage,
-                              child: FutureBuilder<String?>(
+                              child: _FullscreenPhotoFrame(
                                 key: ValueKey(
                                   'fullscreen-path-$_sequenceGeneration-${photo.id}',
                                 ),
-                                future: _pathFutures.putIfAbsent(
+                                previewImage: preview,
+                                pathFuture: _pathFutures.putIfAbsent(
                                   photo.id,
                                   photo.resolvePath,
                                 ),
-                                initialData: photo.initialPath,
-                                builder: (context, snapshot) {
-                                  final path = snapshot.data;
-                                  return Stack(
-                                    fit: StackFit.expand,
-                                    children: [
-                                      if (preview != null)
-                                        Image(
-                                          image: preview,
-                                          fit: BoxFit.contain,
-                                          gaplessPlayback: true,
-                                        ),
-                                      if (path != null)
-                                        Image.file(
-                                          File(path),
-                                          fit: BoxFit.contain,
-                                          gaplessPlayback: true,
-                                          frameBuilder:
-                                              (
-                                                context,
-                                                child,
-                                                frame,
-                                                wasSynchronouslyLoaded,
-                                              ) {
-                                                if (wasSynchronouslyLoaded) {
-                                                  return child;
-                                                }
-                                                return AnimatedOpacity(
-                                                  opacity: frame == null
-                                                      ? 0
-                                                      : 1,
-                                                  duration:
-                                                      AppMotion.durationOf(
-                                                        context,
-                                                        AppMotion.short4,
-                                                      ),
-                                                  curve: AppMotion.standard,
-                                                  child: child,
-                                                );
-                                              },
-                                          errorBuilder: (context, error, _) =>
-                                              preview != null
-                                              ? const SizedBox.shrink()
-                                              : _missingPhoto(context),
-                                        )
-                                      else if (snapshot.connectionState ==
-                                              ConnectionState.done &&
-                                          preview == null)
-                                        _missingPhoto(context),
-                                    ],
-                                  );
-                                },
+                                initialPath: photo.initialPath,
+                                missingPhoto: _missingPhoto(context),
                               ),
                             ),
                           ),
@@ -601,6 +552,109 @@ class _CaptureFullscreenScreenState
           icon: Icon(icon),
         ),
       ),
+    );
+  }
+}
+
+class _FullscreenPhotoFrame extends StatefulWidget {
+  const _FullscreenPhotoFrame({
+    super.key,
+    required this.previewImage,
+    required this.pathFuture,
+    required this.initialPath,
+    required this.missingPhoto,
+  });
+
+  final ImageProvider<Object>? previewImage;
+  final Future<String?> pathFuture;
+  final String? initialPath;
+  final Widget missingPhoto;
+
+  @override
+  State<_FullscreenPhotoFrame> createState() => _FullscreenPhotoFrameState();
+}
+
+class _FullscreenPhotoFrameState extends State<_FullscreenPhotoFrame> {
+  bool _previewFailed = false;
+  String? _failedTargetPath;
+
+  @override
+  void didUpdateWidget(covariant _FullscreenPhotoFrame oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.previewImage != widget.previewImage) {
+      _previewFailed = false;
+    }
+    if (oldWidget.pathFuture != widget.pathFuture) {
+      _failedTargetPath = null;
+    }
+  }
+
+  void _markPreviewFailed() {
+    if (_previewFailed) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_previewFailed) {
+        setState(() => _previewFailed = true);
+      }
+    });
+  }
+
+  void _markTargetFailed(String path) {
+    if (_failedTargetPath == path) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _failedTargetPath != path) {
+        setState(() => _failedTargetPath = path);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = widget.previewImage;
+    return FutureBuilder<String?>(
+      future: widget.pathFuture,
+      initialData: widget.initialPath,
+      builder: (context, snapshot) {
+        final path = snapshot.data;
+        final previewUnavailable = preview == null || _previewFailed;
+        final targetUnavailable = path == null
+            ? snapshot.connectionState == ConnectionState.done
+            : _failedTargetPath == path;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (preview != null)
+              Image(
+                image: preview,
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) {
+                  _markPreviewFailed();
+                  return const SizedBox.shrink();
+                },
+              ),
+            if (path != null)
+              Image.file(
+                File(path),
+                fit: BoxFit.contain,
+                gaplessPlayback: true,
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded) return child;
+                  return AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: AppMotion.durationOf(context, AppMotion.short4),
+                    curve: AppMotion.standard,
+                    child: child,
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  _markTargetFailed(path);
+                  return const SizedBox.shrink();
+                },
+              ),
+            if (previewUnavailable && targetUnavailable) widget.missingPhoto,
+          ],
+        );
+      },
     );
   }
 }

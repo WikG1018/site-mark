@@ -27,6 +27,7 @@ CaptureSummary _summary(
   String? address,
   String? photoNumber,
   DateTime? capturedAt,
+  bool capturedAtMissing = false,
 }) {
   final time =
       capturedAt ??
@@ -44,13 +45,19 @@ CaptureSummary _summary(
       originalPath: '/private/capture-$index.jpg',
       status: CaptureStatus.ready,
       createdAt: time,
-      capturedAt: time,
+      capturedAt: capturedAtMissing ? null : time,
       processingAttempts: 0,
       watermarkLocaleCode: 'zh',
       locationResolution: 'resolved',
     ),
     projectName: projectName,
   );
+}
+
+String _dateKey(CaptureSummary summary) {
+  final time = summary.capture.capturedAt ?? summary.capture.createdAt;
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${time.year}-${two(time.month)}-${two(time.day)}';
 }
 
 CapturePage _page(List<CaptureSummary> rows, {required bool hasMore}) {
@@ -71,13 +78,16 @@ Widget _localized({
   required Widget home,
   AppDatabase? database,
   bool disableAnimations = false,
+  Size size = const Size(400, 800),
+  TextScaler textScaler = TextScaler.noScaling,
+  Locale locale = const Locale('zh'),
 }) {
   return ProviderScope(
     overrides: [
       if (database != null) databaseProvider.overrideWithValue(database),
     ],
     child: MaterialApp(
-      locale: const Locale('zh'),
+      locale: locale,
       supportedLocales: AppStrings.supportedLocales,
       localizationsDelegates: const [
         AppStrings.delegate,
@@ -87,7 +97,8 @@ Widget _localized({
       ],
       home: MediaQuery(
         data: MediaQueryData(
-          size: const Size(400, 800),
+          size: size,
+          textScaler: textScaler,
           disableAnimations: disableAnimations,
         ),
         child: home,
@@ -100,19 +111,31 @@ Widget _pagedHarness(
   CapturePagerController controller,
   CaptureQuerySource source, {
   bool disableAnimations = false,
+  bool grouped = false,
+  Size size = const Size(400, 800),
+  TextScaler textScaler = TextScaler.noScaling,
+  Locale locale = const Locale('zh'),
+  int skeletonItemCount = 8,
+  ValueChanged<String?>? onVisibleGroupChanged,
 }) {
   return _localized(
     disableAnimations: disableAnimations,
+    size: size,
+    textScaler: textScaler,
+    locale: locale,
     home: Scaffold(
       body: CapturePagedList(
         controller: controller,
         source: source,
         emptyMessage: '没有记录',
+        skeletonItemCount: skeletonItemCount,
         itemBuilder: (context, summary, visibleRows) => SizedBox(
           key: Key('row-${summary.capture.id}'),
           height: 64,
           child: Text(summary.capture.workLocation),
         ),
+        groupKey: grouped ? _dateKey : null,
+        onVisibleGroupChanged: onVisibleGroupChanged,
       ),
     ),
   );
@@ -136,6 +159,24 @@ Future<void> _unmount(WidgetTester tester) async {
 }
 
 void main() {
+  test('capture paged list rejects a skeleton maximum below its minimum', () {
+    final source = _FakeCaptureQuerySource();
+    final controller = CapturePagerController(source);
+    addTearDown(() async {
+      controller.dispose();
+      await source.dispose();
+    });
+
+    expect(
+      () => _pagedHarness(controller, source, skeletonItemCount: -1),
+      throwsAssertionError,
+    );
+    expect(
+      () => _pagedHarness(controller, source, skeletonItemCount: 1),
+      throwsAssertionError,
+    );
+  });
+
   testWidgets(
     'all records debounces search for exactly 250ms and back exits search',
     (tester) async {
@@ -164,16 +205,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('filter-year')));
-      await tester.pumpAndSettle();
-      expect(find.widgetWithText(MenuItemButton, '2030'), findsOneWidget);
-      expect(find.widgetWithText(MenuItemButton, '2026'), findsNothing);
-      await tester.tapAt(const Offset(390, 790));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
 
       source.pageQueries.clear();
       await tester.tap(find.byKey(const Key('search-captures')));
       await tester.pump();
+      expect(find.byKey(const Key('filter-sheet-trigger')), findsNothing);
+      expect(find.byKey(const Key('edit-captures')), findsNothing);
       await tester.enterText(
         find.byKey(const Key('capture-search-field')),
         '21栋',
@@ -449,6 +487,10 @@ void main() {
   testWidgets('initial load uses a skeleton and does not wait for count', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(720, 1600);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final page = Completer<CapturePage>();
     final count = Completer<int>();
     final source = _FakeCaptureQuerySource(countFuture: count.future)
@@ -463,10 +505,24 @@ void main() {
     await tester.pumpWidget(_pagedHarness(controller, source));
     await tester.pump();
     expect(find.byKey(const Key('capture-list-skeleton')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('capture-list-skeleton')),
+        matching: find.byType(Card),
+      ),
+      findsNWidgets(7),
+    );
+    final contentElement = tester.element(
+      find.byKey(const Key('capture-list-content')),
+    );
 
     page.complete(_page([_summary(0)], hasMore: false));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('row-capture-0')), findsOneWidget);
+    expect(
+      tester.element(find.byKey(const Key('capture-list-content'))),
+      same(contentElement),
+    );
     expect(controller.state.totalCount, isNull);
 
     count.complete(1);
@@ -556,6 +612,141 @@ void main() {
       await _unmount(tester);
     },
   );
+
+  testWidgets(
+    'date groups merge across pages and use createdAt when capturedAt is null',
+    (tester) async {
+      final source = _FakeCaptureQuerySource()
+        ..enqueue(
+          () => Future.value(
+            _page([
+              _summary(0, capturedAt: DateTime(2026, 8, 4, 12)),
+              _summary(1, capturedAt: DateTime(2026, 8, 4, 11)),
+            ], hasMore: true),
+          ),
+        )
+        ..enqueue(
+          () => Future.value(
+            _page([
+              _summary(
+                2,
+                capturedAt: DateTime(2026, 8, 4, 10),
+                capturedAtMissing: true,
+              ),
+              _summary(3, capturedAt: DateTime(2026, 8, 3, 18)),
+            ], hasMore: false),
+          ),
+        );
+      final controller = CapturePagerController(source);
+      final reported = <String?>[];
+      unawaited(controller.setQuery(const CaptureListQuery()));
+      addTearDown(() {
+        controller.dispose();
+        unawaited(source.dispose());
+      });
+
+      await tester.pumpWidget(
+        _pagedHarness(
+          controller,
+          source,
+          grouped: true,
+          onVisibleGroupChanged: reported.add,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(source.pageQueries, hasLength(2));
+      expect(reported.last, '2026-08-04');
+      expect(find.byKey(const Key('row-capture-0')), findsOneWidget);
+      expect(find.byKey(const Key('row-capture-1')), findsOneWidget);
+      expect(find.byKey(const Key('row-capture-2')), findsOneWidget);
+      expect(find.byKey(const Key('row-capture-3')), findsOneWidget);
+      expect(source.watchedIdSets.last, hasLength(4));
+      expect(find.byType(SliverPersistentHeader), findsNothing);
+      await _unmount(tester);
+    },
+  );
+
+  testWidgets('grouped list reports the topmost visible date while scrolling', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 320));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final rows = [
+      for (var index = 0; index < 3; index++)
+        _summary(index, capturedAt: DateTime(2026, 8, 4, 12 - index)),
+      for (var index = 3; index < 6; index++)
+        _summary(index, capturedAt: DateTime(2026, 8, 3, 15 - index)),
+      for (var index = 6; index < 9; index++)
+        _summary(index, capturedAt: DateTime(2026, 8, 2, 18 - index)),
+    ];
+    final source = _FakeCaptureQuerySource(
+      defaultPage: _page(rows, hasMore: false),
+    );
+    final controller = CapturePagerController(source);
+    final reported = <String?>[];
+    unawaited(controller.setQuery(const CaptureListQuery()));
+    addTearDown(() {
+      controller.dispose();
+      unawaited(source.dispose());
+    });
+
+    await tester.pumpWidget(
+      _pagedHarness(
+        controller,
+        source,
+        grouped: true,
+        size: const Size(360, 320),
+        onVisibleGroupChanged: reported.add,
+      ),
+    );
+    await _pumpUntil(tester, () => reported.isNotEmpty);
+    expect(reported.last, '2026-08-04');
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -330));
+    await tester.pumpAndSettle();
+    expect(reported.last, '2026-08-03');
+  });
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets(
+      'grouped rows have no date strip at 3x text in ${locale.languageCode}',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(360, 800));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final source = _FakeCaptureQuerySource(
+          defaultPage: _page([
+            _summary(0, capturedAt: DateTime(2026, 8, 4, 12)),
+            _summary(1, capturedAt: DateTime(2026, 8, 3, 12)),
+          ], hasMore: false),
+        );
+        final controller = CapturePagerController(source);
+        unawaited(controller.setQuery(const CaptureListQuery()));
+        addTearDown(() {
+          controller.dispose();
+          unawaited(source.dispose());
+        });
+
+        await tester.pumpWidget(
+          _pagedHarness(
+            controller,
+            source,
+            grouped: true,
+            size: const Size(360, 800),
+            textScaler: const TextScaler.linear(3),
+            locale: locale,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final firstRow = find.byKey(const Key('row-capture-0'));
+        expect(find.byType(SliverPersistentHeader), findsNothing);
+        expect(firstRow, findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await _unmount(tester);
+      },
+    );
+  }
 
   testWidgets(
     'watched edit that no longer matches the search refreshes the page',
@@ -761,6 +952,22 @@ void main() {
         find.byKey(const Key('capture-page-switcher')),
       );
       expect(listSwitcher.duration, Duration.zero);
+
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+      await tester.pumpAndSettle();
+      for (final key in const [
+        Key('filter-project-opacity'),
+        Key('filter-year-opacity'),
+        Key('filter-month-opacity'),
+        Key('filter-day-opacity'),
+      ]) {
+        expect(
+          tester.widget<AnimatedOpacity>(find.byKey(key)).duration,
+          Duration.zero,
+        );
+      }
+      await tester.tap(find.byKey(const Key('filter-cancel')));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('search-captures')));
       await tester.pump();

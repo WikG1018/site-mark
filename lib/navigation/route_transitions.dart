@@ -1,20 +1,6 @@
 import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:sitemark/motion.dart';
-
-/// Whether the route currently covering a project page is a photo detail
-/// route (or its editor).
-///
-/// [GoRouterState.uri] on a parent page does not include routes added with
-/// `context.push`, while [GoRouterState.topRoute] does. Inspecting the latter
-/// therefore covers both normal taps and deep links, while deliberately
-/// excluding sibling project routes such as settings and capture forms.
-bool shouldFreezeProjectCaptureList(GoRouterState state) {
-  final topRoute = state.topRoute;
-  return topRoute is GoRoute &&
-      (topRoute.path == 'captures/:captureId' || topRoute.path == 'edit');
-}
 
 /// Builds the page-body transition used by photo details and their editor.
 ///
@@ -42,6 +28,45 @@ Widget buildCaptureDetailRouteTransition({
   return FadeTransition(
     opacity: opacity,
     child: SlideTransition(position: position, child: child),
+  );
+}
+
+/// Builds the lightweight transition between the project list and detail.
+///
+/// Unlike a shared-axis transition this does not transform the project list
+/// underneath the incoming page. Keeping that list geometrically stable
+/// prevents its recent-photo strip from flashing across the screen while the
+/// detail route is popped.
+Widget buildProjectDetailRouteTransition({
+  required BuildContext context,
+  required Animation<double> animation,
+  required Widget child,
+}) {
+  if (MediaQuery.disableAnimationsOf(context)) {
+    return child;
+  }
+
+  final curvedAnimation = CurvedAnimation(
+    parent: animation,
+    curve: AppMotion.emphasizedDecelerate,
+    reverseCurve: AppMotion.emphasizedAccelerate,
+  );
+  final position = Tween<Offset>(
+    begin: const Offset(0.045, 0),
+    end: Offset.zero,
+  ).animate(curvedAnimation);
+
+  return ClipRect(
+    key: const Key('project-detail-route-clip'),
+    child: FadeTransition(
+      key: const Key('project-detail-route-fade'),
+      opacity: curvedAnimation,
+      child: SlideTransition(
+        key: const Key('project-detail-route-slide'),
+        position: position,
+        child: child,
+      ),
+    ),
   );
 }
 

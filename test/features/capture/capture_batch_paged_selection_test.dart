@@ -57,12 +57,12 @@ Widget _localized({required AppDatabase database, required Widget home}) {
   );
 }
 
-IconButton _actionButton(WidgetTester tester, IconData icon) {
+InkWell _actionButton(WidgetTester tester, IconData icon) {
   final finder = find.ancestor(
     of: find.byIcon(icon),
-    matching: find.byType(IconButton),
+    matching: find.byType(InkWell),
   );
-  return tester.widget<IconButton>(finder.first);
+  return tester.widget<InkWell>(finder.first);
 }
 
 Future<void> _unmount(WidgetTester tester) async {
@@ -128,13 +128,13 @@ void main() {
       await _pumpUi(tester);
 
       expect(find.text('已选 120 张'), findsOneWidget);
-      expect(_actionButton(tester, Icons.archive_outlined).onPressed, isNull);
-      expect(_actionButton(tester, Icons.save_outlined).onPressed, isNull);
+      expect(_actionButton(tester, Icons.archive_outlined).onTap, isNull);
+      expect(_actionButton(tester, Icons.save_outlined).onTap, isNull);
       expect(
-        _actionButton(tester, Icons.cleaning_services_outlined).onPressed,
+        _actionButton(tester, Icons.cleaning_services_outlined).onTap,
         isNotNull,
       );
-      expect(_actionButton(tester, Icons.delete_outline).onPressed, isNotNull);
+      expect(_actionButton(tester, Icons.delete_outline).onTap, isNotNull);
 
       await tester.tap(find.byIcon(Icons.delete_outline));
       await _pumpUi(tester);
@@ -144,7 +144,8 @@ void main() {
 
       await tester.tap(find.byKey(const Key('select-all-captures')));
       await _pumpUi(tester);
-      expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+      expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+      expect(find.text('已选 0 张'), findsOneWidget);
       await _unmount(tester);
     },
   );
@@ -193,7 +194,7 @@ void main() {
       );
       await tester.pump();
       expect(find.text('已选 2 张'), findsOneWidget);
-      expect(_actionButton(tester, Icons.archive_outlined).onPressed, isNull);
+      expect(_actionButton(tester, Icons.archive_outlined).onTap, isNull);
 
       second.completeError(StateError('inspect failed'));
       await tester.pump();
@@ -210,11 +211,8 @@ void main() {
         ),
       );
       await _pumpUi(tester);
-      expect(
-        _actionButton(tester, Icons.archive_outlined).onPressed,
-        isNotNull,
-      );
-      expect(_actionButton(tester, Icons.save_outlined).onPressed, isNotNull);
+      expect(_actionButton(tester, Icons.archive_outlined).onTap, isNotNull);
+      expect(_actionButton(tester, Icons.save_outlined).onTap, isNotNull);
       await _unmount(tester);
     },
   );
@@ -250,7 +248,8 @@ void main() {
     await _pumpUi(tester);
 
     expect(source.selectableQueries, hasLength(1));
-    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.text('已选 0 张'), findsOneWidget);
     await _unmount(tester);
   });
 
@@ -326,13 +325,14 @@ void main() {
 
     expect(source.selectableQueries.single.filter.projectId, 'project-1');
     expect(find.text('已选 120 张'), findsOneWidget);
-    expect(_actionButton(tester, Icons.archive_outlined).onPressed, isNotNull);
+    expect(_actionButton(tester, Icons.archive_outlined).onTap, isNotNull);
 
     await tester.tap(find.byKey(const Key('select-all-captures')));
     await _pumpUi(tester);
 
     expect(source.selectableQueries, hasLength(2));
-    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.text('已选 0 张'), findsOneWidget);
     await _unmount(tester);
   });
 

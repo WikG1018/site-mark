@@ -8,6 +8,7 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/shared/ui/adaptive_skeleton_count.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 typedef CapturePagedItemBuilder =
@@ -16,6 +17,8 @@ typedef CapturePagedItemBuilder =
       CaptureSummary summary,
       List<CaptureSummary> visibleRows,
     );
+
+typedef CapturePagedGroupKey = String Function(CaptureSummary summary);
 
 /// Lazy capture list that owns scrolling, loaded-row watches, and page chrome.
 class CapturePagedList extends StatefulWidget {
@@ -29,9 +32,18 @@ class CapturePagedList extends StatefulWidget {
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 96),
     this.skeletonKey = const Key('capture-list-skeleton'),
     this.contentKey = const Key('capture-list-content'),
-    this.skeletonItemCount = 6,
+    this.skeletonItemCount = 8,
     this.forceInitialLoading = false,
-  });
+    this.groupKey,
+    this.onVisibleGroupChanged,
+  }) : assert(
+         groupKey != null || onVisibleGroupChanged == null,
+         'onVisibleGroupChanged requires groupKey',
+       ),
+       assert(
+         skeletonItemCount >= 2,
+         'skeletonItemCount must be at least the adaptive minimum of 2',
+       );
 
   final CapturePagerController controller;
   final CaptureQuerySource source;
@@ -44,11 +56,18 @@ class CapturePagedList extends StatefulWidget {
   final int skeletonItemCount;
   final bool forceInitialLoading;
 
+  /// Groups adjacent rows. The source must order equal keys contiguously.
+  final CapturePagedGroupKey? groupKey;
+  final ValueChanged<String?>? onVisibleGroupChanged;
+
   @override
   State<CapturePagedList> createState() => _CapturePagedListState();
 }
 
 class _CapturePagedListState extends State<CapturePagedList> {
+  final GlobalKey _viewportKey = GlobalKey();
+  final Map<String, GlobalKey> _rowKeys = <String, GlobalKey>{};
+  final Map<String, String> _rowGroups = <String, String>{};
   late final ScrollController _scrollController = ScrollController(
     keepScrollOffset: true,
   );
@@ -57,6 +76,8 @@ class _CapturePagedListState extends State<CapturePagedList> {
   CaptureListQuery? _visibleQuery;
   int _watchGeneration = 0;
   bool _loadMoreScheduled = false;
+  bool _visibleGroupReportScheduled = false;
+  String? _lastReportedGroup;
 
   @override
   void initState() {
@@ -75,10 +96,19 @@ class _CapturePagedListState extends State<CapturePagedList> {
       widget.controller.addListener(_onPagerChanged);
       _visibleQuery = widget.controller.state.query;
       _watchedIds = const [];
+      _lastReportedGroup = null;
+      _rowKeys.clear();
+      _rowGroups.clear();
       _syncWatchedRows();
     } else if (oldWidget.source != widget.source) {
       _watchedIds = const [];
       _syncWatchedRows();
+    }
+    if (oldWidget.groupKey != widget.groupKey ||
+        oldWidget.onVisibleGroupChanged != widget.onVisibleGroupChanged) {
+      _lastReportedGroup = null;
+      _rowGroups.clear();
+      _scheduleVisibleGroupReport();
     }
   }
 
@@ -86,6 +116,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
     final query = widget.controller.state.query;
     if (!identical(query, _visibleQuery)) {
       _visibleQuery = query;
+      _lastReportedGroup = null;
       widget.controller.setAtTop(true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _scrollController.hasClients) {
@@ -93,13 +124,77 @@ class _CapturePagedListState extends State<CapturePagedList> {
         }
       });
     }
+    final visibleIds = widget.controller.state.rows
+        .map((summary) => summary.capture.id)
+        .toSet();
+    _rowKeys.removeWhere((id, _) => !visibleIds.contains(id));
+    _rowGroups.removeWhere((id, _) => !visibleIds.contains(id));
     _syncWatchedRows();
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _scheduleVisibleGroupReport();
+    }
   }
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     widget.controller.setAtTop(_scrollController.offset <= 0.5);
+    _scheduleVisibleGroupReport();
+  }
+
+  void _scheduleVisibleGroupReport() {
+    if (_visibleGroupReportScheduled ||
+        widget.groupKey == null ||
+        widget.onVisibleGroupChanged == null) {
+      return;
+    }
+    _visibleGroupReportScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _visibleGroupReportScheduled = false;
+      if (mounted) _reportVisibleGroup();
+    });
+  }
+
+  void _reportVisibleGroup() {
+    final callback = widget.onVisibleGroupChanged;
+    final groupKey = widget.groupKey;
+    if (callback == null || groupKey == null) return;
+    if (widget.controller.state.rows.isEmpty) {
+      _emitVisibleGroup(null);
+      return;
+    }
+    final viewport = _viewportKey.currentContext?.findRenderObject();
+    if (viewport is! RenderBox || !viewport.attached) return;
+    final viewportTop = viewport.localToGlobal(Offset.zero).dy;
+    var nearestTop = double.infinity;
+    String? nearestGroup;
+    final detachedIds = <String>[];
+    for (final entry in _rowKeys.entries) {
+      final renderObject = entry.value.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox ||
+          !renderObject.attached ||
+          !renderObject.hasSize) {
+        detachedIds.add(entry.key);
+        continue;
+      }
+      final top = renderObject.localToGlobal(Offset.zero).dy;
+      if (top + renderObject.size.height > viewportTop + .5 &&
+          top < nearestTop) {
+        nearestTop = top;
+        nearestGroup = _rowGroups[entry.key];
+      }
+    }
+    for (final id in detachedIds) {
+      _rowKeys.remove(id);
+      _rowGroups.remove(id);
+    }
+    if (nearestGroup != null) _emitVisibleGroup(nearestGroup);
+  }
+
+  void _emitVisibleGroup(String? value) {
+    if (_lastReportedGroup == value) return;
+    _lastReportedGroup = value;
+    widget.onVisibleGroupChanged?.call(value);
   }
 
   bool _sameIds(List<String> next) {
@@ -235,119 +330,180 @@ class _CapturePagedListState extends State<CapturePagedList> {
         !showSkeleton && state.initialError != null && state.rows.isEmpty;
     final showContent = !showSkeleton && !showInitialError;
     final strings = AppStrings.of(context);
-    return AnimatedSwitcher(
-      key: const Key('capture-page-switcher'),
-      duration: AppMotion.durationOf(context, AppMotion.short4),
-      child: Stack(
-        key: const ValueKey('capture-page-surface'),
-        children: [
-          CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              ...widget.sliversBefore,
-              SliverToBoxAdapter(
-                child: AnimatedSwitcher(
-                  duration: AppMotion.durationOf(context, AppMotion.short4),
-                  child: showSkeleton
-                      ? _buildSkeletonStatus()
-                      : showInitialError
-                      ? _buildInitialErrorStatus(strings)
-                      : const SizedBox.shrink(
-                          key: ValueKey('capture-page-ready'),
-                        ),
-                ),
-              ),
-              if (showContent && state.rows.isEmpty)
-                SliverFillRemaining(
-                  key: widget.contentKey,
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        widget.emptyMessage,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                    ),
-                  ),
-                )
-              else if (showContent)
-                SliverPadding(
-                  key: widget.contentKey,
-                  padding: widget.padding,
-                  sliver: SliverList.separated(
-                    itemCount: state.rows.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      _scheduleLoadMore(index, state);
-                      return widget.itemBuilder(
-                        context,
-                        state.rows[index],
-                        state.rows,
-                      );
-                    },
-                  ),
-                ),
-              if (showContent && state.loadingMore)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    child: Center(
-                      child: SizedBox.square(
-                        key: Key('capture-next-page-loading'),
-                        dimension: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    ),
-                  ),
-                )
-              else if (showContent && state.nextPageError != null)
+    _scheduleVisibleGroupReport();
+    return LayoutBuilder(
+      key: widget.contentKey,
+      builder: (context, constraints) => AnimatedSwitcher(
+        key: const Key('capture-page-switcher'),
+        duration: AppMotion.durationOf(context, AppMotion.short4),
+        child: Stack(
+          key: const ValueKey('capture-page-surface'),
+          children: [
+            CustomScrollView(
+              key: _viewportKey,
+              controller: _scrollController,
+              slivers: [
+                ...widget.sliversBefore,
                 SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  child: AnimatedSwitcher(
+                    duration: AppMotion.durationOf(context, AppMotion.short4),
+                    child: showSkeleton
+                        ? _buildSkeletonStatus(constraints.maxHeight)
+                        : showInitialError
+                        ? _buildInitialErrorStatus(strings)
+                        : const SizedBox.shrink(
+                            key: ValueKey('capture-page-ready'),
+                          ),
+                  ),
+                ),
+                if (showContent && state.rows.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
                     child: Center(
-                      child: TextButton.icon(
-                        key: const Key('capture-next-page-retry'),
-                        onPressed: widget.controller.loadMore,
-                        icon: const Icon(Icons.refresh),
-                        label: Text(strings.loadMoreFailedRetry),
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          widget.emptyMessage,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ),
+                    ),
+                  )
+                else if (showContent)
+                  ..._buildContentSlivers(context, state),
+                if (showContent && state.loadingMore)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      child: Center(
+                        child: SizedBox.square(
+                          key: Key('capture-next-page-loading'),
+                          dimension: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ),
+                  )
+                else if (showContent && state.nextPageError != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      child: Center(
+                        child: TextButton.icon(
+                          key: const Key('capture-next-page-retry'),
+                          onPressed: widget.controller.loadMore,
+                          icon: const Icon(Icons.refresh),
+                          label: Text(strings.loadMoreFailedRetry),
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
-          ),
-          if (showContent && state.hasNewer)
-            Positioned(
-              top: 12,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: FilledButton.tonalIcon(
-                  key: const Key('capture-new-records'),
-                  onPressed: _acceptNewer,
-                  icon: const Icon(Icons.arrow_upward),
-                  label: Text(strings.newCaptureRecords),
+              ],
+            ),
+            if (showContent && state.hasNewer)
+              Positioned(
+                top: 12,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: FilledButton.tonalIcon(
+                    key: const Key('capture-new-records'),
+                    onPressed: _acceptNewer,
+                    icon: const Icon(Icons.arrow_upward),
+                    label: Text(strings.newCaptureRecords),
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSkeletonStatus() {
+  List<Widget> _buildContentSlivers(
+    BuildContext context,
+    CapturePagerState state,
+  ) {
+    final groupKey = widget.groupKey;
+    if (groupKey == null) {
+      return [
+        SliverPadding(
+          padding: widget.padding,
+          sliver: SliverList.separated(
+            itemCount: state.rows.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, index) => _buildRow(context, state, index),
+          ),
+        ),
+      ];
+    }
+
+    final groups = <_CaptureRowGroup>[];
+    for (var index = 0; index < state.rows.length; index++) {
+      final key = groupKey(state.rows[index]);
+      if (groups.isEmpty || groups.last.key != key) {
+        groups.add(_CaptureRowGroup(key: key, startIndex: index, length: 1));
+      } else {
+        groups.last.length++;
+      }
+    }
+    final padding = widget.padding.resolve(Directionality.of(context));
+    return [
+      for (var groupIndex = 0; groupIndex < groups.length; groupIndex++)
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(
+            padding.left,
+            groupIndex == 0 ? padding.top : 0,
+            padding.right,
+            groupIndex == groups.length - 1 ? padding.bottom : 12,
+          ),
+          sliver: SliverList.separated(
+            itemCount: groups[groupIndex].length,
+            separatorBuilder: (_, _) => const SizedBox(height: 10),
+            itemBuilder: (context, localIndex) => _buildRow(
+              context,
+              state,
+              groups[groupIndex].startIndex + localIndex,
+            ),
+          ),
+        ),
+    ];
+  }
+
+  Widget _buildRow(BuildContext context, CapturePagerState state, int index) {
+    _scheduleLoadMore(index, state);
+    final summary = state.rows[index];
+    final id = summary.capture.id;
+    final rowKey = _rowKeys.putIfAbsent(id, GlobalKey.new);
+    final groupKey = widget.groupKey;
+    if (groupKey == null) {
+      _rowGroups.remove(id);
+    } else {
+      _rowGroups[id] = groupKey(summary);
+    }
+    return KeyedSubtree(
+      key: rowKey,
+      child: widget.itemBuilder(context, summary, state.rows),
+    );
+  }
+
+  Widget _buildSkeletonStatus(double viewportHeight) {
+    final skeletonCount = adaptiveSkeletonCount(
+      viewportHeight: viewportHeight,
+      itemExtent: 118,
+      max: widget.skeletonItemCount,
+    );
     return Skeletonizer(
       key: widget.skeletonKey,
       child: Padding(
         padding: widget.padding,
         child: Column(
           children: List.generate(
-            widget.skeletonItemCount,
+            skeletonCount,
             (index) => Padding(
               padding: EdgeInsets.only(
-                bottom: index == widget.skeletonItemCount - 1 ? 0 : 10,
+                bottom: index == skeletonCount - 1 ? 0 : 10,
               ),
               child: const _CaptureCardSkeleton(),
             ),
@@ -380,6 +536,18 @@ class _CapturePagedListState extends State<CapturePagedList> {
       ),
     );
   }
+}
+
+final class _CaptureRowGroup {
+  _CaptureRowGroup({
+    required this.key,
+    required this.startIndex,
+    required this.length,
+  });
+
+  final String key;
+  final int startIndex;
+  int length;
 }
 
 class _CaptureCardSkeleton extends StatelessWidget {

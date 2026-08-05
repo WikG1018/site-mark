@@ -1,63 +1,135 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sitemark/app.dart';
+import 'package:sitemark/domain/app_storage_usage.dart';
+import 'package:sitemark/features/settings/settings_group.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 
-/// 二级菜单入口的设置页。原 805 行的单体屏幕已拆分为 7 个独立子页面，
-/// 通过 [context.go] 跳转到对应的二级路由（路由在 `lib/app.dart` 中由
-/// Task 11 注册）。
-class GlobalSettingsScreen extends StatelessWidget {
+class GlobalSettingsScreen extends ConsumerWidget {
   const GlobalSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final strings = AppStrings.of(context);
-    final entries = <(IconData, String, String)>[
-      (
-        Icons.water_drop_outlined,
-        strings.newProjectDefaults,
-        '/settings/watermark',
-      ),
-      (
-        Icons.settings_backup_restore_outlined,
-        strings.backupAndRestore,
-        '/settings/backup-restore',
-      ),
-      (Icons.palette_outlined, strings.appearance, '/settings/appearance'),
-      (Icons.language, strings.language, '/settings/language'),
-      (Icons.storage_outlined, strings.storageMenuLabel, '/settings/storage'),
-      (Icons.location_on_outlined, strings.locationLabel, '/settings/location'),
-      (
-        Icons.notifications_outlined,
-        strings.completionNotificationTitle,
-        '/settings/notification',
-      ),
-      (
-        Icons.health_and_safety_outlined,
-        strings.diagnosticsAndFeedback,
-        '/settings/diagnostics',
-      ),
-      (Icons.info_outline, strings.about, '/settings/about'),
-    ];
+    final settings = _settledValue(ref.watch(appSettingsProvider));
+    final storageUsage = _settledValue(ref.watch(storageUsageProvider));
+    final languageSummary = settings == null
+        ? null
+        : switch (settings.localeCode) {
+            'zh' => strings.chinese,
+            'en' => strings.english,
+            _ => strings.systemLanguage,
+          };
+    final notificationSummary = settings == null
+        ? null
+        : settings.completionNotificationsEnabled
+        ? strings.enabled
+        : strings.disabled;
+    final storageSummary = storageUsage == null
+        ? null
+        : formatStorageBytes(storageUsage.totalBytes);
+
     return Scaffold(
-      appBar: AppBar(title: Text(strings.settings)),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: entries.length,
-        itemBuilder: (context, index) {
-          final (icon, title, route) = entries[index];
-          return Card(
-            child: ListTile(
-              key: route == '/settings/backup-restore'
-                  ? const Key('backup-restore-menu')
-                  : null,
-              leading: Icon(icon),
-              title: Text(title),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push(route),
-            ),
-          );
-        },
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: Text(strings.settings),
+      ),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          floatingDockReservedSpaceOf(context),
+        ),
+        children: [
+          SettingsGroup(
+            key: const Key('settings-group-capture'),
+            title: strings.settingsCaptureAndRecords,
+            children: [
+              SettingsEntry(
+                key: const Key('settings-entry-watermark'),
+                icon: Icons.water_drop_outlined,
+                title: strings.newProjectDefaults,
+                route: '/settings/watermark',
+              ),
+              SettingsEntry(
+                key: const Key('settings-entry-location'),
+                icon: Icons.location_on_outlined,
+                title: strings.locationLabel,
+                route: '/settings/location',
+              ),
+              SettingsEntry(
+                key: const Key('settings-entry-notification'),
+                icon: Icons.notifications_outlined,
+                title: strings.completionNotificationTitle,
+                subtitle: notificationSummary,
+                reserveSubtitleSpace: true,
+                route: '/settings/notification',
+              ),
+            ],
+          ),
+          SettingsGroup(
+            key: const Key('settings-group-data'),
+            title: strings.settingsDataAndSafety,
+            children: [
+              SettingsEntry(
+                key: const Key('backup-restore-menu'),
+                icon: Icons.settings_backup_restore_outlined,
+                title: strings.backupAndRestore,
+                route: '/settings/backup-restore',
+              ),
+              SettingsEntry(
+                key: const Key('settings-entry-storage'),
+                icon: Icons.storage_outlined,
+                title: strings.storageMenuLabel,
+                subtitle: storageSummary,
+                reserveSubtitleSpace: true,
+                route: '/settings/storage',
+              ),
+              SettingsEntry(
+                key: const Key('settings-entry-diagnostics'),
+                icon: Icons.health_and_safety_outlined,
+                title: strings.diagnosticsAndFeedback,
+                route: '/settings/diagnostics',
+              ),
+            ],
+          ),
+          SettingsGroup(
+            key: const Key('settings-group-app'),
+            title: strings.settingsApplication,
+            children: [
+              SettingsEntry(
+                key: const Key('settings-entry-appearance'),
+                icon: Icons.palette_outlined,
+                title: strings.appearance,
+                route: '/settings/appearance',
+              ),
+              SettingsEntry(
+                key: const Key('settings-entry-language'),
+                icon: Icons.language,
+                title: strings.language,
+                subtitle: languageSummary,
+                reserveSubtitleSpace: true,
+                route: '/settings/language',
+              ),
+              SettingsEntry(
+                key: const Key('settings-entry-about'),
+                icon: Icons.info_outline,
+                title: strings.about,
+                route: '/settings/about',
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
+}
+
+T? _settledValue<T>(AsyncValue<T> state) {
+  return switch (state) {
+    AsyncData<T>(:final value) when !state.isLoading => value,
+    _ => null,
+  };
 }

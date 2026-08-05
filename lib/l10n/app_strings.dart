@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/domain/app_links.dart';
 import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_failure_guidance.dart';
+import 'package:sitemark/domain/original_photo_state.dart';
 
 class AppStrings {
   const AppStrings(this.locale);
@@ -202,8 +204,8 @@ class AppStrings {
       _english ? 'Template no longer exists' : '模板已不存在';
   String get openSystemCamera => _english ? 'Capture' : '拍摄';
   String get captureWorkflowHint => _english
-      ? 'Capture will invoke the system camera. Watermarks are processed in the background. You can tap capture repeatedly; return to the project detail to view records as they finish.'
-      : '拍摄将调用系统相机，水印将在后台处理。可连续点击拍摄，返回项目详情即可查看处理中的记录。';
+      ? 'System camera · background watermarking · continuous capture'
+      : '系统相机拍摄 · 后台生成水印 · 支持连续拍摄';
   String get ready => _english ? 'Ready' : '已完成';
   String get failed => _english ? 'Failed' : '失败';
   String get pendingCamera => _english ? 'Waiting for camera' : '等待相机';
@@ -226,21 +228,117 @@ class AppStrings {
           : '照片已安全保留，后台处理会自动重试',
     CaptureFailureCode.originalMissing =>
       _english
-          ? 'The original is missing, so the watermarked photo cannot be created.'
-          : '原图已缺失，无法生成水印照片',
+          ? 'The original is missing, so the watermarked photo cannot be created. Return to the project and take the photo again; you can keep this failed record or delete it from the top-right menu.'
+          : '原图已缺失，无法生成水印照片。请返回项目重新拍摄；也可保留此失败记录，或从右上角菜单删除记录。',
     CaptureFailureCode.originalModified =>
       _english
-          ? 'The original has changed. Processing stopped to protect the record.'
-          : '原图已发生变化，为保护工程记录已停止处理',
+          ? 'The original does not match its capture-time checksum, so processing stopped. Keep the current original as evidence and take the photo again, or delete this failed record from the top-right menu.'
+          : '原图内容与拍摄时校验值不一致，处理已停止。请保留现有原图作为证据并重新拍摄，或从右上角菜单删除此失败记录。',
     CaptureFailureCode.processingFailed =>
       _english
-          ? 'Photo processing failed. Keep the original and try processing again.'
-          : '照片处理失败，请保留原图并重新处理',
+          ? 'Photo processing failed, but the original is retained. Select Retry processing; if it still fails, keep the original and take the photo again.'
+          : '照片处理失败，但原图仍保留。请点击“重新处理”；若仍失败，请保留原图并重新拍摄。',
     CaptureFailureCode.unexpected =>
       _english
-          ? 'The photo could not be processed. Please try again.'
-          : '照片处理失败，请重试',
+          ? 'The photo could not be processed for an unknown reason. If the original is retained, select Retry processing; otherwise take the photo again.'
+          : '照片因未知原因处理失败。若原图仍保留，请点击“重新处理”；否则请重新拍摄。',
   };
+  String captureFailureGuidanceMessage(CaptureFailureGuidance guidance) {
+    if (guidance.surface == CaptureFailureGuidanceSurface.list) {
+      return switch (guidance.code) {
+        CaptureFailureCode.cameraUnavailable =>
+          _english
+              ? 'The system camera was unavailable. Open the record to see available actions.'
+              : '系统相机当时不可用。请打开记录查看可用操作。',
+        CaptureFailureCode.queueUnavailable =>
+          _english
+              ? 'Background processing was delayed. Open the record to see available actions.'
+              : '后台处理曾延迟。请打开记录查看可用操作。',
+        CaptureFailureCode.originalMissing =>
+          _english
+              ? 'The original is missing, so no watermarked photo was created. Open the record to see available actions.'
+              : '原图已缺失，无法生成水印照片。请打开记录查看可用操作。',
+        CaptureFailureCode.originalModified =>
+          _english
+              ? 'The original checksum does not match, so processing stopped. Open the record to see available actions.'
+              : '原图校验值不一致，处理已停止。请打开记录查看可用操作。',
+        CaptureFailureCode.processingFailed =>
+          _english
+              ? 'Photo processing failed. Open the record to see available actions.'
+              : '照片处理失败。请打开记录查看可用操作。',
+        CaptureFailureCode.unexpected =>
+          _english
+              ? 'The photo could not be processed. Open the record to see available actions.'
+              : '照片因未知原因处理失败。请打开记录查看可用操作。',
+      };
+    }
+
+    final reason = switch (guidance.code) {
+      CaptureFailureCode.cameraUnavailable =>
+        _english ? 'The system camera was unavailable.' : '系统相机当时不可用。',
+      CaptureFailureCode.queueUnavailable =>
+        _english ? 'Background processing was delayed.' : '后台处理曾延迟。',
+      CaptureFailureCode.originalMissing =>
+        _english
+            ? 'The original is missing, so no watermarked photo was created.'
+            : '原图已缺失，无法生成水印照片。',
+      CaptureFailureCode.originalModified =>
+        _english
+            ? 'The original does not match its capture-time checksum, so processing stopped.'
+            : '原图内容与拍摄时校验值不一致，处理已停止。',
+      CaptureFailureCode.processingFailed =>
+        _english ? 'Photo processing failed.' : '照片处理失败。',
+      CaptureFailureCode.unexpected =>
+        _english
+            ? 'The photo could not be processed for an unknown reason.'
+            : '照片因未知原因处理失败。',
+    };
+
+    if (guidance.originalState == null) {
+      if (!guidance.projectActive) {
+        return _english
+            ? '$reason The original photo state could not be checked, so Retry processing is unavailable for now. The project is read-only; keep this record and reopen the details later to check again.'
+            : '$reason 无法检查原图状态，暂不提供重新处理。项目当前为只读状态；可保留此记录，稍后重新打开详情检查。';
+      }
+      return _english
+          ? '$reason The original photo state could not be checked, so Retry processing is unavailable for now. Keep this record and reopen the details later to check again, or use the top-right menu to delete it.'
+          : '$reason 无法检查原图状态，暂不提供重新处理。可保留此记录，稍后重新打开详情检查，或使用右上角菜单删除记录。';
+    }
+    if (!guidance.projectActive) {
+      return _english
+          ? '$reason The project is read-only, so the record cannot be retried or deleted. Keep the record, or restore the project to active and open it again to see available actions.'
+          : '$reason 项目当前为只读状态，不能重新处理或删除记录。可保留此记录，或先将项目恢复为进行中，再打开记录查看可用操作。';
+    }
+    if (guidance.originalState == OriginalPhotoState.missing) {
+      return _english
+          ? '$reason The original is currently missing, so retry is unavailable. Return to the project and take the photo again; you can keep this failed record or use the top-right menu to delete it.'
+          : '$reason 原图当前缺失，无法重新处理。请返回项目重新拍摄；也可保留此失败记录，或使用右上角菜单删除记录。';
+    }
+    if (guidance.originalState == OriginalPhotoState.cleared) {
+      return _english
+          ? '$reason The original has been cleared, so retry is unavailable. Return to the project and take the photo again; you can keep this failed record or use the top-right menu to delete it.'
+          : '$reason 原图已清理，无法重新处理。请返回项目重新拍摄；也可保留此失败记录，或使用右上角菜单删除记录。';
+    }
+    if (guidance.code == CaptureFailureCode.originalMissing) {
+      return _english
+          ? '$reason Return to the project and take the photo again; you can keep this failed record or use the top-right menu to delete it.'
+          : '$reason 请返回项目重新拍摄；也可保留此失败记录，或使用右上角菜单删除记录。';
+    }
+    if (guidance.code == CaptureFailureCode.originalModified) {
+      return _english
+          ? '$reason Keep the current original as evidence and take the photo again, or use the top-right menu to delete this failed record.'
+          : '$reason 请保留现有原图作为证据并重新拍摄，或使用右上角菜单删除此失败记录。';
+    }
+    if (guidance.canRetry) {
+      return _english
+          ? '$reason The original is retained. Select Retry processing; if it still fails, keep the original and take the photo again.'
+          : '$reason 原图仍保留。请点击“重新处理”；若仍失败，请保留原图并重新拍摄。';
+    }
+    return _english
+        ? '$reason Keep the record or use the top-right menu to delete it; return to the project to take the photo again.'
+        : '$reason 可保留此记录或使用右上角菜单删除，并返回项目重新拍摄。';
+  }
+
   String get captureQueuedContinue => _english
       ? 'Photo queued for background processing. Continue shooting.'
       : '照片已加入后台处理，可继续拍摄';
@@ -258,6 +356,13 @@ class AppStrings {
   String get cancel => _english ? 'Cancel' : '取消';
   String get exportFailed => _english ? 'Export failed' : '导出失败';
   String get captureDetail => _english ? 'Record details' : '记录详情';
+  String get fieldRecordTab => _english ? 'Field record' : '现场记录';
+  String get fileInfoTab => _english ? 'File info' : '文件信息';
+  String get fileInfoInspectionFailed => _english
+      ? 'File information could not be checked because the local photo is temporarily unavailable. Keep this record and check again.'
+      : '无法检查文件信息，本地照片可能暂时不可访问。请保留此记录并重新检查。';
+  String get recheckFileInfo => _english ? 'Check again' : '重新检查';
+  String get fullFileName => _english ? 'Full file name' : '完整文件名';
   String get originalSha256 => _english ? 'Original SHA-256' : '原图 SHA-256';
   String get capturedAt => _english ? 'Captured at' : '拍摄时间';
   String get coordinates => _english ? 'Coordinates' : '坐标';
@@ -294,14 +399,15 @@ class AppStrings {
       : '拍摄时间、定位结果、照片编号和原图哈希不会被修改。';
   String get regenerationFailed => _english ? 'Regeneration failed' : '重新生成失败';
   String get allRecords => _english ? 'All records' : '全部记录';
+  String get projects => _english ? 'Projects' : '项目';
   String get searchCaptures => _english ? 'Search records' : '搜索记录';
   String get searchCapturesHint => _english
       ? 'Search project, location, content, photographer, notes, address, or photo number'
       : '搜索项目、部位、内容、拍摄人、备注、地址或照片编号';
   String get clearSearch => _english ? 'Clear search' : '清空搜索';
   String get captureListLoadFailed => _english
-      ? 'Could not load capture records. Please try again.'
-      : '拍摄记录加载失败，请重试';
+      ? 'Local capture records could not be read. Please try again.'
+      : '无法读取本机拍摄记录，请重试。';
   String get loadMoreFailedRetry =>
       _english ? 'Could not load more. Tap to retry.' : '加载更多失败，点击重试';
   String get newCaptureRecords => _english ? 'New records' : '有新记录';
@@ -324,11 +430,27 @@ class AppStrings {
   String get allDays => _english ? 'All days' : '全部日期';
   String get monthSuffix => _english ? '' : '月';
   String get daySuffix => _english ? '' : '日';
+  String monthFilterLabel(int month) => _english ? 'Month $month' : '$month月';
+  String dayFilterLabel(int day) => _english ? 'Day $day' : '$day日';
+  String get filterRecords => _english ? 'Filter records' : '筛选记录';
+  String get resetFilters => _english ? 'Reset' : '重置';
+  String get applyFilters => _english ? 'Apply' : '应用';
+  String get removeFilter => _english ? 'Remove filter' : '移除筛选条件';
+  String get removeProjectFilter =>
+      _english ? 'Remove project filter' : '移除项目筛选';
+  String get removeYearFilter => _english ? 'Remove year filter' : '移除年份筛选';
+  String get removeMonthFilter => _english ? 'Remove month filter' : '移除月份筛选';
+  String get removeDayFilter => _english ? 'Remove day filter' : '移除日期筛选';
+  String get deletedProject => _english ? 'Deleted project' : '已删除项目';
   String get filteredEmpty =>
       _english ? 'No records match the current filters' : '没有符合筛选条件的记录';
   String get retryProcessing => _english ? 'Retry processing' : '重新处理';
 
   // Global settings and About
+  String get settingsCaptureAndRecords =>
+      _english ? 'Capture & records' : '拍摄与记录';
+  String get settingsDataAndSafety => _english ? 'Data & safety' : '数据与安全';
+  String get settingsApplication => _english ? 'Application' : '应用';
   String get appearance => _english ? 'Appearance' : '外观';
   String get theme => _english ? 'Theme' : '主题';
   String get systemTheme => _english ? 'System' : '跟随系统';
@@ -397,8 +519,8 @@ class AppStrings {
 
   // Non-blocking location permission UX
   String get locationPermissionExplanation => _english
-      ? 'Foreground location tags each capture with GPS coordinates. Capture still works if you decline; tap below to enable it once.'
-      : '前台定位为每张照片记录 GPS 坐标。拒绝授权也可继续拍摄，点击下方按钮可一次性开启。';
+      ? 'Add GPS to photos (capture works without it).'
+      : '为照片记录 GPS（拒绝后仍可拍摄）';
   String get dismiss => _english ? 'Dismiss' : '关闭';
   String get enableLocation => _english ? 'Enable location' : '开启定位';
   String get openSettingsLabel => _english ? 'Open settings' : '打开设置';
@@ -414,6 +536,7 @@ class AppStrings {
 
   // Capture list edit mode and batch actions (Task 4)
   String get editRecords => _english ? 'Edit records' : '编辑记录';
+  String get selectRecords => _english ? 'Select' : '选择';
   String get done => _english ? 'Done' : '完成';
   String get selectAll => _english ? 'Select all' : '全选';
   String get deselectAll => _english ? 'Deselect all' : '取消全选';
@@ -421,6 +544,8 @@ class AppStrings {
   String get saveToGallery => _english ? 'Save to gallery' : '保存到相册';
   String get clearOriginals => _english ? 'Clear originals' : '清理原图';
   String get deleteAll => _english ? 'Delete all' : '全部删除';
+  String currentVisibleDate(String date) =>
+      _english ? 'Current visible date: $date' : '当前可见日期：$date';
   String selectedCount(int n) => _english ? '$n selected' : '已选 $n 张';
   String actionProgress(int completed, int total) =>
       _english ? 'Processing $completed/$total' : '正在处理 $completed/$total';
@@ -556,8 +681,9 @@ class AppStrings {
   String get backupShareFailed => _english
       ? 'Could not share the backup. You can try again.'
       : '无法分享备份，请重试';
-  String get backupFailedFriendly =>
-      _english ? 'Could not create the backup' : '无法生成备份';
+  String get backupFailedFriendly => _english
+      ? 'Project data or files could not be read, so the backup was not created. Try again; if it still fails, back up one project at a time.'
+      : '无法读取项目数据或文件，因而无法生成备份。请重试；若仍失败，请逐个项目备份。';
   String backupProjectFailed(String projectName) => _english
       ? 'Could not back up "$projectName". Try again; if it still fails, select only this project and retry.'
       : '无法备份项目“$projectName”。请重试；若仍失败，请单独选择该项目备份。';
@@ -574,33 +700,36 @@ class AppStrings {
   String restoringProgress(int completed, int total) =>
       _english ? 'Restoring $completed/$total' : '正在恢复 $completed/$total';
   String get restoreComplete => _english ? 'Restore complete' : '恢复完成';
-  String get backupInvalidArchive =>
-      _english ? 'Not a valid SiteMark backup' : '不是有效的 SiteMark 备份';
-  String get backupNotSiteMark =>
-      _english ? 'This is not a SiteMark backup file' : '不是 SiteMark 备份文件';
-  String get backupUnsupportedVersion =>
-      _english ? 'This backup version is not supported' : '此备份版本暂不支持';
+  String get backupInvalidArchive => _english
+      ? 'The selected ZIP is not a valid SiteMark project backup. Choose a ZIP created with Back up projects in SiteMark.'
+      : '所选 ZIP 不是有效的 SiteMark 项目备份。请选择由 SiteMark“备份项目”生成的 ZIP。';
+  String get backupNotSiteMark => _english
+      ? 'The selected ZIP is not a project backup exported by SiteMark. Choose a ZIP created with Back up projects in SiteMark.'
+      : '所选 ZIP 不是 SiteMark 导出的项目备份。请选择由 SiteMark“备份项目”生成的 ZIP。';
+  String get backupUnsupportedVersion => _english
+      ? 'This backup is newer than this app can read. Update SiteMark, then choose the backup again.'
+      : '此备份版本高于当前应用支持范围。请先升级 SiteMark，再重新选择该备份。';
   String get backupCorrupted => _english
-      ? 'The backup is corrupted or its checksum does not match'
-      : '备份已损坏或校验不一致';
+      ? 'The backup is corrupted or its checksum does not match. Choose another SiteMark backup and try again.'
+      : '备份已损坏或校验不一致。请选择其他 SiteMark 备份后重试。';
   String get backupSelectionNotRestorable => _english
-      ? 'Photo sharing ZIP files cannot restore projects'
-      : '照片分享 ZIP 不能用于恢复项目';
+      ? 'The selected ZIP is a photo-sharing archive and contains no restorable project data. Choose a ZIP created with Back up projects.'
+      : '所选 ZIP 是照片分享包，不含可恢复的项目数据。请选择通过“备份项目”生成的 ZIP。';
   String get backupRestoreNameConflict => _english
-      ? 'A project name conflicts with an existing or selected project'
-      : '项目名称与已有或所选项目冲突';
+      ? 'A restore project name conflicts with an existing project or another selected name. Start restore again, change each conflicting name in the preview, then restore.'
+      : '恢复项目名称与现有项目或本次所选名称冲突。请重新开始恢复，并在预览中修改冲突名称后再恢复。';
   String get backupStorageInsufficient => _english
-      ? 'Not enough storage space to complete this operation'
-      : '存储空间不足，无法完成操作';
+      ? 'Not enough storage space to complete this operation. Free some space and try again.'
+      : '存储空间不足，无法完成操作。请释放空间后重试。';
   String get restoreFinalizationPending => _english
-      ? 'Restore data is safely saved. Publication and visibility will finish automatically the next time the app starts.'
-      : '恢复数据已安全保存，将在下次启动应用时自动完成发布和显示';
+      ? 'Restore data is safely saved but is not visible yet. Restart SiteMark to finish the restore automatically.'
+      : '恢复数据已安全保存，但尚未完成显示。请重启 SiteMark，应用会自动完成恢复。';
   String get restoreFailedRollback => _english
-      ? 'Restore failed. Any changes from this restore were rolled back.'
-      : '恢复失败，本次产生的内容已回滚';
+      ? 'One or more projects could not be restored, so all changes from this restore were rolled back. Choose the original backup and restore again; if it still fails, restore single-project backups one at a time.'
+      : '一个或多个项目恢复失败，本次更改已全部回滚。请重新选择原备份进行恢复；若仍失败，请改用单项目备份逐个恢复。';
   String get restoreFailedGeneral => _english
-      ? 'Could not complete the restore. Please try again.'
-      : '无法完成恢复，请重试';
+      ? 'An error prevented the restore from completing. Choose the backup and restore again; if it still fails, restore single-project backups one at a time.'
+      : '恢复过程中发生错误，未能完成恢复。请重新选择备份进行恢复；若仍失败，请改用单项目备份逐个恢复。';
   String get restoreUsesBackupWatermark =>
       _english ? 'Use watermark settings from this backup' : '使用备份中的水印设置';
   String restoreWatermarkSummary(

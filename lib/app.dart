@@ -34,6 +34,7 @@ import 'package:sitemark/features/projects/project_detail_screen.dart';
 import 'package:sitemark/features/projects/project_watermark_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/root_navigation_scaffold.dart';
 import 'package:sitemark/navigation/route_transitions.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/external_link_service.dart';
@@ -401,6 +402,26 @@ CustomTransitionPage<void> _sharedAxisPage(
   );
 }
 
+/// Project detail uses a short clipped slide over a stable project list.
+CustomTransitionPage<void> _projectDetailPage(
+  GoRouterState state,
+  Widget child,
+) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    transitionDuration: AppMotion.medium2,
+    reverseTransitionDuration: AppMotion.medium2,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return buildProjectDetailRouteTransition(
+        context: context,
+        animation: animation,
+        child: child,
+      );
+    },
+    child: child,
+  );
+}
+
 /// Photo detail and its editor use a position-only transition so the Hero
 /// overlay is not also handed between two independently fading image trees.
 CustomTransitionPage<void> _captureDetailPage(
@@ -424,190 +445,206 @@ CustomTransitionPage<void> _captureDetailPage(
   );
 }
 
-/// Fade Through page for top-level destination switches (projects ↔ all
-/// records ↔ settings), per M3 motion guidance.
-CustomTransitionPage<void> _fadeThroughPage(
-  GoRouterState state,
-  Widget child, {
-  bool freezeSecondary = false,
-}) {
-  return CustomTransitionPage<void>(
-    key: state.pageKey,
-    transitionDuration: AppMotion.medium2,
-    reverseTransitionDuration: AppMotion.medium2,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      return buildFadeThroughRouteTransition(
-        context: context,
-        animation: animation,
-        secondaryAnimation: secondaryAnimation,
-        freezeSecondary: freezeSecondary,
-        child: child,
-      );
-    },
-    child: child,
-  );
-}
+final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 
 final routerProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
+    navigatorKey: rootNavigatorKey,
     routes: [
-      GoRoute(
-        path: '/',
-        pageBuilder: (context, state) => _fadeThroughPage(
-          state,
-          ProjectListScreen(
-            initialStatus: state.extra is ProjectLifecycleStatus
-                ? state.extra! as ProjectLifecycleStatus
-                : null,
-          ),
-        ),
-        routes: [
-          GoRoute(
-            path: 'projects/new',
-            pageBuilder: (context, state) =>
-                _sharedAxisPage(state, const ProjectFormScreen()),
-          ),
-          GoRoute(
-            path: 'records',
-            pageBuilder: (context, state) => _fadeThroughPage(
-              state,
-              const AllCapturesScreen(),
-              freezeSecondary: true,
+      StatefulShellRoute(
+        builder: (context, state, navigationShell) =>
+            RootNavigationScaffold(navigationShell: navigationShell),
+        navigatorContainerBuilder: (context, navigationShell, children) =>
+            RootBranchContainer(
+              currentIndex: navigationShell.currentIndex,
+              children: children,
             ),
-          ),
-          GoRoute(
-            path: 'settings',
-            pageBuilder: (context, state) =>
-                _fadeThroughPage(state, const GlobalSettingsScreen()),
+        branches: [
+          StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'watermark',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  const WatermarkDefaultsSectionScreen(),
+                path: '/',
+                builder: (context, state) => ProjectListScreen(
+                  initialStatus: state.extra is ProjectLifecycleStatus
+                      ? state.extra! as ProjectLifecycleStatus
+                      : null,
                 ),
-              ),
-              GoRoute(
-                path: 'appearance',
-                pageBuilder: (context, state) =>
-                    _sharedAxisPage(state, const AppearanceSectionScreen()),
-              ),
-              GoRoute(
-                path: 'backup-restore',
-                pageBuilder: (context, state) =>
-                    _sharedAxisPage(state, const BackupRestoreSectionScreen()),
                 routes: [
                   GoRoute(
-                    path: 'backup',
-                    pageBuilder: (context, state) {
-                      final arguments =
-                          state.extra is ProjectBackupSelectionArguments
-                          ? state.extra! as ProjectBackupSelectionArguments
-                          : const ProjectBackupSelectionArguments();
-                      return _sharedAxisPage(
-                        state,
-                        ProjectBackupSelectionScreen(
-                          initialProjectIds: arguments.initialProjectIds,
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'projects/new',
+                    pageBuilder: (context, state) =>
+                        _sharedAxisPage(state, const ProjectFormScreen()),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'projects/:projectId',
+                    pageBuilder: (context, state) => _projectDetailPage(
+                      state,
+                      ProjectDetailScreen(
+                        projectId: state.pathParameters['projectId']!,
+                        initialProject: state.extra is Project
+                            ? state.extra! as Project
+                            : null,
+                      ),
+                    ),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'settings',
+                        pageBuilder: (context, state) => _sharedAxisPage(
+                          state,
+                          ProjectWatermarkSettingsScreen(
+                            projectId: state.pathParameters['projectId']!,
+                          ),
                         ),
-                      );
-                    },
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'capture',
+                        pageBuilder: (context, state) => _sharedAxisPage(
+                          state,
+                          CaptureFormScreen(
+                            projectId: state.pathParameters['projectId']!,
+                          ),
+                        ),
+                      ),
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'captures/:captureId',
+                        pageBuilder: (context, state) {
+                          final arguments =
+                              state.extra is CaptureDetailArguments
+                              ? state.extra! as CaptureDetailArguments
+                              : null;
+                          return _captureDetailPage(
+                            state,
+                            CaptureDetailScreen(
+                              projectId: state.pathParameters['projectId']!,
+                              captureId: state.pathParameters['captureId']!,
+                              initialCapture:
+                                  arguments?.capture ??
+                                  (state.extra is CaptureRecord
+                                      ? state.extra! as CaptureRecord
+                                      : null),
+                              initialImagePath: arguments?.initialImagePath,
+                              navigationContext: arguments?.navigationContext,
+                            ),
+                          );
+                        },
+                        routes: [
+                          GoRoute(
+                            parentNavigatorKey: rootNavigatorKey,
+                            path: 'edit',
+                            pageBuilder: (context, state) => _captureDetailPage(
+                              state,
+                              CaptureEditScreen(
+                                projectId: state.pathParameters['projectId']!,
+                                captureId: state.pathParameters['captureId']!,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
               ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
               GoRoute(
-                path: 'language',
-                pageBuilder: (context, state) =>
-                    _sharedAxisPage(state, const LanguageSectionScreen()),
-              ),
-              GoRoute(
-                path: 'storage',
-                pageBuilder: (context, state) =>
-                    _sharedAxisPage(state, const StorageSectionScreen()),
-              ),
-              GoRoute(
-                path: 'location',
-                pageBuilder: (context, state) =>
-                    _sharedAxisPage(state, const LocationSectionScreen()),
-              ),
-              GoRoute(
-                path: 'notification',
-                pageBuilder: (context, state) =>
-                    _sharedAxisPage(state, const NotificationSectionScreen()),
-              ),
-              GoRoute(
-                path: 'diagnostics',
-                pageBuilder: (context, state) =>
-                    _sharedAxisPage(state, const DiagnosticsSectionScreen()),
-              ),
-              GoRoute(
-                path: 'about',
-                pageBuilder: (context, state) =>
-                    _sharedAxisPage(state, const AboutSectionScreen()),
+                path: '/records',
+                builder: (context, state) => const AllCapturesScreen(),
               ),
             ],
           ),
-          GoRoute(
-            path: 'projects/:projectId',
-            pageBuilder: (context, state) => _sharedAxisPage(
-              state,
-              ProjectDetailScreen(
-                projectId: state.pathParameters['projectId']!,
-                initialProject: state.extra is Project
-                    ? state.extra! as Project
-                    : null,
-              ),
-              freezeSecondary: shouldFreezeProjectCaptureList(state),
-            ),
+          StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'settings',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  ProjectWatermarkSettingsScreen(
-                    projectId: state.pathParameters['projectId']!,
-                  ),
-                ),
-              ),
-              GoRoute(
-                path: 'capture',
-                pageBuilder: (context, state) => _sharedAxisPage(
-                  state,
-                  CaptureFormScreen(
-                    projectId: state.pathParameters['projectId']!,
-                  ),
-                ),
-              ),
-              GoRoute(
-                path: 'captures/:captureId',
-                pageBuilder: (context, state) {
-                  final arguments = state.extra is CaptureDetailArguments
-                      ? state.extra! as CaptureDetailArguments
-                      : null;
-                  return _captureDetailPage(
-                    state,
-                    CaptureDetailScreen(
-                      projectId: state.pathParameters['projectId']!,
-                      captureId: state.pathParameters['captureId']!,
-                      initialCapture:
-                          arguments?.capture ??
-                          (state.extra is CaptureRecord
-                              ? state.extra! as CaptureRecord
-                              : null),
-                      initialImagePath: arguments?.initialImagePath,
-                      navigationContext: arguments?.navigationContext,
-                    ),
-                  );
-                },
+                path: '/settings',
+                builder: (context, state) => const GlobalSettingsScreen(),
                 routes: [
                   GoRoute(
-                    path: 'edit',
-                    pageBuilder: (context, state) => _captureDetailPage(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'watermark',
+                    pageBuilder: (context, state) => _sharedAxisPage(
                       state,
-                      CaptureEditScreen(
-                        projectId: state.pathParameters['projectId']!,
-                        captureId: state.pathParameters['captureId']!,
-                      ),
+                      const WatermarkDefaultsSectionScreen(),
                     ),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'appearance',
+                    pageBuilder: (context, state) =>
+                        _sharedAxisPage(state, const AppearanceSectionScreen()),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'backup-restore',
+                    pageBuilder: (context, state) => _sharedAxisPage(
+                      state,
+                      const BackupRestoreSectionScreen(),
+                    ),
+                    routes: [
+                      GoRoute(
+                        parentNavigatorKey: rootNavigatorKey,
+                        path: 'backup',
+                        pageBuilder: (context, state) {
+                          final arguments =
+                              state.extra is ProjectBackupSelectionArguments
+                              ? state.extra! as ProjectBackupSelectionArguments
+                              : const ProjectBackupSelectionArguments();
+                          return _sharedAxisPage(
+                            state,
+                            ProjectBackupSelectionScreen(
+                              initialProjectIds: arguments.initialProjectIds,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'language',
+                    pageBuilder: (context, state) =>
+                        _sharedAxisPage(state, const LanguageSectionScreen()),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'storage',
+                    pageBuilder: (context, state) =>
+                        _sharedAxisPage(state, const StorageSectionScreen()),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'location',
+                    pageBuilder: (context, state) =>
+                        _sharedAxisPage(state, const LocationSectionScreen()),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'notification',
+                    pageBuilder: (context, state) => _sharedAxisPage(
+                      state,
+                      const NotificationSectionScreen(),
+                    ),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'diagnostics',
+                    pageBuilder: (context, state) => _sharedAxisPage(
+                      state,
+                      const DiagnosticsSectionScreen(),
+                    ),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
+                    path: 'about',
+                    pageBuilder: (context, state) =>
+                        _sharedAxisPage(state, const AboutSectionScreen()),
                   ),
                 ],
               ),

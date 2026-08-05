@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,18 @@ import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_summary.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/platform/platform_services.dart';
+
+class _TestCaptureOutputPaths implements CaptureOutputPaths {
+  _TestCaptureOutputPaths(this.renderedPath);
+
+  final String renderedPath;
+
+  @override
+  Future<String> renderedPhotoPath(String captureId) async {
+    return renderedPath;
+  }
+}
 
 class _ControlledProjectsDatabase extends AppDatabase {
   _ControlledProjectsDatabase() : super.forTesting(NativeDatabase.memory());
@@ -33,7 +46,11 @@ class _ControlledProjectsDatabase extends AppDatabase {
 void main() {
   late AppDatabase database;
 
-  Future<void> pumpProjects(WidgetTester tester, {bool settle = true}) async {
+  Future<void> pumpProjects(
+    WidgetTester tester, {
+    bool settle = true,
+    Locale locale = const Locale('zh'),
+  }) async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     await database.createProject(id: 'east', name: '东区厂房改造');
@@ -43,7 +60,7 @@ void main() {
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(database)],
         child: MaterialApp(
-          locale: const Locale('zh'),
+          locale: locale,
           supportedLocales: AppStrings.supportedLocales,
           localizationsDelegates: const [
             AppStrings.delegate,
@@ -56,6 +73,73 @@ void main() {
       ),
     );
     if (settle) await tester.pumpAndSettle();
+  }
+
+  Future<ProviderContainer> pumpProjectList(
+    WidgetTester tester, {
+    required int captures,
+  }) async {
+    database = AppDatabase.forTesting(NativeDatabase.memory());
+    await database.createProject(id: 'recent', name: '最近项目');
+    for (var index = 1; index <= captures; index++) {
+      final id = 'capture-$index';
+      final capturedAt = DateTime.utc(2026, 8, 3, 8, index);
+      final pending = await database.createPendingCapture(
+        id: id,
+        projectId: 'recent',
+        originalPath: '/private/$id.jpg',
+        workLocation: 'A 区',
+        workContent: '检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: capturedAt,
+      );
+      await database.markCaptured(
+        captureId: pending.id,
+        capturedAt: capturedAt,
+      );
+      await database.markRendering(
+        captureId: pending.id,
+        originalSha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      await database.markReady(
+        captureId: pending.id,
+        publishedUri: 'content://media/$id',
+      );
+    }
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        captureOutputPathsProvider.overrideWithValue(
+          _TestCaptureOutputPaths(
+            File('assets/branding/sitemark-icon.png').absolute.path,
+          ),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: ProjectListScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 1)),
+    );
+    await tester.pumpAndSettle();
+    return container;
   }
 
   // Dispose the widget tree before the test ends so the StreamBuilder cancels
@@ -72,7 +156,13 @@ void main() {
     await tester.pump();
     await tester.enterText(find.byKey(const Key('project-search-field')), '东区');
     await tester.pumpAndSettle();
-    expect(find.text('东区厂房改造'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('project-card-east')),
+        matching: find.text('东区厂房改造'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('西区管线整改'), findsNothing);
     await disposeApp(tester);
   });
@@ -83,10 +173,62 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('status filter announces its title and current value', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await pumpProjects(tester, locale: const Locale('en'));
+    try {
+      expect(
+        tester.getSemantics(find.byKey(const Key('project-status-filter'))),
+        matchesSemantics(
+          label: 'Project status: Active',
+          isButton: true,
+          hasTapAction: true,
+        ),
+      );
+    } finally {
+      semantics.dispose();
+      await disposeApp(tester);
+    }
+  });
+
+  testWidgets('project card is one tap target and shows recent thumbnails', (
+    tester,
+  ) async {
+    final container = await pumpProjectList(tester, captures: 3);
+    try {
+      expect(
+        find.byKey(const Key('project-thumbnail-capture-3')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('project-thumbnail-capture-2')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('project-thumbnail-capture-1')),
+        findsOneWidget,
+      );
+      expect(find.byType(PopupMenuButton), findsNothing);
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      container.dispose();
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(database.close);
+    }
+  });
+
   testWidgets(
     'home first frame shows Skeletonizer without real project cards',
     (tester) async {
-      database = _ControlledProjectsDatabase();
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controlledDatabase = _ControlledProjectsDatabase();
+      database = controlledDatabase;
       addTearDown(database.close);
       await tester.pumpWidget(
         ProviderScope(
@@ -105,10 +247,28 @@ void main() {
         ),
       );
 
-      // Loading state shows a fixed skeleton layout but no real project data.
+      // Loading state fills this viewport without inventing off-screen rows.
       expect(find.byKey(const Key('project-list-skeleton')), findsOneWidget);
+      final skeletonList = tester.widget<ListView>(
+        find.descendant(
+          of: find.byKey(const Key('project-list-skeleton')),
+          matching: find.byType(ListView),
+        ),
+      );
+      // Seven rows plus the six separators inserted by ListView.separated.
+      expect(skeletonList.childrenDelegate.estimatedChildCount, 13);
+      final contentElement = tester.element(
+        find.byKey(const Key('project-list-content')),
+      );
       expect(find.text('东区厂房改造'), findsNothing);
       expect(find.text('西区管线整改'), findsNothing);
+
+      controlledDatabase.projectEvents.add(const []);
+      await tester.pumpAndSettle();
+      expect(
+        tester.element(find.byKey(const Key('project-list-content'))),
+        same(contentElement),
+      );
       await disposeApp(tester);
     },
   );
@@ -234,7 +394,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.descendant(of: find.byType(Card), matching: find.text('东区厂房改造')),
+      find.descendant(
+        of: find.byKey(const Key('project-card-east')),
+        matching: find.text('东区厂房改造'),
+      ),
       findsOneWidget,
     );
     expect(
@@ -316,7 +479,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.descendant(of: find.byType(Card), matching: find.text('项目29')),
+      find.descendant(
+        of: find.byKey(const Key('project-card-project-29')),
+        matching: find.text('项目29'),
+      ),
       findsOneWidget,
     );
 

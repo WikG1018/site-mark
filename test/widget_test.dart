@@ -5,6 +5,7 @@ import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
+import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
@@ -145,13 +146,28 @@ void main() {
 
   /// Reads the current text of the [TextFormField] found by [key].
   String fieldText(WidgetTester tester, Key key) {
+    if (key == const Key('notes') && find.byKey(key).evaluate().isEmpty) {
+      return tester
+          .widget<CaptureNotesField>(find.byType(CaptureNotesField))
+          .controller
+          .text;
+    }
     final field = tester.widget<TextFormField>(find.byKey(key));
     return field.controller!.text;
   }
 
+  Future<void> expandNotes(WidgetTester tester) async {
+    if (find.byKey(const Key('notes')).evaluate().isNotEmpty) return;
+    await tester.tap(find.byKey(const Key('notes-expander')));
+    await tester.pumpAndSettle();
+  }
+
   /// Pumps [MyApp] with the standard widget-test fakes and a single ready
   /// capture under `project-1` so the all-records surface has content to show.
-  Future<void> pumpAppWithRecords(WidgetTester tester) async {
+  Future<void> pumpAppWithRecords(
+    WidgetTester tester, {
+    Locale locale = const Locale('zh'),
+  }) async {
     await seedReadyCapture();
     final images = _WidgetTestImagePipeline();
     final share = _WidgetTestShareService();
@@ -166,7 +182,7 @@ void main() {
     await tester.pumpWidget(
       MyApp(
         database: database,
-        initialLocale: const Locale('zh'),
+        initialLocale: locale,
         platformServices: platform,
         imagePipeline: images,
         outputPaths: outputPaths,
@@ -199,9 +215,43 @@ void main() {
 
     expect(find.text('工程印记'), findsOneWidget);
     expect(find.text('暂无进行中的项目'), findsOneWidget);
-    expect(find.text('新建项目'), findsOneWidget);
+    expect(find.text('项目'), findsOneWidget);
+    expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
     await disposeApp(tester);
   });
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('real root pages have no overflow at 360dp and 2x text in '
+        '${locale.languageCode}', (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await pumpAppWithRecords(tester, locale: locale);
+      expect(tester.getSize(find.byType(MaterialApp)), const Size(360, 800));
+      expect(find.byKey(const Key('root-dock')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('root-destination-records')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('root-destination-settings')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('settings-group-capture')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.byKey(const Key('root-destination-projects')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('project-title')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await disposeApp(tester);
+    });
+  }
 
   testWidgets('creates a project and returns to the project list', (
     tester,
@@ -216,7 +266,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('新建项目'));
+    await tester.tap(find.byKey(const Key('new-project-fab')));
     await tester.pumpAndSettle();
 
     expect(find.text('创建项目'), findsOneWidget);
@@ -242,7 +292,8 @@ void main() {
 
     expect(find.text('SiteMark'), findsOneWidget);
     expect(find.text('No active projects'), findsOneWidget);
-    expect(find.text('New project'), findsOneWidget);
+    expect(find.text('Projects'), findsOneWidget);
+    expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
     await disposeApp(tester);
   });
 
@@ -260,8 +311,10 @@ void main() {
 
     await tester.tap(find.text('东区厂房改造'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('此项目水印设置'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.tune_outlined));
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    expect(find.text('此项目水印设置'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('project-watermark-action')));
     // Pump until the watermark settings screen's FutureBuilder resolves and
     // the slider is visible.
     await tester.pumpAndSettle();
@@ -359,7 +412,9 @@ void main() {
     expect(find.textContaining('SM-'), findsNothing);
     expect(find.text('已完成'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.archive_outlined));
+    await tester.tap(find.byKey(const Key('project-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project-backup-action')));
     await tester.pumpAndSettle();
     expect(find.text('备份项目'), findsOneWidget);
     expect(find.text('已选择 1 个项目'), findsOneWidget);
@@ -371,8 +426,12 @@ void main() {
 
     await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();
-    // The detail screen now leads with a large image preview, so the evidence
-    // card is below the fold and must be scrolled into view before asserting.
+    // File evidence lives in the detail screen's file-info tab below the
+    // preview. Scroll to the tabs before selecting it.
+    await tester.ensureVisible(find.byKey(const Key('detail-tab-file-info')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('detail-tab-file-info')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('原图 SHA-256'),
       200,
@@ -380,7 +439,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('原图 SHA-256'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-record')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('edit-work-location')),
@@ -395,7 +456,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('B 区屋面'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.delete_sweep_outlined));
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('delete-record')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
@@ -468,6 +531,7 @@ void main() {
       photographer: '历史拍摄人',
     );
     await openCaptureForm(tester);
+    await expandNotes(tester);
     await tester.enterText(find.byKey(const Key('notes')), '保留本张备注');
 
     await tester.tap(find.byKey(const Key('work-location')));
@@ -492,6 +556,7 @@ void main() {
         photographer: '张工',
       );
       await openCaptureForm(tester, workflowResult: queuedResult);
+      await expandNotes(tester);
       await tester.enterText(find.byKey(const Key('notes')), '本张备注');
       await tester.tap(find.byKey(const Key('capture-button')));
       await tester.pumpAndSettle();
@@ -517,6 +582,7 @@ void main() {
   ) async {
     await seedReadyCapture();
     await openCaptureForm(tester, schedulerOverride: _DelayedScheduler());
+    await expandNotes(tester);
     await tester.enterText(find.byKey(const Key('notes')), '本张备注');
     await tester.tap(find.byKey(const Key('capture-button')));
     await tester.pumpAndSettle();
@@ -552,7 +618,7 @@ void main() {
     await disposeApp(tester);
   });
 
-  testWidgets('home opens all records with project and date filters', (
+  testWidgets('home opens all records with filter sheet and visible date', (
     tester,
   ) async {
     await pumpAppWithRecords(tester);
@@ -560,8 +626,9 @@ void main() {
     await tester.tap(find.byTooltip('全部记录'));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('project-filter')), findsOneWidget);
-    expect(find.byKey(const Key('filter-year')), findsOneWidget);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
+    expect(find.byKey(const Key('visible-capture-date')), findsOneWidget);
+    expect(find.text('2026-07-16'), findsOneWidget);
     expect(find.byType(CaptureRecordCard), findsWidgets);
     await disposeApp(tester);
   });
@@ -602,11 +669,13 @@ void main() {
     await pumpAppWithRecords(tester);
     await tester.tap(find.byTooltip('全部记录'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
 
     await tester.tap(find.byType(CaptureRecordCard));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.tap(find.byKey(const Key('capture-detail-actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('edit-record')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('edit-work-location')),
@@ -621,7 +690,7 @@ void main() {
 
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('project-filter')), findsOneWidget);
+    expect(find.byKey(const Key('filter-sheet-trigger')), findsOneWidget);
     await disposeApp(tester);
   });
 
@@ -632,7 +701,14 @@ void main() {
     await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('外观'));
+    final appearanceEntry = find.text('外观');
+    await tester.ensureVisible(appearanceEntry);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getCenter(appearanceEntry).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('root-dock'))).dy),
+    );
+    await tester.tap(appearanceEntry);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('theme-system')), findsOneWidget);
 
@@ -658,7 +734,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('新建项目'));
+    await tester.tap(find.byKey(const Key('new-project-fab')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('project-name')), name);
     await tester.tap(find.text('保存'));
@@ -695,7 +771,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('新建项目'));
+    await tester.tap(find.byKey(const Key('new-project-fab')));
     await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('project-name')),
@@ -800,6 +876,8 @@ void main() {
       expect(find.byKey(const Key('edit-captures')), findsOneWidget);
       expect(find.byType(CaptureRecordCard), findsWidgets);
 
+      await tester.tap(find.byKey(const Key('project-actions')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('reopen-project')));
       await tester.pumpAndSettle();
 
@@ -863,7 +941,12 @@ void main() {
 
     await tester.tap(find.byKey(const Key('project-actions')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('project-lifecycle-project-1')));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('project-action-sheet')),
+        matching: find.byKey(const Key('reopen-project')),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
@@ -974,7 +1057,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(Checkbox), findsWidgets);
-    expect(find.byKey(const Key('batch-action-bar')), findsNothing);
+    expect(find.byKey(const Key('batch-action-bar')), findsOneWidget);
+    expect(find.text('已选 0 张'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('select-all-captures')));
     await tester.pumpAndSettle();

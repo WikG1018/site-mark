@@ -52,7 +52,7 @@ void main() {
   }
 
   for (final locale in const [Locale('zh'), Locale('en')]) {
-    testWidgets('about section shows v0.9 fallback in ${locale.languageCode}', (
+    testWidgets('about section shows v1.0 fallback in ${locale.languageCode}', (
       tester,
     ) async {
       await pumpScreen(tester, locale: locale);
@@ -60,7 +60,7 @@ void main() {
         find.text(locale.languageCode == 'en' ? 'Version' : '版本'),
         findsOneWidget,
       );
-      expect(find.text('0.10.0+14'), findsOneWidget);
+      expect(find.text('1.0.0+15'), findsOneWidget);
       expect(
         find.text(
           locale.languageCode == 'en'
@@ -127,7 +127,7 @@ void main() {
     await pumpScreen(tester, locale: const Locale('en'));
 
     expect(find.text('9.8.7+654'), findsOneWidget);
-    expect(find.text('0.10.0+14'), findsNothing);
+    expect(find.text('1.0.0+15'), findsNothing);
   });
 }
 

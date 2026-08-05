@@ -6,6 +6,18 @@ import 'package:sitemark/domain/project_lifecycle.dart';
 void main() {
   late AppDatabase database;
 
+  test('decodes recent capture ids and rejects malformed aggregate data', () {
+    expect(decodeRecentCaptureIds('["capture-1","capture-2"]'), [
+      'capture-1',
+      'capture-2',
+    ]);
+    expect(decodeRecentCaptureIds(null), isEmpty);
+    expect(decodeRecentCaptureIds(''), isEmpty);
+    expect(decodeRecentCaptureIds('{"id":"capture-1"}'), isEmpty);
+    expect(decodeRecentCaptureIds('["capture-1", 2]'), isEmpty);
+    expect(decodeRecentCaptureIds('not-json'), isEmpty);
+  });
+
   setUp(() {
     database = AppDatabase.forTesting(NativeDatabase.memory());
   });
@@ -40,6 +52,95 @@ void main() {
       publishedUri: 'content://media/$id',
     );
   }
+
+  test('returns the three newest ready capture ids for each project', () async {
+    await database.createProject(id: 'recent', name: '最近项目');
+    await database.createProject(id: 'empty', name: '空项目');
+
+    for (var index = 0; index < 4; index++) {
+      await insertReadyCapture(
+        id: 'capture-$index',
+        projectId: 'recent',
+        capturedAt: DateTime.utc(2026, 8, 3, 8, index),
+      );
+    }
+    final capturedOnly = await database.createPendingCapture(
+      id: 'capture-not-ready',
+      projectId: 'recent',
+      originalPath: '/private/capture-not-ready.jpg',
+      workLocation: 'A 区',
+      workContent: '检查',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime.utc(2026, 8, 3, 9),
+    );
+    await database.markCaptured(
+      captureId: capturedOnly.id,
+      capturedAt: DateTime.utc(2026, 8, 3, 9),
+    );
+
+    final summaries = await database
+        .watchProjectSummaries(status: ProjectLifecycleStatus.active)
+        .first;
+    final recent = summaries.singleWhere(
+      (summary) => summary.project.id == 'recent',
+    );
+    final empty = summaries.singleWhere(
+      (summary) => summary.project.id == 'empty',
+    );
+
+    expect(recent.recentCaptureIds, ['capture-3', 'capture-2', 'capture-1']);
+    expect(recent.recentCaptureIds, hasLength(3));
+    expect(empty.recentCaptureIds, isEmpty);
+  });
+
+  test('round-trips opaque ready capture ids without delimiter loss', () async {
+    await database.createProject(id: 'opaque', name: '不透明编号');
+    final unitSeparatorId = 'unit${String.fromCharCode(31)}separator';
+    const escapedId = 'quote"slash\\';
+    final ids = [unitSeparatorId, escapedId, ''];
+    for (final (index, id) in ids.indexed) {
+      await insertReadyCapture(
+        id: id,
+        projectId: 'opaque',
+        capturedAt: DateTime.utc(
+          2026,
+          8,
+          3,
+          10,
+        ).subtract(Duration(minutes: index)),
+      );
+    }
+
+    final summary =
+        (await database
+                .watchProjectSummaries(status: ProjectLifecycleStatus.active)
+                .first)
+            .single;
+
+    expect(summary.recentCaptureIds, ids);
+    expect(summary.recentCaptureIds, hasLength(3));
+  });
+
+  test('orders equal capture timestamps by id descending', () async {
+    await database.createProject(id: 'ties', name: '同时间项目');
+    final capturedAt = DateTime.utc(2026, 8, 3, 11);
+    for (final id in ['capture-a', 'capture-c', 'capture-b']) {
+      await insertReadyCapture(
+        id: id,
+        projectId: 'ties',
+        capturedAt: capturedAt,
+      );
+    }
+
+    final summary =
+        (await database
+                .watchProjectSummaries(status: ProjectLifecycleStatus.active)
+                .first)
+            .single;
+
+    expect(summary.recentCaptureIds, ['capture-c', 'capture-b', 'capture-a']);
+  });
 
   test(
     'orders active summaries by pin, last capture, created_at, id',

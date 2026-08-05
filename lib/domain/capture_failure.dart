@@ -10,6 +10,15 @@ enum CaptureFailureCode {
 
   final String storageCode;
 
+  bool get canRetryProcessing => switch (this) {
+    CaptureFailureCode.processingFailed ||
+    CaptureFailureCode.unexpected => true,
+    CaptureFailureCode.cameraUnavailable ||
+    CaptureFailureCode.queueUnavailable ||
+    CaptureFailureCode.originalMissing ||
+    CaptureFailureCode.originalModified => false,
+  };
+
   static CaptureFailureCode fromStorage(String? value) {
     for (final code in values) {
       if (code.storageCode == value) return code;
