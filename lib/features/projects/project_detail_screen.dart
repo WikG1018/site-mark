@@ -339,6 +339,15 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               ],
             ),
             body: FloatingDockLayout(
+              dock: project != null && editing
+                  ? CaptureBatchActionBar(
+                      key: const Key('batch-bar'),
+                      controller: _selectionController,
+                      mediaService: ref.watch(captureMediaServiceProvider),
+                      exportService: ref.watch(projectExportServiceProvider),
+                      shareService: ref.watch(shareFileServiceProvider),
+                    )
+                  : null,
               child: waitingForProject
                   ? _projectLoadingList(strings)
                   : projectLoadFailed
@@ -354,15 +363,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       message: strings.projectNotFound,
                     )
                   : _projectCaptureList(context, strings, project!, filter),
-              dock: project != null && editing
-                  ? CaptureBatchActionBar(
-                      key: const Key('batch-bar'),
-                      controller: _selectionController,
-                      mediaService: ref.watch(captureMediaServiceProvider),
-                      exportService: ref.watch(projectExportServiceProvider),
-                      shareService: ref.watch(shareFileServiceProvider),
-                    )
-                  : null,
             ),
             floatingActionButton: AnimatedSwitcher(
               duration: AppMotion.durationOf(context, AppMotion.medium2),

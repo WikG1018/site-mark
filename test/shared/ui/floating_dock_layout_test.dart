@@ -13,13 +13,13 @@ void main() {
             data: const MediaQueryData(size: Size(360, 800)),
             child: Scaffold(
               body: FloatingDockLayout(
-                child: const SizedBox.expand(key: Key('page-content')),
                 dock: showDock
                     ? const SizedBox(
                         key: Key('test-dock'),
                         height: floatingDockHeight,
                       )
                     : null,
+                child: const SizedBox.expand(key: Key('page-content')),
               ),
             ),
           ),
@@ -44,7 +44,6 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: FloatingDockLayout(
-            child: const SizedBox.expand(),
             dock: const SizedBox(
               key: Key('test-dock'),
               height: floatingDockHeight,
@@ -53,6 +52,7 @@ void main() {
               key: const Key('test-fab'),
               onPressed: () {},
             ),
+            child: const SizedBox.expand(),
           ),
         ),
       ),
@@ -71,8 +71,8 @@ void main() {
           data: MediaQueryData(disableAnimations: true),
           child: Scaffold(
             body: FloatingDockLayout(
-              child: SizedBox.expand(),
               dock: SizedBox(key: Key('test-dock'), height: floatingDockHeight),
+              child: SizedBox.expand(),
             ),
           ),
         ),

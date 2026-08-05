@@ -304,6 +304,15 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
           ],
         ),
         body: FloatingDockLayout(
+          dock: editing
+              ? CaptureBatchActionBar(
+                  key: const Key('batch-bar'),
+                  controller: _selectionController,
+                  mediaService: ref.watch(captureMediaServiceProvider),
+                  exportService: ref.watch(projectExportServiceProvider),
+                  shareService: ref.watch(shareFileServiceProvider),
+                )
+              : null,
           child: StreamBuilder<List<Project>>(
             stream: _projectsStream,
             builder: (context, snapshot) {
@@ -333,15 +342,6 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
               );
             },
           ),
-          dock: editing
-              ? CaptureBatchActionBar(
-                  key: const Key('batch-bar'),
-                  controller: _selectionController,
-                  mediaService: ref.watch(captureMediaServiceProvider),
-                  exportService: ref.watch(projectExportServiceProvider),
-                  shareService: ref.watch(shareFileServiceProvider),
-                )
-              : null,
         ),
       ),
     );

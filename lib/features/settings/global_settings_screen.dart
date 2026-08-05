@@ -4,6 +4,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/features/settings/settings_group.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 
 class GlobalSettingsScreen extends ConsumerWidget {
   const GlobalSettingsScreen({super.key});
@@ -35,7 +36,12 @@ class GlobalSettingsScreen extends ConsumerWidget {
         title: Text(strings.settings),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+        padding: const EdgeInsets.fromLTRB(
+          12,
+          0,
+          12,
+          floatingDockReservedSpace,
+        ),
         children: [
           SettingsGroup(
             key: const Key('settings-group-capture'),

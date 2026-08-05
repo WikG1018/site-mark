@@ -26,7 +26,6 @@ class RootNavigationScaffold extends ConsumerWidget {
         final hideForSelection = path == '/records' && recordsSelecting;
         return Scaffold(
           body: FloatingDockLayout(
-            child: navigationShell,
             dock: showRootNavigation && !hideForSelection
                 ? GlassSurface(
                     key: const Key('root-dock'),
@@ -72,6 +71,7 @@ class RootNavigationScaffold extends ConsumerWidget {
                     child: const Icon(Icons.add),
                   )
                 : null,
+            child: navigationShell,
           ),
         );
       },
