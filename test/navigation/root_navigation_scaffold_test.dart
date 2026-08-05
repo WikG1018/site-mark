@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -72,33 +70,64 @@ void main() {
     }
   }
 
-  Future<void> expectPaintedBranchSwitch(
-    WidgetTester tester, {
-    required int fromIndex,
-  }) async {
-    Widget buildContainer(int currentIndex) => MaterialApp(
-      home: RootBranchContainer(
-        currentIndex: currentIndex,
-        children: const [
-          SizedBox(key: Key('indexed-branch-0')),
-          SizedBox(key: Key('indexed-branch-1')),
-          SizedBox(key: Key('indexed-branch-2')),
-        ],
-      ),
-    );
+  Widget buildBranchContainer(
+    int currentIndex, {
+    bool disableAnimations = false,
+  }) => MaterialApp(
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(
+        context,
+      ).copyWith(disableAnimations: disableAnimations),
+      child: child!,
+    ),
+    home: RootBranchContainer(
+      currentIndex: currentIndex,
+      children: const [
+        SizedBox(key: Key('indexed-branch-0')),
+        SizedBox(key: Key('indexed-branch-1')),
+        SizedBox(key: Key('indexed-branch-2')),
+      ],
+    ),
+  );
 
-    await runWithRouter(tester, (_) async {
-      await tester.pumpWidget(buildContainer(fromIndex));
-      expect(
-        tester.widget<IndexedStack>(find.byType(IndexedStack)).index,
-        fromIndex,
+  Offstage branchOffstage(WidgetTester tester, int index) =>
+      tester.widget<Offstage>(
+        find.byKey(Key('root-branch-offstage-$index'), skipOffstage: false),
       );
 
-      await tester.pumpWidget(buildContainer(0));
-      await tester.pump();
+  FractionalTranslation branchTranslation(WidgetTester tester, int index) =>
+      tester.widget<FractionalTranslation>(
+        find.byKey(Key('root-branch-translation-$index'), skipOffstage: false),
+      );
 
-      expect(tester.widget<IndexedStack>(find.byType(IndexedStack)).index, 0);
-      expect(find.byType(AnimatedOpacity), findsNothing);
+  void expectRecordsBranchOffstage(WidgetTester tester) {
+    expect(find.byType(AllCapturesScreen, skipOffstage: false), findsOneWidget);
+    expect(branchOffstage(tester, 1).offstage, isTrue);
+  }
+
+  Future<void> expectDirectionalBranchSwitch(
+    WidgetTester tester, {
+    required int fromIndex,
+    required int toIndex,
+  }) async {
+    await runWithRouter(tester, (_) async {
+      await tester.pumpWidget(buildBranchContainer(fromIndex));
+      await tester.pumpWidget(buildBranchContainer(toIndex));
+      await tester.pump(AppMotion.rootSwitch ~/ 2);
+
+      final direction = toIndex > fromIndex ? 1 : -1;
+      expect(
+        branchTranslation(tester, fromIndex).translation.dx * direction,
+        lessThan(0),
+      );
+      expect(
+        branchTranslation(tester, toIndex).translation.dx * direction,
+        greaterThan(0),
+      );
+
+      await tester.pumpAndSettle();
+      expect(branchOffstage(tester, fromIndex).offstage, isTrue);
+      expect(branchOffstage(tester, toIndex).offstage, isFalse);
     });
   }
 
@@ -156,37 +185,27 @@ void main() {
     });
   });
 
-  testWidgets('visited records branch stays hidden after project detail pop', (
-    tester,
-  ) async {
-    await runWithRouter(tester, (router) async {
-      router.go('/records');
-      await tester.pumpAndSettle();
-      router.go('/');
-      await tester.pumpAndSettle();
-      unawaited(router.push('/projects/project-1'));
-      await tester.pumpAndSettle();
+  testWidgets(
+    'records never paint while project detail returns after a dock round trip',
+    (tester) async {
+      await runWithRouter(tester, (router) async {
+        await tester.tap(find.byKey(const Key('root-destination-records')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('root-destination-projects')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('project-card-project-1')));
+        await tester.pumpAndSettle();
 
-      router.pop();
-      await tester.pump();
-      await tester.pump(AppMotion.pageTransition ~/ 2);
-
-      final stack = tester.widget<IndexedStack>(
-        find.descendant(
-          of: find.byType(RootBranchContainer),
-          matching: find.byType(IndexedStack),
-        ),
-      );
-      expect(stack.index, 0);
-      expect(
-        find.descendant(
-          of: find.byType(RootBranchContainer),
-          matching: find.byType(AnimatedOpacity),
-        ),
-        findsNothing,
-      );
-    });
-  });
+        router.pop();
+        await tester.pump();
+        expectRecordsBranchOffstage(tester);
+        await tester.pump(AppMotion.pageTransition ~/ 2);
+        expectRecordsBranchOffstage(tester);
+        await tester.pumpAndSettle();
+        expectRecordsBranchOffstage(tester);
+      });
+    },
+  );
 
   testWidgets('root dock overlays content and selection mode hides it', (
     tester,
@@ -332,15 +351,29 @@ void main() {
     });
   });
 
-  testWidgets('switching branch 2 to 0 changes the painted indexed branch', (
+  testWidgets('root pages slide right when switching from branch 2 to 0', (
     tester,
   ) async {
-    await expectPaintedBranchSwitch(tester, fromIndex: 2);
+    await expectDirectionalBranchSwitch(tester, fromIndex: 2, toIndex: 0);
   });
 
-  testWidgets('switching branch 1 to 0 changes the painted indexed branch', (
+  testWidgets('root pages slide left when switching from branch 0 to 1', (
     tester,
   ) async {
-    await expectPaintedBranchSwitch(tester, fromIndex: 1);
+    await expectDirectionalBranchSwitch(tester, fromIndex: 0, toIndex: 1);
+  });
+
+  testWidgets('reduce motion isolates the new root branch immediately', (
+    tester,
+  ) async {
+    await runWithRouter(tester, (_) async {
+      await tester.pumpWidget(buildBranchContainer(0, disableAnimations: true));
+      await tester.pumpWidget(buildBranchContainer(1, disableAnimations: true));
+      await tester.pump();
+
+      expect(branchOffstage(tester, 0).offstage, isTrue);
+      expect(branchOffstage(tester, 1).offstage, isFalse);
+      expect(branchTranslation(tester, 1).translation, Offset.zero);
+    });
   });
 }
