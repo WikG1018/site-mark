@@ -10,19 +10,19 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-![Version](https://img.shields.io/badge/release-v1.0.0-176B55)
+![Version](https://img.shields.io/badge/release-v1.0.1-176B55)
 
-**最新发布版本：[`v1.0.0` 预发布版](https://github.com/WikG1018/site-mark/releases/tag/v1.0.0)**
+**最新发布版本：[`v1.0.1`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.1)**
 
-支持 Android 12（API 31）及以上系统。当前仍属于预发布阶段，适合个人工程记录和现场试用；重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.1` 为维护补丁版；重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 ## 下载
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.0-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.0/sitemark-v1.0.0-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.0-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.0/sitemark-v1.0.0-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.0/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.1-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.1/sitemark-v1.0.1-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.1-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.1/sitemark-v1.0.1-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.1/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -34,6 +34,12 @@ manufacturer camera experience.
 3. 正式 Release 使用同一签名，可以直接覆盖升级并保留应用数据。
 4. Debug APK 与正式版签名不同，通常不能直接覆盖安装。
 5. 如果 Android 提示签名冲突，不要直接卸载保存着重要数据的旧版本；先完成项目备份并确认备份文件已复制到应用目录之外。
+
+## v1.0.1 重点更新
+
+- **失败文案与诊断：** 备份/恢复/删除路径的用户可见错误不再拼接原始异常；删除与恢复诊断事件入库（无路径/项目内容）。
+- **玻璃与根导航：** 根分支滑动增强空间感与 scale；GlassSurface 高光/内描边，overlay 画在内容下方，blur 路径 opacity 有 clamp。
+- **工程与文档：** Agent 常驻入口刷新；真机回归清单；integration 夜间/手动工作流；关于页与 `pubspec` 版本对齐为 `1.0.1+16`。
 
 ## v1.0.0 重点更新
 
@@ -225,7 +231,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。下载和校验请以 [GitHub Release v1.0.0](https://github.com/WikG1018/site-mark/releases/tag/v1.0.0) 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。下载和校验请以 [GitHub Release v1.0.1](https://github.com/WikG1018/site-mark/releases/tag/v1.0.1) 中的实际资源为准。
 
 ## 本地构建
 
