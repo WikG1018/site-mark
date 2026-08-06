@@ -93,3 +93,13 @@
 | 日期 | 版本 | 通过机型数 | 阻塞问题 | 决定（保持 Pre-release 标记 / 去掉标记 / 发 1.0.x 补丁） |
 | --- | --- | --- | --- | --- |
 |  |  |  |  |  |
+
+## 附录 A — 数据路径审计（合入 #34–#37 后）
+
+| 日期 | main SHA | 泄漏扫描 | 诊断接线 | 聚焦测试簇 |
+| --- | --- | --- | --- | --- |
+| 2026-08-06 | 9424579 | 备份/恢复/删除描述函数无 `$error` 拼接；`capture_media_service` 批量操作仍有 `error.toString()` 写入 failures 并可能进详情 SnackBar（记入 follow-up，非本轮 #35/#37 范围） | app.dart 三处 diagnostics；backup+restore+deletion 均有 DiagnosticCategory | 53 tests PASS（deletion/restore diagnostics、import mapping、glass、dock、project detail） |
+
+**Merged:** #36 → #35 → #37 → #34（2026-08-06）
+
+**Task 7–8:** 真机填表与 Pre-release/1.0.1 决策待维护者执行（人工）。
