@@ -155,10 +155,7 @@ void main() {
 
     final deleteResult = await service.deleteAll(['capture-1']);
     expect(deleteResult.failures['capture-1'], 'Operation failed');
-    expect(
-      deleteResult.failures['capture-1'],
-      isNot(contains('/data/user/0')),
-    );
+    expect(deleteResult.failures['capture-1'], isNot(contains('/data/user/0')));
     expect(
       deleteResult.failures['capture-1'],
       isNot(contains('FileSystemException')),
@@ -177,10 +174,7 @@ void main() {
       result.failures['capture-1'],
       isNot(contains('/storage/emulated/0')),
     );
-    expect(
-      result.failures['capture-1'],
-      isNot(contains('StateError')),
-    );
+    expect(result.failures['capture-1'], isNot(contains('StateError')));
   });
 
   test('republish updates the actual returned URI', () async {

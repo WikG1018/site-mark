@@ -243,12 +243,12 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                       key: Key('root-branch-translation-$index'),
                       translation: Offset(
                         transitioning && _activeTweens.containsKey(index)
-                        ? lerpDouble(
-                            _activeTweens[index]!.$1,
-                            _activeTweens[index]!.$2,
-                            progress,
-                          )!
-                        : 0,
+                            ? lerpDouble(
+                                _activeTweens[index]!.$1,
+                                _activeTweens[index]!.$2,
+                                progress,
+                              )!
+                            : 0,
                         0,
                       ),
                       child: HeroMode(

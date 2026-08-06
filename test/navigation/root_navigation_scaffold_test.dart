@@ -176,9 +176,13 @@ void main() {
       // Branch 1 (now the outgoing page) must NOT have snapped to 0.
       // It should be at or beyond its mid-slide position, sliding out.
       final interruptedDx = branchTranslation(tester, 1).translation.dx;
-      expect(interruptedDx, lessThanOrEqualTo(midSlideDx),
-          reason: 'Branch 1 must continue sliding out from its mid-slide '
-              'position, not snap back to center (0).');
+      expect(
+        interruptedDx,
+        lessThanOrEqualTo(midSlideDx),
+        reason:
+            'Branch 1 must continue sliding out from its mid-slide '
+            'position, not snap back to center (0).',
+      );
 
       // Branch 2 should be entering from the right.
       final branch2Dx = branchTranslation(tester, 2).translation.dx;
@@ -188,21 +192,32 @@ void main() {
       // Branch 0 (the old "from") must stay visible while still on-screen,
       // otherwise the left side of the viewport would show the scaffold
       // background through the gap branch 1 leaves behind.
-      expect(branchOffstage(tester, 0).offstage, isFalse,
-          reason: 'Branch 0 must remain visible mid-interrupt to cover the '
-              'viewport left side.');
+      expect(
+        branchOffstage(tester, 0).offstage,
+        isFalse,
+        reason:
+            'Branch 0 must remain visible mid-interrupt to cover the '
+            'viewport left side.',
+      );
       final branch0Dx = branchTranslation(tester, 0).translation.dx;
-      expect(branch0Dx, lessThanOrEqualTo(0),
-          reason: 'Branch 0 should be on the left side, exiting.');
-      expect(branch0Dx, greaterThan(-1),
-          reason: 'Branch 0 should still be partially on-screen.');
+      expect(
+        branch0Dx,
+        lessThanOrEqualTo(0),
+        reason: 'Branch 0 should be on the left side, exiting.',
+      );
+      expect(
+        branch0Dx,
+        greaterThan(-1),
+        reason: 'Branch 0 should still be partially on-screen.',
+      );
 
       // The visible pages must together cover the full [0,1] viewport with
       // no gap: adjacent pages sit one screen-width apart (|dx1 - dx0| <= 1).
       expect(
         (branchTranslation(tester, 1).translation.dx - branch0Dx).abs(),
         lessThanOrEqualTo(1.0),
-        reason: 'Branches 0 and 1 must stay edge-to-edge so no background '
+        reason:
+            'Branches 0 and 1 must stay edge-to-edge so no background '
             'gap appears between them.',
       );
 

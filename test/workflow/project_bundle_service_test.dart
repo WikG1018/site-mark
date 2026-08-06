@@ -1430,9 +1430,7 @@ void main() {
           'sitemark-restore-retry-diag-',
         );
         addTearDown(() => diagnosticRoot.delete(recursive: true));
-        final diagnosticStore = DiagnosticEventStore(
-          directory: diagnosticRoot,
-        );
+        final diagnosticStore = DiagnosticEventStore(directory: diagnosticRoot);
         var generatedId = 0;
         final service = ProjectBundleService(
           database: database,
