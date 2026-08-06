@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -316,7 +318,7 @@ void main() {
 
         // Capture detail is a root-navigator route. Returning must restore
         // project chrome only — never the home dock.
-        router.push('/projects/project-1/captures/capture-missing');
+        unawaited(router.push('/projects/project-1/captures/capture-missing'));
         await tester.pump();
         await tester.pump(AppMotion.pageTransition);
         await tester.pump();
