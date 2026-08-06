@@ -13,6 +13,15 @@ class RootNavigationScaffold extends ConsumerWidget {
 
   final StatefulNavigationShell navigationShell;
 
+  /// Only the three top-level tabs own the home dock.
+  ///
+  /// Project detail (`/projects/:id`), capture detail, and every other nested
+  /// route must keep this false — otherwise the home dock covers the project
+  /// capture FAB after returning from a root-navigator photo page.
+  static bool isRootTabPath(String path) {
+    return path == '/' || path == '/records' || path == '/settings';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = GoRouter.of(context);
@@ -21,8 +30,7 @@ class RootNavigationScaffold extends ConsumerWidget {
       builder: (context, _) {
         final strings = AppStrings.of(context);
         final path = router.routeInformationProvider.value.uri.path;
-        final showRootNavigation =
-            path == '/' || path == '/records' || path == '/settings';
+        final showRootNavigation = isRootTabPath(path);
         final recordsSelecting = ref.watch(allCapturesSelectionModeProvider);
         final hideForSelection = path == '/records' && recordsSelecting;
         return Scaffold(
@@ -153,34 +161,28 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                       index != _currentIndex &&
                       !(transitioning && index == _fromIndex),
                   child: RepaintBoundary(
-                    child: Transform.scale(
-                      key: Key('root-branch-scale-$index'),
-                      scale: switch (index) {
+                    // Full-width horizontal slide ("one continuous take"):
+                    // outgoing page exits by one full width while the incoming
+                    // page enters by one full width. No scale — scale made the
+                    // switch feel like a zoom/card handoff instead of a pan.
+                    child: FractionalTranslation(
+                      key: Key('root-branch-translation-$index'),
+                      translation: Offset(switch (index) {
                         _ when index == _currentIndex && transitioning =>
-                          0.97 + progress * 0.03,
+                          direction * (1 - progress),
                         _ when index == _fromIndex && transitioning =>
-                          1.0 - progress * 0.01,
-                        _ => 1.0,
-                      },
-                      child: FractionalTranslation(
-                        key: Key('root-branch-translation-$index'),
-                        translation: Offset(switch (index) {
-                          _ when index == _currentIndex && transitioning =>
-                            direction * (1 - progress) * 0.16,
-                          _ when index == _fromIndex && transitioning =>
-                            -direction * progress * 0.09,
-                          _ => 0,
-                        }, 0),
-                        child: HeroMode(
+                          -direction * progress,
+                        _ => 0,
+                      }, 0),
+                      child: HeroMode(
+                        enabled: index == _currentIndex,
+                        child: TickerMode(
                           enabled: index == _currentIndex,
-                          child: TickerMode(
-                            enabled: index == _currentIndex,
-                            child: IgnorePointer(
-                              ignoring: index != _currentIndex,
-                              child: ExcludeSemantics(
-                                excluding: index != _currentIndex,
-                                child: branchChild,
-                              ),
+                          child: IgnorePointer(
+                            ignoring: index != _currentIndex,
+                            child: ExcludeSemantics(
+                              excluding: index != _currentIndex,
+                              child: branchChild,
                             ),
                           ),
                         ),

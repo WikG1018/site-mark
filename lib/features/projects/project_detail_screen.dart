@@ -338,6 +338,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   ),
               ],
             ),
+            // Capture FAB lives inside FloatingDockLayout (not Scaffold.floatingActionButton)
+            // so it shares the same overlay plane as the project chrome and is
+            // never covered or replaced by the root home dock after returning
+            // from a full-screen capture-detail route on the root navigator.
             body: FloatingDockLayout(
               dock: project != null && editing
                   ? CaptureBatchActionBar(
@@ -346,6 +350,16 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       mediaService: ref.watch(captureMediaServiceProvider),
                       exportService: ref.watch(projectExportServiceProvider),
                       shareService: ref.watch(shareFileServiceProvider),
+                    )
+                  : null,
+              floatingActionButton: canCapture
+                  ? FloatingActionButton.extended(
+                      key: const ValueKey('capture-fab'),
+                      heroTag: 'project-capture-fab-${widget.projectId}',
+                      onPressed: () =>
+                          context.push('/projects/${widget.projectId}/capture'),
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: Text(strings.capture),
                     )
                   : null,
               child: waitingForProject
@@ -363,23 +377,6 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                       message: strings.projectNotFound,
                     )
                   : _projectCaptureList(context, strings, project!, filter),
-            ),
-            floatingActionButton: AnimatedSwitcher(
-              duration: AppMotion.durationOf(context, AppMotion.medium2),
-              switchInCurve: AppMotion.emphasized,
-              switchOutCurve: AppMotion.emphasized,
-              transitionBuilder: (child, animation) =>
-                  ScaleTransition(scale: animation, child: child),
-              child: !canCapture
-                  ? const SizedBox.shrink()
-                  : FloatingActionButton.extended(
-                      key: const ValueKey('capture-fab'),
-                      heroTag: 'project-capture-fab-${widget.projectId}',
-                      onPressed: () =>
-                          context.push('/projects/${widget.projectId}/capture'),
-                      icon: const Icon(Icons.photo_camera_outlined),
-                      label: Text(strings.capture),
-                    ),
             ),
           );
         },
@@ -422,7 +419,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
         16,
         4,
         16,
-        floatingDockReservedSpaceOf(context),
+        floatingDockReservedSpaceOf(context, avoidFloatingActionButton: true),
       ),
       sliversBefore: [
         SliverToBoxAdapter(

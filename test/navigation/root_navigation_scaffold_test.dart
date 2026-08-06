@@ -100,17 +100,6 @@ void main() {
         find.byKey(Key('root-branch-translation-$index'), skipOffstage: false),
       );
 
-  /// Reads the 2D scale applied by [Transform.scale] around a branch.
-  ///
-  /// [Matrix4.getMaxScaleOnAxis] includes the Z component (always 1.0 for
-  /// [Transform.scale]), so we read the X diagonal entry instead.
-  double branchScale(WidgetTester tester, int index) {
-    final transform = tester.widget<Transform>(
-      find.byKey(Key('root-branch-scale-$index'), skipOffstage: false),
-    );
-    return transform.transform.storage[0];
-  }
-
   void expectRecordsBranchOffstage(WidgetTester tester) {
     expect(find.byType(AllCapturesScreen, skipOffstage: false), findsOneWidget);
     expect(branchOffstage(tester, 1).offstage, isTrue);
@@ -124,8 +113,8 @@ void main() {
     await runWithRouter(tester, (_) async {
       await tester.pumpWidget(buildBranchContainer(fromIndex));
       await tester.pumpWidget(buildBranchContainer(toIndex));
-      // Emphasized curve spends most of the visual change early; sample near the
-      // start so destination is still clearly smaller than the source.
+      // Emphasized curve front-loads motion; sample early while both pages
+      // still share the viewport under a full-width pan.
       await tester.pump(const Duration(milliseconds: 16));
 
       final direction = toIndex > fromIndex ? 1 : -1;
@@ -137,23 +126,19 @@ void main() {
       // Source slides opposite the switch direction; destination enters with it.
       expect(fromDx, lessThan(0));
       expect(toDx, greaterThan(0));
-      // Caps match production travel distances (0.09 source / 0.16 target).
-      expect(fromDx.abs(), lessThanOrEqualTo(0.09));
-      expect(toDx, lessThanOrEqualTo(0.16));
-
-      // Destination grows from 0.97; source gently shrinks from 1.0 toward 0.99.
-      final fromScale = branchScale(tester, fromIndex);
-      final toScale = branchScale(tester, toIndex);
-      expect(fromScale, lessThan(1.0));
-      expect(toScale, lessThan(1.0));
-      expect(toScale, lessThan(fromScale));
-      expect(fromScale, inInclusiveRange(0.99, 1.0));
-      expect(toScale, inInclusiveRange(0.97, 1.0));
+      // Full-width pan: translation is a fraction of one screen width.
+      expect(fromDx.abs(), lessThanOrEqualTo(1.0));
+      expect(toDx, lessThanOrEqualTo(1.0));
+      // Outgoing and incoming stay edge-to-edge (one continuous take).
+      // from = -progress, to = 1 - progress  =>  from + to == 0? No:
+      // fromDx = -progress (signed by direction already applied),
+      // toDx   = (1 - progress)  =>  fromDx + toDx == 1 - 2*progress.
+      // Edge-to-edge means |from| + |to| == 1.0.
+      expect(fromDx.abs() + toDx, closeTo(1.0, 0.001));
 
       await tester.pumpAndSettle();
       expect(branchOffstage(tester, fromIndex).offstage, isTrue);
       expect(branchOffstage(tester, toIndex).offstage, isFalse);
-      expect(branchScale(tester, toIndex), closeTo(1.0, 0.001));
       expect(branchTranslation(tester, toIndex).translation, Offset.zero);
     });
   }
@@ -314,8 +299,44 @@ void main() {
 
       expect(find.byType(ProjectDetailScreen), findsOneWidget);
       expect(find.byKey(const Key('root-dock')), findsNothing);
+      expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
     });
   });
+
+  testWidgets(
+    'returning from capture detail keeps home dock off project detail',
+    (tester) async {
+      await runWithRouter(tester, (router) async {
+        router.go('/projects/project-1');
+        await tester.pump();
+        await tester.pump(AppMotion.pageTransition);
+        await tester.pump();
+        expect(find.byKey(const Key('root-dock')), findsNothing);
+        expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+
+        // Capture detail is a root-navigator route. Returning must restore
+        // project chrome only — never the home dock.
+        router.push('/projects/project-1/captures/capture-missing');
+        await tester.pump();
+        await tester.pump(AppMotion.pageTransition);
+        await tester.pump();
+        expect(find.byKey(const Key('root-dock')), findsNothing);
+
+        router.pop();
+        await tester.pump();
+        await tester.pump(AppMotion.pageTransition);
+        await tester.pump();
+
+        expect(
+          router.routeInformationProvider.value.uri.path,
+          '/projects/project-1',
+        );
+        expect(find.byType(ProjectDetailScreen), findsOneWidget);
+        expect(find.byKey(const Key('root-dock')), findsNothing);
+        expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+      });
+    },
+  );
 
   testWidgets('inactive root branches disable ticks, taps, and semantics', (
     tester,
@@ -401,7 +422,6 @@ void main() {
       expect(branchOffstage(tester, 0).offstage, isTrue);
       expect(branchOffstage(tester, 1).offstage, isFalse);
       expect(branchTranslation(tester, 1).translation, Offset.zero);
-      expect(branchScale(tester, 1), closeTo(1.0, 0.001));
     });
   });
 }
