@@ -26,9 +26,9 @@ class GlassSurface extends StatelessWidget {
   final double opacity;
   final double blurSigma;
 
-  /// When true (default), a very low-opacity flat tint overlay is applied
-  /// with [BlendMode.overlay]. This is not grain/noise texture.
-  /// Set to false to skip the overlay layer entirely.
+  /// When true (default), a very low-opacity flat tint is applied with
+  /// [BlendMode.overlay] **under** the child content (chrome only).
+  /// This is not grain/noise texture. Set to false to skip the overlay layer.
   final bool enableOverlay;
 
   @override
@@ -37,8 +37,9 @@ class GlassSurface extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final blurEnabled =
         blurSigma > 0 && !MediaQuery.disableAnimationsOf(context);
+    // Always clamp so callers cannot push opacity outside a readable glass band.
     final effectiveOpacity = blurEnabled
-        ? opacity
+        ? opacity.clamp(0.58, 0.92)
         : (opacity + 0.10).clamp(0.58, 0.94);
     final overlayEnabled =
         enableOverlay && !MediaQuery.disableAnimationsOf(context);
@@ -46,61 +47,59 @@ class GlassSurface extends StatelessWidget {
     final highlightAlpha = isDark ? 0.09 : 0.14;
     final insetAlpha = isDark ? 0.10 : 0.12;
 
-    // Nested DecoratedBox: outer color fill + border; inner highlight gradient
-    // + inset border. BoxDecoration ignores [color] when [gradient] is set, so
-    // they cannot share one decoration (same pattern as root_navigation_dock).
+    // Outer fill + border. Highlight, optional overlay tint, and content share a
+    // Stack so tint paints under text/icons (not over them). BoxDecoration
+    // ignores [color] when [gradient] is set, so fill and highlight stay nested.
+    final layers = <Widget>[
+      Positioned.fill(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: borderRadius,
+            border: Border.all(
+              color: scheme.onSurface.withValues(alpha: insetAlpha),
+              width: 1,
+            ),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.white.withValues(alpha: highlightAlpha),
+                Colors.white.withValues(alpha: 0),
+              ],
+              stops: const [0.0, 0.38],
+            ),
+          ),
+        ),
+      ),
+      if (overlayEnabled)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: borderRadius,
+                color: scheme.onSurface.withValues(alpha: 0.035),
+                backgroundBlendMode: BlendMode.overlay,
+              ),
+            ),
+          ),
+        ),
+      DefaultTextStyle.merge(
+        style: TextStyle(color: scheme.onSurface),
+        child: IconTheme.merge(
+          data: IconThemeData(color: scheme.onSurface),
+          child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+        ),
+      ),
+    ];
+
     Widget content = DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: effectiveOpacity.toDouble()),
         border: Border.all(color: scheme.outlineVariant.withValues(alpha: .55)),
         borderRadius: borderRadius,
       ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: borderRadius,
-          border: Border.all(
-            color: scheme.onSurface.withValues(alpha: insetAlpha),
-            width: 1,
-          ),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.white.withValues(alpha: highlightAlpha),
-              Colors.white.withValues(alpha: 0),
-            ],
-            stops: const [0.0, 0.38],
-          ),
-        ),
-        child: DefaultTextStyle.merge(
-          style: TextStyle(color: scheme.onSurface),
-          child: IconTheme.merge(
-            data: IconThemeData(color: scheme.onSurface),
-            child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
-          ),
-        ),
-      ),
+      child: Stack(fit: StackFit.passthrough, children: layers),
     );
-
-    if (overlayEnabled) {
-      content = Stack(
-        fit: StackFit.passthrough,
-        children: [
-          content,
-          Positioned.fill(
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: borderRadius,
-                  color: scheme.onSurface.withValues(alpha: 0.035),
-                  backgroundBlendMode: BlendMode.overlay,
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
 
     if (blurEnabled) {
       content = BackdropFilter(
