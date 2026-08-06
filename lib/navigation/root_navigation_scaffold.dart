@@ -154,6 +154,7 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                       !(transitioning && index == _fromIndex),
                   child: RepaintBoundary(
                     child: Transform.scale(
+                      key: Key('root-branch-scale-$index'),
                       scale: switch (index) {
                         _ when index == _currentIndex && transitioning =>
                           0.97 + progress * 0.03,

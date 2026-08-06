@@ -100,6 +100,17 @@ void main() {
         find.byKey(Key('root-branch-translation-$index'), skipOffstage: false),
       );
 
+  /// Reads the 2D scale applied by [Transform.scale] around a branch.
+  ///
+  /// [Matrix4.getMaxScaleOnAxis] includes the Z component (always 1.0 for
+  /// [Transform.scale]), so we read the X diagonal entry instead.
+  double branchScale(WidgetTester tester, int index) {
+    final transform = tester.widget<Transform>(
+      find.byKey(Key('root-branch-scale-$index'), skipOffstage: false),
+    );
+    return transform.transform.storage[0];
+  }
+
   void expectRecordsBranchOffstage(WidgetTester tester) {
     expect(find.byType(AllCapturesScreen, skipOffstage: false), findsOneWidget);
     expect(branchOffstage(tester, 1).offstage, isTrue);
@@ -113,21 +124,37 @@ void main() {
     await runWithRouter(tester, (_) async {
       await tester.pumpWidget(buildBranchContainer(fromIndex));
       await tester.pumpWidget(buildBranchContainer(toIndex));
-      await tester.pump(AppMotion.rootSwitch ~/ 2);
+      // Emphasized curve spends most of the visual change early; sample near the
+      // start so destination is still clearly smaller than the source.
+      await tester.pump(const Duration(milliseconds: 16));
 
       final direction = toIndex > fromIndex ? 1 : -1;
-      expect(
-        branchTranslation(tester, fromIndex).translation.dx * direction,
-        lessThan(0),
-      );
-      expect(
-        branchTranslation(tester, toIndex).translation.dx * direction,
-        greaterThan(0),
-      );
+      final fromDx =
+          branchTranslation(tester, fromIndex).translation.dx * direction;
+      final toDx =
+          branchTranslation(tester, toIndex).translation.dx * direction;
+
+      // Source slides opposite the switch direction; destination enters with it.
+      expect(fromDx, lessThan(0));
+      expect(toDx, greaterThan(0));
+      // Caps match production travel distances (0.09 source / 0.16 target).
+      expect(fromDx.abs(), lessThanOrEqualTo(0.09));
+      expect(toDx, lessThanOrEqualTo(0.16));
+
+      // Destination grows from 0.97; source gently shrinks from 1.0 toward 0.99.
+      final fromScale = branchScale(tester, fromIndex);
+      final toScale = branchScale(tester, toIndex);
+      expect(fromScale, lessThan(1.0));
+      expect(toScale, lessThan(1.0));
+      expect(toScale, lessThan(fromScale));
+      expect(fromScale, inInclusiveRange(0.99, 1.0));
+      expect(toScale, inInclusiveRange(0.97, 1.0));
 
       await tester.pumpAndSettle();
       expect(branchOffstage(tester, fromIndex).offstage, isTrue);
       expect(branchOffstage(tester, toIndex).offstage, isFalse);
+      expect(branchScale(tester, toIndex), closeTo(1.0, 0.001));
+      expect(branchTranslation(tester, toIndex).translation, Offset.zero);
     });
   }
 
@@ -374,6 +401,7 @@ void main() {
       expect(branchOffstage(tester, 0).offstage, isTrue);
       expect(branchOffstage(tester, 1).offstage, isFalse);
       expect(branchTranslation(tester, 1).translation, Offset.zero);
+      expect(branchScale(tester, 1), closeTo(1.0, 0.001));
     });
   });
 }
