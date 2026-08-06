@@ -245,7 +245,7 @@ flutter build apk --debug
 
 ## 参与贡献
 
-欢迎提交缺陷复现、Android 厂商相机兼容性结果、隐私审查和工程记录流程建议。开始前请阅读 [贡献指南](CONTRIBUTING.md)、[安全政策](SECURITY.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。
+欢迎提交缺陷复现、Android 厂商相机兼容性结果、隐私审查和工程记录流程建议。开始前请阅读 [贡献指南](CONTRIBUTING.md)、[安全政策](SECURITY.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。自动化编码 Agent 请先阅读 [Agent 执行入口](NEXT_AGENT_PROMPT.md)。
 
 ## License
 
