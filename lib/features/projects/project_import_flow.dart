@@ -2,10 +2,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
+import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 
 /// Picks a SiteMark backup ZIP, confirms the restore plan with the user, and
@@ -32,6 +34,7 @@ Future<void> runProjectImportFlow(BuildContext context, WidgetRef ref) async {
   try {
     preview = await service.inspect(zipPath);
   } catch (error) {
+    _recordImportFailure(ref, error);
     if (context.mounted) {
       Navigator.of(context).pop();
       messenger.showSnackBar(
@@ -97,6 +100,17 @@ Future<void> runProjectImportFlow(BuildContext context, WidgetRef ref) async {
   if (!context.mounted) return;
 
   if (result != null) {
+    ref
+        .read(diagnosticRecorderProvider)
+        .record(
+          DiagnosticEvent(
+            timestamp: DateTime.now(),
+            category: DiagnosticCategory.restore,
+            outcome: DiagnosticOutcome.success,
+            code: DiagnosticCode.none,
+            count: result.photoCount,
+          ),
+        );
     messenger.showSnackBar(
       SnackBar(
         content: Text(
@@ -105,19 +119,33 @@ Future<void> runProjectImportFlow(BuildContext context, WidgetRef ref) async {
       ),
     );
   } else {
+    _recordImportFailure(ref, failure!);
     messenger.showSnackBar(
-      SnackBar(content: Text(describeImportError(strings, failure!))),
+      SnackBar(content: Text(describeImportError(strings, failure))),
     );
   }
 }
 
-/// Maps a restore failure to a user-facing message. Archive-format problems
-/// (invalid data, selection exports) get dedicated copy; everything else is
-/// a generic failure with the underlying message attached.
+/// Maps an import failure to a user-facing message.
+///
+/// Known archive and conflict cases get dedicated copy. Unknown failures use a
+/// friendly fallback and never append raw exception text (paths, OS errors).
 @visibleForTesting
 String describeImportError(AppStrings strings, Object error) {
   if (error is InvalidArchiveException) {
     return strings.importInvalidArchive;
+  }
+  if (error is ProjectNameConflictException) {
+    return strings.importNameConflict;
+  }
+  if (error is ProjectImportFinalizationPendingException) {
+    return strings.restoreFinalizationPending;
+  }
+  if (error is ProjectRestoreStateException) {
+    return strings.importFailedFriendly;
+  }
+  if (isInsufficientStorageFailure(error)) {
+    return strings.backupStorageInsufficient;
   }
   if (error is ImagePipelineException) {
     if (error.message.contains('selection archive')) {
@@ -126,12 +154,49 @@ String describeImportError(AppStrings strings, Object error) {
     if (error.kind == ImagePipelineFailureKind.invalidData) {
       return strings.importInvalidArchive;
     }
-    return '${strings.importFailed}: ${error.message}';
+    return strings.importFailedFriendly;
+  }
+  return strings.importFailedFriendly;
+}
+
+@visibleForTesting
+DiagnosticCode importDiagnosticCode(Object error) {
+  if (error is InvalidArchiveException) {
+    return DiagnosticCode.invalidArchive;
   }
   if (error is ProjectNameConflictException) {
-    return strings.importNameConflict;
+    return DiagnosticCode.unexpected;
   }
-  return '${strings.importFailed}: $error';
+  if (error is ProjectImportFinalizationPendingException) {
+    // Data is durable; startup will finish displaying it.
+    return DiagnosticCode.none;
+  }
+  if (isInsufficientStorageFailure(error)) {
+    return DiagnosticCode.insufficientStorage;
+  }
+  if (error is ImagePipelineException) {
+    if (error.message.contains('selection archive') ||
+        error.kind == ImagePipelineFailureKind.invalidData) {
+      return DiagnosticCode.invalidArchive;
+    }
+  }
+  return DiagnosticCode.unexpected;
+}
+
+void _recordImportFailure(WidgetRef ref, Object error) {
+  final code = importDiagnosticCode(error);
+  ref
+      .read(diagnosticRecorderProvider)
+      .record(
+        DiagnosticEvent(
+          timestamp: DateTime.now(),
+          category: DiagnosticCategory.restore,
+          outcome: error is ProjectImportFinalizationPendingException
+              ? DiagnosticOutcome.blocked
+              : DiagnosticOutcome.failed,
+          code: code,
+        ),
+      );
 }
 
 void _showBlockingSpinner(BuildContext context, String label) {

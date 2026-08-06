@@ -231,6 +231,7 @@ final projectDeletionServiceProvider = Provider<ProjectDeletionService>((ref) {
     capturePaths: ref.watch(captureOutputPathsProvider),
     files: ref.watch(privateFileStoreProvider),
     pendingStore: ref.watch(projectDeletionPendingStoreProvider),
+    diagnostics: ref.watch(diagnosticRecorderProvider),
   );
 });
 

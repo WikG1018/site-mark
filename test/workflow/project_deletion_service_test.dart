@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
@@ -507,6 +510,87 @@ void main() {
       expect(pendingStore.pending, hasLength(1));
     },
   );
+
+  test(
+    'deleteProject records success diagnostics without path details',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await _seedPublishedCapture(database);
+      final diagnosticRoot = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-diag-',
+      );
+      addTearDown(() async {
+        if (await diagnosticRoot.exists()) {
+          await diagnosticRoot.delete(recursive: true);
+        }
+      });
+      final store = DiagnosticEventStore(directory: diagnosticRoot);
+      final service = ProjectDeletionService(
+        database: database,
+        capturePaths: const _FakeCaptureOutputPaths(),
+        files: _RecordingPrivateFileStore(),
+        pendingStore: _MemoryProjectDeletionPendingStore(),
+        diagnostics: DiagnosticRecorder(store),
+      );
+
+      final result = await service.deleteProject('project-1');
+      List<DiagnosticEvent> events = const [];
+      for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        events = await store.readRecent();
+      }
+
+      expect(result.cleanupPending, isFalse);
+      expect(events, hasLength(1));
+      final event = events.single;
+      expect(event.category, DiagnosticCategory.deletion);
+      expect(event.outcome, DiagnosticOutcome.success);
+      expect(event.code, DiagnosticCode.none);
+      expect(event.count, 1);
+      expect(event.encode(), isNot(contains('/private/')));
+      expect(event.encode(), isNot(contains('project-1')));
+    },
+  );
+
+  test('cascade failure records failed deletion diagnostics', () async {
+    final database = _FailingCascadeDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    await _seedPublishedCapture(database);
+    final diagnosticRoot = await Directory.systemTemp.createTemp(
+      'sitemark-deletion-diag-fail-',
+    );
+    addTearDown(() async {
+      if (await diagnosticRoot.exists()) {
+        await diagnosticRoot.delete(recursive: true);
+      }
+    });
+    final store = DiagnosticEventStore(directory: diagnosticRoot);
+    final service = ProjectDeletionService(
+      database: database,
+      capturePaths: const _FakeCaptureOutputPaths(),
+      files: _RecordingPrivateFileStore(),
+      pendingStore: _MemoryProjectDeletionPendingStore(),
+      diagnostics: DiagnosticRecorder(store),
+    );
+
+    await expectLater(
+      service.deleteProject('project-1'),
+      throwsA(isA<StateError>()),
+    );
+    List<DiagnosticEvent> events = const [];
+    for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      events = await store.readRecent();
+    }
+
+    expect(events, hasLength(1));
+    final event = events.single;
+    expect(event.category, DiagnosticCategory.deletion);
+    expect(event.outcome, DiagnosticOutcome.failed);
+    expect(event.code, DiagnosticCode.unexpected);
+    expect(event.encode(), isNot(contains('simulated cascade')));
+  });
 }
 
 Future<void> _seedPublishedCapture(AppDatabase database) async {
