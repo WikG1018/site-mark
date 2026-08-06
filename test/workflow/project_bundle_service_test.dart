@@ -1433,6 +1433,7 @@ void main() {
         final diagnosticStore = DiagnosticEventStore(
           directory: diagnosticRoot,
         );
+        var generatedId = 0;
         final service = ProjectBundleService(
           database: database,
           bundles: _FakeBundlePipeline(preview: _bundlePreview()),
@@ -1442,9 +1443,7 @@ void main() {
           pendingStore: pending,
           rollback: rollback,
           diagnostics: DiagnosticRecorder(diagnosticStore),
-          idGenerator: () {
-            return 'retry-bundle';
-          },
+          idGenerator: () => 'retry-bundle-${generatedId++}',
         );
         final prepared = await service.prepareRestore('/backups/bundle.zip');
 

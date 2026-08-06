@@ -113,12 +113,12 @@ class _RootBranchContainerState extends State<RootBranchContainer>
   late int _currentIndex;
   bool _disableAnimations = false;
 
-  /// Visual offsets (in screen-width fractions) at the start of the current
-  /// animation. When an animation is interrupted mid-flight, these capture
-  /// the actual on-screen positions so the next segment starts from where
-  /// the pages currently are — no snap-back to center.
-  double _fromStartOffset = 0;
-  double _toStartOffset = 0;
+  /// Active branch page tweens during a transition: [index] -> (start, end)
+  /// screen-width-fraction offsets. The current page tweens to 0; the
+  /// outgoing page tweens to -direction; pages still on-screen when a
+  /// switch is interrupted mid-flight continue exiting to -direction so
+  /// the viewport never shows the scaffold background through a gap.
+  Map<int, (double, double)> _activeTweens = const {};
 
   @override
   void initState() {
@@ -147,33 +147,52 @@ class _RootBranchContainerState extends State<RootBranchContainer>
     if (_disableAnimations) {
       _fromIndex = _currentIndex;
       _currentIndex = widget.currentIndex;
-      _fromStartOffset = 0;
-      _toStartOffset = 0;
+      _activeTweens = const {};
       _controller.value = 1;
       return;
     }
-    // Compute the current visual positions so the new animation segment
-    // continues smoothly from where the pages are right now. Without this,
-    // resetting the controller to 0 makes the intermediate page snap back
-    // to center before the next transition begins.
-    final isAnimating = _controller.isAnimating && _controller.value < 1;
-    if (isAnimating) {
+    final direction = widget.currentIndex > _currentIndex ? 1.0 : -1.0;
+    final newTweens = <int, (double, double)>{};
+
+    if (_controller.isAnimating && _controller.value < 1) {
+      // Interrupted mid-flight: sample each active page's real on-screen
+      // position so the next segment continues from where pages are now.
       final vp = AppMotion.emphasized.transform(_controller.value);
-      final oldDirection = _currentIndex > _fromIndex ? 1.0 : -1.0;
-      // The page that was sliding in (old "to") becomes the new "from".
-      _fromStartOffset = oldDirection * (1 - vp);
+      double currentPosition(int index) {
+        final tween = _activeTweens[index];
+        if (tween == null) return 0;
+        return lerpDouble(tween.$1, tween.$2, vp)!;
+      }
+
+      // The page that was sliding in becomes the new outgoing page.
+      newTweens[_currentIndex] = (currentPosition(_currentIndex), -direction);
+
+      // The new incoming page.
       if (widget.currentIndex == _fromIndex) {
-        // Switching back: the old "from" page (now the new "to") is
-        // partially visible on the opposite side.
-        _toStartOffset = -oldDirection * vp;
+        // Switching back to the old "from": it is still partially visible
+        // on the opposite side, so enter from its current position.
+        newTweens[widget.currentIndex] = (currentPosition(_fromIndex), 0);
       } else {
-        // Switching to a new page: it starts fully off-screen.
-        _toStartOffset = widget.currentIndex > _currentIndex ? 1.0 : -1.0;
+        // Switching to a third page: it starts fully off-screen.
+        newTweens[widget.currentIndex] = (direction, 0);
+      }
+
+      // Any other page still on-screen (e.g. the old "from" in a chain
+      // 0->1->2) keeps sliding out so no background gap appears.
+      for (final index in _activeTweens.keys) {
+        if (index == _currentIndex || index == widget.currentIndex) continue;
+        final pos = currentPosition(index);
+        if (pos.abs() < 1) {
+          newTweens[index] = (pos, -direction);
+        }
       }
     } else {
-      _fromStartOffset = 0;
-      _toStartOffset = widget.currentIndex > _currentIndex ? 1.0 : -1.0;
+      // Clean switch from rest.
+      newTweens[_currentIndex] = (0, -direction);
+      newTweens[widget.currentIndex] = (direction, 0);
     }
+
+    _activeTweens = newTweens;
     _fromIndex = _currentIndex;
     _currentIndex = widget.currentIndex;
     _controller.forward(from: 0);
@@ -200,7 +219,6 @@ class _RootBranchContainerState extends State<RootBranchContainer>
               !_disableAnimations &&
               _controller.value < 1 &&
               _fromIndex != _currentIndex;
-          final direction = _currentIndex > _fromIndex ? 1.0 : -1.0;
           // Mode wrappers stay in the builder so _currentIndex/_fromIndex
           // update every tick. Page content lives in [child] and is stable.
           final branches = (child! as Stack).children;
@@ -212,24 +230,27 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                   key: Key('root-branch-offstage-$index'),
                   offstage:
                       index != _currentIndex &&
-                      !(transitioning && index == _fromIndex),
+                      !(transitioning && _activeTweens.containsKey(index)),
                   child: RepaintBoundary(
                     // Full-width horizontal slide ("one continuous take"):
                     // outgoing page exits by one full width while the incoming
                     // page enters by one full width. No scale — scale made the
                     // switch feel like a zoom/card handoff instead of a pan.
-                    // When a switch interrupts an in-flight animation, the
-                    // start offsets [_fromStartOffset]/[_toStartOffset] ensure
-                    // pages begin from their actual on-screen positions.
+                    // [_activeTweens] holds each visible page's (start, end)
+                    // offset; pages still on-screen when a switch is
+                    // interrupted keep sliding out so no background gap shows.
                     child: FractionalTranslation(
                       key: Key('root-branch-translation-$index'),
-                      translation: Offset(switch (index) {
-                        _ when index == _currentIndex && transitioning =>
-                          lerpDouble(_toStartOffset, 0, progress)!,
-                        _ when index == _fromIndex && transitioning =>
-                          lerpDouble(_fromStartOffset, -direction, progress)!,
-                        _ => 0,
-                      }, 0),
+                      translation: Offset(
+                        transitioning && _activeTweens.containsKey(index)
+                        ? lerpDouble(
+                            _activeTweens[index]!.$1,
+                            _activeTweens[index]!.$2,
+                            progress,
+                          )!
+                        : 0,
+                        0,
+                      ),
                       child: HeroMode(
                         enabled: index == _currentIndex,
                         child: TickerMode(
