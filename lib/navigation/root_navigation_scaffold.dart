@@ -15,21 +15,39 @@ class RootNavigationScaffold extends ConsumerWidget {
 
   /// Only the three top-level tabs own the home dock.
   ///
-  /// Project detail (`/projects/:id`), capture detail, and every other nested
-  /// route must keep this false — otherwise the home dock covers the project
-  /// capture FAB after returning from a root-navigator photo page.
+  /// Nested routes such as project detail (`/projects/:id`) and capture detail
+  /// must keep this false. The home dock must never appear on project screens.
   static bool isRootTabPath(String path) {
     return path == '/' || path == '/records' || path == '/settings';
+  }
+
+  /// Visible location used for root chrome decisions.
+  ///
+  /// Prefer [GoRouter.state] over [RouteInformationProvider.value.uri]:
+  /// `context.push` / imperative routes leave the browser-style URI on the
+  /// previous shell location (`/`) while the real top page is nested. Using
+  /// that URI is what made the home dock reappear over project detail.
+  static String visiblePathOf(GoRouter router) {
+    final statePath = router.state.uri.path;
+    if (statePath.isNotEmpty) {
+      return statePath;
+    }
+    return router.routeInformationProvider.value.uri.path;
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = GoRouter.of(context);
+    // Listen to both providers: go() updates RouteInformation, push/pop of
+    // imperative routes notifies the router delegate.
     return ListenableBuilder(
-      listenable: router.routeInformationProvider,
+      listenable: Listenable.merge([
+        router.routeInformationProvider,
+        router.routerDelegate,
+      ]),
       builder: (context, _) {
         final strings = AppStrings.of(context);
-        final path = router.routeInformationProvider.value.uri.path;
+        final path = visiblePathOf(router);
         final showRootNavigation = isRootTabPath(path);
         final recordsSelecting = ref.watch(allCapturesSelectionModeProvider);
         final hideForSelection = path == '/records' && recordsSelecting;

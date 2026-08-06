@@ -294,12 +294,20 @@ void main() {
 
   testWidgets('secondary routes hide dock', (tester) async {
     await runWithRouter(tester, (router) async {
-      router.go('/projects/project-1');
+      // Real product path: project list push, not go().
+      unawaited(router.push('/projects/project-1'));
       await tester.pump();
       await tester.pump(AppMotion.pageTransition);
       await tester.pump();
 
       expect(find.byType(ProjectDetailScreen), findsOneWidget);
+      // Imperative push keeps routeInformationProvider.uri on '/'. Dock must
+      // still hide based on the real top route, not that stale URI.
+      expect(router.routeInformationProvider.value.uri.path, '/');
+      expect(
+        RootNavigationScaffold.visiblePathOf(router),
+        '/projects/project-1',
+      );
       expect(find.byKey(const Key('root-dock')), findsNothing);
       expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
     });
@@ -309,7 +317,7 @@ void main() {
     'returning from capture detail keeps home dock off project detail',
     (tester) async {
       await runWithRouter(tester, (router) async {
-        router.go('/projects/project-1');
+        unawaited(router.push('/projects/project-1'));
         await tester.pump();
         await tester.pump(AppMotion.pageTransition);
         await tester.pump();
@@ -323,6 +331,11 @@ void main() {
         await tester.pump(AppMotion.pageTransition);
         await tester.pump();
         expect(find.byKey(const Key('root-dock')), findsNothing);
+        // Provider URI may still look like the shell root during push stack.
+        expect(
+          RootNavigationScaffold.visiblePathOf(router),
+          contains('/captures/'),
+        );
 
         router.pop();
         await tester.pump();
@@ -330,7 +343,7 @@ void main() {
         await tester.pump();
 
         expect(
-          router.routeInformationProvider.value.uri.path,
+          RootNavigationScaffold.visiblePathOf(router),
           '/projects/project-1',
         );
         expect(find.byType(ProjectDetailScreen), findsOneWidget);

@@ -43,7 +43,6 @@ class FloatingDockLayout extends StatelessWidget {
     final duration = animateDock
         ? AppMotion.durationOf(context, AppMotion.medium4)
         : Duration.zero;
-    final hasDock = dock != null;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -51,13 +50,11 @@ class FloatingDockLayout extends StatelessWidget {
         if (floatingActionButton case final action?)
           Positioned(
             right: 16,
-            // Sit above the dock when present; otherwise rest just above the
-            // system safe area so project capture chrome is not forced upward
-            // into empty home-dock space.
             bottom:
                 bottomSafeArea +
                 floatingDockBottomInset +
-                (hasDock ? floatingDockHeight + 12 : 0),
+                floatingDockHeight +
+                12,
             child: action,
           ),
         Positioned(

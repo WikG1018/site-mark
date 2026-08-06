@@ -96,30 +96,6 @@ void main() {
     expect(fab.bottom, lessThan(dock.top));
   });
 
-  testWidgets('floating action rests near bottom when dock is absent', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: FloatingDockLayout(
-            floatingActionButton: FloatingActionButton(
-              key: const Key('test-fab'),
-              onPressed: () {},
-            ),
-            child: const SizedBox.expand(),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final fab = tester.getRect(find.byKey(const Key('test-fab')));
-    // No home dock: capture FAB should sit just above the bottom inset,
-    // not reserve an empty dock-height gap.
-    expect(fab.bottom, closeTo(600 - floatingDockBottomInset, 0.1));
-  });
-
   testWidgets('reduce motion removes dock transition duration', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
