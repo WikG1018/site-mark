@@ -152,7 +152,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - 不包含照片、项目名称、项目说明、工程内容、拍摄人、备注；
 - 不包含位置坐标、地址、EXIF、照片编号、文件名、文件路径或 SHA-256；
 - 不包含原始异常文本和堆栈；
-- 诊断事件覆盖备份与恢复结果（不含路径与项目内容）；删除结果由删除诊断合并后一并覆盖；
+- 诊断事件覆盖备份、恢复与删除结果（不含路径与项目内容）；
 - 只有用户主动确认后，诊断 ZIP 才会交给 Android 系统分享面板。
 
 ## 存储位置与卸载影响
@@ -245,7 +245,7 @@ flutter build apk --debug
 
 ## 参与贡献
 
-欢迎提交缺陷复现、Android 厂商相机兼容性结果、隐私审查和工程记录流程建议。开始前请阅读 [贡献指南](CONTRIBUTING.md)、[安全政策](SECURITY.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。
+欢迎提交缺陷复现、Android 厂商相机兼容性结果、隐私审查和工程记录流程建议。开始前请阅读 [贡献指南](CONTRIBUTING.md)、[安全政策](SECURITY.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。自动化编码 Agent 请先阅读 [Agent 执行入口](NEXT_AGENT_PROMPT.md)。
 
 ## License
 

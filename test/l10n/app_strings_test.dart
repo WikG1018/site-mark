@@ -53,6 +53,7 @@ final _stringReaders = <String, _StringReader>{
       strings.captureTemplateInvalidCharacter,
   'captureTemplateNotFound': (strings) => strings.captureTemplateNotFound,
   'backupFailedFriendly': (strings) => strings.backupFailedFriendly,
+  'importFailedFriendly': (strings) => strings.importFailedFriendly,
   'backupProjectFailed': (strings) => strings.backupProjectFailed(_projectName),
   'backupStorageInsufficient': (strings) => strings.backupStorageInsufficient,
   'backupCorrupted': (strings) => strings.backupCorrupted,
@@ -122,6 +123,8 @@ const expectedZh = <String, String>{
   'captureTemplateInvalidCharacter': '模板文字包含不支持的字符',
   'captureTemplateNotFound': '模板已不存在',
   'backupFailedFriendly': '无法读取项目数据或文件，因而无法生成备份。请重试；若仍失败，请逐个项目备份。',
+  'importFailedFriendly':
+      '无法导入该项目。请选择有效的 SiteMark 项目备份后重试；若仍失败，请释放存储空间或换用其他备份。',
   'backupProjectFailed': '无法备份项目“Project Alpha”。请重试；若仍失败，请单独选择该项目备份。',
   'backupStorageInsufficient': '存储空间不足，无法完成操作。请释放空间后重试。',
   'backupCorrupted': '备份已损坏或校验不一致。请选择其他 SiteMark 备份后重试。',
@@ -192,6 +195,8 @@ const expectedEn = <String, String>{
   'captureTemplateNotFound': 'Template no longer exists',
   'backupFailedFriendly':
       'Project data or files could not be read, so the backup was not created. Try again; if it still fails, back up one project at a time.',
+  'importFailedFriendly':
+      'Could not import the project. Choose a valid SiteMark project backup and try again; if it still fails, free some storage space or use another backup.',
   'backupProjectFailed':
       'Could not back up "Project Alpha". Try again; if it still fails, select only this project and retry.',
   'backupStorageInsufficient':
