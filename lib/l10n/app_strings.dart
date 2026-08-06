@@ -630,6 +630,11 @@ class AppStrings {
   String importSuccess(String name, int count) =>
       _english ? 'Imported "$name" ($count photo(s))' : '已导入「$name」（$count 张）';
   String get importFailed => _english ? 'Import failed' : '导入失败';
+
+  /// User-facing import failure that never includes raw exception text.
+  String get importFailedFriendly => _english
+      ? 'Could not import the project. Choose a valid SiteMark project backup and try again; if it still fails, free some storage space or use another backup.'
+      : '无法导入该项目。请选择有效的 SiteMark 项目备份后重试；若仍失败，请释放存储空间或换用其他备份。';
   String get importInvalidArchive =>
       _english ? 'Not a valid SiteMark project backup' : '不是有效的 SiteMark 项目备份';
   String get importSelectionUnsupported => _english

@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/project_import_service.dart'
     show AtomicMarkerWriter, DartAtomicMarkerWriter;
@@ -300,12 +302,14 @@ class ProjectDeletionService {
     required this.capturePaths,
     required this.files,
     required this.pendingStore,
+    this.diagnostics,
   });
 
   final AppDatabase database;
   final CaptureOutputPaths capturePaths;
   final PrivateFileStore files;
   final ProjectDeletionPendingStore pendingStore;
+  final DiagnosticRecorder? diagnostics;
 
   Future<ProjectDeletionPreview> preview(String projectId) async {
     final project = await database.projectById(projectId);
@@ -321,6 +325,7 @@ class ProjectDeletionService {
   }
 
   Future<ProjectDeletionResult> deleteProject(String projectId) async {
+    final stopwatch = Stopwatch()..start();
     final captures = await database.capturesForProject(projectId);
     final paths = <String>{};
     for (final capture in captures) {
@@ -331,35 +336,93 @@ class ProjectDeletionService {
       projectId: projectId,
       paths: paths.toList(growable: false),
     );
-    await pendingStore.write(pending);
-    await database.deleteProjectCascade(projectId);
+    try {
+      await pendingStore.write(pending);
+      await database.deleteProjectCascade(projectId);
+    } catch (error) {
+      _recordDeletion(
+        DiagnosticOutcome.failed,
+        DiagnosticCode.unexpected,
+        count: 1,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
+      rethrow;
+    }
     final cleaned = await _deletePaths(pending.paths);
-    if (!cleaned) return const ProjectDeletionResult(cleanupPending: true);
+    if (!cleaned) {
+      // Database rows are already gone; private file cleanup will retry on
+      // the next launch via the durable marker.
+      _recordDeletion(
+        DiagnosticOutcome.success,
+        DiagnosticCode.none,
+        count: captures.length,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
+      return const ProjectDeletionResult(cleanupPending: true);
+    }
     try {
       await pendingStore.clear(projectId);
     } catch (_) {
       // The files are gone, but preserving the marker lets startup retry the
       // durable commit step without reporting a failed project deletion.
+      _recordDeletion(
+        DiagnosticOutcome.success,
+        DiagnosticCode.none,
+        count: captures.length,
+        durationMs: stopwatch.elapsedMilliseconds,
+      );
       return const ProjectDeletionResult(cleanupPending: true);
     }
+    _recordDeletion(
+      DiagnosticOutcome.success,
+      DiagnosticCode.none,
+      count: captures.length,
+      durationMs: stopwatch.elapsedMilliseconds,
+    );
     return const ProjectDeletionResult(cleanupPending: false);
   }
 
   Future<void> cleanupInterruptedDeletions() async {
     final pendings = await pendingStore.list();
+    var remaining = 0;
+    var attempted = 0;
+    var skippedStillPresent = 0;
     for (final pending in pendings) {
       // Markers are written before the transactional database cascade. A
       // failed cascade leaves its marker in place, so a present project proves
       // this marker is not yet safe to execute against private files.
-      if (await database.projectById(pending.projectId) != null) continue;
+      if (await database.projectById(pending.projectId) != null) {
+        skippedStillPresent += 1;
+        continue;
+      }
+      attempted += 1;
       final cleaned = await _deletePaths(pending.paths);
       if (cleaned) {
         try {
           await pendingStore.clear(pending.projectId);
         } catch (_) {
           // Leave the marker so a later launch can clear it.
+          remaining += 1;
         }
+      } else {
+        remaining += 1;
       }
+    }
+    // Only record when cleanup work was attempted. Markers left for projects
+    // that still exist are intentional (cascade not finished) and must not
+    // look like a successful sweep.
+    if (attempted > 0) {
+      _recordDeletion(
+        remaining == 0 ? DiagnosticOutcome.success : DiagnosticOutcome.blocked,
+        DiagnosticCode.none,
+        count: attempted,
+      );
+    } else if (skippedStillPresent > 0 && pendings.isNotEmpty) {
+      _recordDeletion(
+        DiagnosticOutcome.blocked,
+        DiagnosticCode.none,
+        count: skippedStillPresent,
+      );
     }
   }
 
@@ -373,5 +436,23 @@ class ProjectDeletionService {
       }
     }
     return cleaned;
+  }
+
+  void _recordDeletion(
+    DiagnosticOutcome outcome,
+    DiagnosticCode code, {
+    int? count,
+    int? durationMs,
+  }) {
+    diagnostics?.record(
+      DiagnosticEvent(
+        timestamp: DateTime.now(),
+        category: DiagnosticCategory.deletion,
+        outcome: outcome,
+        code: code,
+        count: count,
+        durationMs: durationMs,
+      ),
+    );
   }
 }
