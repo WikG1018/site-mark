@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -102,5 +103,41 @@ void main() {
       find.byKey(const Key('root-destination-settings')),
     );
     expect(indicator.dx, closeTo(target.dx, 1));
+  });
+
+  testWidgets('destination tap triggers selection haptic feedback', (
+    tester,
+  ) async {
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        calls.add(call);
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+
+    var selected = 0;
+    await tester.pumpWidget(buildDock(selected, (value) => selected = value));
+
+    await tester.tap(find.byKey(const Key('root-destination-records')));
+    await tester.pump();
+
+    expect(selected, 1);
+    expect(
+      calls.any(
+        (call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.selectionClick',
+      ),
+      isTrue,
+      reason: 'dock tap should fire HapticFeedback.selectionClick',
+    );
   });
 }

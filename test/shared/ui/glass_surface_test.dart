@@ -151,4 +151,171 @@ void main() {
       },
     );
   }
+
+  testWidgets('boosts surface opacity when blur is disabled', (tester) async {
+    const baseOpacity = 0.72;
+    final scheme = ColorScheme.fromSeed(seedColor: const Color(0xff005a9c));
+
+    Future<Color?> pumpAndReadSurface({required bool disableAnimations}) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: MediaQueryData(disableAnimations: disableAnimations),
+          child: MaterialApp(
+            theme: ThemeData(colorScheme: scheme),
+            home: const Scaffold(
+              body: GlassSurface(opacity: baseOpacity, child: Text('content')),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final decorated = find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byType(DecoratedBox),
+      );
+      expect(decorated, findsWidgets);
+      final outer = tester.widget<DecoratedBox>(decorated.first);
+      final decoration = outer.decoration as BoxDecoration;
+      return decoration.color;
+    }
+
+    final withBlur = await pumpAndReadSurface(disableAnimations: false);
+    final withoutBlur = await pumpAndReadSurface(disableAnimations: true);
+
+    expect(withBlur, isNotNull);
+    expect(withoutBlur, isNotNull);
+    expect(withBlur!.a, closeTo(baseOpacity, 0.001));
+    expect(
+      withoutBlur!.a,
+      closeTo((baseOpacity + 0.10).clamp(0.58, 0.94), 0.001),
+    );
+    expect(withoutBlur.a, greaterThan(withBlur.a));
+  });
+
+  testWidgets('enableOverlay false skips the overlay blend layer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: GlassSurface(enableOverlay: false, child: Text('content')),
+      ),
+    );
+    await tester.pump();
+
+    final blends = find.descendant(
+      of: find.byType(GlassSurface),
+      matching: find.byWidgetPredicate((Widget widget) {
+        if (widget is! DecoratedBox) return false;
+        final decoration = widget.decoration;
+        return decoration is BoxDecoration &&
+            decoration.backgroundBlendMode == BlendMode.overlay;
+      }),
+    );
+    expect(blends, findsNothing);
+  });
+
+  testWidgets('enableOverlay true paints the overlay blend layer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: GlassSurface(enableOverlay: true, child: Text('content')),
+      ),
+    );
+    await tester.pump();
+
+    final blends = find.descendant(
+      of: find.byType(GlassSurface),
+      matching: find.byWidgetPredicate((Widget widget) {
+        if (widget is! DecoratedBox) return false;
+        final decoration = widget.decoration;
+        return decoration is BoxDecoration &&
+            decoration.backgroundBlendMode == BlendMode.overlay;
+      }),
+    );
+    expect(blends, findsOneWidget);
+  });
+
+  testWidgets('overlay tint sits under content, not above it', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: GlassSurface(
+          enableOverlay: true,
+          child: Text('content', key: Key('glass-content')),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final stack = tester.widget<Stack>(
+      find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byType(Stack),
+      ),
+    );
+    final overlayIndex = stack.children.indexWhere((widget) {
+      if (widget is! Positioned) return false;
+      final child = widget.child;
+      if (child is! IgnorePointer) return false;
+      final decorated = child.child;
+      return decorated is DecoratedBox &&
+          decorated.decoration is BoxDecoration &&
+          (decorated.decoration as BoxDecoration).backgroundBlendMode ==
+              BlendMode.overlay;
+    });
+    final contentIndex = stack.children.indexWhere(
+      (widget) =>
+          widget is DefaultTextStyle ||
+          find
+              .descendant(
+                of: find.byWidget(widget),
+                matching: find.byKey(const Key('glass-content')),
+              )
+              .evaluate()
+              .isNotEmpty,
+    );
+    // Fall back: content is wrapped in DefaultTextStyle.merge
+    final textStyleIndex = stack.children.indexWhere(
+      (widget) => widget is DefaultTextStyle,
+    );
+    final resolvedContentIndex = contentIndex >= 0
+        ? contentIndex
+        : textStyleIndex;
+
+    expect(overlayIndex, greaterThanOrEqualTo(0));
+    expect(resolvedContentIndex, greaterThanOrEqualTo(0));
+    expect(
+      overlayIndex,
+      lessThan(resolvedContentIndex),
+      reason: 'overlay must paint before (under) content in the Stack',
+    );
+  });
+
+  testWidgets('clamps blur-enabled opacity into the glass band', (
+    tester,
+  ) async {
+    final scheme = ColorScheme.fromSeed(seedColor: const Color(0xff005a9c));
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: false),
+        child: MaterialApp(
+          theme: ThemeData(colorScheme: scheme),
+          home: const Scaffold(
+            body: GlassSurface(opacity: 1.0, child: Text('content')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final decorated = find.descendant(
+      of: find.byType(GlassSurface),
+      matching: find.byType(DecoratedBox),
+    );
+    final outer = tester.widget<DecoratedBox>(decorated.first);
+    final color = (outer.decoration as BoxDecoration).color;
+    expect(color, isNotNull);
+    expect(color!.a, closeTo(0.92, 0.001));
+  });
 }
