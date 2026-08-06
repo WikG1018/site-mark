@@ -895,6 +895,7 @@ class ProjectBundleService {
     required Map<String, String> projectNames,
     void Function(int completed, int total)? onProgress,
   }) async {
+    final stopwatch = Stopwatch()..start();
     for (final item in prepared.items) {
       if (await database.projectById(item.targetProjectId) != null) {
         _throwRestore(
@@ -919,6 +920,7 @@ class ProjectBundleService {
           DiagnosticOutcome.success,
           DiagnosticCode.none,
           count: result.photoCount,
+          durationMs: stopwatch.elapsedMilliseconds,
         );
         return [result];
       } catch (error) {
@@ -1005,6 +1007,7 @@ class ProjectBundleService {
         DiagnosticOutcome.success,
         DiagnosticCode.none,
         count: photoCount,
+        durationMs: stopwatch.elapsedMilliseconds,
       );
       return results;
     } catch (error) {
@@ -1019,7 +1022,9 @@ class ProjectBundleService {
             DiagnosticOutcome.blocked,
             DiagnosticCode.none,
             count: photoCount,
+            durationMs: stopwatch.elapsedMilliseconds,
           );
+          // blocked: data is durable; startup will finish visibility.
           return results;
         } catch (_) {
           // Keep the committing marker. Startup recovery finishes visibility.

@@ -1,16 +1,14 @@
 name: Integration
 
-# Device-backed integration tests. Keep off the default PR CI path because they
-# need an Android emulator and are slower/flakier than unit tests. Runs on a
-# nightly schedule and on-demand; also on push to main after unit CI is green.
+# Device-backed integration tests. Not on pull_request — slower/flakier than unit
+# tests and needs an Android emulator. Runs nightly and on manual dispatch only
+# (not every push to main) to control CI cost.
 
 on:
   workflow_dispatch:
   schedule:
     # ~05:17 UTC daily — off the hour to reduce fleet contention
     - cron: '17 5 * * *'
-  push:
-    branches: [main]
 
 permissions:
   contents: read
