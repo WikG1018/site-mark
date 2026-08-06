@@ -12,6 +12,14 @@ Thank you for helping improve SiteMark.
    locations, customer project names, or private photos.
 6. Update both Chinese and English strings when adding user-visible copy.
 
+## Agent / automated contributors
+
+If you are an automated coding agent, start with
+[`NEXT_AGENT_PROMPT.md`](NEXT_AGENT_PROMPT.md). It is the standing entry point for
+product boundaries, verification, and git expectations. Current behavior is
+defined by `docs/current-product-architecture.md` and
+`docs/decision-records.md`; historical specs live under `docs/superpowers/`.
+
 ## Motion consistency
 
 Any custom animation in `lib/` must take its duration and curve exclusively
@@ -20,5 +28,12 @@ from the `AppMotion` tokens in `lib/motion.dart` (`short4`/`medium2`/
 `emphasizedAccelerate`/`standard`). Do not introduce hard-coded durations,
 `Cubic` values, or ad-hoc curves outside that file; extend `AppMotion` first
 if a new token is genuinely needed.
+
+## User-visible errors
+
+Do not show raw `error.toString()`, file paths, or OS error codes in the UI.
+Map failures to stable codes and bilingual friendly copy (see import/restore
+error helpers and `CaptureFailureCode`). Diagnostic events must not include
+engineering content, photo paths, locations, or project names.
 
 By submitting a contribution, you agree that it is licensed under Apache-2.0.
