@@ -385,11 +385,17 @@ class ProjectDeletionService {
   Future<void> cleanupInterruptedDeletions() async {
     final pendings = await pendingStore.list();
     var remaining = 0;
+    var attempted = 0;
+    var skippedStillPresent = 0;
     for (final pending in pendings) {
       // Markers are written before the transactional database cascade. A
       // failed cascade leaves its marker in place, so a present project proves
       // this marker is not yet safe to execute against private files.
-      if (await database.projectById(pending.projectId) != null) continue;
+      if (await database.projectById(pending.projectId) != null) {
+        skippedStillPresent += 1;
+        continue;
+      }
+      attempted += 1;
       final cleaned = await _deletePaths(pending.paths);
       if (cleaned) {
         try {
@@ -402,11 +408,20 @@ class ProjectDeletionService {
         remaining += 1;
       }
     }
-    if (pendings.isNotEmpty) {
+    // Only record when cleanup work was attempted. Markers left for projects
+    // that still exist are intentional (cascade not finished) and must not
+    // look like a successful sweep.
+    if (attempted > 0) {
       _recordDeletion(
         remaining == 0 ? DiagnosticOutcome.success : DiagnosticOutcome.blocked,
         DiagnosticCode.none,
-        count: pendings.length,
+        count: attempted,
+      );
+    } else if (skippedStillPresent > 0 && pendings.isNotEmpty) {
+      _recordDeletion(
+        DiagnosticOutcome.blocked,
+        DiagnosticCode.none,
+        count: skippedStillPresent,
       );
     }
   }

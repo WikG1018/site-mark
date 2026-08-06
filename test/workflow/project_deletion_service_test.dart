@@ -591,6 +591,54 @@ void main() {
     expect(event.code, DiagnosticCode.unexpected);
     expect(event.encode(), isNot(contains('simulated cascade')));
   });
+
+  test(
+    'cleanup with only still-present projects records blocked, not success',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await _seedPublishedCapture(database);
+      final diagnosticRoot = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-diag-skip-',
+      );
+      addTearDown(() async {
+        if (await diagnosticRoot.exists()) {
+          await diagnosticRoot.delete(recursive: true);
+        }
+      });
+      final store = DiagnosticEventStore(directory: diagnosticRoot);
+      final pendingStore = _MemoryProjectDeletionPendingStore()
+        ..pending.add(
+          const PendingProjectDeletion(
+            projectId: 'project-1',
+            paths: ['/private/original.jpg'],
+          ),
+        );
+      final service = ProjectDeletionService(
+        database: database,
+        capturePaths: const _FakeCaptureOutputPaths(),
+        files: _RecordingPrivateFileStore(),
+        pendingStore: pendingStore,
+        diagnostics: DiagnosticRecorder(store),
+      );
+
+      await service.cleanupInterruptedDeletions();
+
+      List<DiagnosticEvent> events = const [];
+      for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        events = await store.readRecent();
+      }
+
+      expect(events, hasLength(1));
+      final event = events.single;
+      expect(event.category, DiagnosticCategory.deletion);
+      expect(event.outcome, DiagnosticOutcome.blocked);
+      expect(event.count, 1);
+      expect(pendingStore.pending, hasLength(1));
+      expect(await database.projectById('project-1'), isNotNull);
+    },
+  );
 }
 
 Future<void> _seedPublishedCapture(AppDatabase database) async {
