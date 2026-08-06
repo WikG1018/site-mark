@@ -129,3 +129,8 @@ v1.0.0 必须通过 Flutter 全量测试与静态分析、Rust fmt/Clippy/全量
 假设留在 `docs/superpowers/` 作为历史，不再从 README 的当前设计入口展示。
 任何改变权限、数据生命周期、拍摄状态机、导出可恢复性或技术分层的修改，必须同步
 更新本文件及[关键技术决策记录](decision-records.md)。
+
+
+## 根导航状态保活与内存
+
+一级「项目 / 全部记录 / 设置」由 `RootBranchContainer` 保活各自分支的导航与滚动状态；切换时短时绘制来源页与目标页以完成方向滑动。`main` 将 `imageCache` 限制在约 40 张 / 32MB，并在内存压力回调中清空缓存。真机观察项见 `docs/verification-v1.0.0-device.md` 第 7 节。

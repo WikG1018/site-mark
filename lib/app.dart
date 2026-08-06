@@ -375,6 +375,7 @@ final projectBundleServiceProvider = Provider<ProjectBundleService>((ref) {
     files: ref.watch(projectBundleFileSystemProvider),
     pendingStore: ref.watch(bundleRestorePendingStoreProvider),
     rollback: ref.watch(projectBundleRollbackProvider),
+    diagnostics: ref.watch(diagnosticRecorderProvider),
   );
 });
 

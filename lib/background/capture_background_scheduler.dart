@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/platform/local_notification_service.dart';
@@ -132,8 +131,8 @@ class WorkmanagerBackgroundWorkClient implements BackgroundWorkClient {
   @override
   Future<void> initialize(void Function() dispatcher) async {
     if (_initialized) return;
-    // ignore: deprecated_member_use
-    await _workmanager.initialize(dispatcher, isInDebugMode: kDebugMode);
+    // isInDebugMode is deprecated and has no effect; omit it.
+    await _workmanager.initialize(dispatcher);
     _initialized = true;
   }
 

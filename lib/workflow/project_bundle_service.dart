@@ -647,6 +647,7 @@ class ProjectBundleService {
     required this.files,
     required this.pendingStore,
     required this.rollback,
+    this.diagnostics,
     String Function()? idGenerator,
   }) : _idGenerator = idGenerator ?? const Uuid().v4;
 
@@ -657,23 +658,78 @@ class ProjectBundleService {
   final ProjectBundleFileSystem files;
   final BundleRestorePendingStore pendingStore;
   final ProjectBundleRollback rollback;
+  final DiagnosticRecorder? diagnostics;
   final String Function() _idGenerator;
   static final Set<String> _activeRestoreTargetIds = <String>{};
 
+  void _recordRestore(
+    DiagnosticOutcome outcome,
+    DiagnosticCode code, {
+    int? count,
+    int? durationMs,
+  }) {
+    diagnostics?.record(
+      DiagnosticEvent(
+        timestamp: DateTime.now(),
+        category: DiagnosticCategory.restore,
+        outcome: outcome,
+        code: code,
+        count: count,
+        durationMs: durationMs,
+      ),
+    );
+  }
+
+  static DiagnosticCode _diagnosticCodeForRestoreFailure(
+    ProjectBundleRestoreFailure failure,
+  ) => switch (failure) {
+    ProjectBundleRestoreFailure.insufficientStorage =>
+      DiagnosticCode.insufficientStorage,
+    ProjectBundleRestoreFailure.corrupted ||
+    ProjectBundleRestoreFailure.notSiteMarkBackup ||
+    ProjectBundleRestoreFailure.unsupportedVersion ||
+    ProjectBundleRestoreFailure.selectionArchive =>
+      DiagnosticCode.invalidArchive,
+    ProjectBundleRestoreFailure.finalizationPending => DiagnosticCode.none,
+    ProjectBundleRestoreFailure.nameConflict ||
+    ProjectBundleRestoreFailure.rolledBack ||
+    ProjectBundleRestoreFailure.general => DiagnosticCode.unexpected,
+  };
+
+  Never _throwRestore(
+    ProjectBundleRestoreException error, {
+    int? count,
+    int? durationMs,
+  }) {
+    _recordRestore(
+      error.failure == ProjectBundleRestoreFailure.finalizationPending
+          ? DiagnosticOutcome.blocked
+          : DiagnosticOutcome.failed,
+      _diagnosticCodeForRestoreFailure(error.failure),
+      count: count,
+      durationMs: durationMs,
+    );
+    throw error;
+  }
+
   Future<PreparedProjectRestore> prepareRestore(String zipPath) async {
+    final stopwatch = Stopwatch()..start();
     rust.ProjectBundlePreview bundlePreview;
     try {
       bundlePreview = await bundles.readBundle(zipPath);
     } catch (bundleError) {
       if (bundleError is ImagePipelineException &&
           bundleError.kind != ImagePipelineFailureKind.invalidData) {
-        throw ProjectBundleRestoreException(
-          'The selected backup could not be read',
-          cause: bundleError,
-          failure: _classifyRestoreFailure(
-            bundleError,
-            fallback: ProjectBundleRestoreFailure.general,
+        _throwRestore(
+          ProjectBundleRestoreException(
+            'The selected backup could not be read',
+            cause: bundleError,
+            failure: _classifyRestoreFailure(
+              bundleError,
+              fallback: ProjectBundleRestoreFailure.general,
+            ),
           ),
+          durationMs: stopwatch.elapsedMilliseconds,
         );
       }
       try {
@@ -698,13 +754,16 @@ class ProjectBundleService {
           singleError,
           fallback: ProjectBundleRestoreFailure.notSiteMarkBackup,
         );
-        throw ProjectBundleRestoreException(
-          'The selected file is not a restorable SiteMark backup',
-          cause: singleError,
-          failure:
-              singleFailure != ProjectBundleRestoreFailure.notSiteMarkBackup
-              ? singleFailure
-              : bundleFailure,
+        _throwRestore(
+          ProjectBundleRestoreException(
+            'The selected file is not a restorable SiteMark backup',
+            cause: singleError,
+            failure:
+                singleFailure != ProjectBundleRestoreFailure.notSiteMarkBackup
+                ? singleFailure
+                : bundleFailure,
+          ),
+          durationMs: stopwatch.elapsedMilliseconds,
         );
       }
     }
@@ -726,12 +785,14 @@ class ProjectBundleService {
       } catch (_) {
         // A partially committed marker is safe and points to no staging tree.
       }
-      throw ProjectBundleRestoreException(
-        'The project bundle could not be prepared',
-        cause: error,
-        failure: _classifyRestoreFailure(
-          error,
-          fallback: ProjectBundleRestoreFailure.general,
+      _throwRestore(
+        ProjectBundleRestoreException(
+          'The project bundle could not be prepared',
+          cause: error,
+          failure: _classifyRestoreFailure(
+            error,
+            fallback: ProjectBundleRestoreFailure.general,
+          ),
         ),
       );
     }
@@ -740,12 +801,14 @@ class ProjectBundleService {
     } catch (error) {
       // The marker stays durable. Startup cleanup safely handles a missing or
       // partially created directory.
-      throw ProjectBundleRestoreException(
-        'The project bundle could not be prepared',
-        cause: error,
-        failure: _classifyRestoreFailure(
-          error,
-          fallback: ProjectBundleRestoreFailure.general,
+      _throwRestore(
+        ProjectBundleRestoreException(
+          'The project bundle could not be prepared',
+          cause: error,
+          failure: _classifyRestoreFailure(
+            error,
+            fallback: ProjectBundleRestoreFailure.general,
+          ),
         ),
       );
     }
@@ -782,12 +845,14 @@ class ProjectBundleService {
       );
     } catch (error) {
       await _cleanupPreparedBundle(preparationPending);
-      throw ProjectBundleRestoreException(
-        'The project bundle could not be prepared',
-        cause: error,
-        failure: _classifyRestoreFailure(
-          error,
-          fallback: ProjectBundleRestoreFailure.corrupted,
+      _throwRestore(
+        ProjectBundleRestoreException(
+          'The project bundle could not be prepared',
+          cause: error,
+          failure: _classifyRestoreFailure(
+            error,
+            fallback: ProjectBundleRestoreFailure.corrupted,
+          ),
         ),
       );
     }
@@ -800,13 +865,17 @@ class ProjectBundleService {
   }) async {
     final targetIds = {for (final item in prepared.items) item.targetProjectId};
     if (targetIds.length != prepared.items.length) {
-      throw const ProjectBundleRestoreException(
-        'Prepared target project IDs must be unique',
+      _throwRestore(
+        ProjectBundleRestoreException(
+          'Prepared target project IDs must be unique',
+        ),
       );
     }
     if (targetIds.any(_activeRestoreTargetIds.contains)) {
-      throw const ProjectBundleRestoreException(
-        'This prepared restore is already in progress',
+      _throwRestore(
+        ProjectBundleRestoreException(
+          'This prepared restore is already in progress',
+        ),
       );
     }
     _activeRestoreTargetIds.addAll(targetIds);
@@ -828,9 +897,11 @@ class ProjectBundleService {
   }) async {
     for (final item in prepared.items) {
       if (await database.projectById(item.targetProjectId) != null) {
-        throw const ProjectBundleRestoreException(
-          'A prepared target project already exists',
-          failure: ProjectBundleRestoreFailure.nameConflict,
+        _throwRestore(
+          ProjectBundleRestoreException(
+            'A prepared target project already exists',
+            failure: ProjectBundleRestoreFailure.nameConflict,
+          ),
         );
       }
     }
@@ -844,15 +915,23 @@ class ProjectBundleService {
           projectId: item.targetProjectId,
           onProgress: onProgress,
         );
+        _recordRestore(
+          DiagnosticOutcome.success,
+          DiagnosticCode.none,
+          count: result.photoCount,
+        );
         return [result];
       } catch (error) {
-        throw ProjectBundleRestoreException(
-          'Single project restore failed and was rolled back',
-          cause: error,
-          failure: _classifyRestoreFailure(
-            error,
-            fallback: ProjectBundleRestoreFailure.rolledBack,
+        _throwRestore(
+          ProjectBundleRestoreException(
+            'Single project restore failed and was rolled back',
+            cause: error,
+            failure: _classifyRestoreFailure(
+              error,
+              fallback: ProjectBundleRestoreFailure.rolledBack,
+            ),
           ),
+          count: 1,
         );
       }
     }
@@ -872,12 +951,14 @@ class ProjectBundleService {
       await pendingStore.write(pending);
     } catch (error) {
       await _cleanupPreparedBundle(pending);
-      throw ProjectBundleRestoreException(
-        'Project bundle restore could not be started',
-        cause: error,
-        failure: _classifyRestoreFailure(
-          error,
-          fallback: ProjectBundleRestoreFailure.general,
+      _throwRestore(
+        ProjectBundleRestoreException(
+          'Project bundle restore could not be started',
+          cause: error,
+          failure: _classifyRestoreFailure(
+            error,
+            fallback: ProjectBundleRestoreFailure.general,
+          ),
         ),
       );
     }
@@ -919,11 +1000,26 @@ class ProjectBundleService {
       await pendingStore.write(committing);
       pending = committing;
       await _finalizeCommit(pending);
+      final photoCount = results.fold<int>(0, (sum, r) => sum + r.photoCount);
+      _recordRestore(
+        DiagnosticOutcome.success,
+        DiagnosticCode.none,
+        count: photoCount,
+      );
       return results;
     } catch (error) {
       if (pending.phase == PendingBundleRestorePhase.committing) {
         try {
           await _finalizeCommit(pending);
+          final photoCount = results.fold<int>(
+            0,
+            (sum, r) => sum + r.photoCount,
+          );
+          _recordRestore(
+            DiagnosticOutcome.blocked,
+            DiagnosticCode.none,
+            count: photoCount,
+          );
           return results;
         } catch (_) {
           // Keep the committing marker. Startup recovery finishes visibility.
@@ -931,17 +1027,19 @@ class ProjectBundleService {
       } else {
         await _rollbackPending(pending);
       }
-      throw ProjectBundleRestoreException(
-        pending.phase == PendingBundleRestorePhase.committing
-            ? 'Project bundle restore completed; final visibility is queued for startup recovery'
-            : 'Project bundle restore failed; all planned projects were rolled back or queued for cleanup',
-        cause: error,
-        failure: pending.phase == PendingBundleRestorePhase.committing
-            ? ProjectBundleRestoreFailure.finalizationPending
-            : _classifyRestoreFailure(
-                error,
-                fallback: ProjectBundleRestoreFailure.rolledBack,
-              ),
+      _throwRestore(
+        ProjectBundleRestoreException(
+          pending.phase == PendingBundleRestorePhase.committing
+              ? 'Project bundle restore completed; final visibility is queued for startup recovery'
+              : 'Project bundle restore failed; all planned projects were rolled back or queued for cleanup',
+          cause: error,
+          failure: pending.phase == PendingBundleRestorePhase.committing
+              ? ProjectBundleRestoreFailure.finalizationPending
+              : _classifyRestoreFailure(
+                  error,
+                  fallback: ProjectBundleRestoreFailure.rolledBack,
+                ),
+        ),
       );
     }
   }
@@ -1016,9 +1114,11 @@ class ProjectBundleService {
     };
     if (requested.keys.toSet().difference(expectedKeys).isNotEmpty ||
         expectedKeys.difference(requested.keys.toSet()).isNotEmpty) {
-      throw const ProjectBundleRestoreException(
-        'Every prepared project must have exactly one restore name',
-        failure: ProjectBundleRestoreFailure.nameConflict,
+      _throwRestore(
+        ProjectBundleRestoreException(
+          'Every prepared project must have exactly one restore name',
+          failure: ProjectBundleRestoreFailure.nameConflict,
+        ),
       );
     }
 
@@ -1033,17 +1133,21 @@ class ProjectBundleService {
     for (final item in prepared.items) {
       final name = requested[item.sourceProjectId]!.trim();
       if (name.isEmpty || name.length > 120) {
-        throw const ProjectBundleRestoreException(
-          'Project names must contain 1 to 120 characters',
-          failure: ProjectBundleRestoreFailure.nameConflict,
+        _throwRestore(
+          ProjectBundleRestoreException(
+            'Project names must contain 1 to 120 characters',
+            failure: ProjectBundleRestoreFailure.nameConflict,
+          ),
         );
       }
       final displayKey = normalizedProjectNameKey(name);
       final safeKey = safeProjectFileNameKey(name);
       if (!displayKeys.add(displayKey) || !safeKeys.add(safeKey)) {
-        throw const ProjectBundleRestoreException(
-          'Project restore names conflict with an existing or selected project',
-          failure: ProjectBundleRestoreFailure.nameConflict,
+        _throwRestore(
+          ProjectBundleRestoreException(
+            'Project restore names conflict with an existing or selected project',
+            failure: ProjectBundleRestoreFailure.nameConflict,
+          ),
         );
       }
       names[item.sourceProjectId] = name;
