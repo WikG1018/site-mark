@@ -144,6 +144,45 @@ void main() {
     expect(await database.captureById('capture-1'), isNotNull);
   });
 
+  // Regression: failure messages must not leak raw exceptions, stack traces,
+  // or file paths. The UI displays `failures[id]` directly in a SnackBar, so
+  // only generic user-facing strings are allowed.
+  test('failure messages never expose raw exception text or paths', () async {
+    files.existing.add('/private/original.jpg');
+    platform.deleteError = StateError(
+      'FileSystemException: cannot open /data/user/0/io.github.wikg1018.sitemark/files/original.jpg',
+    );
+
+    final deleteResult = await service.deleteAll(['capture-1']);
+    expect(deleteResult.failures['capture-1'], 'Operation failed');
+    expect(
+      deleteResult.failures['capture-1'],
+      isNot(contains('/data/user/0')),
+    );
+    expect(
+      deleteResult.failures['capture-1'],
+      isNot(contains('FileSystemException')),
+    );
+  });
+
+  test('republish failure message never exposes raw exception text', () async {
+    files.existing.add('/rendered/capture-1.jpg');
+    platform.publishError = StateError(
+      'MediaStore publish failed: /storage/emulated/0/DCIM/capture-1.jpg',
+    );
+
+    final result = await service.republish(['capture-1']);
+    expect(result.failures['capture-1'], 'Operation failed');
+    expect(
+      result.failures['capture-1'],
+      isNot(contains('/storage/emulated/0')),
+    );
+    expect(
+      result.failures['capture-1'],
+      isNot(contains('StateError')),
+    );
+  });
+
   test('republish updates the actual returned URI', () async {
     files.existing.add('/rendered/capture-1.jpg');
     platform.nextPublishedUri = 'content://media/site-mark/re-saved';
@@ -178,6 +217,7 @@ class _MediaPaths implements CaptureOutputPaths {
 class _MediaPlatform implements PlatformServices {
   final Map<String, ImageMetadataResult> metadataByPath = {};
   Object? deleteError;
+  Object? publishError;
   String nextPublishedUri = 'content://media/site-mark/1';
 
   @override
@@ -185,8 +225,10 @@ class _MediaPlatform implements PlatformServices {
       metadataByPath[path]!;
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async =>
-      nextPublishedUri;
+  Future<String> publishJpeg(String sourcePath, String displayName) async {
+    if (publishError != null) throw publishError!;
+    return nextPublishedUri;
+  }
 
   @override
   Future<void> deletePublishedImage(String contentUri) async {

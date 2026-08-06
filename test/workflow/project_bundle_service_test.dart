@@ -1420,6 +1420,56 @@ void main() {
     );
 
     test(
+      'completed bundle records success (not blocked) when finalization retry succeeds',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final pending = _FakeBundlePendingStore(clearFailuresRemaining: 1);
+        final rollback = _FakeProjectRollback();
+        final diagnosticRoot = await Directory.systemTemp.createTemp(
+          'sitemark-restore-retry-diag-',
+        );
+        addTearDown(() => diagnosticRoot.delete(recursive: true));
+        final diagnosticStore = DiagnosticEventStore(
+          directory: diagnosticRoot,
+        );
+        final service = ProjectBundleService(
+          database: database,
+          bundles: _FakeBundlePipeline(preview: _bundlePreview()),
+          importer: _FakeProjectImporter(),
+          paths: _FakeBundlePaths(),
+          files: _FakeBundleFiles(),
+          pendingStore: pending,
+          rollback: rollback,
+          diagnostics: DiagnosticRecorder(diagnosticStore),
+          idGenerator: () {
+            return 'retry-bundle';
+          },
+        );
+        final prepared = await service.prepareRestore('/backups/bundle.zip');
+
+        final results = await service.restorePrepared(
+          prepared: prepared,
+          projectNames: const {'p1': '恢复东区', 'p2': '恢复西区'},
+        );
+
+        expect(results, hasLength(2));
+        expect(pending.items, isEmpty);
+
+        List<DiagnosticEvent> events = const [];
+        for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          events = await diagnosticStore.readRecent();
+        }
+        expect(events, hasLength(1));
+        // Retry succeeded → the restore is fully committed, so the diagnostic
+        // must be success, not blocked.
+        expect(events.single.outcome, DiagnosticOutcome.success);
+        expect(events.single.category, DiagnosticCategory.restore);
+      },
+    );
+
+    test(
       'committing marker retries marker clear after tokens are already visible',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());

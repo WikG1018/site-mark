@@ -145,6 +145,52 @@ void main() {
     });
   }
 
+  // Regression: rapid dock switching (0→1→2) must not snap the intermediate
+  // page back to center. Before the fix, _controller.forward(from: 0) reset
+  // the animation, causing branch 1 to jump from its mid-slide offset to 0
+  // before branch 2 began entering. The interruptible animation continues
+  // from the actual on-screen position.
+  testWidgets(
+    'rapid dock switch does not snap intermediate page to center',
+    (tester) async {
+      await tester.pumpWidget(buildBranchContainer(0));
+      await tester.pump();
+
+      // Start 0→1 transition.
+      await tester.pumpWidget(buildBranchContainer(1));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      // Branch 1 is mid-slide; record its position.
+      final midSlideDx =
+          branchTranslation(tester, 1).translation.dx;
+      expect(midSlideDx, greaterThan(0));
+      expect(midSlideDx, lessThan(1));
+
+      // Interrupt with 1→2 before the first animation finishes.
+      await tester.pumpWidget(buildBranchContainer(2));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      // Branch 1 (now the outgoing page) must NOT have snapped to 0.
+      // It should be at or beyond its mid-slide position, sliding out.
+      final interruptedDx =
+          branchTranslation(tester, 1).translation.dx;
+      expect(interruptedDx, lessThanOrEqualTo(midSlideDx),
+          reason: 'Branch 1 must continue sliding out from its mid-slide '
+              'position, not snap back to center (0).');
+
+      // Branch 2 should be entering from the right.
+      final branch2Dx = branchTranslation(tester, 2).translation.dx;
+      expect(branch2Dx, greaterThan(0));
+      expect(branch2Dx, lessThanOrEqualTo(1));
+
+      // Let the animation finish.
+      await tester.pumpAndSettle();
+      expect(branchOffstage(tester, 1).offstage, isTrue);
+      expect(branchOffstage(tester, 2).offstage, isFalse);
+      expect(branchTranslation(tester, 2).translation, Offset.zero);
+    },
+  );
+
   testWidgets('dock switches three preserved root branches', (tester) async {
     await runWithRouter(tester, (_) async {
       expect(find.byKey(const Key('root-dock')), findsOneWidget);

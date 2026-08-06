@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -111,6 +113,13 @@ class _RootBranchContainerState extends State<RootBranchContainer>
   late int _currentIndex;
   bool _disableAnimations = false;
 
+  /// Visual offsets (in screen-width fractions) at the start of the current
+  /// animation. When an animation is interrupted mid-flight, these capture
+  /// the actual on-screen positions so the next segment starts from where
+  /// the pages currently are — no snap-back to center.
+  double _fromStartOffset = 0;
+  double _toStartOffset = 0;
+
   @override
   void initState() {
     super.initState();
@@ -135,13 +144,39 @@ class _RootBranchContainerState extends State<RootBranchContainer>
   void didUpdateWidget(covariant RootBranchContainer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.currentIndex == _currentIndex) return;
+    if (_disableAnimations) {
+      _fromIndex = _currentIndex;
+      _currentIndex = widget.currentIndex;
+      _fromStartOffset = 0;
+      _toStartOffset = 0;
+      _controller.value = 1;
+      return;
+    }
+    // Compute the current visual positions so the new animation segment
+    // continues smoothly from where the pages are right now. Without this,
+    // resetting the controller to 0 makes the intermediate page snap back
+    // to center before the next transition begins.
+    final isAnimating = _controller.isAnimating && _controller.value < 1;
+    if (isAnimating) {
+      final vp = AppMotion.emphasized.transform(_controller.value);
+      final oldDirection = _currentIndex > _fromIndex ? 1.0 : -1.0;
+      // The page that was sliding in (old "to") becomes the new "from".
+      _fromStartOffset = oldDirection * (1 - vp);
+      if (widget.currentIndex == _fromIndex) {
+        // Switching back: the old "from" page (now the new "to") is
+        // partially visible on the opposite side.
+        _toStartOffset = -oldDirection * vp;
+      } else {
+        // Switching to a new page: it starts fully off-screen.
+        _toStartOffset = widget.currentIndex > _currentIndex ? 1.0 : -1.0;
+      }
+    } else {
+      _fromStartOffset = 0;
+      _toStartOffset = widget.currentIndex > _currentIndex ? 1.0 : -1.0;
+    }
     _fromIndex = _currentIndex;
     _currentIndex = widget.currentIndex;
-    if (_disableAnimations) {
-      _controller.value = 1;
-    } else {
-      _controller.forward(from: 0);
-    }
+    _controller.forward(from: 0);
   }
 
   @override
@@ -183,13 +218,16 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                     // outgoing page exits by one full width while the incoming
                     // page enters by one full width. No scale — scale made the
                     // switch feel like a zoom/card handoff instead of a pan.
+                    // When a switch interrupts an in-flight animation, the
+                    // start offsets [_fromStartOffset]/[_toStartOffset] ensure
+                    // pages begin from their actual on-screen positions.
                     child: FractionalTranslation(
                       key: Key('root-branch-translation-$index'),
                       translation: Offset(switch (index) {
                         _ when index == _currentIndex && transitioning =>
-                          direction * (1 - progress),
+                          lerpDouble(_toStartOffset, 0, progress)!,
                         _ when index == _fromIndex && transitioning =>
-                          -direction * progress,
+                          lerpDouble(_fromStartOffset, -direction, progress)!,
                         _ => 0,
                       }, 0),
                       child: HeroMode(
