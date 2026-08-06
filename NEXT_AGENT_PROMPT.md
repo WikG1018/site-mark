@@ -11,7 +11,7 @@
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | `io.github.wikg1018.sitemark` |
 | 默认基础分支 | `main` |
-| 当前版本 | 见 `pubspec.yaml`（撰写时为 `1.0.0+15` 预发布） |
+| 当前版本 | 见 `pubspec.yaml`（撰写时为 `1.0.0+15`；GitHub `v1.0.0` **已发布**，Release 可能仍标 Pre-release） |
 | 平台 | Android 12+（API 31+） |
 | Drift schema | 见 `lib/data/app_database.dart` 的 `schemaVersion`（撰写时为 11） |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
@@ -73,7 +73,7 @@
 
 ```text
 dart format --output=none --set-exit-if-changed lib test pigeons packages/sitemark_system_api/lib
-dart analyze lib test
+flutter analyze
 flutter test
 cargo fmt --manifest-path rust/Cargo.toml -- --check
 cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
@@ -124,10 +124,10 @@ cargo test --manifest-path rust/Cargo.toml
 4. 红—绿测试 → 最小实现 → analyze + 相关测试 → 审查 diff → 提交 → 推送/更新 PR。  
 5. 阻塞时报告：复现命令、完整错误、已验证事实、已尝试方案、推荐的最小选择。
 
-## 7. 发布与预发布出口（背景）
+## 7. 发布与维护（背景）
 
 - 发布步骤与自动化门禁：`docs/release-checklist.md`。  
-- 当前 `v1.0.0` 可能仍是 **GitHub pre-release**：去掉预发布标记前，至少完成清单中的拍照/后台与备份恢复**真机**项，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。  
+- **`v1.0.0` 已经发布**（有可下载 APK）。GitHub 上该 Release **可能仍标 Pre-release**：去掉该标记或发 `1.0.x` 补丁前，至少完成清单中的拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。  
 - Agent **默认不**创建 GitHub Release、不上传签名密钥、不在未授权时合并 `main`。
 
 ## 8. 历史文档怎么用
