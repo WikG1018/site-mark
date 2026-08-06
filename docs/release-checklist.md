@@ -4,7 +4,7 @@
 
 Agent 执行仓库内开发任务时，请同时阅读仓库根目录的 [`NEXT_AGENT_PROMPT.md`](../NEXT_AGENT_PROMPT.md)。
 
-v1.0.0 真机勾选表见 [`verification-v1.0.0-device.md`](verification-v1.0.0-device.md)。
+v1.0 真机回归勾选表见 [`verification-v1.0.0-device.md`](verification-v1.0.0-device.md)（适用于已发布的 1.0 维护，而非“尚未发版”）。
 
 ## 一、版本与分支
 
@@ -12,7 +12,7 @@ v1.0.0 真机勾选表见 [`verification-v1.0.0-device.md`](verification-v1.0.0-
 - 发布标签必须为 `v<版本号>`，例如 `version: 0.8.1+12` 对应 `v0.8.1`。
 - 标签指向的提交必须已经进入 `main`，不得从未合并的功能分支直接发布。
 - 发布说明准确列出新增功能、修复内容、已知限制和升级注意事项。
-- 若当前标签仍是 GitHub **pre-release**，在改为正式发布前必须完成本清单第三、四节真机项与 [`verification-v1.0.0-device.md`](verification-v1.0.0-device.md)；不得仅凭 CI 绿灯去掉预发布标记。
+- **v1.0.0 已发布。** 若 GitHub 上该 Release 仍标为 Pre-release，去掉该标记前应完成第三、四节真机项与 [`verification-v1.0.0-device.md`](verification-v1.0.0-device.md) 的关键路径；不得仅凭 CI 绿灯改标记。后续 `1.0.x` 补丁同样用该清单做回归。
 
 ## 二、自动化检查
 
