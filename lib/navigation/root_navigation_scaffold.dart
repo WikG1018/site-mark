@@ -173,8 +173,17 @@ class _RootBranchContainerState extends State<RootBranchContainer>
         // on the opposite side, so enter from its current position.
         newTweens[widget.currentIndex] = (currentPosition(_fromIndex), 0);
       } else {
-        // Switching to a third page: it starts fully off-screen.
-        newTweens[widget.currentIndex] = (direction, 0);
+        // Switching to a third page: enter from just outside the outgoing
+        // page (_currentIndex) on the new direction's side, so the incoming
+        // page stays edge-to-edge with the outgoing page. Starting from the
+        // far edge (|direction| == 1) would leave a background gap when the
+        // outgoing page is still near the center — e.g. reverse 0->2->1:
+        // page 2 sits at ~+0.6, page 1 entering from -1 leaves a gap in the
+        // middle until page 1 crosses the center.
+        newTweens[widget.currentIndex] = (
+          currentPosition(_currentIndex) + direction,
+          0,
+        );
       }
 
       // Any other page still on-screen (e.g. the old "from" in a chain

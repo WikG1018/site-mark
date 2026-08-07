@@ -102,6 +102,50 @@ void main() {
         find.byKey(Key('root-branch-translation-$index'), skipOffstage: false),
       );
 
+  /// Asserts the viewport [0, 1] is fully covered by the union of all visible
+  /// branch page spans. Each visible page covers [translation.dx,
+  /// translation.dx + 1] in screen-width fractions. A gap between adjacent
+  /// pages (union does not contain [0, 1]) would show the scaffold background.
+  void assertViewportCovered(WidgetTester tester, {required String label}) {
+    final intervals = <(double, double)>[];
+    for (var i = 0; i < 3; i++) {
+      if (branchOffstage(tester, i).offstage) continue;
+      final dx = branchTranslation(tester, i).translation.dx;
+      intervals.add((dx, dx + 1));
+    }
+    intervals.sort((a, b) => a.$1.compareTo(b.$1));
+    // Merge overlapping/adjacent intervals, then check for gaps inside [0, 1].
+    var coverageStart = intervals.first.$1;
+    var coverageEnd = intervals.first.$2;
+    for (final (start, end) in intervals.skip(1)) {
+      if (start > coverageEnd) {
+        // Gap between [coverageEnd, start]. If it intersects [0, 1] and is
+        // wider than a float-precision epsilon, fail.
+        if (start > 0 && coverageEnd < 1) {
+          final gapWidth = start - coverageEnd;
+          if (gapWidth > 1e-9) {
+            fail(
+              '$label: viewport gap detected [$coverageEnd, $start] '
+              '(width $gapWidth). Visible intervals: $intervals. '
+              'The union must contain [0, 1].',
+            );
+          }
+        }
+      }
+      if (end > coverageEnd) coverageEnd = end;
+    }
+    expect(
+      coverageStart,
+      lessThanOrEqualTo(0),
+      reason: '$label: leftmost page must start at or before viewport left.',
+    );
+    expect(
+      coverageEnd,
+      greaterThanOrEqualTo(1),
+      reason: '$label: rightmost page must end at or after viewport right.',
+    );
+  }
+
   void expectRecordsBranchOffstage(WidgetTester tester) {
     expect(find.byType(AllCapturesScreen, skipOffstage: false), findsOneWidget);
     expect(branchOffstage(tester, 1).offstage, isTrue);
@@ -184,10 +228,18 @@ void main() {
             'position, not snap back to center (0).',
       );
 
-      // Branch 2 should be entering from the right.
+      // Branch 2 enters edge-to-edge with branch 1 (no background gap).
+      // The interruptible animation starts branch 2 just outside branch 1's
+      // current right edge, so both pages slide in unison. This means
+      // branch 2 may start beyond one screen width (|dx| > 1) when branch 1
+      // is still near the center — that is expected, not a bug.
       final branch2Dx = branchTranslation(tester, 2).translation.dx;
       expect(branch2Dx, greaterThan(0));
-      expect(branch2Dx, lessThanOrEqualTo(1));
+      expect(
+        branch2Dx,
+        closeTo(interruptedDx + 1, 1e-9),
+        reason: 'Branch 2 must be edge-to-edge with branch 1 to avoid a gap.',
+      );
 
       // Branch 0 (the old "from") must stay visible while still on-screen,
       // otherwise the left side of the viewport would show the scaffold
@@ -211,15 +263,12 @@ void main() {
         reason: 'Branch 0 should still be partially on-screen.',
       );
 
-      // The visible pages must together cover the full [0,1] viewport with
-      // no gap: adjacent pages sit one screen-width apart (|dx1 - dx0| <= 1).
-      expect(
-        (branchTranslation(tester, 1).translation.dx - branch0Dx).abs(),
-        lessThanOrEqualTo(1.0),
-        reason:
-            'Branches 0 and 1 must stay edge-to-edge so no background '
-            'gap appears between them.',
-      );
+      // Sample several frames across the second transition and assert the
+      // viewport [0, 1] is fully covered by the union of visible pages.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 32));
+        assertViewportCovered(tester, label: 'forward chain frame $i');
+      }
 
       // Let the animation finish.
       await tester.pumpAndSettle();
@@ -230,74 +279,106 @@ void main() {
   );
 
   // Regression: reverse jump (0->2->1) must not send the old "from" page
-  // (branch 0, on the left) across the screen to the right. Before the fix,
-  // the exit target for "other" on-screen pages used `-direction`, which for
-  // a reverse jump (direction = -1) became +1 — sending branch 0 from its
-  // left-side exit position across the viewport into branch 1's entry path.
-  // The exit direction must follow the page's current side: left page exits
-  // left, right page exits right.
-  testWidgets('reverse jump does not send outgoing page across the screen', (
-    tester,
-  ) async {
-    await tester.pumpWidget(buildBranchContainer(0));
-    await tester.pump();
+  // (branch 0, on the left) across the screen to the right, and must not
+  // leave any background gap. Two bugs were fixed here:
+  //  1. The exit target for "other" on-screen pages used `-direction`, which
+  //     for a reverse jump (direction = -1) became +1 — sending branch 0
+  //     from its left-side exit position across the viewport into branch 1's
+  //     entry path. Fixed by basing the exit direction on the page's current
+  //     side (left page exits left, right page exits right).
+  //  2. The incoming page (branch 1) started from the far edge (-1), but the
+  //     outgoing page (branch 2) was still near the center (~+0.6), so the
+  //     gap between them exceeded one screen width and the scaffold
+  //     background flashed through. Fixed by starting the incoming page
+  //     edge-to-edge with the outgoing page: currentPosition(outgoing) +
+  //     direction.
+  // The test asserts per-frame viewport coverage: the union of all visible
+  // page spans [translation, translation+1] must always contain [0, 1].
+  testWidgets(
+    'reverse jump keeps viewport covered and does not cross the screen',
+    (tester) async {
+      await tester.pumpWidget(buildBranchContainer(0));
+      await tester.pump();
 
-    // Start 0→2 transition (skip branch 1).
-    await tester.pumpWidget(buildBranchContainer(2));
-    await tester.pump(const Duration(milliseconds: 16));
+      // Start 0→2 transition (skip branch 1).
+      await tester.pumpWidget(buildBranchContainer(2));
+      await tester.pump(const Duration(milliseconds: 16));
 
-    // Branch 0 is exiting left; record its position.
-    final branch0MidDx = branchTranslation(tester, 0).translation.dx;
-    expect(
-      branch0MidDx,
-      lessThan(0),
-      reason: 'Branch 0 should be on the left, exiting.',
-    );
+      // Branch 0 is exiting left; record its position.
+      final branch0MidDx = branchTranslation(tester, 0).translation.dx;
+      expect(
+        branch0MidDx,
+        lessThan(0),
+        reason: 'Branch 0 should be on the left, exiting.',
+      );
 
-    // Interrupt with 2→1 (reverse direction) before the first animation
-    // finishes.
-    await tester.pumpWidget(buildBranchContainer(1));
-    await tester.pump(const Duration(milliseconds: 16));
+      // Interrupt with 2→1 (reverse direction) before the first animation
+      // finishes.
+      await tester.pumpWidget(buildBranchContainer(1));
+      // Pump one frame so the new animation segment is sampled mid-flight
+      // (direction assertions are only meaningful while pages are still
+      // transitioning — after pumpAndSettle, exited pages are offstaged and
+      // their translation resets to 0).
+      await tester.pump(const Duration(milliseconds: 16));
 
-    // Branch 0 must still be on the left and moving further left — NOT
-    // crossing to the right side.
-    final branch0InterruptDx = branchTranslation(tester, 0).translation.dx;
-    expect(
-      branch0InterruptDx,
-      lessThanOrEqualTo(0),
-      reason: 'Branch 0 must stay on the left side after reverse jump.',
-    );
-    expect(
-      branch0InterruptDx,
-      lessThanOrEqualTo(branch0MidDx),
-      reason:
-          'Branch 0 must continue exiting left, not reverse direction '
-          'and cross the screen to the right.',
-    );
+      // Branch 0 must still be on the left and moving further left — NOT
+      // crossing to the right side. The old exit-direction bug used
+      // `-direction` which for a reverse jump became +1, sending branch 0
+      // from its left-side exit across the screen to the right.
+      final branch0InterruptDx = branchTranslation(tester, 0).translation.dx;
+      expect(
+        branch0InterruptDx,
+        lessThanOrEqualTo(0),
+        reason: 'Branch 0 must stay on the left side after reverse jump.',
+      );
+      expect(
+        branch0InterruptDx,
+        lessThanOrEqualTo(branch0MidDx),
+        reason:
+            'Branch 0 must continue exiting left, not reverse direction '
+            'and cross the screen to the right.',
+      );
 
-    // Branch 2 (outgoing) exits right.
-    final branch2Dx = branchTranslation(tester, 2).translation.dx;
-    expect(
-      branch2Dx,
-      greaterThanOrEqualTo(0),
-      reason: 'Branch 2 should be on the right, exiting.',
-    );
+      // Branch 2 (outgoing) exits right.
+      final branch2Dx = branchTranslation(tester, 2).translation.dx;
+      expect(
+        branch2Dx,
+        greaterThanOrEqualTo(0),
+        reason: 'Branch 2 should be on the right, exiting.',
+      );
 
-    // Branch 1 (incoming) enters from the left.
-    final branch1Dx = branchTranslation(tester, 1).translation.dx;
-    expect(
-      branch1Dx,
-      lessThanOrEqualTo(0),
-      reason: 'Branch 1 should enter from the left.',
-    );
+      // Branch 1 (incoming) enters from the left, edge-to-edge with branch 2
+      // so no background gap appears between them. The old bug started
+      // branch 1 from the far edge (-1), but branch 2 was still near the
+      // center (~+0.94), leaving a ~6% viewport gap that flashed the
+      // scaffold background.
+      final branch1Dx = branchTranslation(tester, 1).translation.dx;
+      expect(
+        branch1Dx,
+        lessThanOrEqualTo(0),
+        reason: 'Branch 1 should enter from the left.',
+      );
+      expect(
+        branch1Dx,
+        closeTo(branch2Dx - 1, 1e-9),
+        reason: 'Branch 1 must be edge-to-edge with branch 2 to avoid a gap.',
+      );
 
-    // Let the animation finish.
-    await tester.pumpAndSettle();
-    expect(branchOffstage(tester, 0).offstage, isTrue);
-    expect(branchOffstage(tester, 2).offstage, isTrue);
-    expect(branchOffstage(tester, 1).offstage, isFalse);
-    expect(branchTranslation(tester, 1).translation, Offset.zero);
-  });
+      // Sample several frames across the second transition and assert the
+      // viewport [0, 1] is fully covered by the union of visible pages.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 32));
+        assertViewportCovered(tester, label: 'reverse jump frame $i');
+      }
+
+      // Let the animation finish.
+      await tester.pumpAndSettle();
+      expect(branchOffstage(tester, 0).offstage, isTrue);
+      expect(branchOffstage(tester, 2).offstage, isTrue);
+      expect(branchOffstage(tester, 1).offstage, isFalse);
+      expect(branchTranslation(tester, 1).translation, Offset.zero);
+    },
+  );
 
   testWidgets('dock switches three preserved root branches', (tester) async {
     await runWithRouter(tester, (_) async {
