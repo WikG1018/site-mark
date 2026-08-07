@@ -229,6 +229,76 @@ void main() {
     },
   );
 
+  // Regression: reverse jump (0->2->1) must not send the old "from" page
+  // (branch 0, on the left) across the screen to the right. Before the fix,
+  // the exit target for "other" on-screen pages used `-direction`, which for
+  // a reverse jump (direction = -1) became +1 — sending branch 0 from its
+  // left-side exit position across the viewport into branch 1's entry path.
+  // The exit direction must follow the page's current side: left page exits
+  // left, right page exits right.
+  testWidgets('reverse jump does not send outgoing page across the screen', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildBranchContainer(0));
+    await tester.pump();
+
+    // Start 0→2 transition (skip branch 1).
+    await tester.pumpWidget(buildBranchContainer(2));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    // Branch 0 is exiting left; record its position.
+    final branch0MidDx = branchTranslation(tester, 0).translation.dx;
+    expect(
+      branch0MidDx,
+      lessThan(0),
+      reason: 'Branch 0 should be on the left, exiting.',
+    );
+
+    // Interrupt with 2→1 (reverse direction) before the first animation
+    // finishes.
+    await tester.pumpWidget(buildBranchContainer(1));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    // Branch 0 must still be on the left and moving further left — NOT
+    // crossing to the right side.
+    final branch0InterruptDx = branchTranslation(tester, 0).translation.dx;
+    expect(
+      branch0InterruptDx,
+      lessThanOrEqualTo(0),
+      reason: 'Branch 0 must stay on the left side after reverse jump.',
+    );
+    expect(
+      branch0InterruptDx,
+      lessThanOrEqualTo(branch0MidDx),
+      reason:
+          'Branch 0 must continue exiting left, not reverse direction '
+          'and cross the screen to the right.',
+    );
+
+    // Branch 2 (outgoing) exits right.
+    final branch2Dx = branchTranslation(tester, 2).translation.dx;
+    expect(
+      branch2Dx,
+      greaterThanOrEqualTo(0),
+      reason: 'Branch 2 should be on the right, exiting.',
+    );
+
+    // Branch 1 (incoming) enters from the left.
+    final branch1Dx = branchTranslation(tester, 1).translation.dx;
+    expect(
+      branch1Dx,
+      lessThanOrEqualTo(0),
+      reason: 'Branch 1 should enter from the left.',
+    );
+
+    // Let the animation finish.
+    await tester.pumpAndSettle();
+    expect(branchOffstage(tester, 0).offstage, isTrue);
+    expect(branchOffstage(tester, 2).offstage, isTrue);
+    expect(branchOffstage(tester, 1).offstage, isFalse);
+    expect(branchTranslation(tester, 1).translation, Offset.zero);
+  });
+
   testWidgets('dock switches three preserved root branches', (tester) async {
     await runWithRouter(tester, (_) async {
       expect(find.byKey(const Key('root-dock')), findsOneWidget);

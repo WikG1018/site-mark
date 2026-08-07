@@ -178,12 +178,17 @@ class _RootBranchContainerState extends State<RootBranchContainer>
       }
 
       // Any other page still on-screen (e.g. the old "from" in a chain
-      // 0->1->2) keeps sliding out so no background gap appears.
+      // 0->1->2) keeps sliding out so no background gap appears. The exit
+      // direction is based on the page's current side, NOT the new switch
+      // direction: a page on the left must exit left, a page on the right
+      // must exit right. Using `-direction` here would be wrong for reverse
+      // jumps (e.g. 0->2->1: page 0 is on the left, but -direction = +1
+      // would send it across the screen to the right).
       for (final index in _activeTweens.keys) {
         if (index == _currentIndex || index == widget.currentIndex) continue;
         final pos = currentPosition(index);
         if (pos.abs() < 1) {
-          newTweens[index] = (pos, -direction);
+          newTweens[index] = (pos, pos < 0 ? -1.0 : 1.0);
         }
       }
     } else {
