@@ -102,6 +102,88 @@ class RootBranchContainer extends StatefulWidget {
   final int currentIndex;
   final List<Widget> children;
 
+  /// Plans the next dock-switch animation's page offsets.
+  ///
+  /// Returns a map of page index -> (start, end) screen-width-fraction
+  /// offsets. Every page still covering the viewport during the transition is
+  /// in the map; pages that have fully exited (|position| >= 1 at the moment
+  /// of the switch) are dropped so the build offstages them. The current page
+  /// always tweens to 0; every other planned page tweens to |end| == 1 so the
+  /// viewport [0, 1] is fully covered by the union of page spans at every
+  /// animation progress (asserted by the planner tests).
+  ///
+  /// [interruptProgress] is the curve-transformed controller progress (0..1)
+  /// sampled at the moment of the switch, or null when the switch starts from
+  /// rest. A mid-flight switch samples each active page's real on-screen
+  /// position so the next segment continues from where pages are now instead
+  /// of snapping back to the center.
+  ///
+  /// Pure (no state, no animation side effects) so the interruption geometry
+  /// can be exhaustively property-tested.
+  @visibleForTesting
+  static Map<int, (double, double)> planTweens({
+    required Map<int, (double, double)> previous,
+    required int currentIndex,
+    required int targetIndex,
+    double? interruptProgress,
+  }) {
+    final direction = targetIndex > currentIndex ? 1.0 : -1.0;
+    final newTweens = <int, (double, double)>{};
+
+    if (interruptProgress == null) {
+      // Clean switch from rest: the outgoing page exits to the far side of
+      // the new direction while the incoming page enters from that side.
+      newTweens[currentIndex] = (0, -direction);
+      newTweens[targetIndex] = (direction, 0);
+      return newTweens;
+    }
+
+    double currentPosition(int index) {
+      final tween = previous[index];
+      if (tween == null) return 0;
+      return lerpDouble(tween.$1, tween.$2, interruptProgress)!;
+    }
+
+    // The page that was sliding in becomes the new outgoing page.
+    newTweens[currentIndex] = (currentPosition(currentIndex), -direction);
+
+    if (previous.containsKey(targetIndex)) {
+      // The target page is already on-screen (e.g. snapping back to a page
+      // that was mid-exit during a rapid chain like 0->1->2->0). Continue
+      // from its current position so it doesn't jump.
+      newTweens[targetIndex] = (currentPosition(targetIndex), 0);
+    } else {
+      // Enter from just outside the outgoing page on the new direction's
+      // side, so the incoming page stays edge-to-edge with the outgoing page.
+      // Starting from the far edge (|direction| == 1) would leave a
+      // background gap when the outgoing page is still near the center —
+      // e.g. reverse 0->2->1: page 2 sits at ~+0.6, page 1 entering from
+      // -1 leaves a gap in the middle until page 1 crosses the center.
+      newTweens[targetIndex] = (currentPosition(currentIndex) + direction, 0);
+    }
+
+    // Any other page still on-screen keeps sliding out so no background gap
+    // appears. The exit direction is based on the page's index relative to
+    // the new target, NOT its current pixel position and NOT the new switch
+    // direction: pages with index < target must exit left, pages with
+    // index > target must exit right. Using position (e.g. `pos < 0`) is
+    // wrong because during a long rapid chain a page can momentarily cross
+    // the center (e.g. 0->1->2->0 late-interrupt: page 1 may be at -0.1
+    // after sliding left fast, but index 1 > 0 so it must exit right —
+    // sending it left would pull it away from page 2 and open a gap). Using
+    // `-direction` is also wrong for reverse jumps (e.g. 0->2->1: page 0 is
+    // on the left, but -direction = +1 would send it across the screen to
+    // the right).
+    for (final index in previous.keys) {
+      if (index == currentIndex || index == targetIndex) continue;
+      final pos = currentPosition(index);
+      if (pos.abs() < 1) {
+        newTweens[index] = (pos, index < targetIndex ? -1.0 : 1.0);
+      }
+    }
+    return newTweens;
+  }
+
   @override
   State<RootBranchContainer> createState() => _RootBranchContainerState();
 }
@@ -114,10 +196,9 @@ class _RootBranchContainerState extends State<RootBranchContainer>
   bool _disableAnimations = false;
 
   /// Active branch page tweens during a transition: [index] -> (start, end)
-  /// screen-width-fraction offsets. The current page tweens to 0; the
-  /// outgoing page tweens to -direction; pages still on-screen when a
-  /// switch is interrupted mid-flight continue exiting to -direction so
-  /// the viewport never shows the scaffold background through a gap.
+  /// screen-width-fraction offsets. Planned by [planTweens]; the current page
+  /// tweens to 0 and every other page still on screen exits to a side
+  /// (|end| == 1) so the viewport is always fully covered by pages.
   Map<int, (double, double)> _activeTweens = const {};
 
   @override
@@ -151,71 +232,15 @@ class _RootBranchContainerState extends State<RootBranchContainer>
       _controller.value = 1;
       return;
     }
-    final direction = widget.currentIndex > _currentIndex ? 1.0 : -1.0;
-    final newTweens = <int, (double, double)>{};
-
-    if (_controller.isAnimating && _controller.value < 1) {
-      // Interrupted mid-flight: sample each active page's real on-screen
-      // position so the next segment continues from where pages are now.
-      final vp = AppMotion.emphasized.transform(_controller.value);
-      double currentPosition(int index) {
-        final tween = _activeTweens[index];
-        if (tween == null) return 0;
-        return lerpDouble(tween.$1, tween.$2, vp)!;
-      }
-
-      // The page that was sliding in becomes the new outgoing page.
-      newTweens[_currentIndex] = (currentPosition(_currentIndex), -direction);
-
-      // The new incoming page.
-      if (_activeTweens.containsKey(widget.currentIndex)) {
-        // The target page is already on-screen (e.g. snapping back to a page
-        // that was mid-exit during a rapid chain like 0->1->2->0). Continue
-        // from its current position so it doesn't jump.
-        newTweens[widget.currentIndex] = (
-          currentPosition(widget.currentIndex),
-          0,
-        );
-      } else {
-        // Switching to a page that isn't on screen: enter from just outside
-        // the outgoing page (_currentIndex) on the new direction's side, so
-        // the incoming page stays edge-to-edge with the outgoing page.
-        // Starting from the far edge (|direction| == 1) would leave a
-        // background gap when the outgoing page is still near the center —
-        // e.g. reverse 0->2->1: page 2 sits at ~+0.6, page 1 entering from
-        // -1 leaves a gap in the middle until page 1 crosses the center.
-        newTweens[widget.currentIndex] = (
-          currentPosition(_currentIndex) + direction,
-          0,
-        );
-      }
-
-      // Any other page still on-screen keeps sliding out so no background
-      // gap appears. The exit direction is based on the page's index
-      // relative to the new target, NOT its current pixel position and NOT
-      // the new switch direction: pages with index < target must exit left,
-      // pages with index > target must exit right. Using position
-      // (e.g. `pos < 0`) is wrong because during a long rapid chain a page
-      // can momentarily cross the center (e.g. 0->1->2->0 late-interrupt:
-      // page 1 may be at -0.1 after sliding left fast, but index 1 > 0 so it
-      // must exit right — sending it left would pull it away from page 2
-      // and open a gap). Using `-direction` is also wrong for reverse jumps
-      // (e.g. 0->2->1: page 0 is on the left, but -direction = +1 would
-      // send it across the screen to the right).
-      for (final index in _activeTweens.keys) {
-        if (index == _currentIndex || index == widget.currentIndex) continue;
-        final pos = currentPosition(index);
-        if (pos.abs() < 1) {
-          newTweens[index] = (pos, index < widget.currentIndex ? -1.0 : 1.0);
-        }
-      }
-    } else {
-      // Clean switch from rest.
-      newTweens[_currentIndex] = (0, -direction);
-      newTweens[widget.currentIndex] = (direction, 0);
-    }
-
-    _activeTweens = newTweens;
+    final interrupted = _controller.isAnimating && _controller.value < 1;
+    _activeTweens = RootBranchContainer.planTweens(
+      previous: _activeTweens,
+      currentIndex: _currentIndex,
+      targetIndex: widget.currentIndex,
+      interruptProgress: interrupted
+          ? AppMotion.emphasized.transform(_controller.value)
+          : null,
+    );
     _fromIndex = _currentIndex;
     _currentIndex = widget.currentIndex;
     _controller.forward(from: 0);
