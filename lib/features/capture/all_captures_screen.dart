@@ -95,6 +95,26 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     super.dispose();
   }
 
+  /// Consumes a system back on the root records page: exit selection mode
+  /// first, then close search, then clear applied filters — in that order,
+  /// mirroring the UX hierarchy.
+  bool _handleRootBack() {
+    if (_selectionController.editing) {
+      _invalidateSelectionRequests();
+      _selectionController.exit();
+      return true;
+    }
+    if (_searching) {
+      _exitSearch();
+      return true;
+    }
+    if (_hasFilter) {
+      _onFilterChanged(const CaptureFilter());
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _loadDateOptions(CaptureListQuery query) async {
     final generation = ++_dateOptionsGeneration;
     try {
@@ -221,18 +241,15 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     final editing = _selectionController.editing;
     final allEligibleSelected =
         _allQuerySelected && _selectionController.selectedIds.isNotEmpty;
+    // The PopScope intercepts a system back while selection mode, search or a
+    // filter is active on this root branch page. Without it the router
+    // delegate stops at the shell's first page (nothing to pop) and Android
+    // finishes the activity, so the back would exit the app instead of
+    // exiting selection mode — the reported bug this guards against.
     return PopScope(
       canPop: !editing && !_searching && !_hasFilter,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
-        if (_selectionController.editing) {
-          _invalidateSelectionRequests();
-          _selectionController.exit();
-        } else if (_searching) {
-          _exitSearch();
-        } else if (_hasFilter) {
-          _onFilterChanged(const CaptureFilter());
-        }
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleRootBack();
       },
       child: Scaffold(
         appBar: AppBar(

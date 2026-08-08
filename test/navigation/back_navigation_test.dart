@@ -61,8 +61,9 @@ void main() {
         expect(find.byKey(const Key('filter-cancel')), findsNothing);
         expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
 
-        expect(_screenPopScope(tester, AllCapturesScreen).canPop, isFalse);
-        await tester.binding.handlePopRoute();
+        // With a filter applied the back is consumed: the router delegate
+        // answers true (the app stays open) and the filter is cleared below.
+        expect(await tester.binding.handlePopRoute(), isTrue);
         await _pumpBounded(tester);
         await _pumpUntilFound(
           tester,
@@ -72,7 +73,63 @@ void main() {
         expect(find.byKey(const Key('active-filter-year')), findsNothing);
         expect(find.textContaining('Second project location'), findsOneWidget);
         expect(router.routeInformationProvider.value.uri.path, '/records');
+        // Nothing left to consume: the back interception is disarmed again.
         expect(_screenPopScope(tester, AllCapturesScreen).canPop, isTrue);
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+        container.dispose();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.runAsync(database.close);
+      }
+    },
+  );
+
+  testWidgets(
+    'system back in filtered selection exits selection then clears filter without exiting the app',
+    (tester) async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      await _seedBackFilterRecords(database);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(database)],
+      );
+      try {
+        final router = container.read(routerProvider);
+        await _pumpProductionRouter(
+          tester,
+          container: container,
+          router: router,
+          locale: const Locale('en'),
+        );
+        router.go('/records');
+        await _pumpBounded(tester);
+
+        await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+        await _pumpBounded(tester);
+        await tester.tap(find.byKey(const Key('filter-project-project-1')));
+        await _pumpBounded(tester);
+        await tester.tap(find.byKey(const Key('filter-apply')));
+        await _pumpBounded(tester);
+        expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+
+        // Enter selection mode: the batch action bar replaces the root dock.
+        await tester.tap(find.byKey(const Key('edit-captures')));
+        await _pumpBounded(tester);
+        expect(find.byKey(const Key('batch-bar')), findsOneWidget);
+
+        // System back exits selection only — the filter stays applied and the
+        // app stays open (regression: the back used to finish the activity).
+        expect(await tester.binding.handlePopRoute(), isTrue);
+        await _pumpBounded(tester);
+        expect(find.byKey(const Key('batch-bar')), findsNothing);
+        expect(find.byKey(const Key('active-filter-project')), findsOneWidget);
+        expect(find.byType(AllCapturesScreen), findsOneWidget);
+        expect(router.routeInformationProvider.value.uri.path, '/records');
+
+        // Next back clears the filter, again without exiting.
+        expect(await tester.binding.handlePopRoute(), isTrue);
+        await _pumpBounded(tester);
+        expect(find.byKey(const Key('active-filter-project')), findsNothing);
       } finally {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
