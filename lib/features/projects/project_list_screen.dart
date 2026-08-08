@@ -59,6 +59,13 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     super.dispose();
   }
 
+  /// Closes the project search when a system back arrives while it is open;
+  /// otherwise the back falls through to the navigator.
+  void _handleRootBack() {
+    if (!_searching) return;
+    _closeSearch();
+  }
+
   void _startSearch() {
     setState(() => _searching = true);
     WidgetsBinding.instance.addPostFrameCallback(
@@ -116,10 +123,12 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
       status: searching ? null : _status,
       search: searching ? _query : '',
     );
+    // The PopScope closes the project search on a system back while the
+    // search is open; otherwise the back falls through.
     return PopScope(
       canPop: !_searching,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _searching) _closeSearch();
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleRootBack();
       },
       child: Scaffold(
         appBar: AppBar(
