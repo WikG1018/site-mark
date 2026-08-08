@@ -87,8 +87,8 @@ class CaptureMediaService {
         await files.deleteIfExists(record.originalPath);
         await database.markOriginalDeleted(id);
         succeeded.add(id);
-      } catch (error) {
-        failures[id] = error.toString();
+      } catch (_) {
+        failures[id] = 'Operation failed';
       }
     }
     return CaptureActionResult(
@@ -130,8 +130,8 @@ class CaptureMediaService {
         await files.deleteIfExists(await outputPaths.renderedPhotoPath(id));
         await database.deleteCapture(id);
         succeeded.add(id);
-      } catch (error) {
-        failures[id] = error.toString();
+      } catch (_) {
+        failures[id] = 'Operation failed';
       }
     }
     return CaptureActionResult(
@@ -170,8 +170,8 @@ class CaptureMediaService {
         );
         await database.updatePublishedUri(id, uri);
         succeeded.add(id);
-      } catch (error) {
-        failures[id] = error.toString();
+      } catch (_) {
+        failures[id] = 'Operation failed';
       }
     }
     return CaptureActionResult(

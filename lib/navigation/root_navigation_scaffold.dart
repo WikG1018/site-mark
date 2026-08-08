@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,16 +15,42 @@ class RootNavigationScaffold extends ConsumerWidget {
 
   final StatefulNavigationShell navigationShell;
 
+  /// Only the three top-level tabs own the home dock.
+  ///
+  /// Nested routes such as project detail (`/projects/:id`) and capture detail
+  /// must keep this false. The home dock must never appear on project screens.
+  static bool isRootTabPath(String path) {
+    return path == '/' || path == '/records' || path == '/settings';
+  }
+
+  /// Visible location used for root chrome decisions.
+  ///
+  /// Prefer [GoRouter.state] over [RouteInformationProvider.value.uri]:
+  /// `context.push` / imperative routes leave the browser-style URI on the
+  /// previous shell location (`/`) while the real top page is nested. Using
+  /// that URI is what made the home dock reappear over project detail.
+  static String visiblePathOf(GoRouter router) {
+    final statePath = router.state.uri.path;
+    if (statePath.isNotEmpty) {
+      return statePath;
+    }
+    return router.routeInformationProvider.value.uri.path;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = GoRouter.of(context);
+    // Listen to both providers: go() updates RouteInformation, push/pop of
+    // imperative routes notifies the router delegate.
     return ListenableBuilder(
-      listenable: router.routeInformationProvider,
+      listenable: Listenable.merge([
+        router.routeInformationProvider,
+        router.routerDelegate,
+      ]),
       builder: (context, _) {
         final strings = AppStrings.of(context);
-        final path = router.routeInformationProvider.value.uri.path;
-        final showRootNavigation =
-            path == '/' || path == '/records' || path == '/settings';
+        final path = visiblePathOf(router);
+        final showRootNavigation = isRootTabPath(path);
         final recordsSelecting = ref.watch(allCapturesSelectionModeProvider);
         final hideForSelection = path == '/records' && recordsSelecting;
         return Scaffold(
@@ -85,6 +113,13 @@ class _RootBranchContainerState extends State<RootBranchContainer>
   late int _currentIndex;
   bool _disableAnimations = false;
 
+  /// Active branch page tweens during a transition: [index] -> (start, end)
+  /// screen-width-fraction offsets. The current page tweens to 0; the
+  /// outgoing page tweens to -direction; pages still on-screen when a
+  /// switch is interrupted mid-flight continue exiting to -direction so
+  /// the viewport never shows the scaffold background through a gap.
+  Map<int, (double, double)> _activeTweens = const {};
+
   @override
   void initState() {
     super.initState();
@@ -109,13 +144,81 @@ class _RootBranchContainerState extends State<RootBranchContainer>
   void didUpdateWidget(covariant RootBranchContainer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.currentIndex == _currentIndex) return;
+    if (_disableAnimations) {
+      _fromIndex = _currentIndex;
+      _currentIndex = widget.currentIndex;
+      _activeTweens = const {};
+      _controller.value = 1;
+      return;
+    }
+    final direction = widget.currentIndex > _currentIndex ? 1.0 : -1.0;
+    final newTweens = <int, (double, double)>{};
+
+    if (_controller.isAnimating && _controller.value < 1) {
+      // Interrupted mid-flight: sample each active page's real on-screen
+      // position so the next segment continues from where pages are now.
+      final vp = AppMotion.emphasized.transform(_controller.value);
+      double currentPosition(int index) {
+        final tween = _activeTweens[index];
+        if (tween == null) return 0;
+        return lerpDouble(tween.$1, tween.$2, vp)!;
+      }
+
+      // The page that was sliding in becomes the new outgoing page.
+      newTweens[_currentIndex] = (currentPosition(_currentIndex), -direction);
+
+      // The new incoming page.
+      if (_activeTweens.containsKey(widget.currentIndex)) {
+        // The target page is already on-screen (e.g. snapping back to a page
+        // that was mid-exit during a rapid chain like 0->1->2->0). Continue
+        // from its current position so it doesn't jump.
+        newTweens[widget.currentIndex] = (
+          currentPosition(widget.currentIndex),
+          0,
+        );
+      } else {
+        // Switching to a page that isn't on screen: enter from just outside
+        // the outgoing page (_currentIndex) on the new direction's side, so
+        // the incoming page stays edge-to-edge with the outgoing page.
+        // Starting from the far edge (|direction| == 1) would leave a
+        // background gap when the outgoing page is still near the center —
+        // e.g. reverse 0->2->1: page 2 sits at ~+0.6, page 1 entering from
+        // -1 leaves a gap in the middle until page 1 crosses the center.
+        newTweens[widget.currentIndex] = (
+          currentPosition(_currentIndex) + direction,
+          0,
+        );
+      }
+
+      // Any other page still on-screen keeps sliding out so no background
+      // gap appears. The exit direction is based on the page's index
+      // relative to the new target, NOT its current pixel position and NOT
+      // the new switch direction: pages with index < target must exit left,
+      // pages with index > target must exit right. Using position
+      // (e.g. `pos < 0`) is wrong because during a long rapid chain a page
+      // can momentarily cross the center (e.g. 0->1->2->0 late-interrupt:
+      // page 1 may be at -0.1 after sliding left fast, but index 1 > 0 so it
+      // must exit right — sending it left would pull it away from page 2
+      // and open a gap). Using `-direction` is also wrong for reverse jumps
+      // (e.g. 0->2->1: page 0 is on the left, but -direction = +1 would
+      // send it across the screen to the right).
+      for (final index in _activeTweens.keys) {
+        if (index == _currentIndex || index == widget.currentIndex) continue;
+        final pos = currentPosition(index);
+        if (pos.abs() < 1) {
+          newTweens[index] = (pos, index < widget.currentIndex ? -1.0 : 1.0);
+        }
+      }
+    } else {
+      // Clean switch from rest.
+      newTweens[_currentIndex] = (0, -direction);
+      newTweens[widget.currentIndex] = (direction, 0);
+    }
+
+    _activeTweens = newTweens;
     _fromIndex = _currentIndex;
     _currentIndex = widget.currentIndex;
-    if (_disableAnimations) {
-      _controller.value = 1;
-    } else {
-      _controller.forward(from: 0);
-    }
+    _controller.forward(from: 0);
   }
 
   @override
@@ -139,7 +242,6 @@ class _RootBranchContainerState extends State<RootBranchContainer>
               !_disableAnimations &&
               _controller.value < 1 &&
               _fromIndex != _currentIndex;
-          final direction = _currentIndex > _fromIndex ? 1.0 : -1.0;
           // Mode wrappers stay in the builder so _currentIndex/_fromIndex
           // update every tick. Page content lives in [child] and is stable.
           final branches = (child! as Stack).children;
@@ -151,36 +253,36 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                   key: Key('root-branch-offstage-$index'),
                   offstage:
                       index != _currentIndex &&
-                      !(transitioning && index == _fromIndex),
+                      !(transitioning && _activeTweens.containsKey(index)),
                   child: RepaintBoundary(
-                    child: Transform.scale(
-                      key: Key('root-branch-scale-$index'),
-                      scale: switch (index) {
-                        _ when index == _currentIndex && transitioning =>
-                          0.97 + progress * 0.03,
-                        _ when index == _fromIndex && transitioning =>
-                          1.0 - progress * 0.01,
-                        _ => 1.0,
-                      },
-                      child: FractionalTranslation(
-                        key: Key('root-branch-translation-$index'),
-                        translation: Offset(switch (index) {
-                          _ when index == _currentIndex && transitioning =>
-                            direction * (1 - progress) * 0.16,
-                          _ when index == _fromIndex && transitioning =>
-                            -direction * progress * 0.09,
-                          _ => 0,
-                        }, 0),
-                        child: HeroMode(
+                    // Full-width horizontal slide ("one continuous take"):
+                    // outgoing page exits by one full width while the incoming
+                    // page enters by one full width. No scale — scale made the
+                    // switch feel like a zoom/card handoff instead of a pan.
+                    // [_activeTweens] holds each visible page's (start, end)
+                    // offset; pages still on-screen when a switch is
+                    // interrupted keep sliding out so no background gap shows.
+                    child: FractionalTranslation(
+                      key: Key('root-branch-translation-$index'),
+                      translation: Offset(
+                        transitioning && _activeTweens.containsKey(index)
+                            ? lerpDouble(
+                                _activeTweens[index]!.$1,
+                                _activeTweens[index]!.$2,
+                                progress,
+                              )!
+                            : 0,
+                        0,
+                      ),
+                      child: HeroMode(
+                        enabled: index == _currentIndex,
+                        child: TickerMode(
                           enabled: index == _currentIndex,
-                          child: TickerMode(
-                            enabled: index == _currentIndex,
-                            child: IgnorePointer(
-                              ignoring: index != _currentIndex,
-                              child: ExcludeSemantics(
-                                excluding: index != _currentIndex,
-                                child: branchChild,
-                              ),
+                          child: IgnorePointer(
+                            ignoring: index != _currentIndex,
+                            child: ExcludeSemantics(
+                              excluding: index != _currentIndex,
+                              child: branchChild,
                             ),
                           ),
                         ),

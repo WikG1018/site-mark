@@ -553,6 +553,48 @@ void main() {
     },
   );
 
+  test(
+    'deleteProject records blocked (not success) when file cleanup is pending',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await _seedPublishedCapture(database);
+      final diagnosticRoot = await Directory.systemTemp.createTemp(
+        'sitemark-deletion-diag-pending-',
+      );
+      addTearDown(() async {
+        if (await diagnosticRoot.exists()) {
+          await diagnosticRoot.delete(recursive: true);
+        }
+      });
+      final store = DiagnosticEventStore(directory: diagnosticRoot);
+      final files = _RecordingPrivateFileStore()
+        ..failOnceFor.add('/private/original.jpg');
+      final service = ProjectDeletionService(
+        database: database,
+        capturePaths: const _FakeCaptureOutputPaths(),
+        files: files,
+        pendingStore: _MemoryProjectDeletionPendingStore(),
+        diagnostics: DiagnosticRecorder(store),
+      );
+
+      final result = await service.deleteProject('project-1');
+      List<DiagnosticEvent> events = const [];
+      for (var attempt = 0; attempt < 20 && events.isEmpty; attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        events = await store.readRecent();
+      }
+
+      expect(result.cleanupPending, isTrue);
+      expect(events, hasLength(1));
+      final event = events.single;
+      expect(event.category, DiagnosticCategory.deletion);
+      // Cleanup incomplete must be blocked, not success — the operation is
+      // not fully committed until private files are removed.
+      expect(event.outcome, DiagnosticOutcome.blocked);
+    },
+  );
+
   test('cascade failure records failed deletion diagnostics', () async {
     final database = _FailingCascadeDatabase(NativeDatabase.memory());
     addTearDown(database.close);

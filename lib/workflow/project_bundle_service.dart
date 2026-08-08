@@ -924,14 +924,17 @@ class ProjectBundleService {
         );
         return [result];
       } catch (error) {
+        final failure = _classifyRestoreFailure(
+          error,
+          fallback: ProjectBundleRestoreFailure.rolledBack,
+        );
         _throwRestore(
           ProjectBundleRestoreException(
-            'Single project restore failed and was rolled back',
+            failure == ProjectBundleRestoreFailure.finalizationPending
+                ? 'Single project restore committed; final visibility is queued for startup recovery'
+                : 'Single project restore failed and was rolled back',
             cause: error,
-            failure: _classifyRestoreFailure(
-              error,
-              fallback: ProjectBundleRestoreFailure.rolledBack,
-            ),
+            failure: failure,
           ),
           count: 1,
         );
@@ -1018,13 +1021,14 @@ class ProjectBundleService {
             0,
             (sum, r) => sum + r.photoCount,
           );
+          // Finalization succeeded on retry: the restore is fully committed,
+          // so this is a success, not a blocked outcome.
           _recordRestore(
-            DiagnosticOutcome.blocked,
+            DiagnosticOutcome.success,
             DiagnosticCode.none,
             count: photoCount,
             durationMs: stopwatch.elapsedMilliseconds,
           );
-          // blocked: data is durable; startup will finish visibility.
           return results;
         } catch (_) {
           // Keep the committing marker. Startup recovery finishes visibility.

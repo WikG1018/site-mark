@@ -351,9 +351,10 @@ class ProjectDeletionService {
     final cleaned = await _deletePaths(pending.paths);
     if (!cleaned) {
       // Database rows are already gone; private file cleanup will retry on
-      // the next launch via the durable marker.
+      // the next launch via the durable marker. Record as blocked (not
+      // success) because the operation is not fully complete.
       _recordDeletion(
-        DiagnosticOutcome.success,
+        DiagnosticOutcome.blocked,
         DiagnosticCode.none,
         count: captures.length,
         durationMs: stopwatch.elapsedMilliseconds,
@@ -366,7 +367,7 @@ class ProjectDeletionService {
       // The files are gone, but preserving the marker lets startup retry the
       // durable commit step without reporting a failed project deletion.
       _recordDeletion(
-        DiagnosticOutcome.success,
+        DiagnosticOutcome.blocked,
         DiagnosticCode.none,
         count: captures.length,
         durationMs: stopwatch.elapsedMilliseconds,
