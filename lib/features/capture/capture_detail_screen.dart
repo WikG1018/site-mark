@@ -207,6 +207,10 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                         capture: capture,
                         outputPaths: outputPaths,
                         source: effectiveSource,
+                        // Paired with the fullscreen page's Hero (also
+                        // capture-photo-{id}) so opening fullscreen flies the
+                        // photo in; the outer Hero below hosts this same tag.
+                        heroTag: heroTag,
                         heroDestination: heroTag != null,
                         initialImagePath: widget.initialImagePath,
                         navigationContext: widget.navigationContext,

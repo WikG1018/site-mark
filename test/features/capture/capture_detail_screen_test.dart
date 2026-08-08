@@ -348,6 +348,15 @@ void main() {
       find.byType(CaptureImagePreview),
     );
     expect(hero.tag, 'capture-photo-capture-1');
+    // The preview must forward the same tag so opening fullscreen pairs the
+    // hero flight (regression: the tag was not forwarded, so fullscreen
+    // opened without a hero transition).
+    expect(
+      tester
+          .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
+          .heroTag,
+      'capture-photo-capture-1',
+    );
     expect(
       tester
           .widget<CaptureImagePreview>(find.byType(CaptureImagePreview))
@@ -439,7 +448,7 @@ void main() {
       find.byType(CaptureImagePreview),
     );
     expect(preview.source, CapturePreviewSource.original);
-    expect(preview.heroTag, isNull);
+    expect(preview.heroTag, 'capture-photo-capture-1');
     expect(
       tester.widget<Hero>(find.byType(Hero)).tag,
       'capture-photo-capture-1',
