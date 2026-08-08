@@ -206,10 +206,7 @@ class _RootBranchContainerState extends State<RootBranchContainer>
         if (index == _currentIndex || index == widget.currentIndex) continue;
         final pos = currentPosition(index);
         if (pos.abs() < 1) {
-          newTweens[index] = (
-            pos,
-            index < widget.currentIndex ? -1.0 : 1.0,
-          );
+          newTweens[index] = (pos, index < widget.currentIndex ? -1.0 : 1.0);
         }
       }
     } else {
