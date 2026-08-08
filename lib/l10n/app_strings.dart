@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:sitemark/domain/app_links.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_failure_guidance.dart';
+import 'package:sitemark/domain/capture_media_failure.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 
 class AppStrings {
@@ -242,6 +243,30 @@ class AppStrings {
       _english
           ? 'The photo could not be processed for an unknown reason. If the original is retained, select Retry processing; otherwise take the photo again.'
           : '照片因未知原因处理失败。若原图仍保留，请点击“重新处理”；否则请重新拍摄。',
+  };
+
+  /// User-facing text for a batched media-operation failure. The enum itself
+  /// carries no raw exception or file-path content, so these strings are the
+  /// only surface that can show failure details.
+  String captureMediaFailure(CaptureMediaFailure failure) => switch (failure) {
+    CaptureMediaFailure.recordMissing =>
+      _english ? 'Capture record does not exist' : '拍摄记录不存在',
+    CaptureMediaFailure.clearStatusNotAllowed =>
+      _english
+          ? 'Only ready or failed captures can have originals cleared'
+          : '仅可清除就绪或失败记录的原始照片',
+    CaptureMediaFailure.deleteStatusNotAllowed =>
+      _english
+          ? 'Only ready or failed captures can be deleted'
+          : '仅可删除就绪或失败状态的记录',
+    CaptureMediaFailure.republishStatusNotAllowed =>
+      _english ? 'Only ready captures can be republished' : '仅可就绪状态的记录重新发布',
+    CaptureMediaFailure.originalMissing =>
+      _english ? 'Original photo is unexpectedly missing' : '原图意外缺失，无法完成操作',
+    CaptureMediaFailure.renderedPhotoMissing =>
+      _english ? 'Rendered photo is missing' : '水印照片文件缺失',
+    CaptureMediaFailure.operationFailed =>
+      _english ? 'Operation failed. Please try again.' : '操作失败，请重试。',
   };
   String captureFailureGuidanceMessage(CaptureFailureGuidance guidance) {
     if (guidance.surface == CaptureFailureGuidanceSurface.list) {
