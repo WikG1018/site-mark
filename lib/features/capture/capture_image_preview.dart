@@ -411,9 +411,12 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     );
     final navigationContext = widget.navigationContext;
     final querySource = widget.querySource;
+    // Paired with the source page's capture-photo-{id} hero when present, so
+    // opening fullscreen flies the photo instead of covering it.
+    final heroTag = widget.heroTag;
     final CaptureFullscreenScreen page;
     if (navigationContext == null || querySource == null) {
-      page = CaptureFullscreenScreen(photos: [currentPhoto]);
+      page = CaptureFullscreenScreen(photos: [currentPhoto], heroTag: heroTag);
     } else {
       final cursors = <String, CapturePageCursor>{
         currentCapture.id: navigationContext.cursor,
@@ -442,6 +445,16 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
                 id: capture.id,
                 includeInSequence: path != null,
                 initialPath: path,
+                // Downsampled preview so an adjacent page shows something
+                // immediately instead of a black frame while the full-size
+                // JPEG decodes; the full image fades in on top afterwards.
+                previewImage: path == null
+                    ? null
+                    : ResizeImage.resizeIfNeeded(
+                        800,
+                        null,
+                        FileImage(File(path)),
+                      ),
                 resolvePath: () async => path,
               );
             }());
@@ -449,7 +462,10 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
           return Future.wait(pendingPhotos);
         },
       );
-      page = CaptureFullscreenScreen.sequence(sequence: sequence);
+      page = CaptureFullscreenScreen.sequence(
+        sequence: sequence,
+        heroTag: heroTag,
+      );
     }
 
     Navigator.of(context).push(

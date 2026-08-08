@@ -302,6 +302,36 @@ void main() {
     await disposeApp(tester);
   });
 
+  testWidgets('home search applies its query only after the debounce window', (
+    tester,
+  ) async {
+    await pumpProjects(tester);
+    await tester.tap(find.byKey(const Key('search-projects')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('project-search-field')),
+      'Alpha',
+    );
+    // The keystrokes queue one debounce window: typing several characters
+    // quickly must not re-run the query per character. After the 250ms
+    // window the filter applies and the list narrows down.
+    for (var i = 0; i < 4; i++) {
+      await tester.enterText(
+        find.byKey(const Key('project-search-field')),
+        'A',
+      );
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.text('Warehouse Alpha'), findsOneWidget);
+    expect(find.text('东区厂房改造'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(find.text('东区厂房改造'), findsNothing);
+    expect(find.text('Warehouse Alpha'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
   testWidgets('search no-result state keeps exit available', (tester) async {
     await pumpProjects(tester);
     await tester.tap(find.byKey(const Key('search-projects')));

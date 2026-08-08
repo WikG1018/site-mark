@@ -1056,6 +1056,71 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
+  testWidgets('two-finger pinch zooms in from 1x without a double tap', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    expect(viewerScale(tester), closeTo(1, 0.001));
+
+    final center = tester.getCenter(find.byType(InteractiveViewer));
+    final detector = tester.widget<GestureDetector>(
+      find.byKey(const Key('fullscreen-photo-0')),
+    );
+    expect(detector.onTap, isNotNull);
+
+    // Two fingers pinch outward from 1x; the raw-pointer pinch path is not
+    // subject to the gesture arena, so no double tap is needed.
+    final leftFinger = await tester.startGesture(center - const Offset(40, 0));
+    await tester.pump();
+    final rightFinger = await tester.startGesture(center + const Offset(40, 0));
+    await tester.pump();
+    await leftFinger.moveBy(const Offset(-20, 0));
+    await rightFinger.moveBy(const Offset(20, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(viewerScale(tester), greaterThan(1));
+    await leftFinger.up();
+    await rightFinger.up();
+    // Let the double-tap recognizer's timeout elapse so the test leaves no
+    // pending timers behind.
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets(
+    'wraps the initial photo in a Hero only when a hero tag is given',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: CaptureFullscreenScreen(
+              photos: [CaptureFullscreenPhoto.resolved(path: '/photo.jpg')],
+              heroTag: 'capture-photo-1',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final hero = tester.widget<Hero>(find.byType(Hero));
+      expect(hero.tag, 'capture-photo-1');
+    },
+  );
+
+  testWidgets('no hero is wrapped when the page opens without a hero tag', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    expect(find.byType(Hero), findsNothing);
+  });
+
   testWidgets('vertical drag past the threshold dismisses the viewer', (
     tester,
   ) async {

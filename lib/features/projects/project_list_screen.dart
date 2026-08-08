@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,7 +33,45 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   };
   bool _searching = false;
   String _query = '';
+
+  /// Debounced query actually applied to the list. Typing updates [_query]
+  /// immediately so the field stays responsive, while the list query (and the
+  /// full StreamBuilder rebuild) waits for a pause — matching the records
+  /// screen's 250ms debounce.
+  String _effectiveQuery = '';
+  Timer? _queryDebounce;
   late ProjectLifecycleStatus _status;
+  Stream<List<ProjectSummary>>? _summaryStream;
+  String? _summaryStreamKey;
+
+  static const Duration _searchDebounce = Duration(milliseconds: 250);
+
+  /// Reuses the Drift stream across rebuilds: creating a new stream in build()
+  /// would resubscribe (and re-run) the query on every setState, e.g. on each
+  /// keystroke.
+  Stream<List<ProjectSummary>> _summariesFor({
+    required ProjectLifecycleStatus? status,
+    required String search,
+  }) {
+    final key = '${status?.name}|$search';
+    if (_summaryStreamKey != key || _summaryStream == null) {
+      _summaryStreamKey = key;
+      _summaryStream = ref
+          .read(databaseProvider)
+          .watchProjectSummaries(status: status, search: search);
+    }
+    return _summaryStream!;
+  }
+
+  void _onSearchChanged(String value) {
+    _queryDebounce?.cancel();
+    final next = value;
+    setState(() => _query = next);
+    _queryDebounce = Timer(_searchDebounce, () {
+      if (!mounted || _effectiveQuery == next) return;
+      setState(() => _effectiveQuery = next);
+    });
+  }
 
   @override
   void initState() {
@@ -50,6 +90,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
 
   @override
   void dispose() {
+    _queryDebounce?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
     _searchScrollController.dispose();
@@ -74,17 +115,23 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   }
 
   void _closeSearch() {
+    _queryDebounce?.cancel();
     _searchController.clear();
     setState(() {
       _query = '';
+      _effectiveQuery = '';
       _searching = false;
     });
   }
 
   void _handleSearchAction() {
     if (_query.isNotEmpty) {
+      _queryDebounce?.cancel();
       _searchController.clear();
-      setState(() => _query = '');
+      setState(() {
+        _query = '';
+        _effectiveQuery = '';
+      });
       _searchFocus.requestFocus();
       return;
     }
@@ -113,15 +160,14 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final database = ref.watch(databaseProvider);
     final outputPaths = ref.watch(captureOutputPathsProvider);
-    final searching = _searching && _query.trim().isNotEmpty;
+    final searching = _searching && _effectiveQuery.trim().isNotEmpty;
     final listController = searching
         ? _searchScrollController
         : _statusScrollControllers[_status]!;
-    final stream = database.watchProjectSummaries(
+    final stream = _summariesFor(
       status: searching ? null : _status,
-      search: searching ? _query : '',
+      search: searching ? _effectiveQuery : '',
     );
     // The PopScope closes the project search on a system back while the
     // search is open; otherwise the back falls through.
@@ -145,7 +191,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                         hintText: strings.searchProjectsHint,
                         border: InputBorder.none,
                       ),
-                      onChanged: (value) => setState(() => _query = value),
+                      onChanged: _onSearchChanged,
                     )
                   : Text(strings.appName, key: const Key('project-title')),
             ),

@@ -35,14 +35,18 @@ class CaptureFullscreenScreen extends ConsumerStatefulWidget {
     super.key,
     required List<CaptureFullscreenPhoto> photos,
     this.initialIndex = 0,
+    this.heroTag,
   }) : _photos = photos,
        sequence = null,
        assert(photos.isNotEmpty, 'photos must not be empty'),
        assert(initialIndex >= 0 && initialIndex < photos.length);
 
-  const CaptureFullscreenScreen.sequence({super.key, required this.sequence})
-    : _photos = const [],
-      initialIndex = 0;
+  const CaptureFullscreenScreen.sequence({
+    super.key,
+    required this.sequence,
+    this.heroTag,
+  }) : _photos = const [],
+       initialIndex = 0;
 
   final List<CaptureFullscreenPhoto> _photos;
   final CaptureFullscreenSequence? sequence;
@@ -51,6 +55,12 @@ class CaptureFullscreenScreen extends ConsumerStatefulWidget {
 
   /// Index of the photo that should be shown first.
   final int initialIndex;
+
+  /// Hero tag for the initially shown photo, paired with the source page's
+  /// `capture-photo-{id}` hero so opening fullscreen flies the photo over
+  /// instead of covering it with an opaque route transition. `null` (no
+  /// paired hero, e.g. non-ready records) falls back to the plain push.
+  final String? heroTag;
 
   factory CaptureFullscreenScreen.fromPaths({
     Key? key,
@@ -94,6 +104,18 @@ class _CaptureFullscreenScreenState
   static const double _dragShrinkFactor = 600;
   static const double _minDragScale = 0.7;
   static const int _prefetchEdgeDistance = 2;
+  static const double _maxZoomScale = 4;
+
+  /// Raw two-finger pinch tracking. The pinch is driven from [Listener]
+  /// pointer events rather than the scale gesture recognizer: the PageView's
+  /// horizontal drag wins the gesture arena over the default scale
+  /// recognizer, which made a two-finger pinch from 1x dead on arrival.
+  final Map<int, Offset> _pinchPointers = {};
+  double? _pinchStartSpan;
+  double? _pinchStartScale;
+  Offset? _pinchStartPan;
+  Offset _pinchFocal = Offset.zero;
+  bool _multiTouch = false;
 
   late final PageController _pageController;
   final Map<String, TransformationController> _transformationControllers = {};
@@ -317,6 +339,92 @@ class _CaptureFullscreenScreenState
     }
   }
 
+  /// Gestures drive the [InteractiveViewer]'s controller directly (the viewer
+  /// itself has both pan and scale disabled), so a two-finger pinch works
+  /// from 1x — previously the viewer pinned the transform at 1x until a
+  /// double tap zoomed in first.
+  (double, Offset) _decomposeTransform(Matrix4 value) =>
+      (value.getMaxScaleOnAxis(), Offset(value.storage[12], value.storage[13]));
+
+  Matrix4 _composeTransform(double scale, Offset pan) => Matrix4.identity()
+    ..translateByDouble(pan.dx, pan.dy, 0, 1)
+    ..scaleByDouble(scale, scale, 1, 1);
+
+  Offset _clampPan(double scale, Offset pan) {
+    final size = context.size;
+    if (size == null) return pan;
+    final maxX = size.width * (scale - 1) / 2;
+    final maxY = size.height * (scale - 1) / 2;
+    return Offset(pan.dx.clamp(-maxX, maxX), pan.dy.clamp(-maxY, maxY));
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (_pinchPointers.length >= 2) return;
+    _pinchPointers[event.pointer] = event.localPosition;
+    if (_pinchPointers.length == 2) {
+      _pinchStart(_pinchPointers.values.toList());
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (!_pinchPointers.containsKey(event.pointer)) return;
+    _pinchPointers[event.pointer] = event.localPosition;
+    if (_pinchPointers.length == 2) {
+      _pinchUpdate(_pinchPointers.values.toList());
+    }
+  }
+
+  void _onPointerUpOrCancel(PointerEvent event) {
+    if (_pinchPointers.remove(event.pointer) == null) return;
+    if (_pinchPointers.length < 2) _pinchEnd();
+  }
+
+  /// Begins a two-finger pinch from whatever scale the photo currently has —
+  /// importantly including 1x.
+  void _pinchStart(List<Offset> pointers) {
+    final photoId = _currentPhotoId;
+    if (photoId == null) return;
+    final (scale, pan) = _decomposeTransform(_controllerFor(photoId).value);
+    _pinchStartSpan = (pointers[0] - pointers[1]).distance;
+    _pinchStartScale = scale;
+    _pinchStartPan = pan;
+    _pinchFocal = (pointers[0] + pointers[1]) / 2;
+    setState(() => _multiTouch = true);
+  }
+
+  void _pinchUpdate(List<Offset> pointers) {
+    final photoId = _currentPhotoId;
+    final startSpan = _pinchStartSpan;
+    final startScale = _pinchStartScale;
+    final startPan = _pinchStartPan;
+    if (photoId == null || startSpan == null || startScale == null) return;
+    if (startPan == null) return;
+    final span = (pointers[0] - pointers[1]).distance;
+    if (span == 0) return;
+    final scale = (startScale * span / startSpan).clamp(1.0, _maxZoomScale);
+    final focal = (pointers[0] + pointers[1]) / 2;
+    // Keep the point under the pinch focal stationary, then follow the focal
+    // (finger midpoint) so the gesture feels anchored to the fingers.
+    final ratio = scale / startScale;
+    final pan = focal - (_pinchFocal - startPan) * ratio;
+    _controllerFor(photoId).value = _composeTransform(
+      scale,
+      _clampPan(scale, pan),
+    );
+  }
+
+  void _pinchEnd() {
+    final photoId = _currentPhotoId;
+    if (photoId != null) {
+      final zoomed = _controllerFor(photoId).value.getMaxScaleOnAxis() > 1.01;
+      if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
+    }
+    _pinchStartSpan = null;
+    _pinchStartScale = null;
+    _pinchStartPan = null;
+    setState(() => _multiTouch = false);
+  }
+
   void _handleDoubleTap() {
     final targetPhotoId = _currentPhotoId;
     if (targetPhotoId == null) return;
@@ -407,14 +515,32 @@ class _CaptureFullscreenScreenState
             controller: _pageController,
             itemCount: _photos.length,
             onPageChanged: _onPageChanged,
-            // Only allow horizontal swipe when not zoomed.
-            physics: _zoomed
+            // Only allow horizontal swipe when not zoomed and not pinching.
+            physics: _zoomed || _multiTouch
                 ? const NeverScrollableScrollPhysics()
                 : const PageScrollPhysics(),
             itemBuilder: (context, index) {
               final photo = _photos[index];
               final preview = photo.previewImage;
               final transformController = _controllerFor(photo.id);
+              // The initially shown photo flies in from the source page's
+              // `capture-photo-{id}` hero when one is provided; adjacent and
+              // hero-less photos render without a Hero.
+              final heroForThisPage = index == widget.initialIndex
+                  ? widget.heroTag
+                  : null;
+              final frame = _FullscreenPhotoFrame(
+                key: ValueKey(
+                  'fullscreen-path-$_sequenceGeneration-${photo.id}',
+                ),
+                previewImage: preview,
+                pathFuture: _pathFutures.putIfAbsent(
+                  photo.id,
+                  photo.resolvePath,
+                ),
+                initialPath: photo.initialPath,
+                missingPhoto: _missingPhoto(context),
+              );
 
               return KeyedSubtree(
                 key: ValueKey(
@@ -422,49 +548,59 @@ class _CaptureFullscreenScreenState
                 ),
                 child: KeyedSubtree(
                   key: Key('fullscreen-photo-id-${photo.id}'),
-                  child: GestureDetector(
-                    key: Key('fullscreen-photo-$index'),
-                    onTap: _toggleChrome,
-                    onDoubleTapDown: (details) =>
-                        _doubleTapPosition = details.localPosition,
-                    onDoubleTap: index == _currentPage
-                        ? _handleDoubleTap
+                  child: Listener(
+                    // Raw pointer feed for the two-finger pinch (see
+                    // [_pinchPointers]); gesture recognizers below keep
+                    // handling tap / double tap / vertical dismiss.
+                    onPointerDown: index == _currentPage
+                        ? _onPointerDown
                         : null,
-                    onVerticalDragStart: (!_zoomed && index == _currentPage)
-                        ? _onVerticalDragStart
+                    onPointerMove: index == _currentPage
+                        ? _onPointerMove
                         : null,
-                    onVerticalDragUpdate: (!_zoomed && index == _currentPage)
-                        ? _onVerticalDragUpdate
+                    onPointerUp: index == _currentPage
+                        ? _onPointerUpOrCancel
                         : null,
-                    onVerticalDragEnd: (!_zoomed && index == _currentPage)
-                        ? _onVerticalDragEnd
+                    onPointerCancel: index == _currentPage
+                        ? _onPointerUpOrCancel
                         : null,
-                    child: Transform.translate(
-                      offset: index == _currentPage
-                          ? Offset(0, _dragOffset)
-                          : Offset.zero,
-                      child: Transform.scale(
-                        scale: index == _currentPage ? dragScale : 1.0,
-                        child: InteractiveViewer(
-                          transformationController: transformController,
-                          panEnabled: _zoomed && index == _currentPage,
-                          minScale: 1,
-                          maxScale: 4,
-                          child: Center(
-                            child: Semantics(
-                              label: strings.fullscreenPhotoSemantics,
-                              liveRegion: index == _currentPage,
-                              child: _FullscreenPhotoFrame(
-                                key: ValueKey(
-                                  'fullscreen-path-$_sequenceGeneration-${photo.id}',
-                                ),
-                                previewImage: preview,
-                                pathFuture: _pathFutures.putIfAbsent(
-                                  photo.id,
-                                  photo.resolvePath,
-                                ),
-                                initialPath: photo.initialPath,
-                                missingPhoto: _missingPhoto(context),
+                    child: GestureDetector(
+                      key: Key('fullscreen-photo-$index'),
+                      onTap: _toggleChrome,
+                      onDoubleTapDown: (details) =>
+                          _doubleTapPosition = details.localPosition,
+                      onDoubleTap: index == _currentPage
+                          ? _handleDoubleTap
+                          : null,
+                      onVerticalDragStart:
+                          (!_zoomed && !_multiTouch && index == _currentPage)
+                          ? _onVerticalDragStart
+                          : null,
+                      onVerticalDragUpdate:
+                          (!_zoomed && !_multiTouch && index == _currentPage)
+                          ? _onVerticalDragUpdate
+                          : null,
+                      onVerticalDragEnd:
+                          (!_zoomed && !_multiTouch && index == _currentPage)
+                          ? _onVerticalDragEnd
+                          : null,
+                      child: Transform.translate(
+                        offset: index == _currentPage
+                            ? Offset(0, _dragOffset)
+                            : Offset.zero,
+                        child: Transform.scale(
+                          scale: index == _currentPage ? dragScale : 1.0,
+                          child: InteractiveViewer(
+                            transformationController: transformController,
+                            panEnabled: false,
+                            scaleEnabled: false,
+                            child: Center(
+                              child: Semantics(
+                                label: strings.fullscreenPhotoSemantics,
+                                liveRegion: index == _currentPage,
+                                child: heroForThisPage == null
+                                    ? frame
+                                    : Hero(tag: heroForThisPage, child: frame),
                               ),
                             ),
                           ),
