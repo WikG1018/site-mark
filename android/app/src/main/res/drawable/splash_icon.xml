@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash-screen icon for Android 12+ (values-v31 LaunchTheme).
+
+     The system renders windowSplashScreenAnimatedIcon inside the central
+     two-thirds of the screen and scales it up, which makes a full launcher
+     icon look like a blown-up app icon. This dedicated icon is a brand-green
+     disc with a white camera glyph (the product is an engineering watermark
+     camera), so the splash reads as a branded moment instead of a zoomed
+     launcher icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <!-- Brand green disc (matches the README badge color). -->
+    <path
+        android:fillColor="#176B55"
+        android:pathData="M144,144m-96,0a96,96 0,1 1,192 0a96,96 0,1 1,-192 0" />
+    <!-- Camera body: white rounded rectangle. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,112h144a16,16 0,0 1,16 16v48a16,16 0,0 1,-16 16h-144a16,16 0,0 1,-16 -16v-48a16,16 0,0 1,16 -16z" />
+    <!-- Viewfinder bump. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M120,96h48a8,8 0,0 1,8 8v8h-64v-8a8,8 0,0 1,8 -8z" />
+    <!-- Lens recess (green disc punched through the white body). -->
+    <path
+        android:fillColor="#176B55"
+        android:pathData="M144,140m-28,0a28,28 0,1 1,56 0a28,28 0,1 1,-56 0" />
+    <!-- Shutter dot. -->
+    <path
+        android:fillColor="#176B55"
+        android:pathData="M196,120m-7,0a7,7 0,1 1,14 0a7,7 0,1 1,-14 0" />
+</vector>
