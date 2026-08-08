@@ -168,36 +168,48 @@ class _RootBranchContainerState extends State<RootBranchContainer>
       newTweens[_currentIndex] = (currentPosition(_currentIndex), -direction);
 
       // The new incoming page.
-      if (widget.currentIndex == _fromIndex) {
-        // Switching back to the old "from": it is still partially visible
-        // on the opposite side, so enter from its current position.
-        newTweens[widget.currentIndex] = (currentPosition(_fromIndex), 0);
+      if (_activeTweens.containsKey(widget.currentIndex)) {
+        // The target page is already on-screen (e.g. snapping back to a page
+        // that was mid-exit during a rapid chain like 0->1->2->0). Continue
+        // from its current position so it doesn't jump.
+        newTweens[widget.currentIndex] = (
+          currentPosition(widget.currentIndex),
+          0,
+        );
       } else {
-        // Switching to a third page: enter from just outside the outgoing
-        // page (_currentIndex) on the new direction's side, so the incoming
-        // page stays edge-to-edge with the outgoing page. Starting from the
-        // far edge (|direction| == 1) would leave a background gap when the
-        // outgoing page is still near the center — e.g. reverse 0->2->1:
-        // page 2 sits at ~+0.6, page 1 entering from -1 leaves a gap in the
-        // middle until page 1 crosses the center.
+        // Switching to a page that isn't on screen: enter from just outside
+        // the outgoing page (_currentIndex) on the new direction's side, so
+        // the incoming page stays edge-to-edge with the outgoing page.
+        // Starting from the far edge (|direction| == 1) would leave a
+        // background gap when the outgoing page is still near the center —
+        // e.g. reverse 0->2->1: page 2 sits at ~+0.6, page 1 entering from
+        // -1 leaves a gap in the middle until page 1 crosses the center.
         newTweens[widget.currentIndex] = (
           currentPosition(_currentIndex) + direction,
           0,
         );
       }
 
-      // Any other page still on-screen (e.g. the old "from" in a chain
-      // 0->1->2) keeps sliding out so no background gap appears. The exit
-      // direction is based on the page's current side, NOT the new switch
-      // direction: a page on the left must exit left, a page on the right
-      // must exit right. Using `-direction` here would be wrong for reverse
-      // jumps (e.g. 0->2->1: page 0 is on the left, but -direction = +1
-      // would send it across the screen to the right).
+      // Any other page still on-screen keeps sliding out so no background
+      // gap appears. The exit direction is based on the page's index
+      // relative to the new target, NOT its current pixel position and NOT
+      // the new switch direction: pages with index < target must exit left,
+      // pages with index > target must exit right. Using position
+      // (e.g. `pos < 0`) is wrong because during a long rapid chain a page
+      // can momentarily cross the center (e.g. 0->1->2->0 late-interrupt:
+      // page 1 may be at -0.1 after sliding left fast, but index 1 > 0 so it
+      // must exit right — sending it left would pull it away from page 2
+      // and open a gap). Using `-direction` is also wrong for reverse jumps
+      // (e.g. 0->2->1: page 0 is on the left, but -direction = +1 would
+      // send it across the screen to the right).
       for (final index in _activeTweens.keys) {
         if (index == _currentIndex || index == widget.currentIndex) continue;
         final pos = currentPosition(index);
         if (pos.abs() < 1) {
-          newTweens[index] = (pos, pos < 0 ? -1.0 : 1.0);
+          newTweens[index] = (
+            pos,
+            index < widget.currentIndex ? -1.0 : 1.0,
+          );
         }
       }
     } else {

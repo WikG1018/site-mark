@@ -380,6 +380,177 @@ void main() {
     },
   );
 
+  // Regression: rapid four-segment chain 0->1->2->0 must not expose
+  // background. Two bugs were fixed here:
+  //  1. When the target page (0) is already on-screen (mid-exit in _activeTweens)
+  //     the old code only checked `widget.currentIndex == _fromIndex`, which
+  //     missed cases where the target was an older "other" page (not the most
+  //     recent _fromIndex). The incoming page was incorrectly repositioned to
+  //     an edge-to-edge offset, causing a visible jump and gap.
+  //  2. When an "other" page (branch 1) had slid left past the center (pos < 0)
+  //     during the second segment, the old code used `pos < 0` to pick an exit
+  //     direction and sent it further left, even though index 1 > 0 means it
+  //     must exit right. That pulled branch 1 away from branch 2 and opened a
+  //     gap in the right half of the viewport.
+  testWidgets(
+    'four-segment rapid chain 0->1->2->0 keeps viewport covered',
+    (tester) async {
+      await tester.pumpWidget(buildBranchContainer(0));
+      await tester.pump();
+
+      // 0->1, let it progress partway.
+      await tester.pumpWidget(buildBranchContainer(1));
+      await tester.pump(const Duration(milliseconds: 48));
+
+      // Interrupt with 1->2, let it progress to the point where branch 1 has
+      // slid past center (pos < 0) — this is where the old direction bug
+      // triggered.
+      await tester.pumpWidget(buildBranchContainer(2));
+      await tester.pump(const Duration(milliseconds: 120));
+
+      // Sanity: branch 0 should still be visible on the left, branch 1 should
+      // now be left of center but still on-screen.
+      expect(branchOffstage(tester, 0).offstage, isFalse);
+      expect(branchOffstage(tester, 1).offstage, isFalse);
+      expect(branchTranslation(tester, 1).translation.dx, lessThan(0));
+
+      // Interrupt with 2->0 (return to the first page).
+      await tester.pumpWidget(buildBranchContainer(0));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      // Branch 0 must NOT have jumped to an edge; it continues from its
+      // current on-screen position.
+      final branch0Dx = branchTranslation(tester, 0).translation.dx;
+      expect(
+        branch0Dx,
+        lessThan(0),
+        reason: 'Branch 0 should be entering from the left side.',
+      );
+      expect(
+        branch0Dx,
+        greaterThan(-1),
+        reason: 'Branch 0 must start from its actual mid-exit position, '
+            'not be reset to the far edge (-1).',
+      );
+
+      // Branch 1 (index 1 > 0) must exit RIGHT, not left — even though its
+      // current dx is negative. The old bug sent it left because pos<0.
+      final branch1Dx = branchTranslation(tester, 1).translation.dx;
+      expect(
+        branch1Dx,
+        greaterThanOrEqualTo(branch0Dx),
+        reason: 'Branch 1 must be at or to the right of branch 0.',
+      );
+
+      // Sample frames across the final transition and assert viewport coverage.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 32));
+        assertViewportCovered(tester, label: 'four-segment chain frame $i');
+      }
+
+      await tester.pumpAndSettle();
+      expect(branchOffstage(tester, 1).offstage, isTrue);
+      expect(branchOffstage(tester, 2).offstage, isTrue);
+      expect(branchOffstage(tester, 0).offstage, isFalse);
+      expect(branchTranslation(tester, 0).translation, Offset.zero);
+    },
+  );
+
+  // Regression: reverse-direction chain (2->1->0) must keep the viewport
+  // covered symmetrically to the forward chain.
+  testWidgets(
+    'reverse chain 2->1->0 keeps viewport covered',
+    (tester) async {
+      await tester.pumpWidget(buildBranchContainer(2));
+      await tester.pump();
+
+      // 2->1, let it progress partway.
+      await tester.pumpWidget(buildBranchContainer(1));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      // Interrupt with 1->0 before it settles.
+      await tester.pumpWidget(buildBranchContainer(0));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      // Branch 2 (old "from" in the first jump) must stay on the right side
+      // and keep exiting right (index 2 > 0), not cross to the left.
+      final branch2Dx = branchTranslation(tester, 2).translation.dx;
+      expect(
+        branch2Dx,
+        greaterThanOrEqualTo(0),
+        reason: 'Branch 2 must be on the right side.',
+      );
+
+      // Branch 1 (outgoing) must continue sliding right, not snap back.
+      final branch1Dx = branchTranslation(tester, 1).translation.dx;
+      expect(
+        branch1Dx,
+        lessThanOrEqualTo(branch2Dx),
+        reason: 'Branch 1 must be at or to the left of branch 2.',
+      );
+
+      // Branch 0 enters edge-to-edge with branch 1.
+      final branch0Dx = branchTranslation(tester, 0).translation.dx;
+      expect(
+        branch0Dx,
+        closeTo(branch1Dx - 1, 1e-9),
+        reason: 'Branch 0 must enter edge-to-edge with branch 1.',
+      );
+
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 32));
+        assertViewportCovered(tester, label: 'reverse chain frame $i');
+      }
+
+      await tester.pumpAndSettle();
+      expect(branchOffstage(tester, 1).offstage, isTrue);
+      expect(branchOffstage(tester, 2).offstage, isTrue);
+      expect(branchOffstage(tester, 0).offstage, isFalse);
+      expect(branchTranslation(tester, 0).translation, Offset.zero);
+    },
+  );
+
+  // Regression: after a reverse jump (0->2->1), jumping back to 2 must keep
+  // the viewport covered. This exercises the case where the outgoing page (1)
+  // is itself a previously-interrupted incoming page.
+  testWidgets(
+    'reverse jump return 0->2->1->2 keeps viewport covered',
+    (tester) async {
+      await tester.pumpWidget(buildBranchContainer(0));
+      await tester.pump();
+
+      // 0->2, mid-flight.
+      await tester.pumpWidget(buildBranchContainer(2));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      // Interrupt with 2->1, mid-flight.
+      await tester.pumpWidget(buildBranchContainer(1));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      // Branch 2 is now exiting right; branch 0 continues left exit; branch 1
+      // is entering from the left.
+      expect(branchTranslation(tester, 2).translation.dx, greaterThanOrEqualTo(0));
+
+      // Interrupt with 1->2 (go back to settings). Branch 2 is already
+      // on-screen (it's the current outgoing page from the previous step? No,
+      // branch 2 is in _activeTweens as outgoing, and now becomes the target).
+      await tester.pumpWidget(buildBranchContainer(2));
+      await tester.pump(const Duration(milliseconds: 16));
+
+      // All three pages should be positioned without gaps.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 32));
+        assertViewportCovered(tester, label: 'reverse jump return frame $i');
+      }
+
+      await tester.pumpAndSettle();
+      expect(branchOffstage(tester, 0).offstage, isTrue);
+      expect(branchOffstage(tester, 1).offstage, isTrue);
+      expect(branchOffstage(tester, 2).offstage, isFalse);
+      expect(branchTranslation(tester, 2).translation, Offset.zero);
+    },
+  );
+
   testWidgets('dock switches three preserved root branches', (tester) async {
     await runWithRouter(tester, (_) async {
       expect(find.byKey(const Key('root-dock')), findsOneWidget);
