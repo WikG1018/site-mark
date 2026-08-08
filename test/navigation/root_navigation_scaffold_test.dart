@@ -718,6 +718,30 @@ void main() {
     });
   });
 
+  testWidgets('go() to a secondary route also hides dock', (tester) async {
+    await runWithRouter(tester, (router) async {
+      // go() updates both RouteInformation and GoRouter.state, so this is the
+      // easier of the two entry paths — kept as a lock so a regression toward
+      // reading only the provider URI is caught from both directions.
+      router.go('/projects/project-1');
+      await tester.pump();
+      await tester.pump(AppMotion.pageTransition);
+      await tester.pump();
+
+      expect(find.byType(ProjectDetailScreen), findsOneWidget);
+      expect(
+        RootNavigationScaffold.visiblePathOf(router),
+        '/projects/project-1',
+      );
+      expect(
+        router.routeInformationProvider.value.uri.path,
+        '/projects/project-1',
+      );
+      expect(find.byKey(const Key('root-dock')), findsNothing);
+      expect(find.byKey(const ValueKey('capture-fab')), findsOneWidget);
+    });
+  });
+
   testWidgets(
     'returning from capture detail keeps home dock off project detail',
     (tester) async {
