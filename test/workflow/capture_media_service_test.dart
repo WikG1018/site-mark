@@ -1,8 +1,12 @@
+import 'dart:ui' show Locale;
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_media_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
+import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -144,38 +148,48 @@ void main() {
     expect(await database.captureById('capture-1'), isNotNull);
   });
 
-  // Regression: failure messages must not leak raw exceptions, stack traces,
-  // or file paths. The UI displays `failures[id]` directly in a SnackBar, so
-  // only generic user-facing strings are allowed.
-  test('failure messages never expose raw exception text or paths', () async {
+  // Regression: failure results must never carry raw exceptions, stack
+  // traces, or file paths. The failures map now holds enum reasons only, so
+  // a raw platform exception (which would leak the app data path) becomes
+  // `operationFailed`; user-facing wording lives in AppStrings, separately
+  // guarded by the strings test.
+  test('per-row failures are enum reasons, never raw exception text', () async {
     files.existing.add('/private/original.jpg');
     platform.deleteError = StateError(
       'FileSystemException: cannot open /data/user/0/io.github.wikg1018.sitemark/files/original.jpg',
     );
 
     final deleteResult = await service.deleteAll(['capture-1']);
-    expect(deleteResult.failures['capture-1'], 'Operation failed');
-    expect(deleteResult.failures['capture-1'], isNot(contains('/data/user/0')));
     expect(
       deleteResult.failures['capture-1'],
-      isNot(contains('FileSystemException')),
+      CaptureMediaFailure.operationFailed,
     );
+    // The failure is an enum reason; even the localized UI text rendered from
+    // it must not carry the injected path or exception type.
+    final localized = const AppStrings(
+      Locale('zh'),
+    ).captureMediaFailure(deleteResult.failures['capture-1']!);
+    expect(localized, isNot(contains('/data/user/0')));
+    expect(localized, isNot(contains('FileSystemException')));
   });
 
-  test('republish failure message never exposes raw exception text', () async {
-    files.existing.add('/rendered/capture-1.jpg');
-    platform.publishError = StateError(
-      'MediaStore publish failed: /storage/emulated/0/DCIM/capture-1.jpg',
-    );
+  test(
+    'republish failure records enum reason, never raw exception text',
+    () async {
+      files.existing.add('/rendered/capture-1.jpg');
+      platform.publishError = StateError(
+        'MediaStore publish failed: /storage/emulated/0/DCIM/capture-1.jpg',
+      );
 
-    final result = await service.republish(['capture-1']);
-    expect(result.failures['capture-1'], 'Operation failed');
-    expect(
-      result.failures['capture-1'],
-      isNot(contains('/storage/emulated/0')),
-    );
-    expect(result.failures['capture-1'], isNot(contains('StateError')));
-  });
+      final result = await service.republish(['capture-1']);
+      expect(result.failures['capture-1'], CaptureMediaFailure.operationFailed);
+      final localized = const AppStrings(
+        Locale('en'),
+      ).captureMediaFailure(result.failures['capture-1']!);
+      expect(localized, isNot(contains('/storage/emulated/0')));
+      expect(localized, isNot(contains('StateError')));
+    },
+  );
 
   test('republish updates the actual returned URI', () async {
     files.existing.add('/rendered/capture-1.jpg');

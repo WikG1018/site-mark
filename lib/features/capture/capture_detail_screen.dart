@@ -654,12 +654,13 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          failure ??
-              strings.actionResult(
-                result.succeededIds.length,
-                result.skippedIds.length,
-                result.failures.length,
-              ),
+          failure == null
+              ? strings.actionResult(
+                  result.succeededIds.length,
+                  result.skippedIds.length,
+                  result.failures.length,
+                )
+              : strings.captureMediaFailure(failure),
         ),
       ),
     );
@@ -704,9 +705,14 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     if (result.succeededIds.contains(current.id)) {
       context.go('/projects/$_projectId');
     } else {
+      final failure = result.failures[current.id];
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(result.failures[current.id] ?? strings.deleteRecord),
+          content: Text(
+            failure == null
+                ? strings.deleteRecord
+                : strings.captureMediaFailure(failure),
+          ),
         ),
       );
     }

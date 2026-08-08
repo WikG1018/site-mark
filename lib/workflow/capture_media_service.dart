@@ -1,5 +1,6 @@
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_file_info.dart';
+import 'package:sitemark/domain/capture_media_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -7,9 +8,10 @@ import 'package:sitemark/platform/platform_services.dart';
 /// Outcome of a batched media operation against a list of capture IDs.
 ///
 /// [succeededIds] are processed in order; [skippedIds] were no-ops (e.g.
-/// already-cleared originals); [failures] maps a capture ID to the error
-/// message produced while processing that row. Failed rows are preserved so
-/// the caller can retry them.
+/// already-cleared originals); [failures] maps a capture ID to the reason
+/// processing failed for that row. Failed rows are preserved so the caller
+/// can retry them. Reasons are enums — user-facing wording is owned by the
+/// UI, so raw exceptions and private paths can never reach the user.
 class CaptureActionResult {
   const CaptureActionResult({
     required this.succeededIds,
@@ -19,7 +21,7 @@ class CaptureActionResult {
 
   final List<String> succeededIds;
   final List<String> skippedIds;
-  final Map<String, String> failures;
+  final Map<String, CaptureMediaFailure> failures;
 }
 
 class CaptureMediaService {
@@ -62,18 +64,17 @@ class CaptureMediaService {
   Future<CaptureActionResult> clearOriginals(List<String> captureIds) async {
     final succeeded = <String>[];
     final skipped = <String>[];
-    final failures = <String, String>{};
+    final failures = <String, CaptureMediaFailure>{};
     for (final id in captureIds) {
       try {
         final record = await database.captureById(id);
         if (record == null) {
-          failures[id] = 'Capture record does not exist';
+          failures[id] = CaptureMediaFailure.recordMissing;
           continue;
         }
         if (record.status != CaptureStatus.ready &&
             record.status != CaptureStatus.failed) {
-          failures[id] =
-              'Only ready or failed captures can have originals cleared';
+          failures[id] = CaptureMediaFailure.clearStatusNotAllowed;
           continue;
         }
         if (record.originalDeletedAt != null) {
@@ -81,14 +82,14 @@ class CaptureMediaService {
           continue;
         }
         if (!await files.exists(record.originalPath)) {
-          failures[id] = 'Original photo is unexpectedly missing';
+          failures[id] = CaptureMediaFailure.originalMissing;
           continue;
         }
         await files.deleteIfExists(record.originalPath);
         await database.markOriginalDeleted(id);
         succeeded.add(id);
       } catch (_) {
-        failures[id] = 'Operation failed';
+        failures[id] = CaptureMediaFailure.operationFailed;
       }
     }
     return CaptureActionResult(
@@ -110,17 +111,17 @@ class CaptureMediaService {
   Future<CaptureActionResult> deleteAll(List<String> captureIds) async {
     final succeeded = <String>[];
     final skipped = <String>[];
-    final failures = <String, String>{};
+    final failures = <String, CaptureMediaFailure>{};
     for (final id in captureIds) {
       try {
         final record = await database.captureById(id);
         if (record == null) {
-          failures[id] = 'Capture record does not exist';
+          failures[id] = CaptureMediaFailure.recordMissing;
           continue;
         }
         if (record.status != CaptureStatus.ready &&
             record.status != CaptureStatus.failed) {
-          failures[id] = 'Only ready or failed captures can be deleted';
+          failures[id] = CaptureMediaFailure.deleteStatusNotAllowed;
           continue;
         }
         if (record.publishedUri != null) {
@@ -131,7 +132,7 @@ class CaptureMediaService {
         await database.deleteCapture(id);
         succeeded.add(id);
       } catch (_) {
-        failures[id] = 'Operation failed';
+        failures[id] = CaptureMediaFailure.operationFailed;
       }
     }
     return CaptureActionResult(
@@ -147,21 +148,21 @@ class CaptureMediaService {
   Future<CaptureActionResult> republish(List<String> captureIds) async {
     final succeeded = <String>[];
     final skipped = <String>[];
-    final failures = <String, String>{};
+    final failures = <String, CaptureMediaFailure>{};
     for (final id in captureIds) {
       try {
         final record = await database.captureById(id);
         if (record == null) {
-          failures[id] = 'Capture record does not exist';
+          failures[id] = CaptureMediaFailure.recordMissing;
           continue;
         }
         if (record.status != CaptureStatus.ready) {
-          failures[id] = 'Only ready captures can be republished';
+          failures[id] = CaptureMediaFailure.republishStatusNotAllowed;
           continue;
         }
         final renderedPath = await outputPaths.renderedPhotoPath(id);
         if (!await files.exists(renderedPath)) {
-          failures[id] = 'Rendered photo is missing';
+          failures[id] = CaptureMediaFailure.renderedPhotoMissing;
           continue;
         }
         final uri = await platform.publishJpeg(
@@ -171,7 +172,7 @@ class CaptureMediaService {
         await database.updatePublishedUri(id, uri);
         succeeded.add(id);
       } catch (_) {
-        failures[id] = 'Operation failed';
+        failures[id] = CaptureMediaFailure.operationFailed;
       }
     }
     return CaptureActionResult(

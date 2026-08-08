@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/domain/capture_failure.dart';
+import 'package:sitemark/domain/capture_media_failure.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 typedef _StringReader = String Function(AppStrings strings);
@@ -90,6 +91,21 @@ final _stringReaders = <String, _StringReader>{
   'noArchivedProjects': (strings) => strings.noArchivedProjects,
   'projectPhotoCount': (strings) => strings.projectPhotoCount(3),
   'noCaptureRecordsYet': (strings) => strings.noCaptureRecordsYet,
+  'mediaFailureRecordMissing': (strings) =>
+      strings.captureMediaFailure(CaptureMediaFailure.recordMissing),
+  'mediaFailureClearStatus': (strings) =>
+      strings.captureMediaFailure(CaptureMediaFailure.clearStatusNotAllowed),
+  'mediaFailureDeleteStatus': (strings) =>
+      strings.captureMediaFailure(CaptureMediaFailure.deleteStatusNotAllowed),
+  'mediaFailureRepublishStatus': (strings) => strings.captureMediaFailure(
+    CaptureMediaFailure.republishStatusNotAllowed,
+  ),
+  'mediaFailureOriginalMissing': (strings) =>
+      strings.captureMediaFailure(CaptureMediaFailure.originalMissing),
+  'mediaFailureRenderedMissing': (strings) =>
+      strings.captureMediaFailure(CaptureMediaFailure.renderedPhotoMissing),
+  'mediaFailureOperationFailed': (strings) =>
+      strings.captureMediaFailure(CaptureMediaFailure.operationFailed),
 };
 
 const expectedZh = <String, String>{
@@ -159,6 +175,13 @@ const expectedZh = <String, String>{
   'noArchivedProjects': '暂无已归档的项目',
   'projectPhotoCount': '3 张照片',
   'noCaptureRecordsYet': '暂无拍摄记录',
+  'mediaFailureRecordMissing': '拍摄记录不存在',
+  'mediaFailureClearStatus': '仅可清除就绪或失败记录的原始照片',
+  'mediaFailureDeleteStatus': '仅可删除就绪或失败状态的记录',
+  'mediaFailureRepublishStatus': '仅可就绪状态的记录重新发布',
+  'mediaFailureOriginalMissing': '原图意外缺失，无法完成操作',
+  'mediaFailureRenderedMissing': '水印照片文件缺失',
+  'mediaFailureOperationFailed': '操作失败，请重试。',
 };
 
 const expectedEn = <String, String>{
@@ -243,6 +266,14 @@ const expectedEn = <String, String>{
   'noArchivedProjects': 'No archived projects yet',
   'projectPhotoCount': '3 photos',
   'noCaptureRecordsYet': 'No captures yet',
+  'mediaFailureRecordMissing': 'Capture record does not exist',
+  'mediaFailureClearStatus':
+      'Only ready or failed captures can have originals cleared',
+  'mediaFailureDeleteStatus': 'Only ready or failed captures can be deleted',
+  'mediaFailureRepublishStatus': 'Only ready captures can be republished',
+  'mediaFailureOriginalMissing': 'Original photo is unexpectedly missing',
+  'mediaFailureRenderedMissing': 'Rendered photo is missing',
+  'mediaFailureOperationFailed': 'Operation failed. Please try again.',
 };
 
 void main() {
@@ -287,6 +318,33 @@ void main() {
     expect(AppStrings.delegate.isSupported(const Locale('fr')), isFalse);
     expect(AppStrings.supportedLocales, const [Locale('zh'), Locale('en')]);
   });
+
+  test(
+    'media operation failure strings never expose raw exceptions or paths',
+    () {
+      // Leak markers only: exception type names and private file-path roots.
+      const forbidden = [
+        'FileSystemException',
+        'StateError',
+        '/data/',
+        '/storage/emulated',
+      ];
+      for (final locale in const [Locale('zh'), Locale('en')]) {
+        final strings = AppStrings(locale);
+        for (final failure in CaptureMediaFailure.values) {
+          final text = strings.captureMediaFailure(failure);
+          expect(
+            text,
+            isNotEmpty,
+            reason: '$locale/$failure must be localized',
+          );
+          for (final marker in forbidden) {
+            expect(text, isNot(contains(marker)), reason: '$locale/$failure');
+          }
+        }
+      }
+    },
+  );
 }
 
 Future<_LocalizedSnapshot> _pumpLocalizedSnapshot(
