@@ -254,7 +254,13 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         );
       },
     );
-    if (widget.heroTag != null && !widget.thumbnail) {
+    // The host page owns the Hero when it marks this preview as the hero
+    // destination (detail keeps a stable outer Hero across preview
+    // resolution); otherwise the preview wraps itself so list thumbnails
+    // (CapturePhotoHero) and other callers stay flight sources.
+    if (widget.heroTag != null &&
+        !widget.thumbnail &&
+        !widget.heroDestination) {
       return Hero(tag: widget.heroTag!, child: preview);
     }
     return preview;
