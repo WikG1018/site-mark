@@ -10,19 +10,19 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-![Version](https://img.shields.io/badge/release-v1.0.3-176B55)
+![Version](https://img.shields.io/badge/release-v1.0.5-176B55)
 
-**最新发布版本：[`v1.0.3`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.3)**
+**最新发布版本：[`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5)**
 
-支持 Android 12（API 31）及以上系统。`v1.0.3` 为维护补丁版；重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.5` 为体验修复版；重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 ## 下载
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.3-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.3/sitemark-v1.0.3-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.3-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.3/sitemark-v1.0.3-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.3/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.5-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.5/sitemark-v1.0.5-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.5-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.5/sitemark-v1.0.5-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.5/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -35,12 +35,22 @@ manufacturer camera experience.
 4. Debug APK 与正式版签名不同，通常不能直接覆盖安装。
 5. 如果 Android 提示签名冲突，不要直接卸载保存着重要数据的旧版本；先完成项目备份并确认备份文件已复制到应用目录之外。
 
+## v1.0.5 重点更新
+
+- **首页搜索不再闪烁：** 输入项目名称的 250ms 防抖等待期间继续显示当前项目列表，不再逐字闪回骨架占位；查询切换后再更新结果。
+- **版本信息统一：** README 下载入口、应用内“关于”版本和安装包版本统一为 `1.0.5+20`。
+
+## v1.0.4 重点更新
+
+- **详情 Hero 链路修复：** 详情页图片预览把 Hero 标识继续传递到全屏查看器，恢复列表、详情与全屏之间连续一致的图片飞行动画。
+- **发布工程修复：** 统一 Dart 格式并修复发布分支中的异常文件内容，恢复完整 CI 验证。
+
 ## v1.0.3 重点更新
 
 - **返回键逐级退出：** 「全部记录」筛选/编辑/搜索状态下按系统返回，先取消选择、再关闭搜索、再清除筛选，不再一次返回直接退出应用（按钮返回路径已由回归测试全链路锁定）。
 - **品牌化启动画面：** 启动时不再显示放大版应用图标，改为品牌深绿圆盘 + 白色相机符号的专用启动图形，亮暗模式背景与首页衔接无闪色。
 - **全屏查看体验：** 双指可从 1x 直接放大（此前需先双击）；点开照片改为 Hero 一镜到底飞入（替代覆盖式转场）；左右滑动相邻照片即时显示降采样预览，不再黑屏等全尺寸解码。
-- **首页搜索性能：** 搜索输入增加 250ms 去抖并复用查询流，逐字输入不再反复重建整个列表；关于页与 `pubspec` 版本对齐为 `1.0.3+18`。
+- **首页搜索性能：** 搜索输入增加 250ms 去抖并复用查询流，减少逐字输入触发的数据库查询；关于页与 `pubspec` 版本对齐为 `1.0.3+18`。
 
 ## v1.0.2 重点更新
 
@@ -244,7 +254,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。下载和校验请以 [GitHub Release v1.0.3](https://github.com/WikG1018/site-mark/releases/tag/v1.0.3) 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。下载和校验请以 [GitHub Release v1.0.5](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5) 中的实际资源为准。
 
 ## 本地构建
 

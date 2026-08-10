@@ -150,12 +150,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
+  Future<void> applyProjectSearch(WidgetTester tester) async {
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('home search filters by Chinese project name', (tester) async {
     await pumpProjects(tester);
     await tester.tap(find.byKey(const Key('search-projects')));
     await tester.pump();
     await tester.enterText(find.byKey(const Key('project-search-field')), '东区');
-    await tester.pumpAndSettle();
+    await applyProjectSearch(tester);
     expect(
       find.descendant(
         of: find.byKey(const Key('project-card-east')),
@@ -283,7 +288,7 @@ void main() {
       find.byKey(const Key('project-search-field')),
       'warehouse alpha',
     );
-    await tester.pumpAndSettle();
+    await applyProjectSearch(tester);
     expect(find.text('Warehouse Alpha'), findsOneWidget);
     expect(find.byKey(const Key('project-search-action')), findsOneWidget);
     expect(find.byIcon(Icons.clear), findsOneWidget);
@@ -321,6 +326,11 @@ void main() {
         'A',
       );
       await tester.pump(const Duration(milliseconds: 60));
+      expect(
+        find.byKey(const Key('project-list-skeleton')),
+        findsNothing,
+        reason: '防抖等待期间应保留原列表，不能逐字闪回骨架屏',
+      );
     }
     expect(find.text('Warehouse Alpha'), findsOneWidget);
     expect(find.text('东区厂房改造'), findsOneWidget);
@@ -340,7 +350,7 @@ void main() {
       find.byKey(const Key('project-search-field')),
       '不存在',
     );
-    await tester.pumpAndSettle();
+    await applyProjectSearch(tester);
     expect(find.text('没有匹配的项目'), findsOneWidget);
     expect(find.byKey(const Key('project-search-action')), findsOneWidget);
     await disposeApp(tester);
@@ -422,7 +432,7 @@ void main() {
       find.byKey(const Key('project-search-field')),
       '东区厂房改造',
     );
-    await tester.pumpAndSettle();
+    await applyProjectSearch(tester);
     expect(
       find.descendant(
         of: find.byKey(const Key('project-card-east')),
@@ -507,7 +517,7 @@ void main() {
       find.byKey(const Key('project-search-field')),
       '项目29',
     );
-    await tester.pumpAndSettle();
+    await applyProjectSearch(tester);
     expect(
       find.descendant(
         of: find.byKey(const Key('project-card-project-29')),
