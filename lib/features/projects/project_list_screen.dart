@@ -240,10 +240,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
           key: const Key('project-list-content'),
           builder: (context, constraints) =>
               StreamBuilder<List<ProjectSummary>>(
-                key: ValueKey(
-                  'project-summaries-'
-                  '${searching ? 'search' : _status.name}-$_query',
-                ),
+                key: ValueKey('project-summaries-$_summaryStreamKey'),
                 stream: stream,
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
