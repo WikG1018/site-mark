@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Flutter's device test runner discovers the Dart VM service through a
+         loopback TCP socket. Keep this permission scoped to androidTest so
+         every normal debug/profile/release APK stays fully offline. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>
