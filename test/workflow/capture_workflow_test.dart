@@ -233,7 +233,7 @@ void main() {
         ),
       );
 
-      final records = await database.watchCapturesForProject('project-1').first;
+      final records = await database.capturesForProject('project-1');
       expect(result.outcome, CaptureWorkflowOutcome.cancelled);
       expect(records, isEmpty);
       expect(platform.finishedCapture, ('capture-1', false));

@@ -398,7 +398,6 @@ void main() {
           'raw internal detail',
           failure: entry.key,
         ),
-        preparing: true,
       );
       expect(message, entry.value);
       expect(message, isNot(contains('raw internal')));

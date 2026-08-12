@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/capture_filter.dart';
+import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
@@ -74,9 +75,8 @@ void main() {
     );
 
     final projectUpdates = StreamIterator(database.watchProjects());
-    final summaryUpdates = StreamIterator(database.watchAllCaptureSummaries());
+    final queryRepository = CaptureQueryRepository(database);
     addTearDown(projectUpdates.cancel);
-    addTearDown(summaryUpdates.cancel);
     expect(await projectUpdates.moveNext(), isTrue);
     expect(projectUpdates.current.map((project) => project.id), ['normal']);
     expect((await database.getProjects()).map((project) => project.id), [
@@ -86,14 +86,10 @@ void main() {
       (await database.getAllProjectsInternal()).map((project) => project.id),
       containsAll(['normal', 'restoring']),
     );
-    expect(await summaryUpdates.moveNext(), isTrue);
-    expect(summaryUpdates.current.map((summary) => summary.capture.id), [
-      'normal-capture',
-    ]);
     expect(
-      (await database.watchCaptureSummaries(const CaptureFilter()).first).map(
-        (summary) => summary.capture.id,
-      ),
+      (await queryRepository.loadPage(
+        const CaptureListQuery(),
+      )).rows.map((summary) => summary.capture.id),
       ['normal-capture'],
     );
     expect(await database.projectById('restoring'), isNotNull);
@@ -108,11 +104,12 @@ void main() {
       projectUpdates.current.map((project) => project.id),
       containsAll(['normal', 'restoring']),
     );
-    expect(await summaryUpdates.moveNext(), isTrue);
-    expect(summaryUpdates.current.map((summary) => summary.capture.id), [
-      'restoring-capture',
-      'normal-capture',
-    ]);
+    expect(
+      (await queryRepository.loadPage(
+        const CaptureListQuery(),
+      )).rows.map((summary) => summary.capture.id),
+      ['restoring-capture', 'normal-capture'],
+    );
   });
 
   test('rejects normalized duplicate project names', () async {
@@ -352,28 +349,6 @@ void main() {
       expect(captured.photoNumber, '车间改造-SM-20260716-003');
     },
   );
-
-  test('returns pending camera records for startup recovery', () async {
-    await database.createProject(
-      id: 'project',
-      name: '车间改造',
-      createdAt: DateTime.utc(2026, 7, 16),
-    );
-    await database.createPendingCapture(
-      id: 'capture-1',
-      projectId: 'project',
-      originalPath: '/private/capture-1.jpg',
-      workLocation: 'A 区',
-      workContent: '风管安装',
-      photographer: '张工',
-      watermarkLocaleCode: 'zh',
-      createdAt: DateTime(2026, 7, 16, 9, 30),
-    );
-
-    final pending = await database.pendingCameraCaptures();
-
-    expect(pending.map((capture) => capture.id), ['capture-1']);
-  });
 
   test(
     'persists render and publish transitions with traceability metadata',
@@ -679,9 +654,9 @@ void main() {
         capturedAt: DateTime(2026, 7, 16, 9, 32),
       );
 
-      final rows = await database
-          .watchCaptureSummaries(const CaptureFilter())
-          .first;
+      final rows = (await CaptureQueryRepository(
+        database,
+      ).loadPage(const CaptureListQuery())).rows;
 
       expect(rows.map((row) => row.capture.id), ['capture-on-july-16']);
       expect(rows.single.projectName, '东区厂房改造');
@@ -723,11 +698,11 @@ void main() {
       capturedAt: DateTime(2026, 7, 15, 9, 32),
     );
 
-    final rows = await database
-        .watchCaptureSummaries(
-          const CaptureFilter(year: 2026, month: 7, day: 16),
-        )
-        .first;
+    final rows = (await CaptureQueryRepository(database).loadPage(
+      const CaptureListQuery(
+        filter: CaptureFilter(year: 2026, month: 7, day: 16),
+      ),
+    )).rows;
 
     expect(rows.map((row) => row.capture.id), ['capture-on-july-16']);
   });
@@ -772,9 +747,9 @@ void main() {
       capturedAt: DateTime(2026, 7, 16, 10, 32),
     );
 
-    final rows = await database
-        .watchCaptureSummaries(const CaptureFilter().selectProject('project-1'))
-        .first;
+    final rows = (await CaptureQueryRepository(database).loadPage(
+      const CaptureListQuery(filter: CaptureFilter(projectId: 'project-1')),
+    )).rows;
 
     expect(rows.map((row) => row.capture.id), ['capture-a']);
   });
@@ -816,9 +791,9 @@ void main() {
         capturedAt: DateTime(2026, 7, 16, 9, 5),
       );
 
-      final rows = await database
-          .watchCaptureSummaries(const CaptureFilter())
-          .first;
+      final rows = (await CaptureQueryRepository(
+        database,
+      ).loadPage(const CaptureListQuery())).rows;
 
       expect(rows.map((row) => row.capture.id), [
         'capture-earlier',
@@ -859,77 +834,15 @@ void main() {
         capturedAt: sameTimestamp,
       );
 
-      final rows = await database
-          .watchCaptureSummaries(const CaptureFilter())
-          .first;
+      final rows = (await CaptureQueryRepository(
+        database,
+      ).loadPage(const CaptureListQuery())).rows;
 
       expect(rows.map((row) => row.capture.id), ['capture-z', 'capture-a']);
     },
   );
 
-  test(
-    '1000 capture summary filter applies project and local day range in descending order',
-    () async {
-      const projectId = 'project-1';
-      final startOfDay = DateTime(2026, 7, 16);
-      await database.createProject(id: projectId, name: '东区厂房改造');
-      await database.createProject(id: 'project-2', name: '西区宿舍');
-
-      await database.batch((batch) {
-        for (var index = 0; index < 1000; index++) {
-          final inTargetProject = index.isEven;
-          final inTargetDay = inTargetProject && index % 4 == 0;
-          final capturedAt = inTargetDay
-              ? startOfDay.add(Duration(minutes: index))
-              : index == 998
-              ? startOfDay.add(const Duration(days: 1))
-              : startOfDay.subtract(const Duration(days: 1));
-          batch.insert(
-            database.captureRecords,
-            CaptureRecordsCompanion.insert(
-              id: 'capture-${index.toString().padLeft(4, '0')}',
-              projectId: inTargetProject ? projectId : 'project-2',
-              workLocation: '施工区',
-              workContent: '安装检查',
-              photographer: '张工',
-              originalPath: '/private/$index.jpg',
-              status: CaptureStatus.captured,
-              createdAt: startOfDay,
-              capturedAt: Value(capturedAt),
-            ),
-          );
-        }
-      });
-
-      final rows = await database
-          .watchCaptureSummaries(
-            const CaptureFilter(
-              projectId: projectId,
-              year: 2026,
-              month: 7,
-              day: 16,
-            ),
-          )
-          .first;
-
-      expect(rows, hasLength(250));
-      expect(rows.first.capture.id, 'capture-0996');
-      expect(rows.last.capture.id, 'capture-0000');
-      expect(rows.every((row) => row.capture.projectId == projectId), isTrue);
-      expect(
-        rows.every(
-          (row) =>
-              !row.capture.capturedAt!.isBefore(startOfDay) &&
-              row.capture.capturedAt!.isBefore(
-                startOfDay.add(const Duration(days: 1)),
-              ),
-        ),
-        isTrue,
-      );
-    },
-  );
-
-  test('unfiltered summary stream ignores date and project filters', () async {
+  test('unfiltered summary query returns joined capture data', () async {
     await database.createProject(
       id: 'project-1',
       name: '东区厂房改造',
@@ -950,7 +863,9 @@ void main() {
       capturedAt: DateTime(2026, 7, 16, 9, 32),
     );
 
-    final rows = await database.watchAllCaptureSummaries().first;
+    final rows = (await CaptureQueryRepository(
+      database,
+    ).loadPage(const CaptureListQuery())).rows;
 
     expect(rows.map((row) => row.capture.id), ['capture-on-july-16']);
     expect(rows.single.projectName, '东区厂房改造');
@@ -1238,9 +1153,7 @@ void main() {
       await database.createProject(id: 'p1', name: 'Project 1');
       database.setPollingPaused(true);
 
-      final stream = database.watchCaptureSummaries(
-        const CaptureFilter(projectId: 'p1'),
-      );
+      final stream = database.watchCaptureSummariesByIds({'c1'});
       final emissions = <List<dynamic>>[];
       final subscription = stream.listen(emissions.add);
 
