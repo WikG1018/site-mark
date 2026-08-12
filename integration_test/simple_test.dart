@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -50,9 +51,20 @@ void main() {
 
       expect(find.text('照片已加入后台处理，可继续拍摄'), findsOneWidget);
       expect(find.byKey(const Key('capture-button')), findsOneWidget);
+      final capture = (await database.capturesForProject('project-1')).single;
+      final capturedAt = capture.capturedAt ?? capture.createdAt;
       await openAllRecords(tester);
-      await selectCaptureDate(tester, DateTime(2026, 7, 16));
-      expect(find.text('SM-20260716-001'), findsOneWidget);
+      await selectCaptureDate(tester, capturedAt);
+      expect(
+        find.text(
+          captureListDisplayName(
+            capturedAt: capture.capturedAt,
+            photoNumber: capture.photoNumber,
+            fallback: capture.workLocation,
+          ),
+        ),
+        findsOneWidget,
+      );
     },
   );
 }
@@ -123,6 +135,9 @@ Future<void> openAllRecords(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.byType(BackButton));
   await tester.pumpAndSettle();
+  await tester.pump(const Duration(seconds: 5));
+  await tester.pumpAndSettle();
+  expect(find.text('照片已加入后台处理，可继续拍摄'), findsNothing);
   await tester.tap(find.byKey(const Key('root-destination-records')));
   await tester.pumpAndSettle();
 }
