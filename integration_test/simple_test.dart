@@ -5,6 +5,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/main.dart';
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
@@ -28,6 +29,7 @@ void main() {
         database: database,
         initialLocale: const Locale('zh'),
         backgroundScheduler: _NoopCaptureBackgroundScheduler(),
+        completionNotificationService: _NoopCompletionNotificationService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -82,6 +84,7 @@ Future<void> createProjectAndOpenCapture(
       shareService: _IntegrationShareService(),
       privateFileStore: _IntegrationPrivateFileStore(),
       backgroundScheduler: scheduler,
+      completionNotificationService: _NoopCompletionNotificationService(),
     ),
   );
   await tester.pumpAndSettle();
@@ -269,6 +272,29 @@ class _NoopCaptureBackgroundScheduler implements CaptureBackgroundScheduler {
 
   @override
   Future<void> reconcilePending() async {}
+}
+
+/// Keeps device tests independent from the local-notifications plugin while
+/// preserving the same startup lifecycle as production.
+class _NoopCompletionNotificationService
+    implements CompletionNotificationService {
+  @override
+  Future<void> initialize(
+    void Function(String deepLinkPath) onTapDeepLink,
+  ) async {}
+
+  @override
+  Future<bool> requestPermission() async => false;
+
+  @override
+  Future<void> setEnabled(bool enabled) async {}
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) async {}
 }
 
 /// A [CaptureBackgroundScheduler] that runs the real [CaptureProcessor] inline
