@@ -39,6 +39,18 @@ jobs:
       - run: flutter pub get
       - name: Warm Gradle and Android build caches
         run: ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest
+      - name: Warm Flutter Android build and native assets
+        run: |
+          for attempt in 1 2 3; do
+            if flutter build apk --debug; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::Flutter Android build failed; retrying after a transient-download backoff (attempt $attempt/3)."
+            sleep "$((attempt * 10))"
+          done
       - name: Allow the integration runner to bind its loopback VM service
         # `flutter test integration_test/...` installs app-debug.apk rather than
         # an androidTest APK. The Dart VM service therefore needs INTERNET in

@@ -51,9 +51,30 @@ jobs:
       - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path rust/Cargo.toml
       - run: ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest
-      - run: flutter build apk --debug
+      - name: Build debug APK
+        run: |
+          for attempt in 1 2 3; do
+            if flutter build apk --debug; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::Debug APK build failed; retrying after a transient-download backoff (attempt $attempt/3)."
+            sleep "$((attempt * 10))"
+          done
       - name: Build unsigned release variant
-        run: flutter build apk --release
+        run: |
+          for attempt in 1 2 3; do
+            if flutter build apk --release; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::Release APK build failed; retrying after a transient-download backoff (attempt $attempt/3)."
+            sleep "$((attempt * 10))"
+          done
       - uses: actions/upload-artifact@v6
         with:
           name: sitemark-debug-apk

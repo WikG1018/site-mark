@@ -51,7 +51,8 @@ void main() {
 
       expect(find.text('照片已加入后台处理，可继续拍摄'), findsOneWidget);
       expect(find.byKey(const Key('capture-button')), findsOneWidget);
-      final capture = (await database.capturesForProject('project-1')).single;
+      final project = (await database.getProjects()).single;
+      final capture = (await database.capturesForProject(project.id)).single;
       final capturedAt = capture.capturedAt ?? capture.createdAt;
       await openAllRecords(tester);
       await selectCaptureDate(tester, capturedAt);
