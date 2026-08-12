@@ -64,7 +64,7 @@ jobs:
           disable-animations: true
           script: |
             mkdir -p integration-artifacts
-            adb logcat -c
+            timeout 10s adb logcat -c || true
             set +e
             timeout --signal=INT --kill-after=60s 15m \
               flutter test integration_test/simple_test.dart --reporter expanded \
@@ -74,7 +74,9 @@ jobs:
             exit "$status"
       - name: Collect emulator log
         if: always()
-        run: adb logcat -d -v threadtime > integration-artifacts/logcat.txt || true
+        run: |
+          mkdir -p integration-artifacts
+          timeout 30s adb logcat -d -v threadtime > integration-artifacts/logcat.txt || true
       - name: Upload integration diagnostics
         if: always()
         uses: actions/upload-artifact@v6
