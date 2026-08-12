@@ -11,7 +11,7 @@
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | `io.github.wikg1018.sitemark` |
 | 默认基础分支 | `main` |
-| 当前版本 | 见 `pubspec.yaml`（撰写时为 `1.0.5+20`；GitHub `v1.0.5` **已发布并设为 Latest**） |
+| 当前版本 | 见 `pubspec.yaml`（撰写时准备发布 `1.0.6+21`；GitHub `v1.0.5` 仍为已完成真机回归的 Latest） |
 | 平台 | Android 12+（API 31+） |
 | Drift schema | 见 `lib/data/app_database.dart` 的 `schemaVersion`（撰写时为 11） |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
@@ -80,7 +80,7 @@ cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path rust/Cargo.toml
 ```
 
-- **格式化版本陷阱（硬约定）：** CI 固定 Flutter `3.44.6`（dart_style `3.1.8`），本机常见的 `3.44.9`（dart_style `3.1.12`）格式化结果与其**不同**（record 字面量换行、文件末尾换行），曾多次导致 CI 格式门禁失败。提交任何 Dart 改动前，用 `dart pub global activate dart_style 3.1.8` 后再跑上面的 format 命令，以 3.1.8 的输出为准；若 format 报出改动，说明本机 dart_style 版本不对，不要直接提交。
+- **格式化版本陷阱（硬约定）：** CI 固定 Flutter `3.44.6`（其 Dart SDK 内置 dart_style `3.1.8`），本机常见的 Flutter `3.44.9` 使用 dart_style `3.1.12`，格式化结果与 CI **不同**（record 字面量换行、文件末尾换行），曾多次导致格式门禁失败。提交任何 Dart 改动前，必须直接调用 Flutter `3.44.6` SDK 目录中的 `bin/dart format`；`dart pub global activate dart_style 3.1.8` 不会替换当前 SDK 的 `dart format`，不能作为版本锁定手段。若无法取得对应 SDK，则让 CI 执行格式校验，不要用不同版本自动重写后直接提交。
 - CI 当前跑 `flutter test`，**不**默认跑 `integration_test/`；改导航/拍摄主路径时仍应本地或 emulator 跑相关集成测试。  
 - 真机结论不得用模拟器或单元测试冒充；未完成的真机项必须写明。
 
@@ -128,7 +128,7 @@ cargo test --manifest-path rust/Cargo.toml
 ## 7. 发布与维护（背景）
 
 - 发布步骤与自动化门禁：`docs/release-checklist.md`。  
-- **`v1.0.5` 已经发布**（有可下载 APK，GitHub Release 已设为 Latest）。后续 `1.0.x` 补丁发版前，至少完成清单中的拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。  
+- **`v1.0.5` 已经发布并设为 Latest；`v1.0.6` 正在准备发布。** v1.0.6 在完成清单中的拍照/后台与备份恢复**真机**回归前保持 Pre-release；真机回归应覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。  
 - Agent **默认不**创建 GitHub Release、不上传签名密钥、不在未授权时合并 `main`。
 
 ## 8. 历史文档怎么用
