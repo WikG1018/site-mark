@@ -10,9 +10,9 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-![Version](https://img.shields.io/badge/release-v1.0.5-176B55)
+[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.6-E67E22)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.6)
 
-**下一预发布版本：`v1.0.6`（发布工作流完成后提供下载）**  
+**最新预发布版本：[`v1.0.6`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.6)**  
 **已完成真机回归的稳定版本：[`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5)**
 
 支持 Android 12（API 31）及以上系统。`v1.0.6` 加固媒体恢复、启动容错和 Android 相册发布一致性；完成真机回归前保持 Pre-release。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
@@ -262,7 +262,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.6` 发布后，下载和校验以对应 GitHub Release 中的实际资源为准；完成真机回归前该版本保持 Pre-release。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.6` 已作为 Pre-release 发布，下载和校验以对应 GitHub Release 中的实际资源为准；完成真机回归前不提升为 Latest。
 
 ## 本地构建
 
