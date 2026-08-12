@@ -80,6 +80,7 @@ cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path rust/Cargo.toml
 ```
 
+- **格式化版本陷阱（硬约定）：** CI 固定 Flutter `3.44.6`（dart_style `3.1.8`），本机常见的 `3.44.9`（dart_style `3.1.12`）格式化结果与其**不同**（record 字面量换行、文件末尾换行），曾多次导致 CI 格式门禁失败。提交任何 Dart 改动前，用 `dart pub global activate dart_style 3.1.8` 后再跑上面的 format 命令，以 3.1.8 的输出为准；若 format 报出改动，说明本机 dart_style 版本不对，不要直接提交。
 - CI 当前跑 `flutter test`，**不**默认跑 `integration_test/`；改导航/拍摄主路径时仍应本地或 emulator 跑相关集成测试。  
 - 真机结论不得用模拟器或单元测试冒充；未完成的真机项必须写明。
 
