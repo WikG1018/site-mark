@@ -12,7 +12,7 @@ v1.0 真机回归勾选表见 [`verification-v1.0.0-device.md`](verification-v1.
 - 发布标签必须为 `v<版本号>`，例如 `version: 0.8.1+12` 对应 `v0.8.1`。
 - 标签指向的提交必须已经进入 `main`，不得从未合并的功能分支直接发布。
 - 发布说明准确列出新增功能、修复内容、已知限制和升级注意事项。
-- **v1.0.0 已发布。** 若 GitHub 上该 Release 仍标为 Pre-release，去掉该标记前应完成第三、四节真机项与 [`verification-v1.0.0-device.md`](verification-v1.0.0-device.md) 的关键路径，并记录厂商机型矩阵；不得仅凭 CI 绿灯改标记。后续 `1.0.x` 补丁同样用本清单做回归。
+- **v1.0.5 已发布（Latest）。** v1.0.0~v1.0.4 此前为 Pre-release；v1.0.5 已通过真机回归并设为 Latest。后续 `1.0.x` 补丁同样用本清单做回归。
 
 ## 二、自动化检查
 
