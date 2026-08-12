@@ -119,7 +119,11 @@ Future<void> tapSystemCameraAndReturnCaptured(WidgetTester tester) async {
 
 /// Returns to the home project list and opens the global all-records surface.
 Future<void> openAllRecords(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('全部记录'));
+  await tester.tap(find.byType(BackButton));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byType(BackButton));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('root-destination-records')));
   await tester.pumpAndSettle();
 }
 
