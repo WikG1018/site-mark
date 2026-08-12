@@ -129,19 +129,17 @@ Future<void> openAllRecords(WidgetTester tester) async {
 
 /// Selects the year/month/day matching [date] in the cascading filter bar.
 Future<void> selectCaptureDate(WidgetTester tester, DateTime date) async {
-  await tester.tap(find.byKey(const Key('filter-year')));
+  await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text(date.year.toString()).last);
-  await tester.pumpAndSettle();
-
-  await tester.tap(find.byKey(const Key('filter-month')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('${date.month}月').last);
+  await tester.tap(find.byKey(Key('filter-year-${date.year}')));
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byKey(const Key('filter-day')));
+  await tester.tap(find.byKey(Key('filter-month-${date.month}')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('${date.day}日').last);
+
+  await tester.tap(find.byKey(Key('filter-day-${date.day}')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('filter-apply')));
   await tester.pumpAndSettle();
 }
 
