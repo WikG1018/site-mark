@@ -42,9 +42,6 @@ String _trimToUtf8Bytes(String value, int maxBytes) {
   return result.toString();
 }
 
-/// Fallback project-name component used by [formatPhotoNumber].
-const fallbackProjectName = 'Project';
-
 /// Formats a short, filesystem-safe photo number.
 ///
 /// Format: `{safeProjectName}-SM-{yyyyMMdd}-{seq}`. The caller allocates the

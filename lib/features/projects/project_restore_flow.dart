@@ -115,10 +115,7 @@ Future<void> runProjectRestoreFlow(
   } catch (error) {
     if (context.mounted) {
       Navigator.of(context, rootNavigator: true).pop();
-      _showMessage(
-        context,
-        describeProjectRestoreError(strings, error, preparing: true),
-      );
+      _showMessage(context, describeProjectRestoreError(strings, error));
     }
     return;
   }
@@ -176,17 +173,11 @@ Future<void> runProjectRestoreFlow(
     if (results != null) {
       await _showRestoreSuccess(context, strings, results);
     } else {
-      _showMessage(
-        context,
-        describeProjectRestoreError(strings, failure!, preparing: false),
-      );
+      _showMessage(context, describeProjectRestoreError(strings, failure!));
     }
   } catch (error) {
     if (context.mounted) {
-      _showMessage(
-        context,
-        describeProjectRestoreError(strings, error, preparing: false),
-      );
+      _showMessage(context, describeProjectRestoreError(strings, error));
     }
   } finally {
     await discardGuard.discard();
@@ -203,11 +194,7 @@ Future<String?> _pickRestoreZip() async {
 }
 
 @visibleForTesting
-String describeProjectRestoreError(
-  AppStrings strings,
-  Object error, {
-  required bool preparing,
-}) {
+String describeProjectRestoreError(AppStrings strings, Object error) {
   if (error is ProjectBundleRestoreException) {
     return switch (error.failure) {
       ProjectBundleRestoreFailure.notSiteMarkBackup =>

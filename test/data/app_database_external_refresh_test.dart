@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
-import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 
 void main() {
@@ -48,13 +47,9 @@ void main() {
   });
 
   test(
-    'detail and summary watchers observe an external ready update',
+    'detail and selected-summary watchers observe an external ready update',
     () async {
       final detail = StreamIterator(foreground.watchCaptureById('capture-1'));
-      final filtered = StreamIterator(
-        foreground.watchCaptureSummaries(const CaptureFilter()),
-      );
-      final all = StreamIterator(foreground.watchAllCaptureSummaries());
       final selectedInitial = Completer<List<CaptureSummary>>();
       final selectedReady = Completer<List<CaptureSummary>>();
       final selectedSubscription = foreground
@@ -80,10 +75,6 @@ void main() {
 
       expect(await detail.moveNext(), isTrue);
       expect(detail.current?.status, CaptureStatus.captured);
-      expect(await filtered.moveNext(), isTrue);
-      expect(filtered.current.single.capture.status, CaptureStatus.captured);
-      expect(await all.moveNext(), isTrue);
-      expect(all.current.single.capture.status, CaptureStatus.captured);
 
       await background.markRendering(
         captureId: 'capture-1',
@@ -98,14 +89,6 @@ void main() {
         detail,
         (record) => record?.status == CaptureStatus.ready,
       );
-      final readyFiltered = await _nextMatching(
-        filtered,
-        (rows) => rows.single.capture.status == CaptureStatus.ready,
-      );
-      final readyAll = await _nextMatching(
-        all,
-        (rows) => rows.single.capture.status == CaptureStatus.ready,
-      );
       late List<CaptureSummary> readySelected;
       try {
         readySelected = await selectedReady.future.timeout(
@@ -116,15 +99,8 @@ void main() {
       }
 
       expect(readyDetail?.publishedUri, 'content://media/site-mark/1');
-      expect(readyFiltered.single.projectName, '东区厂房改造');
-      expect(
-        readyAll.single.capture.publishedUri,
-        'content://media/site-mark/1',
-      );
       expect(readySelected.single.projectName, '东区厂房改造');
       await detail.cancel();
-      await filtered.cancel();
-      await all.cancel();
     },
   );
 }

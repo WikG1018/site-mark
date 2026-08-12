@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:sitemark/data/conditional_polling_stream.dart';
-import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/photo_number.dart';
@@ -179,10 +178,10 @@ class AppDatabase extends _$AppDatabase {
 
   final Duration externalRefreshInterval;
 
-  /// When true, [watchCaptureById] / [watchCaptureSummaries] /
-  /// [watchAllCaptureSummaries] stop their conditional-polling timers. The
-  /// underlying drift `watch()` stream keeps running (it's cheap and
-  /// SQLite-update-hook driven); only the 1 Hz fallback polling is paused.
+  /// When true, capture detail and selected-summary streams stop their
+  /// conditional-polling timers. The underlying drift `watch()` stream keeps
+  /// running (it's cheap and SQLite-update-hook driven); only the 1 Hz
+  /// fallback polling is paused.
   /// Set by the ITGSA fair-memory lifecycle hook so a backgrounded app does
   /// not keep waking the database.
   bool _pollingPaused = false;
@@ -589,13 +588,6 @@ ORDER BY
     });
   }
 
-  Stream<List<CaptureRecord>> watchCapturesForProject(String projectId) {
-    return (select(captureRecords)
-          ..where((row) => row.projectId.equals(projectId))
-          ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]))
-        .watch();
-  }
-
   Future<List<CaptureRecord>> capturesForProject(String projectId) {
     return (select(captureRecords)
           ..where((row) => row.projectId.equals(projectId))
@@ -952,13 +944,6 @@ ORDER BY
     });
   }
 
-  Future<List<CaptureRecord>> pendingCameraCaptures() {
-    return (select(captureRecords)
-          ..where((row) => row.status.equals(CaptureStatus.pendingCamera.name))
-          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
-        .get();
-  }
-
   Future<CaptureRecord> markRendering({
     required String captureId,
     required String originalSha256,
@@ -1134,37 +1119,9 @@ ORDER BY
     );
   }
 
-  Stream<List<CaptureSummary>> watchCaptureSummaries(CaptureFilter filter) {
-    final query = _captureSummarySelectable(filter);
-    return watchWithConditionalPolling(
-      source: query.watch(),
-      load: query.get,
-      shouldPoll: (rows) =>
-          rows.any((summary) => _isProcessing(summary.capture.status)),
-      equals: _sameCaptureSummaries,
-      pollInterval: externalRefreshInterval,
-      isPaused: () => _pollingPaused,
-    );
-  }
-
   Stream<List<CaptureSummary>> watchCaptureSummariesByIds(Set<String> ids) {
     if (ids.isEmpty) return Stream.value(const []);
-    final query = _captureSummarySelectable(null, ids: ids);
-    return watchWithConditionalPolling(
-      source: query.watch(),
-      load: query.get,
-      shouldPoll: (rows) =>
-          rows.any((summary) => _isProcessing(summary.capture.status)),
-      equals: _sameCaptureSummaries,
-      pollInterval: externalRefreshInterval,
-      isPaused: () => _pollingPaused,
-    );
-  }
-
-  /// Unfiltered summary stream used to derive available filter options
-  /// (projects, years, months, days) without applying the user's selection.
-  Stream<List<CaptureSummary>> watchAllCaptureSummaries() {
-    final query = _captureSummarySelectable(null);
+    final query = _captureSummariesByIdsSelectable(ids);
     return watchWithConditionalPolling(
       source: query.watch(),
       load: query.get,
@@ -1445,13 +1402,8 @@ ORDER BY
     });
   }
 
-  /// Shared select with a join on `captures.project_id = projects.id`,
-  /// excluding `pendingCamera` rows, applying an optional [filter], and
-  /// sorting by `coalesce(captured_at, created_at)` descending.
-  Selectable<CaptureSummary> _captureSummarySelectable(
-    CaptureFilter? filter, {
-    Set<String>? ids,
-  }) {
+  /// Selects the requested non-pending captures with their project names.
+  Selectable<CaptureSummary> _captureSummariesByIdsSelectable(Set<String> ids) {
     final query =
         select(captureRecords).join([
             innerJoin(
@@ -1479,23 +1431,7 @@ ORDER BY
             ),
           ]);
 
-    if (ids != null) {
-      query.where(captureRecords.id.isIn(ids));
-    }
-    if (filter != null) {
-      if (filter.projectId != null) {
-        query.where(captureRecords.projectId.equals(filter.projectId!));
-      }
-      final range = filter.localRange;
-      if (range != null) {
-        final sortKey = coalesce([
-          captureRecords.capturedAt,
-          captureRecords.createdAt,
-        ]);
-        query.where(sortKey.isBiggerOrEqualValue(range.start));
-        query.where(sortKey.isSmallerThanValue(range.end));
-      }
-    }
+    query.where(captureRecords.id.isIn(ids));
     return query.map(
       (row) => CaptureSummary(
         capture: row.readTable(captureRecords),

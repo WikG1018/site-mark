@@ -269,7 +269,7 @@ pub fn sha256_file(path: String) -> Result<String, String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-pub fn verify_file(path: String, expected_sha256: String) -> Result<bool, String> {
+fn verify_file(path: String, expected_sha256: String) -> Result<bool, String> {
     Ok(sha256_file(path)?.eq_ignore_ascii_case(expected_sha256.trim()))
 }
 
