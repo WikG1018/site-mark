@@ -35,7 +35,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('工程印记'), findsOneWidget);
-    expect(find.text('新建项目'), findsWidgets);
+    expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
   });
 
   testWidgets(
@@ -89,7 +89,7 @@ Future<void> createProjectAndOpenCapture(
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.text('新建项目'));
+  await tester.tap(find.byKey(const Key('new-project-fab')));
   await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const Key('project-name')), '东区厂房改造');
   await tester.tap(find.text('保存'));
