@@ -8,6 +8,7 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -19,6 +20,7 @@ void main() {
   late _MediaFiles files;
   late _MediaPlatform platform;
   late _MediaPaths paths;
+  late MemoryCaptureMediaCleanupPendingStore pendingStore;
   late CaptureMediaService service;
 
   setUp(() async {
@@ -51,11 +53,13 @@ void main() {
     files = _MediaFiles();
     platform = _MediaPlatform();
     paths = _MediaPaths();
+    pendingStore = MemoryCaptureMediaCleanupPendingStore();
     service = CaptureMediaService(
       database: database,
       platform: platform,
       outputPaths: paths,
       files: files,
+      pendingStore: pendingStore,
     );
   });
 
@@ -141,25 +145,115 @@ void main() {
     },
   );
 
-  test('delete all keeps the row when published deletion fails', () async {
+  test('delete all retries gallery cleanup after the row commits', () async {
     platform.deleteError = StateError('MediaStore failure');
     final result = await service.deleteAll(['capture-1']);
-    expect(result.failures.keys, ['capture-1']);
-    expect(await database.captureById('capture-1'), isNotNull);
+    expect(result.succeededIds, ['capture-1']);
+    expect(await database.captureById('capture-1'), isNull);
+    expect(await pendingStore.list(), hasLength(1));
+
+    platform.deleteError = null;
+    await service.cleanupInterrupted();
+
+    expect(platform.deletedUris, ['content://media/site-mark/1']);
+    expect(await pendingStore.list(), isEmpty);
   });
 
-  // Regression: failure results must never carry raw exceptions, stack
-  // traces, or file paths. The failures map now holds enum reasons only, so
-  // a raw platform exception (which would leak the app data path) becomes
-  // `operationFailed`; user-facing wording lives in AppStrings, separately
-  // guarded by the strings test.
-  test('per-row failures are enum reasons, never raw exception text', () async {
+  test(
+    'clear originals commits database state before retryable file cleanup',
+    () async {
+      files.existing.add('/private/original.jpg');
+      files.failures.add('/private/original.jpg');
+
+      final result = await service.clearOriginals(['capture-1']);
+
+      expect(result.succeededIds, ['capture-1']);
+      expect(
+        (await database.captureById('capture-1'))?.originalDeletedAt,
+        isNotNull,
+      );
+      expect(await pendingStore.list(), hasLength(1));
+
+      files.failures.clear();
+      await service.cleanupInterrupted();
+
+      expect(files.existing, isNot(contains('/private/original.jpg')));
+      expect(await pendingStore.list(), isEmpty);
+    },
+  );
+
+  test('delete all commits the row before retryable private cleanup', () async {
+    files.existing.addAll(['/private/original.jpg', '/rendered/capture-1.jpg']);
+    files.failures.add('/rendered/capture-1.jpg');
+
+    final result = await service.deleteAll(['capture-1']);
+
+    expect(result.succeededIds, ['capture-1']);
+    expect(await database.captureById('capture-1'), isNull);
+    expect(await pendingStore.list(), hasLength(1));
+
+    files.failures.clear();
+    await service.cleanupInterrupted();
+
+    expect(files.existing, isEmpty);
+    expect(await pendingStore.list(), isEmpty);
+  });
+
+  test('startup resumes a delete committed only as a marker', () async {
+    final pending = PendingCaptureMediaCleanup(
+      captureId: 'capture-1',
+      kind: CaptureMediaCleanupKind.deleteCapture,
+      paths: const ['/private/original.jpg', '/rendered/capture-1.jpg'],
+      publishedUri: 'content://media/site-mark/1',
+    );
+    files.existing.addAll(pending.paths);
+    await pendingStore.write(pending);
+    await database.deleteCapture('capture-1');
+
+    await service.cleanupInterrupted();
+
+    expect(platform.deletedUris, ['content://media/site-mark/1']);
+    expect(await database.captureById('capture-1'), isNull);
+    expect(files.existing, isEmpty);
+    expect(await pendingStore.list(), isEmpty);
+  });
+
+  test('startup abandons an uncommitted delete marker safely', () async {
+    const pending = PendingCaptureMediaCleanup(
+      captureId: 'capture-1',
+      kind: CaptureMediaCleanupKind.deleteCapture,
+      paths: ['/private/original.jpg', '/rendered/capture-1.jpg'],
+      publishedUri: 'content://media/site-mark/1',
+    );
+    files.existing.addAll(pending.paths);
+    await pendingStore.write(pending);
+
+    await service.cleanupInterrupted();
+
+    expect(await database.captureById('capture-1'), isNotNull);
+    expect(files.existing, containsAll(pending.paths));
+    expect(platform.deletedUris, isEmpty);
+    expect(await pendingStore.list(), isEmpty);
+  });
+
+  // Regression: pre-commit failures must never carry raw exceptions, stack
+  // traces, or file paths. Post-commit media cleanup failures are instead
+  // persisted for startup retry and count as a completed user action.
+  test('pre-commit failures are enum reasons, never raw text', () async {
     files.existing.add('/private/original.jpg');
-    platform.deleteError = StateError(
-      'FileSystemException: cannot open /data/user/0/io.github.wikg1018.sitemark/files/original.jpg',
+    final failingService = CaptureMediaService(
+      database: database,
+      platform: platform,
+      outputPaths: paths,
+      files: files,
+      pendingStore: _ThrowingMediaCleanupPendingStore(
+        StateError(
+          'FileSystemException: cannot open /data/user/0/io.github.wikg1018.sitemark/files/original.jpg',
+        ),
+      ),
     );
 
-    final deleteResult = await service.deleteAll(['capture-1']);
+    final deleteResult = await failingService.deleteAll(['capture-1']);
     expect(
       deleteResult.failures['capture-1'],
       CaptureMediaFailure.operationFailed,
@@ -205,15 +299,33 @@ void main() {
 class _MediaFiles implements PrivateFileStore {
   final Set<String> existing = {};
   final List<String> deleted = [];
+  final Set<String> failures = {};
 
   @override
   Future<bool> exists(String path) async => existing.contains(path);
 
   @override
   Future<void> deleteIfExists(String path) async {
+    if (failures.contains(path)) throw StateError('simulated delete failure');
     existing.remove(path);
     deleted.add(path);
   }
+}
+
+class _ThrowingMediaCleanupPendingStore
+    implements CaptureMediaCleanupPendingStore {
+  _ThrowingMediaCleanupPendingStore(this.error);
+
+  final Object error;
+
+  @override
+  Future<void> write(PendingCaptureMediaCleanup pending) async => throw error;
+
+  @override
+  Future<List<PendingCaptureMediaCleanup>> list() async => const [];
+
+  @override
+  Future<void> clear(String captureId, CaptureMediaCleanupKind kind) async {}
 }
 
 class _MediaPaths implements CaptureOutputPaths {
@@ -227,6 +339,7 @@ class _MediaPlatform implements PlatformServices {
   Object? deleteError;
   Object? publishError;
   String nextPublishedUri = 'content://media/site-mark/1';
+  final List<String> deletedUris = [];
 
   @override
   Future<ImageMetadataResult> inspectImage(String path) async =>
@@ -241,6 +354,7 @@ class _MediaPlatform implements PlatformServices {
   @override
   Future<void> deletePublishedImage(String contentUri) async {
     if (deleteError != null) throw deleteError!;
+    deletedUris.add(contentUri);
   }
 
   @override

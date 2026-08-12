@@ -55,6 +55,7 @@ void main() {
             cleanupInterruptedImports: _noOpRecovery,
             cleanupInterruptedBundleRestores: _noOpRecovery,
             cleanupInterruptedProjectDeletions: _noOpRecovery,
+            cleanupInterruptedCaptureMedia: _noOpRecovery,
           ),
         ),
       );

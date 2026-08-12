@@ -45,6 +45,7 @@ import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark/workflow/app_storage_service.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
+import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_template_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
@@ -220,6 +221,11 @@ final privateFileStoreProvider = Provider<PrivateFileStore>(
   (ref) => DartIoPrivateFileStore(),
 );
 
+final captureMediaCleanupPendingStoreProvider =
+    Provider<CaptureMediaCleanupPendingStore>(
+      (ref) => AppCaptureMediaCleanupPendingStore(),
+    );
+
 final projectDeletionPendingStoreProvider =
     Provider<ProjectDeletionPendingStore>(
       (ref) => AppProjectDeletionPendingStore(),
@@ -288,6 +294,7 @@ final captureMediaServiceProvider = Provider<CaptureMediaService>((ref) {
     platform: ref.watch(platformServicesProvider),
     outputPaths: ref.watch(captureOutputPathsProvider),
     files: ref.watch(privateFileStoreProvider),
+    pendingStore: ref.watch(captureMediaCleanupPendingStoreProvider),
   );
 });
 
@@ -309,6 +316,8 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
         .cleanupInterruptedBundleRestores(),
     cleanupInterruptedProjectDeletions: () =>
         ref.read(projectDeletionServiceProvider).cleanupInterruptedDeletions(),
+    cleanupInterruptedCaptureMedia: () =>
+        ref.read(captureMediaServiceProvider).cleanupInterrupted(),
   );
 });
 
@@ -858,6 +867,7 @@ class MyApp extends StatelessWidget {
     this.completionNotificationService,
     this.memoryPressureService,
     this.captureFormDraftStore,
+    this.captureMediaCleanupPendingStore,
     this.memoryPressureController,
   });
 
@@ -876,6 +886,7 @@ class MyApp extends StatelessWidget {
   final CompletionNotificationService? completionNotificationService;
   final MemoryPressureService? memoryPressureService;
   final CaptureFormDraftStore? captureFormDraftStore;
+  final CaptureMediaCleanupPendingStore? captureMediaCleanupPendingStore;
   final MemoryPressureController? memoryPressureController;
 
   @override
@@ -920,6 +931,10 @@ class MyApp extends StatelessWidget {
         if (captureFormDraftStore != null)
           captureFormDraftStoreProvider.overrideWithValue(
             captureFormDraftStore!,
+          ),
+        if (captureMediaCleanupPendingStore != null)
+          captureMediaCleanupPendingStoreProvider.overrideWithValue(
+            captureMediaCleanupPendingStore!,
           ),
         if (memoryPressureController != null)
           memoryPressureControllerProvider.overrideWithValue(

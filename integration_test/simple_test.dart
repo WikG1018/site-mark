@@ -4,10 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/main.dart';
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
-import 'package:sitemark/src/rust/frb_generated.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -20,18 +21,22 @@ import 'package:sitemark_system_api/sitemark_system_api.dart';
 /// filtered-records surfaces can be driven end-to-end without a real camera.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  setUpAll(RustLib.init);
 
   testWidgets('starts at the project list', (tester) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('zh')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        backgroundScheduler: _NoopCaptureBackgroundScheduler(),
+        completionNotificationService: _NoopCompletionNotificationService(),
+      ),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('工程印记'), findsOneWidget);
-    expect(find.text('新建项目'), findsWidgets);
+    expect(find.byKey(const Key('new-project-fab')), findsOneWidget);
   });
 
   testWidgets(
@@ -46,9 +51,21 @@ void main() {
 
       expect(find.text('照片已加入后台处理，可继续拍摄'), findsOneWidget);
       expect(find.byKey(const Key('capture-button')), findsOneWidget);
+      final project = (await database.getProjects()).single;
+      final capture = (await database.capturesForProject(project.id)).single;
+      final capturedAt = capture.capturedAt ?? capture.createdAt;
       await openAllRecords(tester);
-      await selectCaptureDate(tester, DateTime(2026, 7, 16));
-      expect(find.text('SM-20260716-001'), findsOneWidget);
+      await selectCaptureDate(tester, capturedAt);
+      expect(
+        find.text(
+          captureListDisplayName(
+            capturedAt: capture.capturedAt,
+            photoNumber: capture.photoNumber,
+            fallback: capture.workLocation,
+          ),
+        ),
+        findsOneWidget,
+      );
     },
   );
 }
@@ -80,11 +97,12 @@ Future<void> createProjectAndOpenCapture(
       shareService: _IntegrationShareService(),
       privateFileStore: _IntegrationPrivateFileStore(),
       backgroundScheduler: scheduler,
+      completionNotificationService: _NoopCompletionNotificationService(),
     ),
   );
   await tester.pumpAndSettle();
 
-  await tester.tap(find.text('新建项目'));
+  await tester.tap(find.byKey(const Key('new-project-fab')));
   await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const Key('project-name')), '东区厂房改造');
   await tester.tap(find.text('保存'));
@@ -114,25 +132,30 @@ Future<void> tapSystemCameraAndReturnCaptured(WidgetTester tester) async {
 
 /// Returns to the home project list and opens the global all-records surface.
 Future<void> openAllRecords(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('全部记录'));
+  await tester.tap(find.byType(BackButton));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byType(BackButton));
+  await tester.pumpAndSettle();
+  await tester.pump(const Duration(seconds: 5));
+  await tester.pumpAndSettle();
+  expect(find.text('照片已加入后台处理，可继续拍摄'), findsNothing);
+  await tester.tap(find.byKey(const Key('root-destination-records')));
   await tester.pumpAndSettle();
 }
 
 /// Selects the year/month/day matching [date] in the cascading filter bar.
 Future<void> selectCaptureDate(WidgetTester tester, DateTime date) async {
-  await tester.tap(find.byKey(const Key('filter-year')));
+  await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text(date.year.toString()).last);
-  await tester.pumpAndSettle();
-
-  await tester.tap(find.byKey(const Key('filter-month')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('${date.month}月').last);
+  await tester.tap(find.byKey(Key('filter-year-${date.year}')));
   await tester.pumpAndSettle();
 
-  await tester.tap(find.byKey(const Key('filter-day')));
+  await tester.tap(find.byKey(Key('filter-month-${date.month}')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('${date.day}日').last);
+
+  await tester.tap(find.byKey(Key('filter-day-${date.day}')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('filter-apply')));
   await tester.pumpAndSettle();
 }
 
@@ -196,8 +219,7 @@ class _IntegrationImagePipeline implements ImagePipeline {
   @override
   Future<ExtractedArchivePhoto> extractArchivePhoto(
     ExtractArchivePhotoRequest request,
-  ) =>
-      throw UnimplementedError();
+  ) => throw UnimplementedError();
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async {
@@ -252,6 +274,45 @@ class _IntegrationPrivateFileStore implements PrivateFileStore {
 
   @override
   Future<void> deleteIfExists(String path) async {}
+}
+
+/// Keeps the smoke test independent from WorkManager. Device-backed queue
+/// behavior is covered by [_InlineProcessingScheduler] in the capture flow.
+class _NoopCaptureBackgroundScheduler implements CaptureBackgroundScheduler {
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> enqueue(String captureId) async {}
+
+  @override
+  Future<void> retry(String captureId) async {}
+
+  @override
+  Future<void> reconcilePending() async {}
+}
+
+/// Keeps device tests independent from the local-notifications plugin while
+/// preserving the same startup lifecycle as production.
+class _NoopCompletionNotificationService
+    implements CompletionNotificationService {
+  @override
+  Future<void> initialize(
+    void Function(String deepLinkPath) onTapDeepLink,
+  ) async {}
+
+  @override
+  Future<bool> requestPermission() async => false;
+
+  @override
+  Future<void> setEnabled(bool enabled) async {}
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) async {}
 }
 
 /// A [CaptureBackgroundScheduler] that runs the real [CaptureProcessor] inline
