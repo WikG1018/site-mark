@@ -38,7 +38,17 @@ jobs:
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'system-images;android-34;google_apis;x86_64'
       - run: flutter pub get
       - name: Warm Gradle and Android build caches
-        run: ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest
+        run: |
+          for attempt in 1 2 3; do
+            if ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::Gradle warm-up failed; retrying after a transient-download backoff (attempt $attempt/3)."
+            sleep "$((attempt * 10))"
+          done
       - name: Warm Flutter Android build and native assets
         run: |
           for attempt in 1 2 3; do

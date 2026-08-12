@@ -50,7 +50,18 @@ jobs:
       - run: cargo fmt --manifest-path rust/Cargo.toml --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path rust/Cargo.toml
-      - run: ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest
+      - name: Run Android unit tests
+        run: |
+          for attempt in 1 2 3; do
+            if ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::Android unit tests failed; retrying after a transient-download backoff (attempt $attempt/3)."
+            sleep "$((attempt * 10))"
+          done
       - name: Build debug APK
         run: |
           for attempt in 1 2 3; do
