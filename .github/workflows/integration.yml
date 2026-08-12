@@ -37,6 +37,8 @@ jobs:
           test -x "$SDKMANAGER"
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'system-images;android-34;google_apis;x86_64'
       - run: flutter pub get
+      - name: Warm Gradle and Android build caches
+        run: ./android/gradlew -p android :sitemark_system_api:testDebugUnitTest
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
