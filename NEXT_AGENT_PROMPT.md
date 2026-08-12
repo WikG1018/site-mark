@@ -11,7 +11,7 @@
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | `io.github.wikg1018.sitemark` |
 | 默认基础分支 | `main` |
-| 当前版本 | 见 `pubspec.yaml`（撰写时准备发布 `1.0.6+21`；GitHub `v1.0.5` 仍为已完成真机回归的 Latest） |
+| 当前版本 | 见 `pubspec.yaml`（撰写时为 `1.0.6+21`；GitHub `v1.0.6` 已作为 Pre-release 发布，`v1.0.5` 仍为已完成真机回归的 Latest） |
 | 平台 | Android 12+（API 31+） |
 | Drift schema | 见 `lib/data/app_database.dart` 的 `schemaVersion`（撰写时为 11） |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
@@ -128,7 +128,7 @@ cargo test --manifest-path rust/Cargo.toml
 ## 7. 发布与维护（背景）
 
 - 发布步骤与自动化门禁：`docs/release-checklist.md`。  
-- **`v1.0.5` 已经发布并设为 Latest；`v1.0.6` 正在准备发布。** v1.0.6 在完成清单中的拍照/后台与备份恢复**真机**回归前保持 Pre-release；真机回归应覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。  
+- **`v1.0.5` 已经发布并设为 Latest；`v1.0.6` 已作为 Pre-release 发布。** v1.0.6 在完成清单中的拍照/后台与备份恢复**真机**回归前不提升为 Latest；真机回归应覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。  
 - Agent **默认不**创建 GitHub Release、不上传签名密钥、不在未授权时合并 `main`。
 
 ## 8. 历史文档怎么用
