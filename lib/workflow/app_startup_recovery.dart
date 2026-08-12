@@ -7,6 +7,7 @@ class AppStartupRecovery {
     required this.cleanupInterruptedImports,
     required this.cleanupInterruptedBundleRestores,
     required this.cleanupInterruptedProjectDeletions,
+    required this.cleanupInterruptedCaptureMedia,
   });
 
   final Future<void> Function() recoverCamera;
@@ -16,37 +17,32 @@ class AppStartupRecovery {
   final Future<void> Function() cleanupInterruptedImports;
   final Future<void> Function() cleanupInterruptedBundleRestores;
   final Future<void> Function() cleanupInterruptedProjectDeletions;
+  final Future<void> Function() cleanupInterruptedCaptureMedia;
 
   Future<void> run() async {
-    try {
-      await cleanupInterruptedExports();
-    } catch (_) {
-      // Export staging contains no committed backup. Cleanup is retried on the
-      // next launch and must never block recovery of user data.
-    }
+    await _bestEffort(cleanupInterruptedExports);
     // Remove half-imported projects first so they never surface in the UI
     // or confuse the other recovery steps.
+    await _bestEffort(cleanupInterruptedImports);
+    await _bestEffort(cleanupInterruptedBundleRestores);
+    await _bestEffort(cleanupInterruptedProjectDeletions);
+    await _bestEffort(cleanupInterruptedCaptureMedia);
+
+    // Core recovery stages are best-effort for the same reason as cleanup:
+    // camera/plugin, SQLite, location and WorkManager failures are independent.
+    // A transient failure in one subsystem must not skip later recovery work or
+    // escape into the root post-frame callback.
+    await _bestEffort(recoverCamera);
+    await _bestEffort(resolveLocations);
+    await _bestEffort(reconcileQueue);
+  }
+
+  Future<void> _bestEffort(Future<void> Function() operation) async {
     try {
-      await cleanupInterruptedImports();
+      await operation();
     } catch (_) {
-      // Import cleanup is retried from its durable marker on the next launch.
-      // A storage-side cleanup error must not block camera, location, or
-      // background-queue recovery for otherwise healthy captures.
+      // Durable work is retried on the next launch. Keep startup moving so an
+      // unrelated subsystem can still recover in the current session.
     }
-    try {
-      await cleanupInterruptedBundleRestores();
-    } catch (_) {
-      // Bundle restore cleanup is retried from its durable marker on the next
-      // launch. It must not block project deletion or core capture recovery.
-    }
-    try {
-      await cleanupInterruptedProjectDeletions();
-    } catch (_) {
-      // Project deletion cleanup is retried from its durable marker on the
-      // next launch. A storage-side error must not block capture recovery.
-    }
-    await recoverCamera();
-    await resolveLocations();
-    await reconcileQueue();
   }
 }

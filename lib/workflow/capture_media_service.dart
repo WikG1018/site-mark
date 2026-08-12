@@ -4,6 +4,7 @@ import 'package:sitemark/domain/capture_media_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 
 /// Outcome of a batched media operation against a list of capture IDs.
 ///
@@ -30,12 +31,14 @@ class CaptureMediaService {
     required this.platform,
     required this.outputPaths,
     required this.files,
-  });
+    CaptureMediaCleanupPendingStore? pendingStore,
+  }) : pendingStore = pendingStore ?? MemoryCaptureMediaCleanupPendingStore();
 
   final AppDatabase database;
   final PlatformServices platform;
   final CaptureOutputPaths outputPaths;
   final PrivateFileStore files;
+  final CaptureMediaCleanupPendingStore pendingStore;
 
   Future<OriginalPhotoState> originalState(CaptureRecord record) async {
     if (record.originalDeletedAt != null) {
@@ -85,8 +88,14 @@ class CaptureMediaService {
           failures[id] = CaptureMediaFailure.originalMissing;
           continue;
         }
-        await files.deleteIfExists(record.originalPath);
+        final pending = PendingCaptureMediaCleanup(
+          captureId: id,
+          kind: CaptureMediaCleanupKind.clearOriginal,
+          paths: [record.originalPath],
+        );
+        await pendingStore.write(pending);
         await database.markOriginalDeleted(id);
+        await _finishCleanup(pending);
         succeeded.add(id);
       } catch (_) {
         failures[id] = CaptureMediaFailure.operationFailed;
@@ -101,13 +110,14 @@ class CaptureMediaService {
 
   /// Removes the published image, original file, rendered file, and database
   /// row for each capture in [captureIds]. Permits `ready` and `failed` rows.
-  /// The exact deletion order per row is:
-  ///   1. `deletePublishedImage(publishedUri)` (when set)
-  ///   2. `deleteIfExists(originalPath)`
-  ///   3. `deleteIfExists(renderedPhotoPath(id))`
-  ///   4. `deleteCapture(id)`
-  /// Per-record exceptions are caught, the row is preserved for retry, and
-  /// processing continues with later IDs.
+  /// The exact durable deletion order per row is:
+  ///   1. persist an app-private cleanup marker
+  ///   2. `deleteCapture(id)` (the logical commit point)
+  ///   3. remove the published image and private files, then the marker
+  /// A crash or media cleanup failure after the commit point is retried by
+  /// [cleanupInterrupted]. Per-record exceptions remain isolated. Once the
+  /// database commit succeeds, leftover media cleanup is durable and
+  /// therefore does not turn the user's completed action into a failure.
   Future<CaptureActionResult> deleteAll(List<String> captureIds) async {
     final succeeded = <String>[];
     final skipped = <String>[];
@@ -124,12 +134,15 @@ class CaptureMediaService {
           failures[id] = CaptureMediaFailure.deleteStatusNotAllowed;
           continue;
         }
-        if (record.publishedUri != null) {
-          await platform.deletePublishedImage(record.publishedUri!);
-        }
-        await files.deleteIfExists(record.originalPath);
-        await files.deleteIfExists(await outputPaths.renderedPhotoPath(id));
+        final pending = PendingCaptureMediaCleanup(
+          captureId: id,
+          kind: CaptureMediaCleanupKind.deleteCapture,
+          paths: [record.originalPath, await outputPaths.renderedPhotoPath(id)],
+          publishedUri: record.publishedUri,
+        );
+        await pendingStore.write(pending);
         await database.deleteCapture(id);
+        await _finishCleanup(pending);
         succeeded.add(id);
       } catch (_) {
         failures[id] = CaptureMediaFailure.operationFailed;
@@ -192,5 +205,58 @@ class CaptureMediaService {
       height: metadata.height,
       mimeType: metadata.mimeType,
     );
+  }
+
+  /// Resumes media cleanup whose user-visible database commit survived a
+  /// process death. Each marker is isolated so one bad file cannot block the
+  /// remaining recovery work.
+  Future<void> cleanupInterrupted() async {
+    final pendings = await pendingStore.list();
+    for (final pending in pendings) {
+      try {
+        final record = await database.captureById(pending.captureId);
+        final committed = switch (pending.kind) {
+          CaptureMediaCleanupKind.clearOriginal =>
+            record == null || record.originalDeletedAt != null,
+          CaptureMediaCleanupKind.deleteCapture => record == null,
+        };
+        if (!committed) {
+          // The database commit never happened. Preserve media that the live
+          // row can still reference and discard only the pre-commit marker.
+          await pendingStore.clear(pending.captureId, pending.kind);
+          continue;
+        }
+        await _finishCleanup(pending);
+      } catch (_) {
+        // Keep the durable marker for a later launch and continue with others.
+      }
+    }
+  }
+
+  Future<bool> _finishCleanup(PendingCaptureMediaCleanup pending) async {
+    var cleaned = true;
+    if (pending.kind == CaptureMediaCleanupKind.deleteCapture &&
+        pending.publishedUri != null) {
+      try {
+        await platform.deletePublishedImage(pending.publishedUri!);
+      } catch (_) {
+        cleaned = false;
+      }
+    }
+    for (final path in pending.paths) {
+      try {
+        await files.deleteIfExists(path);
+      } catch (_) {
+        cleaned = false;
+      }
+    }
+    if (cleaned) {
+      try {
+        await pendingStore.clear(pending.captureId, pending.kind);
+      } catch (_) {
+        // The marker is harmless and cleanup is idempotent on the next launch.
+      }
+    }
+    return cleaned;
   }
 }

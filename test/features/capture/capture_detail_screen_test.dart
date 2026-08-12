@@ -1094,7 +1094,7 @@ void main() {
     await disposeDetail(tester);
   });
 
-  testWidgets('failed original deletion does not clear the original', (
+  testWidgets('failed original file cleanup commits for startup retry', (
     tester,
   ) async {
     await pumpReadyDetail(tester, originalExists: true);
@@ -1111,12 +1111,17 @@ void main() {
     await tester.pump(const Duration(seconds: 6));
     await tester.pumpAndSettle();
 
-    // The error prevents the original from being cleared.
-    expect(find.text('原图已清理'), findsNothing);
+    // The user-visible database change is committed, while the durable marker
+    // keeps the physical file eligible for a later startup retry.
     expect(
       (await database.captureById('capture-1'))?.originalDeletedAt,
-      isNull,
+      isNotNull,
     );
+    expect(files.existing, contains('/private/original.jpg'));
+
+    files.deleteError = null;
+    await media.cleanupInterrupted();
+    expect(files.existing, isNot(contains('/private/original.jpg')));
 
     await disposeDetail(tester);
   });

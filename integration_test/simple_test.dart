@@ -7,7 +7,6 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
-import 'package:sitemark/src/rust/frb_generated.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -20,13 +19,16 @@ import 'package:sitemark_system_api/sitemark_system_api.dart';
 /// filtered-records surfaces can be driven end-to-end without a real camera.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  setUpAll(RustLib.init);
 
   testWidgets('starts at the project list', (tester) async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
     await tester.pumpWidget(
-      MyApp(database: database, initialLocale: const Locale('zh')),
+      MyApp(
+        database: database,
+        initialLocale: const Locale('zh'),
+        backgroundScheduler: _NoopCaptureBackgroundScheduler(),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -196,8 +198,7 @@ class _IntegrationImagePipeline implements ImagePipeline {
   @override
   Future<ExtractedArchivePhoto> extractArchivePhoto(
     ExtractArchivePhotoRequest request,
-  ) =>
-      throw UnimplementedError();
+  ) => throw UnimplementedError();
 
   @override
   Future<ExportProjectResult> export(ExportProjectRequest request) async {
@@ -252,6 +253,22 @@ class _IntegrationPrivateFileStore implements PrivateFileStore {
 
   @override
   Future<void> deleteIfExists(String path) async {}
+}
+
+/// Keeps the smoke test independent from WorkManager. Device-backed queue
+/// behavior is covered by [_InlineProcessingScheduler] in the capture flow.
+class _NoopCaptureBackgroundScheduler implements CaptureBackgroundScheduler {
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> enqueue(String captureId) async {}
+
+  @override
+  Future<void> retry(String captureId) async {}
+
+  @override
+  Future<void> reconcilePending() async {}
 }
 
 /// A [CaptureBackgroundScheduler] that runs the real [CaptureProcessor] inline

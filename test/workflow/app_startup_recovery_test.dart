@@ -14,6 +14,7 @@ void main() {
         cleanupInterruptedImports: () async => events.add('imports'),
         cleanupInterruptedBundleRestores: () async => events.add('bundles'),
         cleanupInterruptedProjectDeletions: () async => events.add('deletions'),
+        cleanupInterruptedCaptureMedia: () async => events.add('media'),
       );
 
       await recovery.run();
@@ -23,6 +24,7 @@ void main() {
         'imports',
         'bundles',
         'deletions',
+        'media',
         'camera',
         'location',
         'queue',
@@ -43,6 +45,7 @@ void main() {
       },
       cleanupInterruptedBundleRestores: () async => events.add('bundles'),
       cleanupInterruptedProjectDeletions: () async => events.add('deletions'),
+      cleanupInterruptedCaptureMedia: () async => events.add('media'),
     );
 
     await recovery.run();
@@ -52,6 +55,7 @@ void main() {
       'imports',
       'bundles',
       'deletions',
+      'media',
       'camera',
       'location',
       'queue',
@@ -73,6 +77,7 @@ void main() {
           throw StateError('simulated bundle cleanup failure');
         },
         cleanupInterruptedProjectDeletions: () async => events.add('deletions'),
+        cleanupInterruptedCaptureMedia: () async => events.add('media'),
       );
 
       await recovery.run();
@@ -82,6 +87,7 @@ void main() {
         'imports',
         'bundles',
         'deletions',
+        'media',
         'camera',
         'location',
         'queue',
@@ -104,6 +110,7 @@ void main() {
           events.add('deletions');
           throw StateError('simulated deletion cleanup failure');
         },
+        cleanupInterruptedCaptureMedia: () async => events.add('media'),
       );
 
       await recovery.run();
@@ -113,6 +120,7 @@ void main() {
         'imports',
         'bundles',
         'deletions',
+        'media',
         'camera',
         'location',
         'queue',
@@ -142,6 +150,10 @@ void main() {
         events.add('deletions');
         throw StateError('delete');
       },
+      cleanupInterruptedCaptureMedia: () async {
+        events.add('media');
+        throw StateError('media');
+      },
     );
 
     await recovery.run();
@@ -151,9 +163,47 @@ void main() {
       'imports',
       'bundles',
       'deletions',
+      'media',
       'camera',
       'location',
       'queue',
     ]);
   });
+
+  for (final failingStage in ['camera', 'location', 'queue']) {
+    test(
+      '$failingStage recovery failure does not block later stages',
+      () async {
+        final events = <String>[];
+        Future<void> stage(String name) async {
+          events.add(name);
+          if (name == failingStage) throw StateError(name);
+        }
+
+        final recovery = AppStartupRecovery(
+          recoverCamera: () => stage('camera'),
+          resolveLocations: () => stage('location'),
+          reconcileQueue: () => stage('queue'),
+          cleanupInterruptedExports: () => stage('exports'),
+          cleanupInterruptedImports: () => stage('imports'),
+          cleanupInterruptedBundleRestores: () => stage('bundles'),
+          cleanupInterruptedProjectDeletions: () => stage('deletions'),
+          cleanupInterruptedCaptureMedia: () => stage('media'),
+        );
+
+        await recovery.run();
+
+        expect(events, [
+          'exports',
+          'imports',
+          'bundles',
+          'deletions',
+          'media',
+          'camera',
+          'location',
+          'queue',
+        ]);
+      },
+    );
+  }
 }

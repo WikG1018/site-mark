@@ -14,6 +14,7 @@ import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
+import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
 
@@ -45,6 +46,7 @@ void main() {
       cleanupInterruptedImports: () async => events.add('imports'),
       cleanupInterruptedBundleRestores: () async {},
       cleanupInterruptedProjectDeletions: () async {},
+      cleanupInterruptedCaptureMedia: () async {},
     );
 
     await tester.pumpWidget(
@@ -192,6 +194,8 @@ void main() {
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
         captureFormDraftStore: MemoryCaptureFormDraftStore(),
+        captureMediaCleanupPendingStore:
+            MemoryCaptureMediaCleanupPendingStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -385,6 +389,8 @@ void main() {
         backgroundScheduler: scheduler,
         completionNotificationService: _FakeCompletionNotificationService(),
         captureFormDraftStore: MemoryCaptureFormDraftStore(),
+        captureMediaCleanupPendingStore:
+            MemoryCaptureMediaCleanupPendingStore(),
       ),
     );
     await tester.pumpAndSettle();

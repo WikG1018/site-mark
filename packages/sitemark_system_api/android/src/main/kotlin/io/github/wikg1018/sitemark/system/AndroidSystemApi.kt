@@ -3,6 +3,7 @@ package io.github.wikg1018.sitemark.system
 import android.Manifest
 import android.app.Activity
 import android.content.ClipData
+import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
@@ -435,44 +436,18 @@ class AndroidSystemApi(
         val safeName = normalizedJpegName(displayName)
         val resolver = context.contentResolver
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        var created = false
-        val uri = findPublishedImage(collection, safeName) ?: run {
-            created = true
-            resolver.insert(
-                collection,
-                ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, safeName)
-                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, PUBLISHED_RELATIVE_PATH)
-                    put(MediaStore.Images.Media.IS_PENDING, 1)
-                },
-            ) ?: error("MediaStore did not create an image")
-        }
-        try {
-            if (!created) {
-                resolver.update(
-                    uri,
-                    ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 1) },
-                    null,
-                    null,
-                )
-            }
-            source.inputStream().use { input ->
-                resolver.openOutputStream(uri, "w")?.use { output ->
-                    input.copyTo(output)
-                } ?: error("MediaStore did not open the output stream")
-            }
-            resolver.update(
-                uri,
-                ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
-                null,
-                null,
-            )
-            return MediaPublishResult(uri.toString())
-        } catch (error: Throwable) {
-            if (created) resolver.delete(uri, null, null)
-            throw error
-        }
+        val publisher = SafeMediaPublisher(
+            store = AndroidPublishedImageStore(
+                resolver = resolver,
+                collection = collection,
+                relativePath = PUBLISHED_RELATIVE_PATH,
+            ),
+            createBackupFile = {
+                val cache = context.cacheDir.apply { mkdirs() }
+                File.createTempFile("sitemark-published-", ".jpg", cache)
+            },
+        )
+        return MediaPublishResult(publisher.publish(source, safeName))
     }
 
     override fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit) {
@@ -547,20 +522,6 @@ class AndroidSystemApi(
         return "$base.jpg"
     }
 
-    private fun findPublishedImage(collection: Uri, displayName: String): Uri? {
-        val projection = arrayOf(MediaStore.Images.Media._ID)
-        val selection =
-            "${MediaStore.Images.Media.DISPLAY_NAME} = ? AND " +
-                "${MediaStore.Images.Media.RELATIVE_PATH} = ?"
-        val arguments = arrayOf(displayName, PUBLISHED_RELATIVE_PATH)
-        context.contentResolver.query(collection, projection, selection, arguments, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return ContentUris.withAppendedId(collection, cursor.getLong(0))
-            }
-        }
-        return null
-    }
-
     companion object {
         const val REQUEST_CAMERA_CAPTURE = 41001
         const val REQUEST_LOCATION_PERMISSION = 41002
@@ -590,4 +551,68 @@ class AndroidSystemApi(
      */
     internal fun publishJpegForTest(sourcePath: String, displayName: String): MediaPublishResult =
         publishJpegInternal(sourcePath, displayName)
+}
+
+private class AndroidPublishedImageStore(
+    private val resolver: ContentResolver,
+    private val collection: Uri,
+    private val relativePath: String,
+) : PublishedImageStore {
+    override fun find(displayName: String): String? {
+        val projection = arrayOf(MediaStore.Images.Media._ID)
+        val selection =
+            "${MediaStore.Images.Media.DISPLAY_NAME} = ? AND " +
+                "${MediaStore.Images.Media.RELATIVE_PATH} = ?"
+        val arguments = arrayOf(displayName, relativePath)
+        resolver.query(collection, projection, selection, arguments, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                return ContentUris.withAppendedId(collection, cursor.getLong(0)).toString()
+            }
+        }
+        return null
+    }
+
+    override fun insertPending(displayName: String): String {
+        val uri = resolver.insert(
+            collection,
+            ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, relativePath)
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            },
+        ) ?: error("MediaStore did not create an image")
+        return uri.toString()
+    }
+
+    override fun backup(contentUri: String, destination: File) {
+        resolver.openInputStream(Uri.parse(contentUri))?.use { input ->
+            destination.outputStream().use { output -> input.copyTo(output) }
+        } ?: error("MediaStore did not open the existing image")
+        require(destination.length() > 0L) { "Existing MediaStore image is empty" }
+    }
+
+    override fun write(contentUri: String, source: File) {
+        source.inputStream().use { input ->
+            resolver.openOutputStream(Uri.parse(contentUri), "w")?.use { output ->
+                input.copyTo(output)
+            } ?: error("MediaStore did not open the output stream")
+        }
+    }
+
+    override fun setPending(contentUri: String, pending: Boolean) {
+        val updated = resolver.update(
+            Uri.parse(contentUri),
+            ContentValues().apply {
+                put(MediaStore.Images.Media.IS_PENDING, if (pending) 1 else 0)
+            },
+            null,
+            null,
+        )
+        check(updated > 0) { "MediaStore did not update the image state" }
+    }
+
+    override fun delete(contentUri: String) {
+        resolver.delete(Uri.parse(contentUri), null, null)
+    }
 }
