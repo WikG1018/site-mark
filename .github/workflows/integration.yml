@@ -65,13 +65,7 @@ jobs:
           script: |
             mkdir -p integration-artifacts
             timeout --signal=KILL 10s adb logcat -c || true
-            set +e
-            timeout --signal=INT --kill-after=60s 15m \
-              flutter test integration_test/simple_test.dart --reporter expanded \
-              > integration-artifacts/flutter-test.log 2>&1
-            status=$?
-            cat integration-artifacts/flutter-test.log
-            exit "$status"
+            timeout --signal=INT --kill-after=60s 15m flutter test integration_test/simple_test.dart --reporter expanded
       - name: Collect emulator log
         if: always()
         timeout-minutes: 1
