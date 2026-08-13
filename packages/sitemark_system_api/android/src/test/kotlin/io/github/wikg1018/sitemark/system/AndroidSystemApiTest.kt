@@ -50,6 +50,7 @@ class AndroidSystemApiTest {
         `when`(editor.putBoolean(anyString(), org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(editor)
         `when`(editor.remove(anyString())).thenReturn(editor)
         `when`(editor.apply()).then {} // no-op
+        `when`(editor.commit()).thenReturn(true)
         `when`(context.getSharedPreferences(anyString(), anyInt())).thenReturn(prefs)
         locationManager = mock(LocationManager::class.java)
         `when`(context.getSystemService(LocationManager::class.java)).thenReturn(locationManager)

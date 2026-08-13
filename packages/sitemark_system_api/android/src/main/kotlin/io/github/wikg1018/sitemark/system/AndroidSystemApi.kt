@@ -38,7 +38,8 @@ class AndroidSystemApi(
     private val context: Context,
     private val metadataReader: ImageMetadataReader = AndroidXImageMetadataReader(),
 ) : SiteMarkSystemApi {
-    private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+    private val preferences =
+        context.getSharedPreferences(CaptureSessionPolicy.PREFERENCES, Context.MODE_PRIVATE)
     private val locationManager = context.getSystemService(LocationManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor = Executors.newSingleThreadExecutor()
@@ -79,8 +80,8 @@ class AndroidSystemApi(
             error("Unable to replace existing capture target")
         }
         preferences.edit()
-            .putString(KEY_CAPTURE_ID, captureId)
-            .putString(KEY_CAPTURE_PATH, target.absolutePath)
+            .putString(CaptureSessionPolicy.KEY_CAPTURE_ID, captureId)
+            .putString(CaptureSessionPolicy.KEY_CAPTURE_PATH, target.absolutePath)
             .apply()
         return target.absolutePath
     }
@@ -100,16 +101,11 @@ class AndroidSystemApi(
             return
         }
         val target = preparedTarget(captureId)
-        val uri = Uri.Builder()
-            .scheme("content")
-            .authority("${context.packageName}.capture")
-            .appendPath("capture")
-            .appendPath(captureId)
-            .build()
+        val uri = CaptureSessionPolicy.captureContentUri(context.packageName, captureId)
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
             putExtra(MediaStore.EXTRA_OUTPUT, uri)
             clipData = ClipData.newRawUri("SiteMark capture", uri)
-            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(CaptureSessionPolicy.URI_GRANT_FLAGS)
         }
         if (intent.resolveActivity(context.packageManager) == null) {
             callback(
@@ -133,8 +129,8 @@ class AndroidSystemApi(
     }
 
     override fun recoverCameraCapture(): RecoveredCameraCapture? {
-        val captureId = preferences.getString(KEY_CAPTURE_ID, null) ?: return null
-        val path = preferences.getString(KEY_CAPTURE_PATH, null) ?: return null
+        val captureId = preferences.getString(CaptureSessionPolicy.KEY_CAPTURE_ID, null) ?: return null
+        val path = preferences.getString(CaptureSessionPolicy.KEY_CAPTURE_PATH, null) ?: return null
         val file = File(path)
         return RecoveredCameraCapture(
             captureId = captureId,
@@ -145,10 +141,11 @@ class AndroidSystemApi(
     }
 
     override fun finishCameraCapture(captureId: String, keepOriginal: Boolean) {
-        val pendingId = preferences.getString(KEY_CAPTURE_ID, null)
+        val pendingId = preferences.getString(CaptureSessionPolicy.KEY_CAPTURE_ID, null)
         if (pendingId != captureId) return
-        val path = preferences.getString(KEY_CAPTURE_PATH, null)
-        preferences.edit().remove(KEY_CAPTURE_ID).remove(KEY_CAPTURE_PATH).apply()
+        val path = preferences.getString(CaptureSessionPolicy.KEY_CAPTURE_PATH, null)
+        revokeCaptureUriPermission(captureId)
+        CaptureSessionPolicy.clearPending(preferences.edit())
         if (!keepOriginal && path != null) {
             File(path).delete()
         }
@@ -157,8 +154,9 @@ class AndroidSystemApi(
     fun onCameraActivityResult(resultCode: Int) {
         val callback = cameraCallback ?: return
         cameraCallback = null
-        val captureId = preferences.getString(KEY_CAPTURE_ID, null)
-        val path = preferences.getString(KEY_CAPTURE_PATH, null).orEmpty()
+        val captureId = preferences.getString(CaptureSessionPolicy.KEY_CAPTURE_ID, null)
+        val path = preferences.getString(CaptureSessionPolicy.KEY_CAPTURE_PATH, null).orEmpty()
+        revokeCaptureUriPermission(captureId)
         val file = File(path)
         val captured = resultCode == Activity.RESULT_OK && file.exists() && file.length() > 0L
         if (captured) {
@@ -440,7 +438,7 @@ class AndroidSystemApi(
             store = AndroidPublishedImageStore(
                 resolver = resolver,
                 collection = collection,
-                relativePath = PUBLISHED_RELATIVE_PATH,
+                relativePath = PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH,
             ),
             createBackupFile = {
                 val cache = context.cacheDir.apply { mkdirs() }
@@ -452,14 +450,37 @@ class AndroidSystemApi(
 
     override fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit) {
         ioExecutor.execute {
-            val result = runCatching {
-                val uri = Uri.parse(contentUri)
-                require(uri.scheme == "content") { "Expected a content URI" }
-                context.contentResolver.delete(uri, null, null)
-                Unit
-            }
+            val result = runCatching { deletePublishedImageInternal(contentUri) }
             mainHandler.post { callback(result) }
         }
+    }
+
+    private fun deletePublishedImageInternal(contentUri: String) {
+        val uri = Uri.parse(contentUri)
+        require(PublishedImageDeletePolicy.allowsUri(uri.scheme, uri.authority)) {
+            "Published image URI is not a MediaStore image"
+        }
+        val relativePath = queryPublishedRelativePath(uri)
+        require(PublishedImageDeletePolicy.allowsRelativePath(relativePath)) {
+            "Published image is outside Pictures/SiteMark"
+        }
+        context.contentResolver.delete(uri, null, null)
+    }
+
+    private fun queryPublishedRelativePath(uri: Uri): String? {
+        context.contentResolver.query(
+            uri,
+            arrayOf(MediaStore.Images.Media.RELATIVE_PATH),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)
+            if (index >= 0 && cursor.moveToFirst()) {
+                return cursor.getString(index)
+            }
+        }
+        return null
     }
 
     fun dispose() {
@@ -470,11 +491,21 @@ class AndroidSystemApi(
         ioExecutor.shutdown()
     }
 
+    private fun revokeCaptureUriPermission(captureId: String?) {
+        if (!CaptureSessionPolicy.shouldRevoke(captureId)) return
+        val id = captureId ?: return
+        val packageName = context.packageName ?: return
+        context.revokeUriPermission(
+            CaptureSessionPolicy.captureContentUri(packageName, id),
+            CaptureSessionPolicy.URI_GRANT_FLAGS,
+        )
+    }
+
     private fun preparedTarget(captureId: String): File {
-        require(preferences.getString(KEY_CAPTURE_ID, null) == captureId) {
+        require(preferences.getString(CaptureSessionPolicy.KEY_CAPTURE_ID, null) == captureId) {
             "Capture target has not been prepared"
         }
-        val path = preferences.getString(KEY_CAPTURE_PATH, null)
+        val path = preferences.getString(CaptureSessionPolicy.KEY_CAPTURE_PATH, null)
             ?: error("Capture target path is missing")
         val expected = File(File(context.filesDir, "originals"), CaptureTargetPolicy.fileName(captureId))
         val target = File(path)
@@ -527,11 +558,7 @@ class AndroidSystemApi(
         const val REQUEST_LOCATION_PERMISSION = 41002
         const val REQUEST_ARCHIVE_SAVE = 41003
         private const val DEFAULT_LOCATION_TIMEOUT_MILLIS = 10_000L
-        private const val PREFERENCES = "sitemark_capture_recovery"
-        private const val KEY_CAPTURE_ID = "capture_id"
-        private const val KEY_CAPTURE_PATH = "capture_path"
         private const val KEY_LOCATION_PERMISSION_REQUESTED = "location_permission_requested"
-        private const val PUBLISHED_RELATIVE_PATH = "Pictures/SiteMark/"
     }
 
     // ------------------------------------------------------------------

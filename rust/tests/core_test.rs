@@ -23,6 +23,73 @@ fn sample_watermark() -> ExportWatermarkSettings {
     }
 }
 
+fn sample_render_request(source: &std::path::Path, output: &std::path::Path) -> RenderPhotoRequest {
+    RenderPhotoRequest {
+        source_path: source.to_string_lossy().into_owned(),
+        output_path: output.to_string_lossy().into_owned(),
+        project_name: "东区厂房改造".to_string(),
+        work_location: "A 区三层".to_string(),
+        work_content: "风管安装检查".to_string(),
+        photographer: "张工".to_string(),
+        photo_number: "SM-20260716-001".to_string(),
+        captured_at: "2026-07-16 09:32:18 +08:00".to_string(),
+        address: None,
+        coordinates: None,
+        notes: None,
+        position: WatermarkPosition::BottomLeft,
+        opacity: 0.78,
+        accent_color_argb: 0xff37c58b,
+        font_scale: 1.0,
+        locale_code: "zh".to_string(),
+    }
+}
+
+/// 1×1 GIF89a. Used to prove render_photo rejects non JPEG/PNG codecs
+/// before any pixel buffer is allocated.
+const TINY_GIF: &[u8] = &[
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, // GIF89a
+    0x01, 0x00, 0x01, 0x00, // 1×1
+    0x00, 0x00, 0x00, // no global color table
+    0x2C, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, // image descriptor
+    0x02, 0x02, 0x4C, 0x01, 0x00, // image data
+    0x3B, // trailer
+];
+
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &byte in data {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+/// Writes a valid 1×1 PNG, then rewrites IHDR so the decoder reports
+/// `width`×`height` without ever storing a 64 MP payload.
+fn write_png_claiming_dimensions(path: &std::path::Path, width: u32, height: u32) {
+    let image = ImageBuffer::from_pixel(1, 1, Rgb([210u8, 215u8, 220u8]));
+    image.save(path).unwrap();
+    let mut bytes = fs::read(path).unwrap();
+    assert!(
+        bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]),
+        "expected a PNG signature"
+    );
+    let width_at = 16;
+    let height_at = 20;
+    let crc_at = 29;
+    bytes[width_at..width_at + 4].copy_from_slice(&width.to_be_bytes());
+    bytes[height_at..height_at + 4].copy_from_slice(&height.to_be_bytes());
+    let crc = crc32(&bytes[12..29]);
+    bytes[crc_at..crc_at + 4].copy_from_slice(&crc.to_be_bytes());
+    fs::write(path, bytes).unwrap();
+}
+
 /// Writes a ZIP with the given `(entry name, bytes)` pairs. Test helper for
 /// crafting archives (valid, malicious, or legacy) without `export_project`.
 fn write_zip(path: &std::path::Path, entries: &[(&str, &[u8])]) {
@@ -424,6 +491,78 @@ fn invalid_source_image_uses_invalid_data_error_prefix() {
     .unwrap_err();
 
     assert!(error.starts_with("invalid_data:"), "{error}");
+}
+
+#[test]
+fn rejects_gif_sources_with_invalid_data_prefix() {
+    let directory = tempdir().unwrap();
+    let source = directory.path().join("source.gif");
+    let output = directory.path().join("watermarked.jpg");
+    fs::write(&source, TINY_GIF).unwrap();
+
+    let error = render_photo(sample_render_request(&source, &output)).unwrap_err();
+
+    assert!(error.starts_with("invalid_data:"), "{error}");
+    assert!(error.to_ascii_lowercase().contains("format"), "{error}");
+    assert!(
+        !error.contains("decode source pixels"),
+        "format must be rejected before pixel allocation: {error}"
+    );
+    assert!(!output.exists(), "rejected sources must not write output");
+}
+
+#[test]
+fn rejects_gif_bytes_even_when_named_as_jpeg() {
+    let directory = tempdir().unwrap();
+    let source = directory.path().join("source.jpg");
+    let output = directory.path().join("watermarked.jpg");
+    fs::write(&source, TINY_GIF).unwrap();
+
+    let error = render_photo(sample_render_request(&source, &output)).unwrap_err();
+
+    assert!(error.starts_with("invalid_data:"), "{error}");
+    assert!(error.to_ascii_lowercase().contains("format"), "{error}");
+    assert!(
+        !error.contains("decode source image"),
+        "content-detected GIF must not be parsed as JPEG: {error}"
+    );
+    assert!(!output.exists(), "rejected sources must not write output");
+}
+
+#[test]
+fn rejects_png_header_claiming_an_oversized_edge_without_allocating() {
+    let directory = tempdir().unwrap();
+    let source = directory.path().join("huge.png");
+    let output = directory.path().join("watermarked.jpg");
+    write_png_claiming_dimensions(&source, 16_385, 1);
+
+    let error = render_photo(sample_render_request(&source, &output)).unwrap_err();
+
+    assert!(error.starts_with("invalid_data:"), "{error}");
+    assert!(
+        !error.contains("decode source pixels"),
+        "dimensions must be rejected before RGBA allocation: {error}"
+    );
+    assert!(!output.exists(), "rejected sources must not write output");
+}
+
+#[test]
+fn rejects_png_header_claiming_more_than_64_megapixels() {
+    let directory = tempdir().unwrap();
+    let source = directory.path().join("wide.png");
+    let output = directory.path().join("watermarked.jpg");
+    // 16_384 × 3_907 = 64_012_288, just over the 64 MP cap, while staying
+    // under the 16_384 edge limit so this exercises the pixel-count branch.
+    write_png_claiming_dimensions(&source, 16_384, 3_907);
+
+    let error = render_photo(sample_render_request(&source, &output)).unwrap_err();
+
+    assert!(error.starts_with("invalid_data:"), "{error}");
+    assert!(
+        !error.contains("decode source pixels"),
+        "pixel budget must be rejected before RGBA allocation: {error}"
+    );
+    assert!(!output.exists(), "rejected sources must not write output");
 }
 
 #[test]
