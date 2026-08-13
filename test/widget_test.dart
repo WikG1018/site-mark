@@ -460,7 +460,13 @@ void main() {
     await tester.enterText(find.byKey(const Key('edit-photographer')), '李工');
     await tester.tap(find.text('重新生成水印'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('detail-tab-field-record')));
+    await tester.scrollUntilVisible(
+      find.text('现场记录'),
+      -200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('现场记录'));
     await tester.pumpAndSettle();
     expect(find.textContaining('B 区屋面'), findsOneWidget);
 
