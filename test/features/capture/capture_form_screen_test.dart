@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
+import 'package:sitemark/features/capture/capture_form_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/notification_service.dart';
@@ -468,6 +469,98 @@ void main() {
       await disposeApp(tester);
     },
   );
+
+  testWidgets('missing project shows not-found instead of a spinner', (
+    tester,
+  ) async {
+    final platform = _CaptureFormPlatform(
+      permissionState: LocationPermissionState.denied,
+    );
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        platformServicesProvider.overrideWithValue(platform),
+        completionNotificationServiceProvider.overrideWithValue(
+          _NoOpCompletionNotificationService(),
+        ),
+        captureFormDraftStoreProvider.overrideWithValue(
+          MemoryCaptureFormDraftStore(),
+        ),
+        startupRecoveryEnabledProvider.overrideWithValue(false),
+      ],
+    );
+    addTearDown(container.dispose);
+    final router = container.read(routerProvider);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          routerConfig: router,
+        ),
+      ),
+    );
+    router.go('/projects/missing/capture');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-not-found')), findsOneWidget);
+    expect(find.text('项目不存在或已删除'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byKey(const Key('capture-button')), findsNothing);
+    await disposeApp(tester);
+  });
+
+  testWidgets('project lookup error shows an explicit load-failed state', (
+    tester,
+  ) async {
+    final failing = _ThrowingProjectDatabase();
+    addTearDown(failing.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(failing),
+          captureFormDraftStoreProvider.overrideWithValue(
+            MemoryCaptureFormDraftStore(),
+          ),
+        ],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const CaptureFormScreen(projectId: 'missing'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-load-error')), findsOneWidget);
+    expect(
+      find.text(AppStrings(const Locale('en')).projectLoadFailed),
+      findsOneWidget,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+}
+
+class _ThrowingProjectDatabase extends AppDatabase {
+  _ThrowingProjectDatabase() : super.forTesting(NativeDatabase.memory());
+
+  @override
+  Future<Project?> projectById(String projectId) {
+    return Future<Project?>.error(StateError('lookup failed'));
+  }
 }
 
 class _NoOpCompletionNotificationService

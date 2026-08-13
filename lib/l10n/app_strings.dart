@@ -772,6 +772,78 @@ class AppStrings {
   String get restoreUsesDefaultWatermark => _english
       ? 'No watermark settings in this backup; defaults will be used'
       : '备份未包含水印设置，将使用默认设置';
+
+  String get privacyProtection => _english ? 'Privacy' : '隐私保护';
+  String get diagnosticsStoredLocally => _english
+      ? 'Diagnostic records stay on this device and are never uploaded automatically.'
+      : '诊断记录只保存在本机，不会自动上传。';
+  String get diagnosticBundlePrivacyNotice => _english
+      ? 'The diagnostic bundle does not include photos, project names, work content, photographers, coordinates, or original file paths; the file is handed to the system share sheet only after you choose to share it.'
+      : '诊断包不包含照片、项目名称、工程内容、拍摄人、位置坐标或原图路径；'
+            '只有你主动点击分享后，文件才会交给系统分享面板。';
+  String get diagnosticsRetentionHint => _english
+      ? 'Diagnostic records are kept for at most 7 days, with a 2 MB size limit.'
+      : '诊断记录最多保留 7 天，空间上限为 2 MB。';
+  String get generateAndShareDiagnosticBundle =>
+      _english ? 'Generate and share diagnostic bundle' : '生成并分享诊断包';
+  String get shareDiagnosticBundleTitle =>
+      _english ? 'Share diagnostic bundle?' : '分享诊断包？';
+  String get shareDiagnosticBundleContent => _english
+      ? 'Includes: app version, system environment, storage statistics, operation results, and timings.\n\n'
+            'Does not include: photos, project names, work content, photographers, coordinates, file paths, or raw exceptions.\n\n'
+            'The system share sheet opens only after you confirm.'
+      : '包含：应用版本、系统环境、存储统计、操作结果与耗时。\n\n'
+            '不包含：照片、项目名称、工程内容、拍摄人、位置坐标、文件路径和原始异常。\n\n'
+            '确认后才会打开系统分享面板。';
+  String get confirmGenerate => _english ? 'Generate' : '确认生成';
+  String get diagnosticBundleFailed => _english
+      ? 'Could not generate the diagnostic bundle. Please try again.'
+      : '诊断包生成失败，请稍后重试';
+  String get clearLocalDiagnostics =>
+      _english ? 'Clear local diagnostic records' : '清除本机诊断记录';
+  String get clearDiagnosticsTitle =>
+      _english ? 'Clear diagnostic records?' : '清除诊断记录？';
+  String get clearDiagnosticsContent => _english
+      ? 'Only local diagnostic events will be cleared. Photos, projects, and backups are not deleted.'
+      : '只清除本机诊断事件，不会删除照片、项目或备份。';
+  String get backupWaitForProcessingTitle =>
+      _english ? 'Wait for photos to finish processing' : '请等待照片处理完成';
+  String backupWaitForProcessingMessage(int count) => _english
+      ? '$count photo(s) are still processing. Wait until they finish so the backup is complete.'
+      : '有 $count 张照片仍在处理中。为避免备份遗漏，请处理完成后再试。';
+  String get backupFailedRecordsTitle =>
+      _english ? 'Some photos failed processing' : '存在处理失败的照片';
+  String backupFailedRecordsMessage(int count) => _english
+      ? '$count failed record(s) will not be included. Retry those photos first, or back up only completed records.'
+      : '有 $count 张失败记录不会进入备份。建议先返回项目重新处理；'
+            '也可以明确选择仅备份已完成记录。';
+  String get backupReturnToProcess => _english ? 'Go back and retry' : '返回处理';
+  String get backupCompletedRecordsOnly =>
+      _english ? 'Back up completed records only' : '仅备份已完成记录';
+  String get backupEmptyProjectHint => _english
+      ? 'Empty projects can also be backed up. The description and watermark settings are kept.'
+      : '空白项目也可以备份，项目说明和水印设置会保留。';
+  String get gotIt => _english ? 'Got it' : '知道了';
+  String diagnosticBundleSummary({
+    required String generatedAt,
+    required int eventCount,
+  }) => _english
+      ? 'SiteMark diagnostic bundle\n'
+            'Generated at: $generatedAt\n'
+            'Event count: $eventCount\n'
+            'Privacy: no photos, project names, work content, people, locations, file paths, or raw exceptions.\n'
+      : 'SiteMark 诊断包\n'
+            '生成时间：$generatedAt\n'
+            '事件数量：$eventCount\n'
+            '隐私：不包含照片、项目名称、工程内容、人员、位置、文件路径或原始异常。\n';
+  String get captureNotFound =>
+      _english ? 'Capture not found or deleted' : '拍摄记录不存在或已删除';
+  String get captureLoadFailed => _english
+      ? 'Could not load the capture. Go back and try again.'
+      : '拍摄记录加载失败，请返回后重试';
+  String get createProjectFailed => _english
+      ? 'Could not create the project. Please try again.'
+      : '项目创建失败，请稍后重试';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

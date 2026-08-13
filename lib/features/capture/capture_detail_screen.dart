@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_display_name.dart';
@@ -147,10 +148,33 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
           initialData: widget.initialCapture,
           builder: (context, snapshot) {
             final capture = snapshot.data;
+            final waitingForCapture =
+                capture == null &&
+                snapshot.connectionState == ConnectionState.waiting;
+            final captureLoadFailed = capture == null && snapshot.hasError;
+            final captureMissing =
+                capture == null && !waitingForCapture && !captureLoadFailed;
             if (capture == null) {
+              final title = captureLoadFailed
+                  ? strings.captureLoadFailed
+                  : captureMissing
+                  ? strings.captureNotFound
+                  : strings.captureDetail;
               return Scaffold(
-                appBar: AppBar(title: Text(strings.captureDetail)),
-                body: const Center(child: CircularProgressIndicator()),
+                appBar: AppBar(title: Text(title)),
+                body: waitingForCapture
+                    ? const Center(child: CircularProgressIndicator())
+                    : _ResourceUnavailableState(
+                        key: captureLoadFailed
+                            ? const Key('capture-load-error')
+                            : const Key('capture-not-found'),
+                        icon: captureLoadFailed
+                            ? Icons.cloud_off_outlined
+                            : Icons.photo_outlined,
+                        message: captureLoadFailed
+                            ? strings.captureLoadFailed
+                            : strings.captureNotFound,
+                      ),
               );
             }
             return FutureBuilder<CaptureFileInfo>(
@@ -339,7 +363,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                           const SizedBox(height: 14),
                           if (_section == CaptureDetailSection.fieldRecord)
                             _DetailCard(
-                              children: _fieldRecordRows(strings, capture),
+                              children: _fieldRecordRows(
+                                context,
+                                strings,
+                                capture,
+                              ),
                             )
                           else if (info != null)
                             _DetailCard(
@@ -362,7 +390,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     );
   }
 
-  List<Widget> _fieldRecordRows(AppStrings strings, CaptureRecord capture) {
+  List<Widget> _fieldRecordRows(
+    BuildContext context,
+    AppStrings strings,
+    CaptureRecord capture,
+  ) {
     return [
       _DetailRow(
         icon: Icons.place_outlined,
@@ -388,7 +420,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       _DetailRow(
         icon: Icons.schedule_outlined,
         label: strings.capturedAt,
-        value: capture.capturedAt?.toIso8601String() ?? '-',
+        value: capture.capturedAt == null
+            ? '-'
+            : DateFormat.yMMMd(
+                Localizations.localeOf(context).toString(),
+              ).add_Hm().format(capture.capturedAt!),
       ),
       if (capture.latitude != null && capture.longitude != null)
         _DetailRow(
@@ -767,6 +803,42 @@ String formatBytes(int bytes) {
   }
   if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
   return '$bytes B';
+}
+
+class _ResourceUnavailableState extends StatelessWidget {
+  const _ResourceUnavailableState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DetailCard extends StatelessWidget {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
+import 'package:sitemark/l10n/app_strings.dart';
 
 class DiagnosticsSectionScreen extends ConsumerWidget {
   const DiagnosticsSectionScreen({
@@ -15,45 +16,46 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final strings = AppStrings.of(context);
     return SettingsSectionScaffold(
-      title: '诊断与反馈',
+      title: strings.diagnosticsAndFeedback,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Card(
             color: Theme.of(context).colorScheme.primaryContainer,
-            child: const Padding(
-              padding: EdgeInsets.all(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('隐私保护', style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(height: 8),
-                  Text('诊断记录只保存在本机，不会自动上传。'),
-                  SizedBox(height: 6),
                   Text(
-                    '诊断包不包含照片、项目名称、工程内容、拍摄人、位置坐标或原图路径；'
-                    '只有你主动点击分享后，文件才会交给系统分享面板。',
+                    strings.privacyProtection,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
+                  const SizedBox(height: 8),
+                  Text(strings.diagnosticsStoredLocally),
+                  const SizedBox(height: 6),
+                  Text(strings.diagnosticBundlePrivacyNotice),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 12),
-          const Text('诊断记录最多保留 7 天，空间上限为 2 MB。'),
+          Text(strings.diagnosticsRetentionHint),
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: onGenerateAndShare == null
                 ? () => _generateAndShare(context, ref)
                 : () => onGenerateAndShare!(context),
             icon: const Icon(Icons.ios_share_outlined),
-            label: const Text('生成并分享诊断包'),
+            label: Text(strings.generateAndShareDiagnosticBundle),
           ),
           TextButton(
             onPressed: onClear == null
                 ? () => _clear(context, ref)
                 : () => onClear!(context),
-            child: const Text('清除本机诊断记录'),
+            child: Text(strings.clearLocalDiagnostics),
           ),
         ],
       ),
@@ -61,26 +63,26 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
   }
 
   Future<void> _generateAndShare(BuildContext context, WidgetRef ref) async {
+    final strings = AppStrings.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('分享诊断包？'),
-        content: const Text(
-          '包含：应用版本、系统环境、存储统计、操作结果与耗时。\n\n'
-          '不包含：照片、项目名称、工程内容、拍摄人、位置坐标、文件路径和原始异常。\n\n'
-          '确认后才会打开系统分享面板。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('确认生成'),
-          ),
-        ],
-      ),
+      builder: (dialogContext) {
+        final dialogStrings = AppStrings.of(dialogContext);
+        return AlertDialog(
+          title: Text(dialogStrings.shareDiagnosticBundleTitle),
+          content: Text(dialogStrings.shareDiagnosticBundleContent),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(dialogStrings.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(dialogStrings.confirmGenerate),
+            ),
+          ],
+        );
+      },
     );
     if (confirmed != true || !context.mounted) return;
     try {
@@ -91,27 +93,30 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('诊断包生成失败，请稍后重试')));
+      ).showSnackBar(SnackBar(content: Text(strings.diagnosticBundleFailed)));
     }
   }
 
   Future<void> _clear(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('清除诊断记录？'),
-        content: const Text('只清除本机诊断事件，不会删除照片、项目或备份。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('清除'),
-          ),
-        ],
-      ),
+      builder: (dialogContext) {
+        final dialogStrings = AppStrings.of(dialogContext);
+        return AlertDialog(
+          title: Text(dialogStrings.clearDiagnosticsTitle),
+          content: Text(dialogStrings.clearDiagnosticsContent),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(dialogStrings.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(dialogStrings.clear),
+            ),
+          ],
+        );
+      },
     );
     if (confirmed != true) return;
     final service = await ref.read(diagnosticBundleServiceProvider.future);

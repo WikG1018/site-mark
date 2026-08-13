@@ -38,8 +38,8 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
     // is used (not the watch stream) so the future resolves on a single
     // microtask and the save button's spinner does not stall `pumpAndSettle`
     // in widget tests.
-    final settings = await database.getAppSettings();
     try {
+      final settings = await database.getAppSettings();
       await database.createProject(
         id: const Uuid().v4(),
         name: _nameController.text,
@@ -60,6 +60,13 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
             : AppStrings.of(context).projectFileNameConflict;
       });
       _formKey.currentState!.validate();
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppStrings.of(context).createProjectFailed)),
+      );
       return;
     }
     if (mounted) context.go('/');
