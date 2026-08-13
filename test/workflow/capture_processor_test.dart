@@ -202,6 +202,24 @@ void main() {
     expect(record?.processingAttempts, 2);
   });
 
+  test(
+    'second process after a transient render failure does not increment attempts',
+    () async {
+      images.renderError = FileSystemException('temporary write failure');
+      await seedCaptured(attempts: 0);
+
+      expect(await processor.process('capture-1'), CaptureProcessResult.retry);
+      final afterFirst = await database.captureById('capture-1');
+      expect(afterFirst?.status, CaptureStatus.rendering);
+      expect(afterFirst?.processingAttempts, 1);
+
+      expect(await processor.process('capture-1'), CaptureProcessResult.retry);
+      final afterSecond = await database.captureById('capture-1');
+      expect(afterSecond?.status, CaptureStatus.rendering);
+      expect(afterSecond?.processingAttempts, 1);
+    },
+  );
+
   test('missing record returns missing', () async {
     expect(
       await processor.process('does-not-exist'),

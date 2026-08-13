@@ -5,6 +5,7 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
+import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:uuid/uuid.dart';
 
@@ -100,12 +101,22 @@ class CaptureWorkflow {
     required this.outputPaths,
     required this.locationCoordinator,
     PrivateFileStore? fileStore,
+    CaptureMediaService? mediaService,
     String Function()? idFactory,
     DateTime Function()? now,
     this.onLaunchTiming,
   }) : _idFactory = idFactory ?? const Uuid().v4,
        _now = now ?? DateTime.now,
-       _fileStore = fileStore ?? DartIoPrivateFileStore();
+       _fileStore = fileStore ?? DartIoPrivateFileStore() {
+    _mediaService =
+        mediaService ??
+        CaptureMediaService(
+          database: database,
+          platform: platform,
+          outputPaths: outputPaths,
+          files: _fileStore,
+        );
+  }
 
   final AppDatabase database;
   final PlatformServices platform;
@@ -114,6 +125,7 @@ class CaptureWorkflow {
   final CaptureOutputPaths outputPaths;
   final CaptureLocationCoordinator locationCoordinator;
   final PrivateFileStore _fileStore;
+  late final CaptureMediaService _mediaService;
   final String Function() _idFactory;
   final DateTime Function() _now;
   final CaptureLaunchTimingCallback? onLaunchTiming;
@@ -230,6 +242,30 @@ class CaptureWorkflow {
         outcome: CaptureWorkflowOutcome.cancelled,
       );
     }
+    if (record.status != CaptureStatus.pendingCamera) {
+      await platform.finishCameraCapture(recovered.captureId, true);
+      if (record.status == CaptureStatus.captured ||
+          record.status == CaptureStatus.rendering) {
+        try {
+          await scheduler.enqueue(recovered.captureId);
+        } catch (_) {
+          return CaptureWorkflowResult(
+            outcome: CaptureWorkflowOutcome.delayed,
+            capture: record,
+          );
+        }
+        return CaptureWorkflowResult(
+          outcome: CaptureWorkflowOutcome.queued,
+          capture: record,
+        );
+      }
+      return CaptureWorkflowResult(
+        outcome: record.status == CaptureStatus.failed
+            ? CaptureWorkflowOutcome.failed
+            : CaptureWorkflowOutcome.queued,
+        capture: record,
+      );
+    }
     if (!recovered.hasContent) {
       await database.deleteCapture(recovered.captureId);
       await platform.finishCameraCapture(recovered.captureId, false);
@@ -315,16 +351,7 @@ class CaptureWorkflow {
   }
 
   Future<void> deleteCapture(String captureId) async {
-    final record = await database.captureById(captureId);
-    if (record == null) return;
-    if (record.publishedUri != null) {
-      await platform.deletePublishedImage(record.publishedUri!);
-    }
-    final renderedPath = await outputPaths.renderedPhotoPath(captureId);
-    for (final path in [record.originalPath, renderedPath]) {
-      await _fileStore.deleteIfExists(path);
-    }
-    await database.deleteCapture(captureId);
+    await _mediaService.deleteAll([captureId]);
   }
 
   /// Marks the capture `captured`, finishes the camera target keeping the

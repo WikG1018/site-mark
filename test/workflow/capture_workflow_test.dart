@@ -345,6 +345,170 @@ void main() {
     expect(images.lastRenderRequest, isNull);
   });
 
+  test(
+    'recoverPendingCapture keeps an assigned photo number when already captured',
+    () async {
+      await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project-1',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 16, 9, 30),
+      );
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+      );
+      await database.createPendingCapture(
+        id: 'capture-2',
+        projectId: 'project-1',
+        originalPath: '/private/capture-2.jpg',
+        workLocation: 'B 区',
+        workContent: '保温检查',
+        photographer: '李工',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 16, 9, 40),
+      );
+      await database.markCaptured(
+        captureId: 'capture-2',
+        capturedAt: DateTime(2026, 7, 16, 9, 41),
+      );
+      platform.recoveredCapture = RecoveredCameraCapture(
+        captureId: 'capture-1',
+        outputPath: '/private/capture-1.jpg',
+        hasContent: true,
+      );
+
+      final result = await workflow.recoverPendingCapture();
+
+      expect(result?.outcome, CaptureWorkflowOutcome.queued);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.captured);
+      expect(record?.photoNumber, '东区厂房改造-SM-20260716-001');
+      expect(platform.finishedCapture, ('capture-1', true));
+      expect(scheduler.enqueuedIds, ['capture-1']);
+    },
+  );
+
+  test(
+    'recoverPendingCapture does not remint or unready a ready capture',
+    () async {
+      await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project-1',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 16, 9, 30),
+      );
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+      );
+      await database.markRendering(
+        captureId: 'capture-1',
+        originalSha256: digestA,
+      );
+      await database.markReady(
+        captureId: 'capture-1',
+        publishedUri: 'content://media/site-mark/1',
+      );
+      platform.recoveredCapture = RecoveredCameraCapture(
+        captureId: 'capture-1',
+        outputPath: '/private/capture-1.jpg',
+        hasContent: true,
+      );
+
+      final result = await workflow.recoverPendingCapture();
+
+      expect(result?.outcome, CaptureWorkflowOutcome.queued);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.ready);
+      expect(record?.photoNumber, '东区厂房改造-SM-20260716-001');
+      expect(record?.publishedUri, 'content://media/site-mark/1');
+      expect(platform.finishedCapture, ('capture-1', true));
+      expect(scheduler.enqueuedIds, isEmpty);
+    },
+  );
+
+  test(
+    'recoverPendingCapture finishes a rendering capture without reminting',
+    () async {
+      await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project-1',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 16, 9, 30),
+      );
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+      );
+      await database.markRendering(
+        captureId: 'capture-1',
+        originalSha256: digestA,
+      );
+      platform.recoveredCapture = RecoveredCameraCapture(
+        captureId: 'capture-1',
+        outputPath: '/private/capture-1.jpg',
+        hasContent: true,
+      );
+
+      final result = await workflow.recoverPendingCapture();
+
+      expect(result?.outcome, CaptureWorkflowOutcome.queued);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.rendering);
+      expect(record?.photoNumber, '东区厂房改造-SM-20260716-001');
+      expect(platform.finishedCapture, ('capture-1', true));
+      expect(scheduler.enqueuedIds, ['capture-1']);
+    },
+  );
+
+  test(
+    'recoverPendingCapture does not delete a non-pending row when the target is empty',
+    () async {
+      await database.createPendingCapture(
+        id: 'capture-1',
+        projectId: 'project-1',
+        originalPath: '/private/capture-1.jpg',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        createdAt: DateTime(2026, 7, 16, 9, 30),
+      );
+      await database.markCaptured(
+        captureId: 'capture-1',
+        capturedAt: DateTime(2026, 7, 16, 9, 32, 18),
+      );
+      platform.recoveredCapture = RecoveredCameraCapture(
+        captureId: 'capture-1',
+        outputPath: '/private/capture-1.jpg',
+        hasContent: false,
+      );
+
+      final result = await workflow.recoverPendingCapture();
+
+      expect(result?.outcome, CaptureWorkflowOutcome.queued);
+      expect(await database.captureById('capture-1'), isNotNull);
+      expect(
+        (await database.captureById('capture-1'))?.status,
+        CaptureStatus.captured,
+      );
+      expect(platform.finishedCapture, ('capture-1', true));
+    },
+  );
+
   test('regenerates after descriptive edits by re-enqueuing', () async {
     await workflow.capture(
       const CaptureDraft(
@@ -469,6 +633,37 @@ void main() {
 
     expect(await database.captureById('capture-1'), isNull);
     expect(platform.deletedUri, 'content://media/site-mark/1');
+  });
+
+  test('deleteCapture commits the database row before file cleanup', () async {
+    await workflow.capture(
+      const CaptureDraft(
+        projectId: 'project-1',
+        projectName: '东区厂房改造',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+      ),
+    );
+    await drainCoordinator();
+    await database.markRendering(
+      captureId: 'capture-1',
+      originalSha256: digestA,
+    );
+    await database.markReady(
+      captureId: 'capture-1',
+      publishedUri: 'content://media/site-mark/1',
+    );
+    fileStore.existing.addAll([
+      '/private/capture-1.jpg',
+      '/private/rendered/capture-1.jpg',
+    ]);
+    fileStore.failures.add('/private/rendered/capture-1.jpg');
+
+    await workflow.deleteCapture('capture-1');
+
+    expect(await database.captureById('capture-1'), isNull);
   });
 }
 
@@ -599,12 +794,14 @@ class _FakeOutputPaths implements CaptureOutputPaths {
 
 class _FakePrivateFileStore implements PrivateFileStore {
   final Set<String> existing = {};
+  final Set<String> failures = {};
 
   @override
   Future<bool> exists(String path) async => existing.contains(path);
 
   @override
   Future<void> deleteIfExists(String path) async {
+    if (failures.contains(path)) throw StateError('simulated delete failure');
     existing.remove(path);
   }
 }

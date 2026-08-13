@@ -46,7 +46,8 @@ enum CaptureProcessResult {
 /// 1. Return [CaptureProcessResult.missing] if the record or project is gone.
 /// 2. Return [CaptureProcessResult.alreadyComplete] for `ready`.
 /// 3. Reject `pendingCamera` (foreground recovery owns it).
-/// 4. Increment `processingAttempts` in one transaction.
+/// 4. Increment `processingAttempts` when entering from `captured`. A row
+///    already in `rendering` keeps its current attempt count.
 /// 5. Verify original path, captured time, and photo number; permanent failure
 ///    otherwise.
 /// 6. Compute SHA-256 when missing, or verify the current original against the
@@ -102,8 +103,12 @@ final class CaptureProcessor {
       return CaptureProcessResult.deferred;
     }
 
-    // Step 4: increment the attempt counter in a single transaction.
-    final attempted = await database.incrementProcessingAttempts(captureId);
+    // Step 4: increment only when starting a new attempt from `captured`.
+    // Re-entering `process()` on a row already in `rendering` (WorkManager
+    // retry or startup reconcile) must not consume another attempt.
+    final attempted = record.status == CaptureStatus.rendering
+        ? record
+        : await database.incrementProcessingAttempts(captureId);
     final attempts = attempted.processingAttempts;
 
     // Step 5: verify the captured-time/photo-number/path evidence is present.
