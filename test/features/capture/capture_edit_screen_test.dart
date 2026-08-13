@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
-import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_edit_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -170,7 +169,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    router.push('/records/edit');
+    await router.push('/records/edit');
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('重新生成水印'));
