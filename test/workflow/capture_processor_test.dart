@@ -209,16 +209,10 @@ void main() {
       await seedCaptured(attempts: 0);
 
       expect(await processor.process('capture-1'), CaptureProcessResult.retry);
-      expect(
-        (await database.captureById('capture-1'))?.processingAttempts,
-        1,
-      );
+      expect((await database.captureById('capture-1'))?.processingAttempts, 1);
 
       expect(await processor.process('capture-1'), CaptureProcessResult.retry);
-      expect(
-        (await database.captureById('capture-1'))?.processingAttempts,
-        2,
-      );
+      expect((await database.captureById('capture-1'))?.processingAttempts, 2);
 
       expect(await processor.process('capture-1'), CaptureProcessResult.failed);
       final afterThird = await database.captureById('capture-1');
