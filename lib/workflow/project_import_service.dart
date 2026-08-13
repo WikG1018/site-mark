@@ -87,7 +87,7 @@ abstract interface class ProjectArchiveImporter {
 /// A not-yet-committed import recorded on disk, so an import interrupted by
 /// a process kill can be cleaned up on the next launch. The marker lists
 /// every file the import may have created, staged and final alike.
-enum PendingImportPhase { planned, ownsProject, committing }
+enum PendingImportPhase { planned, ownsProject, filesPlaced, committing }
 
 class PendingImport {
   const PendingImport({
@@ -130,6 +130,8 @@ class PendingImport {
       finalFiles: strings('finalFiles'),
       phase: json['phase'] == PendingImportPhase.committing.name
           ? PendingImportPhase.committing
+          : json['phase'] == PendingImportPhase.filesPlaced.name
+          ? PendingImportPhase.filesPlaced
           : json['phase'] == PendingImportPhase.ownsProject.name
           ? PendingImportPhase.ownsProject
           : PendingImportPhase.planned,
@@ -359,8 +361,9 @@ class DartImportFileCommitter implements ImportFileCommitter {
 /// Import is crash-safe: files are extracted into a staging directory while
 /// a [PendingImport] marker records the plan on disk. Only after every photo
 /// verifies does the import commit — database rows first, then files are
-/// moved into place. [cleanupInterruptedImports] removes the leftovers of
-/// any import that never committed (e.g. the process was killed).
+/// moved into place, then a durable non-rollback phase is persisted before
+/// staging is deleted. [cleanupInterruptedImports] removes the leftovers of
+/// any import that never placed files (e.g. the process was killed).
 class ProjectImportService implements ProjectArchiveImporter {
   ProjectImportService({
     required this.database,
@@ -631,7 +634,8 @@ class ProjectImportService implements ProjectArchiveImporter {
         }
       }
 
-      // Commit point: move staged files into their final locations.
+      // Commit point: move staged files into their final locations, then
+      // persist a non-rollback phase before any staging delete.
       for (var index = 0; index < plans.length; index++) {
         final plan = plans[index];
         await committer.moveIntoPlace(plan.stagedRendered, plan.finalRendered);
@@ -642,6 +646,12 @@ class ProjectImportService implements ProjectArchiveImporter {
           );
         }
       }
+      pending = pending.withPhase(
+        retainRestoreOwnership
+            ? PendingImportPhase.filesPlaced
+            : PendingImportPhase.committing,
+      );
+      await pendingStore.writePending(pending);
       committed = true;
     } finally {
       if (!committed) {
@@ -667,9 +677,6 @@ class ProjectImportService implements ProjectArchiveImporter {
       // database token remains owned by that bundle.
       await pendingStore.clearPending(targetProjectId);
     } else {
-      final committing = pending.withPhase(PendingImportPhase.committing);
-      await pendingStore.writePending(committing);
-      pending = committing;
       try {
         await _finalizeCommit(pending);
       } catch (error, stackTrace) {
@@ -694,8 +701,12 @@ class ProjectImportService implements ProjectArchiveImporter {
     );
   }
 
-  /// Removes leftovers of imports that never committed. Runs at startup
+  /// Removes leftovers of imports that never placed files. Runs at startup
   /// before any recovery work so half-imported projects never surface.
+  ///
+  /// [PendingImportPhase.committing] retries token release.
+  /// [PendingImportPhase.filesPlaced] keeps the project and restore token;
+  /// leftover staging may be deleted. Other phases roll back.
   ///
   /// Every step is best-effort: one failed delete must not abandon the
   /// remaining files, and the database cleanup always runs. The marker is
@@ -709,6 +720,14 @@ class ProjectImportService implements ProjectArchiveImporter {
           await _finalizeCommit(pending);
         } catch (_) {
           // Keep the committing marker and retry finalization next launch.
+        }
+        continue;
+      }
+      if (pending.phase == PendingImportPhase.filesPlaced) {
+        try {
+          await committer.deleteTree(pending.stagingDirectory);
+        } catch (_) {
+          // Leftover staging is harmless; keep the marker and ownership.
         }
         continue;
       }
