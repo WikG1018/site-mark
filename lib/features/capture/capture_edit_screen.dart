@@ -78,14 +78,14 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
               notes: _notes.text.trim().isEmpty ? null : _notes.text,
             ),
           );
-      if (mounted) {
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go(
-            '/projects/${widget.projectId}/captures/${widget.captureId}',
-          );
-        }
+      if (!mounted) return;
+      setState(() => _working = false);
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(
+          '/projects/${widget.projectId}/captures/${widget.captureId}',
+        );
       }
     } catch (_) {
       if (!mounted) return;

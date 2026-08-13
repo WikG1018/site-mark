@@ -460,6 +460,8 @@ void main() {
     await tester.enterText(find.byKey(const Key('edit-photographer')), '李工');
     await tester.tap(find.text('重新生成水印'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('detail-tab-field-record')));
+    await tester.pumpAndSettle();
     expect(find.textContaining('B 区屋面'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('capture-detail-actions')));

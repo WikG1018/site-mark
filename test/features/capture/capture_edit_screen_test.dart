@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -168,12 +170,15 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    await router.push('/records/edit');
-    await tester.pumpAndSettle();
+    await tester.pump();
+    // GoRouter.push completes only after that route is popped.
+    unawaited(router.push('/records/edit'));
+    await tester.pump();
+    await tester.pump();
 
     await tester.tap(find.text('重新生成水印'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump();
 
     expect(workflow.regenerateCalls, 1);
     expect(find.byKey(const Key('all-records')), findsOneWidget);
