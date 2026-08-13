@@ -12,11 +12,10 @@ the exported image. Location is never requested in the background. A denied,
 approximate, or unavailable result does not block photography and is recorded
 explicitly.
 
-Original photos, project records, and optional company logos are stored in the
-application's private storage. Watermarked photos selected for publication are
-written to the device's shared `Pictures/SiteMark` collection. Project archives
-are created only when the user requests an export and are handed to Android's
-system share sheet.
+Original photos and project records are stored in the application's private
+storage. Watermarked photos selected for publication are written to the device's
+shared `Pictures/SiteMark` collection. Project archives are created only when the
+user requests an export and are handed to Android's system share sheet.
 
 Uninstalling SiteMark removes private application data. Watermarked images
 already published to shared storage remain until the user deletes them.
@@ -30,9 +29,8 @@ SiteMark 以离线使用为设计前提，不创建账号、不连接 SiteMark �
 中，并可能显示在水印成片上。应用不申请后台定位；拒绝、模糊或暂时无法获取定位均不
 阻止拍照，并会在记录中明确标注。
 
-原图、项目记录和可选企业 Logo 位于应用私有存储。发布的水印图写入设备共享的
-`Pictures/SiteMark` 目录。只有用户主动导出时才会生成项目归档，并交由 Android 系统
-分享面板处理。
+原图和项目记录位于应用私有存储。发布的水印图写入设备共享的 `Pictures/SiteMark`
+目录。只有用户主动导出时才会生成项目归档，并交由 Android 系统分享面板处理。
 
 卸载 SiteMark 会删除应用私有数据；已经发布到共享相册的水印图将保留，直到用户自行
 删除。
