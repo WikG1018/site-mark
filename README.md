@@ -10,20 +10,20 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.6-E67E22)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.6)
+[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.7-E67E22)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.7)
 
-**最新预发布版本：[`v1.0.6`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.6)**  
+**最新预发布版本：[`v1.0.7`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.7)**  
 **已完成真机回归的稳定版本：[`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5)**
 
-支持 Android 12（API 31）及以上系统。`v1.0.6` 加固媒体恢复、启动容错和 Android 相册发布一致性；完成真机回归前保持 Pre-release。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.7` 修复恢复清理误删项目、拍摄处理幂等性、解码内存防线与英文文案缺失；完成真机回归前保持 Pre-release。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 ## 下载
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.6-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.6/sitemark-v1.0.6-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.6-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.6/sitemark-v1.0.6-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.6/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.7-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/sitemark-v1.0.7-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.7-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/sitemark-v1.0.7-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -35,6 +35,14 @@ manufacturer camera experience.
 3. 正式 Release 使用同一签名，可以直接覆盖升级并保留应用数据。
 4. Debug APK 与正式版签名不同，通常不能直接覆盖安装。
 5. 如果 Android 提示签名冲突，不要直接卸载保存着重要数据的旧版本；先完成项目备份并确认备份文件已复制到应用目录之外。
+
+## v1.0.7 重点更新
+
+- **恢复不再误删项目：** 恢复流程在文件落位后立即持久化提交阶段标记；启动清理不再把已恢复完成的项目当作中断导入而删除。
+- **拍摄处理幂等：** 相机恢复不再重铸每日照片编号、不再把已完成记录拉回待处理；处理重试只扣减一次次数预算；大批量选择的记录监听按 900 条分片，避开 SQLite 变量上限。
+- **解码与相册防线收紧：** 非 JPEG/PNG 或超大尺寸的照片在分配解码内存前被拒绝，防止构造图片导致 OOM；拍摄完成后撤销相机 URI 授权；相册删除仅允许作用于 `Pictures/SiteMark` 条目。
+- **英文文案补齐：** 残留中文的诊断、备份预检与诊断 ZIP 摘要文案全部双语化；项目或记录缺失、加载失败时显示明确状态，不再无限转圈。
+- **诊断可观测：** 诊断事件存储失败不再静默，丢弃计数写入诊断包清单，便于排查存储异常。
 
 ## v1.0.6 重点更新
 
@@ -262,7 +270,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.6` 已作为 Pre-release 发布，下载和校验以对应 GitHub Release 中的实际资源为准；完成真机回归前不提升为 Latest。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.7` 发布后，下载和校验以对应 GitHub Release 中的实际资源为准；完成真机回归前该版本保持 Pre-release。
 
 ## 本地构建
 
