@@ -12,7 +12,7 @@ csv = "1.4.0"
 flutter_rust_bridge = "=2.12.0"
 hex = "0.4.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
-imageproc = "0.27.0"
+imageproc = { version = "0.27.0", default-features = false, features = ["text"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 sha2 = "0.11.0"

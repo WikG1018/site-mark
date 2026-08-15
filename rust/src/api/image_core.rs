@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 use ab_glyph::{FontArc, PxScale};
 use image::codecs::jpeg::JpegEncoder;
-use image::{DynamicImage, GenericImageView, ImageDecoder, ImageReader, Pixel, Rgba, RgbaImage};
+use image::{
+    DynamicImage, GenericImageView, ImageDecoder, ImageFormat, ImageReader, Pixel, Rgba, RgbaImage,
+};
 use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut, text_size};
 use imageproc::rect::Rect;
 use serde::{Deserialize, Serialize};
@@ -275,10 +277,16 @@ fn verify_file(path: String, expected_sha256: String) -> Result<bool, String> {
 
 pub fn render_photo(request: RenderPhotoRequest) -> Result<RenderPhotoResult, String> {
     validate_render_request(&request)?;
-    let mut decoder = ImageReader::open(&request.source_path)
+    let reader = ImageReader::open(&request.source_path)
         .map_err(|error| io_failure("open source image", error))?
+        .with_guessed_format()
+        .map_err(|error| io_failure("detect source image format", error))?;
+    validate_source_format(reader.format())?;
+    let mut decoder = reader
         .into_decoder()
         .map_err(|error| image_failure("decode source image", error))?;
+    let (encoded_width, encoded_height) = decoder.dimensions();
+    validate_source_dimensions(encoded_width, encoded_height)?;
     let orientation = decoder
         .orientation()
         .map_err(|error| image_failure("read image orientation", error))?;
@@ -672,6 +680,40 @@ pub fn export_project_bundle(
         archive_sha256: sha256_file(request.output_zip_path)?,
         photo_count: entries.len() as u32,
     })
+}
+
+const MAX_SOURCE_PIXELS: u64 = 64_000_000;
+const MAX_SOURCE_EDGE: u32 = 16_384;
+
+fn validate_source_dimensions(width: u32, height: u32) -> Result<(), String> {
+    if width > MAX_SOURCE_EDGE || height > MAX_SOURCE_EDGE {
+        return Err(invalid_data(
+            "validate source image",
+            format!("image {width}x{height} exceeds the {MAX_SOURCE_EDGE}px edge limit"),
+        ));
+    }
+    let pixels = u64::from(width).saturating_mul(u64::from(height));
+    if pixels > MAX_SOURCE_PIXELS {
+        return Err(invalid_data(
+            "validate source image",
+            format!("image {width}x{height} exceeds the 64 megapixel limit"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_source_format(format: Option<ImageFormat>) -> Result<(), String> {
+    match format {
+        Some(ImageFormat::Jpeg) | Some(ImageFormat::Png) => Ok(()),
+        Some(format) => Err(invalid_data(
+            "validate source image",
+            format!("unsupported image format {format:?}"),
+        )),
+        None => Err(invalid_data(
+            "validate source image",
+            "unable to detect image format",
+        )),
+    }
 }
 
 fn validate_render_request(request: &RenderPhotoRequest) -> Result<(), String> {
@@ -2576,4 +2618,37 @@ pub fn extract_archive_photo(
         rendered_path: request.rendered_destination.clone(),
         original_path: request.original_destination.clone(),
     })
+}
+
+#[cfg(test)]
+mod decode_limit_tests {
+    use super::{validate_source_dimensions, validate_source_format};
+    use image::ImageFormat;
+
+    #[test]
+    fn accepts_images_up_to_64_megapixels_and_16384_edge() {
+        assert!(validate_source_dimensions(8_000, 8_000).is_ok());
+        assert!(validate_source_dimensions(16_384, 3_906).is_ok());
+        assert!(validate_source_dimensions(1, 1).is_ok());
+    }
+
+    #[test]
+    fn rejects_images_over_64_megapixels_or_16384_edge() {
+        let over_pixels = validate_source_dimensions(8_001, 8_001).unwrap_err();
+        assert!(over_pixels.starts_with("invalid_data:"), "{over_pixels}");
+        let over_width = validate_source_dimensions(16_385, 1).unwrap_err();
+        assert!(over_width.starts_with("invalid_data:"), "{over_width}");
+        let over_height = validate_source_dimensions(1, 16_385).unwrap_err();
+        assert!(over_height.starts_with("invalid_data:"), "{over_height}");
+    }
+
+    #[test]
+    fn rejects_non_jpeg_png_formats() {
+        assert!(validate_source_format(Some(ImageFormat::Jpeg)).is_ok());
+        assert!(validate_source_format(Some(ImageFormat::Png)).is_ok());
+        let gif = validate_source_format(Some(ImageFormat::Gif)).unwrap_err();
+        assert!(gif.starts_with("invalid_data:"), "{gif}");
+        let unknown = validate_source_format(None).unwrap_err();
+        assert!(unknown.starts_with("invalid_data:"), "{unknown}");
+    }
 }
