@@ -469,16 +469,20 @@ class AndroidSystemApi(
     }
 
     private fun publishedRowExists(uri: Uri): Boolean {
-        context.contentResolver.query(
-            uri,
-            arrayOf(MediaStore.Images.Media._ID),
-            null,
-            null,
-            null,
-        )?.use { cursor ->
-            return cursor.moveToFirst()
-        }
-        return false
+        // A null cursor means MediaProvider is temporarily unavailable
+        // (crashed, restarting, storage mounting) — NOT that the row is
+        // gone. Treating it as "missing" would report delete success,
+        // clear the retry marker and orphan the photo forever. Only a real
+        // cursor with zero rows proves the user deleted it themselves.
+        val cursor =
+            context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Images.Media._ID),
+                null,
+                null,
+                null,
+            ) ?: error("MediaStore did not answer the published image query")
+        return cursor.use { it.moveToFirst() }
     }
 
     private fun queryPublishedRelativePath(uri: Uri): String? {

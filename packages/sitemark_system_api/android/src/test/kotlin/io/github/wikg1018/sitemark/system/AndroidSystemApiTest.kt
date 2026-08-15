@@ -248,6 +248,28 @@ class AndroidSystemApiTest {
     }
 
     @Test
+    fun deletePublishedImageFailsWhenMediaStoreReturnsNoCursor() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            // A null cursor means MediaProvider is temporarily unavailable,
+            // not that the row is gone — this must throw so the cleanup
+            // marker survives and the delete is retried later.
+            stubResolverQueries(resolver, idCursor = null, pathCursor = null)
+            val api = AndroidSystemApi(context)
+
+            val error = assertThrows(IllegalStateException::class.java) {
+                api.deletePublishedImageForTest(uri.toString())
+            }
+
+            assertEquals("MediaStore did not answer the published image query", error.message)
+            verify(resolver, never()).delete(any(Uri::class.java), isNull(), isNull())
+        }
+    }
+
+    @Test
     fun deletePublishedImageDeletesAnExistingRowInPicturesSiteMark() {
         val resolver = mock(ContentResolver::class.java)
         `when`(context.contentResolver).thenReturn(resolver)

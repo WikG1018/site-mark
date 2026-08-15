@@ -56,7 +56,7 @@ class SafeMediaPublisherTest {
     }
 
     @Test
-    fun `old row delete failure restores a consistent published state`() {
+    fun `old row delete failure keeps the finalized new row published`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {
             val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
@@ -69,18 +69,20 @@ class SafeMediaPublisherTest {
                 publisher.publish(source, "capture.jpg")
             }
 
-            // The old row is still published with the old bytes and the
-            // prepared replacement row is removed — no duplicate names.
+            // The new row was already finalized, so it must stay published —
+            // deleting both rows could leave the gallery empty. The old row
+            // remains as a temporary duplicate until the next cleanup pass
+            // retries the delete.
+            assertEquals("new-image", store.rows[FakePublishedImageStore.NEW_URI]?.bytes)
+            assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
             assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
-            assertEquals(false, store.rows[FakePublishedImageStore.OLD_URI]?.pending)
-            assertNull(store.rows[FakePublishedImageStore.NEW_URI])
         } finally {
             directory.deleteRecursively()
         }
     }
 
     @Test
-    fun `finalize failure after old row removal cleans the pending row`() {
+    fun `finalize failure keeps the old row and cleans the pending row`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {
             val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
@@ -93,10 +95,11 @@ class SafeMediaPublisherTest {
                 publisher.publish(source, "capture.jpg")
             }
 
-            // The old row is already gone (documented narrow window) and the
-            // unfinalized new row must not linger as an orphan; the caller
-            // re-publishes from the private original to recover.
-            assertNull(store.rows[FakePublishedImageStore.OLD_URI])
+            // Finalization happens before the old row is removed, so the old
+            // published photo is untouched and the unfinalized pending row
+            // must not linger as an orphan; the caller can safely retry.
+            assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
+            assertEquals(false, store.rows[FakePublishedImageStore.OLD_URI]?.pending)
             assertNull(store.rows[FakePublishedImageStore.NEW_URI])
             assertEquals(0, error.suppressed.size)
         } finally {

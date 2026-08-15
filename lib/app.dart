@@ -712,6 +712,10 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
     // failed. Deferring to the post-frame callback keeps the fast first paint
     // while establishing the queue before the user can reach the capture form.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // The widget may already be unmounted by the time the first frame
+      // callback fires (e.g. immediate teardown in tests); never touch
+      // `ref` before confirming the State is still alive.
+      if (!mounted) return;
       try {
         await ref.read(captureBackgroundSchedulerProvider).initialize();
       } catch (_) {
@@ -729,6 +733,9 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
         await ref.read(completionNotificationServiceProvider).initialize((
           path,
         ) {
+          // The service outlives this widget and may fire a saved tap
+          // long after dispose; never touch `ref` once unmounted.
+          if (!mounted) return;
           ref.read(routerProvider).push(path);
         });
       } catch (_) {

@@ -256,6 +256,28 @@ void main() {
       // pressure events.
       expect(service.handlers, isEmpty);
     });
+
+    testWidgets(
+      'a notification tap fired after dispose does not touch the router',
+      (tester) async {
+        final notifications = _TappingCompletionNotificationService();
+        final service = _StartupRecordingMemoryPressureService();
+        await pumpAppWith(
+          tester: tester,
+          service: service,
+          notifications: notifications,
+        );
+        expect(notifications.onTapDeepLink, isNotNull);
+
+        await disposeApp(tester);
+
+        // The plugin outlives the widget tree and may fire a saved tap
+        // long after dispose; the callback must bail on the unmounted
+        // State instead of dereferencing `ref` (which would throw).
+        notifications.onTapDeepLink!('/projects/p1/captures/c1');
+        await tester.pump(const Duration(milliseconds: 1));
+      },
+    );
   });
 }
 
@@ -320,6 +342,32 @@ class _FailingCompletionNotificationService
   @override
   Future<void> initialize(void Function(String deepLinkPath) onTapDeepLink) =>
       Future.error(StateError('notification plugin unavailable'));
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) => Future.value();
+
+  @override
+  Future<void> setEnabled(bool enabled) => Future.value();
+}
+
+/// Saves the deep-link callback so a test can fire a notification tap after
+/// the app has been disposed, mimicking a long-lived native plugin.
+class _TappingCompletionNotificationService
+    implements CompletionNotificationService {
+  void Function(String deepLinkPath)? onTapDeepLink;
+
+  @override
+  Future<void> initialize(void Function(String deepLinkPath) onTapDeepLink) {
+    this.onTapDeepLink = onTapDeepLink;
+    return Future.value();
+  }
 
   @override
   Future<bool> requestPermission() async => true;
