@@ -1120,6 +1120,18 @@ void main() {
       PendingImport.fromJson(committing.toJson()).phase,
       PendingImportPhase.committing,
     );
+    const filesPlaced = PendingImport(
+      projectId: 'files-placed-id',
+      stagingDirectory: '/staging/files-placed-id',
+      stagedFiles: [],
+      finalFiles: ['/rendered/a.jpg'],
+      phase: PendingImportPhase.filesPlaced,
+      operationId: 'files-placed-operation',
+    );
+    expect(
+      PendingImport.fromJson(filesPlaced.toJson()).phase,
+      PendingImportPhase.filesPlaced,
+    );
   });
 
   test('non-owning startup marker preserves a raced project', () async {
@@ -1389,6 +1401,143 @@ void main() {
       expect((await database.getProjects()).single.name, '待完成恢复');
       expect(pendingStore.pending, isEmpty);
       expect(files.attemptedDeletes, isEmpty);
+    },
+  );
+
+  test(
+    'filesPlaced marker keeps restored rows and final files on startup cleanup',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      const projectId = 'placed-project';
+      const operationId = 'restore-placed-project';
+      await database.createProject(
+        id: projectId,
+        name: '已落盘项目',
+        restoreOperationId: operationId,
+      );
+      await database.insertRestoredCapture(
+        id: 'placed-capture',
+        projectId: projectId,
+        photoNumber: '已落盘项目-SM-20260716-001',
+        originalPath: '/originals/placed-capture.jpg',
+        workLocation: 'A 区',
+        workContent: '检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+        originalSha256: 'c' * 64,
+        createdAt: DateTime(2026, 7, 16, 9),
+        capturedAt: DateTime(2026, 7, 16, 9),
+      );
+      final files = _RecordingFileStore();
+      final committer = _RecordingCommitter();
+      final pendingStore = _FakePendingStore()
+        ..pending.add(
+          const PendingImport(
+            projectId: projectId,
+            stagingDirectory: '/staging/placed-project',
+            stagedFiles: [
+              '/staging/placed-project/rendered/placed-capture.jpg',
+            ],
+            finalFiles: [
+              '/rendered/placed-capture.jpg',
+              '/originals/placed-capture.jpg',
+            ],
+            phase: PendingImportPhase.filesPlaced,
+            operationId: operationId,
+          ),
+        );
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: files,
+        pendingStore: pendingStore,
+        committer: committer,
+      );
+
+      await service.cleanupInterruptedImports();
+
+      expect(await database.projectById(projectId), isNotNull);
+      expect(
+        (await database.projectById(projectId))!.restoreOperationId,
+        operationId,
+      );
+      expect(await database.capturesForProject(projectId), hasLength(1));
+      expect(
+        files.attemptedDeletes,
+        isNot(
+          containsAll([
+            '/rendered/placed-capture.jpg',
+            '/originals/placed-capture.jpg',
+          ]),
+        ),
+      );
+      expect(files.deleted, isEmpty);
+    },
+  );
+
+  test(
+    'retainRestoreOwnership child persist filesPlaced and cleanup keeps ownership',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      const projectId = 'bundle-child';
+      const operationId = 'bundle-operation';
+      final files = _RecordingFileStore();
+      final pendingStore = _FakePendingStore();
+      final service = _service(
+        database: database,
+        images: _ImportImagePipeline(_preview()),
+        files: files,
+        pendingStore: pendingStore,
+      );
+
+      final result = await service.importProject(
+        zipPath: '/backups/p.zip',
+        projectName: '子项目恢复',
+        projectId: projectId,
+        restoreOperationId: operationId,
+        retainRestoreOwnership: true,
+      );
+
+      expect(result.projectId, projectId);
+      expect(
+        pendingStore.writtenPhases,
+        contains(PendingImportPhase.filesPlaced),
+      );
+      expect(
+        pendingStore.pending,
+        anyOf(
+          isEmpty,
+          everyElement(
+            predicate<PendingImport>(
+              (pending) => pending.phase == PendingImportPhase.filesPlaced,
+            ),
+          ),
+        ),
+      );
+      if (pendingStore.pending.isEmpty) {
+        pendingStore.pending.add(
+          const PendingImport(
+            projectId: projectId,
+            stagingDirectory: '/staging/bundle-child',
+            stagedFiles: [],
+            finalFiles: ['/rendered/child.jpg', '/originals/child.jpg'],
+            phase: PendingImportPhase.filesPlaced,
+            operationId: operationId,
+          ),
+        );
+      }
+
+      await service.cleanupInterruptedImports();
+
+      final project = await database.projectById(projectId);
+      expect(project, isNotNull);
+      expect(project!.restoreOperationId, operationId);
+      expect(await database.capturesForProject(projectId), isNotEmpty);
+      expect(pendingStore.pending, isNotEmpty);
+      expect(pendingStore.pending.single.phase, PendingImportPhase.filesPlaced);
+      expect(files.deleted, isEmpty);
     },
   );
 
@@ -1757,6 +1906,7 @@ class _FakeStagingPaths implements ImportStagingPaths {
 
 class _FakePendingStore implements ImportPendingStore {
   final pending = <PendingImport>[];
+  final writtenPhases = <PendingImportPhase>[];
   final cleared = <String>[];
   var writes = 0;
   bool throwOnClear = false;
@@ -1764,6 +1914,7 @@ class _FakePendingStore implements ImportPendingStore {
   @override
   Future<void> writePending(PendingImport pending) async {
     writes++;
+    writtenPhases.add(pending.phase);
     this.pending.removeWhere((entry) => entry.projectId == pending.projectId);
     this.pending.add(pending);
   }
