@@ -87,7 +87,8 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
     try {
       final service = await ref.read(diagnosticBundleServiceProvider.future);
-      final path = await service.generate();
+      final dropped = ref.read(diagnosticRecorderProvider).droppedCount;
+      final path = await service.generate(droppedEventCount: dropped);
       await ref.read(shareFileServiceProvider).shareFile(path);
     } catch (_) {
       if (!context.mounted) return;

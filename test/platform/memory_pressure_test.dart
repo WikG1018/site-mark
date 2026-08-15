@@ -169,6 +169,16 @@ void main() {
 
       expect(hook.persistCalls, 0);
     });
+
+    test('lastLevel tracks the most recent dispatched level', () async {
+      final controller = MemoryPressureController();
+
+      expect(controller.lastLevel, isNull);
+      await controller.dispatch(MemoryPressureLevel.trim);
+      expect(controller.lastLevel, MemoryPressureLevel.trim);
+      await controller.dispatch(MemoryPressureLevel.kill);
+      expect(controller.lastLevel, MemoryPressureLevel.kill);
+    });
   });
 
   group('MemoryPressureCoordinator', () {
@@ -189,6 +199,40 @@ void main() {
 
       // The coordinator should have acked with success=true.
       expect(service.acks, [(MemoryPressureLevel.trim, true)]);
+    });
+
+    test(
+      'acks carry the eventId so native matches the pending Binder',
+      () async {
+        final service = _RecordingMemoryPressureService();
+        final controller = MemoryPressureController();
+        final coordinator = MemoryPressureCoordinator(
+          service: service,
+          controller: controller,
+        );
+        coordinator.start();
+        addTearDown(coordinator.dispose);
+
+        await service.handlers.first(MemoryPressureLevel.kill, 42);
+
+        expect(service.ackEventIds, [42]);
+      },
+    );
+
+    test('dispose unregisters the handler from the service', () async {
+      final service = _RecordingMemoryPressureService();
+      final controller = MemoryPressureController();
+      final coordinator = MemoryPressureCoordinator(
+        service: service,
+        controller: controller,
+      );
+      coordinator.start();
+      expect(service.handlers, hasLength(1));
+
+      coordinator.dispose();
+
+      expect(service.handlers, isEmpty);
+      expect(service.acks, isEmpty);
     });
   });
 }
@@ -248,6 +292,7 @@ class _RecordingKillHook implements KillBackupHook {
 class _RecordingMemoryPressureService implements MemoryPressureService {
   final List<MemoryPressureHandler> handlers = [];
   final List<(MemoryPressureLevel, bool)> acks = [];
+  final List<int?> ackEventIds = [];
 
   @override
   Future<void> initialize() async {}
@@ -265,5 +310,6 @@ class _RecordingMemoryPressureService implements MemoryPressureService {
     required bool success,
   }) async {
     acks.add((level, success));
+    ackEventIds.add(eventId);
   }
 }
