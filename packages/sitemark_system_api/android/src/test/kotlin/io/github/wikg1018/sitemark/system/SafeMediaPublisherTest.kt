@@ -1,7 +1,7 @@
 package io.github.wikg1018.sitemark.system
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -10,45 +10,95 @@ import java.nio.file.Files
 
 class SafeMediaPublisherTest {
     @Test
-    fun `replacement failure restores previous bytes and published state`() {
+    fun `replacement publishes a new row and deletes the old one`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {
             val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
-            val store = FakePublishedImageStore(existingBytes = "old-image").apply {
-                failSource = source
-            }
-            val backup = File(directory, "backup.jpg")
-            val publisher = SafeMediaPublisher(store) { backup }
+            val store = FakePublishedImageStore(existingBytes = "old-image")
+            val publisher = SafeMediaPublisher(store)
 
-            assertThrows(IllegalStateException::class.java) {
-                publisher.publish(source, "capture.jpg")
-            }
+            val published = publisher.publish(source, "capture.jpg")
 
-            assertEquals("old-image", store.existingBytes)
-            assertFalse(store.pending)
-            assertFalse(backup.exists())
+            assertEquals(FakePublishedImageStore.NEW_URI, published)
+            // The old row is gone and the new row is finalized with the new
+            // bytes — never a half-written row left visible.
+            assertNull(store.rows[FakePublishedImageStore.OLD_URI])
+            val newRow = store.rows[FakePublishedImageStore.NEW_URI]
+            assertEquals("new-image", newRow?.bytes)
+            assertEquals(false, newRow?.pending)
         } finally {
             directory.deleteRecursively()
         }
     }
 
     @Test
-    fun `backup failure leaves existing image untouched`() {
+    fun `replacement write failure keeps the old row intact`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {
             val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
             val store = FakePublishedImageStore(existingBytes = "old-image").apply {
-                failBackup = true
+                failWrite = true
             }
-            val publisher = SafeMediaPublisher(store) { File(directory, "backup.jpg") }
+            val publisher = SafeMediaPublisher(store)
 
             assertThrows(IllegalStateException::class.java) {
                 publisher.publish(source, "capture.jpg")
             }
 
-            assertEquals("old-image", store.existingBytes)
-            assertFalse(store.pending)
-            assertEquals(0, store.stateChanges)
+            // The old published row was never touched...
+            assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
+            assertEquals(false, store.rows[FakePublishedImageStore.OLD_URI]?.pending)
+            // ...and the partially written pending row is cleaned up.
+            assertNull(store.rows[FakePublishedImageStore.NEW_URI])
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `old row delete failure restores a consistent published state`() {
+        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
+        try {
+            val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
+            val store = FakePublishedImageStore(existingBytes = "old-image").apply {
+                failDeleteOldRow = true
+            }
+            val publisher = SafeMediaPublisher(store)
+
+            assertThrows(IllegalStateException::class.java) {
+                publisher.publish(source, "capture.jpg")
+            }
+
+            // The old row is still published with the old bytes and the
+            // prepared replacement row is removed — no duplicate names.
+            assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
+            assertEquals(false, store.rows[FakePublishedImageStore.OLD_URI]?.pending)
+            assertNull(store.rows[FakePublishedImageStore.NEW_URI])
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `finalize failure after old row removal cleans the pending row`() {
+        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
+        try {
+            val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
+            val store = FakePublishedImageStore(existingBytes = "old-image").apply {
+                failFinalize = true
+            }
+            val publisher = SafeMediaPublisher(store)
+
+            val error = assertThrows(IllegalStateException::class.java) {
+                publisher.publish(source, "capture.jpg")
+            }
+
+            // The old row is already gone (documented narrow window) and the
+            // unfinalized new row must not linger as an orphan; the caller
+            // re-publishes from the private original to recover.
+            assertNull(store.rows[FakePublishedImageStore.OLD_URI])
+            assertNull(store.rows[FakePublishedImageStore.NEW_URI])
+            assertEquals(0, error.suppressed.size)
         } finally {
             directory.deleteRecursively()
         }
@@ -60,36 +110,15 @@ class SafeMediaPublisherTest {
         try {
             val source = File(directory, "new.jpg").apply { writeText("new-image") }
             val store = FakePublishedImageStore(existingBytes = null).apply {
-                failSource = source
+                failWrite = true
             }
-            val publisher = SafeMediaPublisher(store) { File(directory, "unused.jpg") }
+            val publisher = SafeMediaPublisher(store)
 
             assertThrows(IllegalStateException::class.java) {
                 publisher.publish(source, "capture.jpg")
             }
 
-            assertTrue(store.deleted)
-        } finally {
-            directory.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun `double write failure keeps potentially partial image hidden`() {
-        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
-        try {
-            val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
-            val store = FakePublishedImageStore(existingBytes = "old-image").apply {
-                failAllWrites = true
-            }
-            val publisher = SafeMediaPublisher(store) { File(directory, "backup.jpg") }
-
-            val error = assertThrows(IllegalStateException::class.java) {
-                publisher.publish(source, "capture.jpg")
-            }
-
-            assertTrue(store.pending)
-            assertEquals(1, error.suppressed.size)
+            assertTrue(store.rows.isEmpty())
         } finally {
             directory.deleteRecursively()
         }
@@ -97,45 +126,46 @@ class SafeMediaPublisherTest {
 }
 
 private class FakePublishedImageStore(existingBytes: String?) : PublishedImageStore {
-    var existingBytes = existingBytes
-    var pending = false
-    var deleted = false
-    var stateChanges = 0
-    var failBackup = false
-    var failAllWrites = false
-    var failSource: File? = null
+    class Row(var bytes: String, var pending: Boolean)
 
-    override fun find(displayName: String): String? =
-        if (existingBytes == null) null else CONTENT_URI
+    val rows = linkedMapOf<String, Row>()
+    var failWrite = false
+    var failFinalize = false
+    var failDeleteOldRow = false
 
-    override fun insertPending(displayName: String): String {
-        existingBytes = ""
-        pending = true
-        return CONTENT_URI
+    init {
+        if (existingBytes != null) {
+            rows[OLD_URI] = Row(existingBytes, pending = false)
+        }
     }
 
-    override fun backup(contentUri: String, destination: File) {
-        if (failBackup) error("backup failed")
-        destination.writeText(checkNotNull(existingBytes))
+    override fun find(displayName: String): String? =
+        rows.entries.firstOrNull { !it.value.pending }?.key
+
+    override fun insertPending(displayName: String): String {
+        rows[NEW_URI] = Row("", pending = true)
+        return NEW_URI
     }
 
     override fun write(contentUri: String, source: File) {
-        existingBytes = "partial"
-        if (failAllWrites || source == failSource) error("write failed")
-        existingBytes = source.readText()
+        val row = rows.getValue(contentUri)
+        row.bytes = "partial"
+        if (failWrite) error("write failed")
+        row.bytes = source.readText()
     }
 
     override fun setPending(contentUri: String, pending: Boolean) {
-        this.pending = pending
-        stateChanges += 1
+        if (!pending && failFinalize) error("finalize failed")
+        rows.getValue(contentUri).pending = pending
     }
 
     override fun delete(contentUri: String) {
-        deleted = true
-        existingBytes = null
+        if (contentUri == OLD_URI && failDeleteOldRow) error("delete failed")
+        rows.remove(contentUri)
     }
 
     companion object {
-        private const val CONTENT_URI = "content://media/site-mark/1"
+        const val OLD_URI = "content://media/site-mark/1"
+        const val NEW_URI = "content://media/site-mark/2"
     }
 }

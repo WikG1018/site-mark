@@ -207,6 +207,56 @@ void main() {
       await disposeApp(tester);
     });
   });
+
+  group('startup wiring', () {
+    Future<void> pumpAppWith({
+      required WidgetTester tester,
+      required MemoryPressureService service,
+      CompletionNotificationService notifications =
+          const _FakeCompletionNotificationService(),
+    }) async {
+      await tester.pumpWidget(
+        MyApp(
+          database: database,
+          initialLocale: const Locale('zh'),
+          completionNotificationService: notifications,
+          captureFormDraftStore: MemoryCaptureFormDraftStore(),
+          memoryPressureController: controller,
+          memoryPressureService: service,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'a failing notification initialization still wires the memory bridge',
+      (tester) async {
+        final service = _StartupRecordingMemoryPressureService();
+        await pumpAppWith(
+          tester: tester,
+          service: service,
+          notifications: _FailingCompletionNotificationService(),
+        );
+
+        // The notification plugin failure must not stop the ITGSA bridge:
+        // the coordinator still registered its handler with the service.
+        expect(service.handlers, hasLength(1));
+        await disposeApp(tester);
+      },
+    );
+
+    testWidgets('dispose unregisters the pressure coordinator', (tester) async {
+      final service = _StartupRecordingMemoryPressureService();
+      await pumpAppWith(tester: tester, service: service);
+      expect(service.handlers, hasLength(1));
+
+      await disposeApp(tester);
+
+      // The disposed root widget must no longer receive (and ACK) native
+      // pressure events.
+      expect(service.handlers, isEmpty);
+    });
+  });
 }
 
 /// [MemoryPressureController] subclass that records calls to the three
@@ -243,6 +293,8 @@ class _RecordingController extends MemoryPressureController {
 
 class _FakeCompletionNotificationService
     implements CompletionNotificationService {
+  const _FakeCompletionNotificationService();
+
   @override
   Future<void> initialize(void Function(String deepLinkPath) onTapDeepLink) =>
       Future.value();
@@ -259,6 +311,50 @@ class _FakeCompletionNotificationService
 
   @override
   Future<void> setEnabled(bool enabled) => Future.value();
+}
+
+/// Simulates a notification plugin whose initialization fails with a plain
+/// (non-UnimplementedError) exception.
+class _FailingCompletionNotificationService
+    implements CompletionNotificationService {
+  @override
+  Future<void> initialize(void Function(String deepLinkPath) onTapDeepLink) =>
+      Future.error(StateError('notification plugin unavailable'));
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) => Future.value();
+
+  @override
+  Future<void> setEnabled(bool enabled) => Future.value();
+}
+
+/// Records handler registration so tests can observe whether the memory
+/// bridge was wired and whether dispose detaches it.
+class _StartupRecordingMemoryPressureService implements MemoryPressureService {
+  final List<MemoryPressureHandler> handlers = [];
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  VoidCallback addHandler(MemoryPressureHandler handler) {
+    handlers.add(handler);
+    return () => handlers.remove(handler);
+  }
+
+  @override
+  Future<void> acknowledge(
+    MemoryPressureLevel level, {
+    int? eventId,
+    required bool success,
+  }) async {}
 }
 
 class _NoopMemoryPressureService implements MemoryPressureService {

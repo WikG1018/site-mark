@@ -718,9 +718,11 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
         // The scheduler clears its failed initialization future. A later
         // capture enqueue retries it instead of letting startup fail.
       }
+      if (!mounted) return;
       if (ref.read(startupRecoveryEnabledProvider)) {
         await ref.read(appStartupRecoveryProvider).run();
       }
+      if (!mounted) return;
       // Wire completion notifications: taps (including the cold-start
       // launch payload) deep-link into the capture detail page.
       try {
@@ -729,10 +731,12 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
         ) {
           ref.read(routerProvider).push(path);
         });
-      } on UnimplementedError {
-        // No production implementation injected (e.g. widget tests);
-        // notifications stay inert.
+      } catch (_) {
+        // Best-effort: no production implementation injected (widget tests,
+        // UnimplementedError) or a failing plugin must not block the
+        // memory-pressure bridge below, which is safety-critical.
       }
+      if (!mounted) return;
       // Initialize the ITGSA fair-memory bridge. The native
       // `MemoryPressureReceiver` forwards `itgsa.intent.action.MEMORY_TRIM`
       // and `MEMORY_KILL` broadcasts through the
@@ -741,14 +745,26 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
       // kill hooks) and then ACKs the OEM Binder.
       // The provider defaults to [NoopMemoryPressureService] so tests that
       // don't override it still run without errors.
-      _pressureCoordinator = ref.read(memoryPressureCoordinatorProvider);
-      await ref.read(memoryPressureServiceProvider).initialize();
-      _pressureCoordinator!.start();
+      final coordinator = ref.read(memoryPressureCoordinatorProvider);
+      try {
+        await ref.read(memoryPressureServiceProvider).initialize();
+      } catch (_) {
+        // The channel may be unavailable (non-ITGSA ROM, tests); the bridge
+        // stays inert but startup must not crash.
+      }
+      if (!mounted) return;
+      _pressureCoordinator = coordinator;
+      coordinator.start();
     });
   }
 
   @override
   void dispose() {
+    // Detach from the service so a disposed root widget no longer receives
+    // (and ACKs) native pressure events. Idempotent with the coordinator
+    // provider's own onDispose, which calls dispose() again harmlessly.
+    _pressureCoordinator?.dispose();
+    _pressureCoordinator = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

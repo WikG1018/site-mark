@@ -7,9 +7,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
+import android.database.Cursor
 import android.location.Location
 import android.location.LocationManager
+import android.net.Uri
 import android.os.CancellationSignal
+import android.provider.MediaStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -17,9 +20,13 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.eq
+import org.mockito.ArgumentMatchers.isNull
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.mockStatic
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.anyInt
 import org.mockito.Mockito.anyString
 import java.util.concurrent.Executor
@@ -215,5 +222,84 @@ class AndroidSystemApiTest {
         assertThrows(IllegalArgumentException::class.java) {
             api.normalizedJpegName("A\uFEFFB-SM-001")
         }
+    }
+
+    @Test
+    fun deletePublishedImageTreatsAMissingGalleryRowAsSuccess() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        // MediaStore reports "row not found" as a cursor with zero rows.
+        val emptyCursor = mock(Cursor::class.java)
+        `when`(emptyCursor.moveToFirst()).thenReturn(false)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            stubResolverQueries(resolver, idCursor = emptyCursor, pathCursor = null)
+            val api = AndroidSystemApi(context)
+
+            // The user may have deleted the photo from the gallery
+            // themselves; the missing row is the desired end state and must
+            // NOT throw — failing would keep the cleanup marker pending
+            // forever and retry the delete on every launch.
+            api.deletePublishedImageForTest(uri.toString())
+
+            verify(resolver, never()).delete(any(Uri::class.java), isNull(), isNull())
+        }
+    }
+
+    @Test
+    fun deletePublishedImageDeletesAnExistingRowInPicturesSiteMark() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val idCursor = mock(Cursor::class.java)
+        `when`(idCursor.moveToFirst()).thenReturn(true)
+        val pathCursor = mock(Cursor::class.java)
+        `when`(pathCursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)).thenReturn(0)
+        `when`(pathCursor.moveToFirst()).thenReturn(true)
+        `when`(pathCursor.getString(0)).thenReturn(PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            stubResolverQueries(resolver, idCursor = idCursor, pathCursor = pathCursor)
+            val api = AndroidSystemApi(context)
+
+            api.deletePublishedImageForTest(uri.toString())
+
+            verify(resolver).delete(eq(uri), isNull(), isNull())
+        }
+    }
+
+    /** Returns a Uri double that passes the MediaStore allowlist check. */
+    private fun mediaUri(): Uri {
+        val uri = mock(Uri::class.java)
+        `when`(uri.scheme).thenReturn("content")
+        `when`(uri.authority).thenReturn(MediaStore.AUTHORITY)
+        return uri
+    }
+
+    /**
+     * Stubs [ContentResolver.query] to answer with the cursor matching the
+     * requested projection so the delete body runs without a real
+     * ContentProvider. Must be called inside an active [mockStatic] scope.
+     */
+    private fun stubResolverQueries(
+        resolver: ContentResolver,
+        idCursor: Cursor?,
+        pathCursor: Cursor?,
+    ) {
+        doAnswer { invocation ->
+            val projection = invocation.getArgument<Array<String>>(1)
+            when (projection.firstOrNull()) {
+                MediaStore.Images.Media._ID -> idCursor
+                MediaStore.Images.Media.RELATIVE_PATH -> pathCursor
+                else -> null
+            }
+        }.`when`(resolver).query(
+            any(Uri::class.java),
+            any(Array<String>::class.java),
+            isNull(),
+            isNull(),
+            isNull(),
+        )
     }
 }

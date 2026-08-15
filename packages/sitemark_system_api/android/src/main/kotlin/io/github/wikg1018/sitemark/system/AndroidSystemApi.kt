@@ -440,10 +440,6 @@ class AndroidSystemApi(
                 collection = collection,
                 relativePath = PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH,
             ),
-            createBackupFile = {
-                val cache = context.cacheDir.apply { mkdirs() }
-                File.createTempFile("sitemark-published-", ".jpg", cache)
-            },
         )
         return MediaPublishResult(publisher.publish(source, safeName))
     }
@@ -460,11 +456,29 @@ class AndroidSystemApi(
         require(PublishedImageDeletePolicy.allowsUri(uri.scheme, uri.authority)) {
             "Published image URI is not a MediaStore image"
         }
+        // The user may have deleted the photo from the gallery themselves.
+        // A missing row is the desired end state, so treat it as success —
+        // failing here would keep the cleanup marker pending forever and
+        // retry the delete on every launch.
+        if (!publishedRowExists(uri)) return
         val relativePath = queryPublishedRelativePath(uri)
         require(PublishedImageDeletePolicy.allowsRelativePath(relativePath)) {
             "Published image is outside Pictures/SiteMark"
         }
         context.contentResolver.delete(uri, null, null)
+    }
+
+    private fun publishedRowExists(uri: Uri): Boolean {
+        context.contentResolver.query(
+            uri,
+            arrayOf(MediaStore.Images.Media._ID),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            return cursor.moveToFirst()
+        }
+        return false
     }
 
     private fun queryPublishedRelativePath(uri: Uri): String? {
@@ -578,6 +592,15 @@ class AndroidSystemApi(
      */
     internal fun publishJpegForTest(sourcePath: String, displayName: String): MediaPublishResult =
         publishJpegInternal(sourcePath, displayName)
+
+    /**
+     * Test adapter for the synchronous delete body. Runs the policy checks +
+     * MediaStore query inline (no executor hop) so the idempotent-delete
+     * contract can be asserted without waiting on a background thread.
+     */
+    internal fun deletePublishedImageForTest(contentUri: String) {
+        deletePublishedImageInternal(contentUri)
+    }
 }
 
 private class AndroidPublishedImageStore(
@@ -589,7 +612,8 @@ private class AndroidPublishedImageStore(
         val projection = arrayOf(MediaStore.Images.Media._ID)
         val selection =
             "${MediaStore.Images.Media.DISPLAY_NAME} = ? AND " +
-                "${MediaStore.Images.Media.RELATIVE_PATH} = ?"
+                "${MediaStore.Images.Media.RELATIVE_PATH} = ? AND " +
+                "${MediaStore.Images.Media.IS_PENDING} = 0"
         val arguments = arrayOf(displayName, relativePath)
         resolver.query(collection, projection, selection, arguments, null)?.use { cursor ->
             if (cursor.moveToFirst()) {
@@ -610,13 +634,6 @@ private class AndroidPublishedImageStore(
             },
         ) ?: error("MediaStore did not create an image")
         return uri.toString()
-    }
-
-    override fun backup(contentUri: String, destination: File) {
-        resolver.openInputStream(Uri.parse(contentUri))?.use { input ->
-            destination.outputStream().use { output -> input.copyTo(output) }
-        } ?: error("MediaStore did not open the existing image")
-        require(destination.length() > 0L) { "Existing MediaStore image is empty" }
     }
 
     override fun write(contentUri: String, source: File) {
