@@ -20,7 +20,10 @@ class DiagnosticBundleService {
   final Future<Directory> Function()? supportDirectory;
   final Future<PackageInfo> Function()? packageInfo;
 
-  Future<String> generate() async {
+  /// [droppedEventCount] records diagnostic events that failed to persist
+  /// (see `DiagnosticRecorder.droppedCount`); callers pass it so a broken
+  /// store is visible in shared bundles instead of silently missing events.
+  Future<String> generate({int? droppedEventCount}) async {
     final root = await (supportDirectory ?? getApplicationSupportDirectory)();
     final outputDirectory = Directory(
       '${root.path}${Platform.pathSeparator}diagnostics',
@@ -51,6 +54,7 @@ class DiagnosticBundleService {
       'generated_at': generatedAt,
       'retention_days': 7,
       'max_event_bytes': 2 * 1024 * 1024,
+      'dropped_event_count': droppedEventCount ?? 0,
     });
     final archive = Archive()
       ..addFile(ArchiveFile.string('summary.txt', summary))
