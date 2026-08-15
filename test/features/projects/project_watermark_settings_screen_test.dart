@@ -142,4 +142,70 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(AccentChoiceChip), findsNWidgets(9));
   });
+
+  testWidgets('missing project shows not-found instead of a spinner', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(database)],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const ProjectWatermarkSettingsScreen(projectId: 'missing'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-not-found')), findsOneWidget);
+    expect(find.text('项目不存在或已删除'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('project lookup error shows an explicit load-failed state', (
+    tester,
+  ) async {
+    final failing = _ThrowingProjectDatabase();
+    addTearDown(failing.close);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(failing)],
+        child: MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: const ProjectWatermarkSettingsScreen(projectId: 'project-1'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('project-load-error')), findsOneWidget);
+    expect(
+      find.text(AppStrings(const Locale('en')).projectLoadFailed),
+      findsOneWidget,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+}
+
+class _ThrowingProjectDatabase extends AppDatabase {
+  _ThrowingProjectDatabase() : super.forTesting(NativeDatabase.memory());
+
+  @override
+  Future<Project?> projectById(String projectId) {
+    return Future<Project?>.error(StateError('lookup failed'));
+  }
 }

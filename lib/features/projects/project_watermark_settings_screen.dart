@@ -57,8 +57,25 @@ class _ProjectWatermarkSettingsScreenState
         future: _projectFuture,
         builder: (context, snapshot) {
           final project = snapshot.data;
+          final waitingForProject =
+              project == null &&
+              snapshot.connectionState == ConnectionState.waiting;
+          final projectLoadFailed = project == null && snapshot.hasError;
           if (project == null) {
-            return const Center(child: CircularProgressIndicator());
+            if (waitingForProject) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return _ResourceUnavailableState(
+              key: projectLoadFailed
+                  ? const Key('project-load-error')
+                  : const Key('project-not-found'),
+              icon: projectLoadFailed
+                  ? Icons.cloud_off_outlined
+                  : Icons.folder_off_outlined,
+              message: projectLoadFailed
+                  ? strings.projectLoadFailed
+                  : strings.projectNotFound,
+            );
           }
           _position ??= project.watermarkPosition;
           _opacity ??= project.watermarkOpacity;
@@ -235,6 +252,42 @@ class _ProjectWatermarkSettingsScreenState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+}
+
+class _ResourceUnavailableState extends StatelessWidget {
+  const _ResourceUnavailableState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

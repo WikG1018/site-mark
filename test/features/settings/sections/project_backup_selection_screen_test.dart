@@ -42,6 +42,7 @@ void main() {
     Future<ArchiveSaveOutcome> Function(String path)? saveArchive,
     Future<void> Function(String path)? shareFile,
     Set<String> initialProjectIds = const {},
+    Locale locale = const Locale('zh'),
   }) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
@@ -51,7 +52,7 @@ void main() {
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(database)],
         child: MaterialApp(
-          locale: const Locale('zh'),
+          locale: locale,
           supportedLocales: AppStrings.supportedLocales,
           localizationsDelegates: const [
             AppStrings.delegate,
@@ -318,4 +319,93 @@ void main() {
       },
     );
   }
+
+  testWidgets('shows a bilingual empty-project backup hint', (tester) async {
+    await pumpScreen(tester, locale: const Locale('en'));
+    final strings = AppStrings(const Locale('en'));
+    expect(find.text(strings.backupEmptyProjectHint), findsOneWidget);
+    expect(find.textContaining('空白项目也可以备份'), findsNothing);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('blocks backup while photos are still processing', (
+    tester,
+  ) async {
+    await database.createPendingCapture(
+      id: 'processing',
+      projectId: 'p1',
+      originalPath: '/processing.jpg',
+      workLocation: 'A区',
+      workContent: '检查',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+    );
+    await pumpScreen(
+      tester,
+      initialProjectIds: const {'p1'},
+      locale: const Locale('en'),
+    );
+    final strings = AppStrings(const Locale('en'));
+
+    await tester.tap(find.byKey(const Key('backup-continue')));
+    await tester.pumpAndSettle();
+
+    expect(find.text(strings.backupWaitForProcessingTitle), findsOneWidget);
+    expect(
+      find.text(strings.backupWaitForProcessingMessage(1)),
+      findsOneWidget,
+    );
+    expect(find.textContaining('请等待照片处理完成'), findsNothing);
+    await tester.tap(find.text(strings.gotIt));
+    await tester.pumpAndSettle();
+    expect(find.text(strings.includePrivateOriginals), findsNothing);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('asks before omitting failed records in English', (tester) async {
+    final failed = await database.createPendingCapture(
+      id: 'failed',
+      projectId: 'p1',
+      originalPath: '/failed.jpg',
+      workLocation: 'A区',
+      workContent: '检查',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+    );
+    await database.markFailed(captureId: failed.id, reason: 'failure');
+    var exported = false;
+    await pumpScreen(
+      tester,
+      initialProjectIds: const {'p1'},
+      locale: const Locale('en'),
+      exportProjects:
+          ({
+            required projectIds,
+            required includeOriginals,
+            onProgress,
+            allowFailedOmissions = false,
+          }) async {
+            exported = true;
+            return const ProjectBackupResult(
+              kind: ProjectBackupKind.bundle,
+              outputZipPath: '/tmp/projects.zip',
+              projectCount: 1,
+            );
+          },
+    );
+    final strings = AppStrings(const Locale('en'));
+
+    await tester.tap(find.byKey(const Key('backup-continue')));
+    await tester.pumpAndSettle();
+
+    expect(find.text(strings.backupFailedRecordsTitle), findsOneWidget);
+    expect(find.text(strings.backupFailedRecordsMessage(1)), findsOneWidget);
+    expect(find.textContaining('存在处理失败的照片'), findsNothing);
+
+    await tester.tap(find.text(strings.backupReturnToProcess));
+    await tester.pumpAndSettle();
+    expect(exported, isFalse);
+    expect(find.text(strings.includePrivateOriginals), findsNothing);
+    await disposeScreen(tester);
+  });
 }

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_failure.dart';
@@ -1125,6 +1126,93 @@ void main() {
 
     await disposeDetail(tester);
   });
+
+  testWidgets('formats captured at with the locale instead of ISO-8601', (
+    tester,
+  ) async {
+    final capturedAt = DateTime(2026, 8, 4, 9);
+    await pumpReadyDetail(tester, originalExists: true);
+    expect(
+      find.text(DateFormat.yMMMd('zh').add_Hm().format(capturedAt)),
+      findsOneWidget,
+    );
+    expect(find.textContaining('2026-08-04T'), findsNothing);
+    await disposeDetail(tester);
+
+    await pumpReadyDetail(
+      tester,
+      originalExists: true,
+      locale: const Locale('en'),
+    );
+    expect(
+      find.text(DateFormat.yMMMd('en').add_Hm().format(capturedAt)),
+      findsOneWidget,
+    );
+    expect(find.textContaining('2026-08-04T'), findsNothing);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('missing capture shows not-found instead of a spinner', (
+    tester,
+  ) async {
+    database = _DetailDatabase();
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    files = _DetailFiles();
+    platform = _DetailPlatform();
+    paths = _DetailPaths();
+    media = _DetailMediaService(
+      database: database,
+      platform: platform,
+      outputPaths: paths,
+      files: files,
+    );
+
+    await tester.pumpWidget(buildDetailApp(mediaService: media));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('capture-not-found')), findsOneWidget);
+    expect(find.text('拍摄记录不存在或已删除'), findsWidgets);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await disposeDetail(tester);
+  });
+
+  testWidgets('capture lookup error shows an explicit load-failed state', (
+    tester,
+  ) async {
+    database = _ErrorCaptureWatchDatabase();
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '东区厂房改造');
+    files = _DetailFiles();
+    platform = _DetailPlatform();
+    paths = _DetailPaths();
+    media = _DetailMediaService(
+      database: database,
+      platform: platform,
+      outputPaths: paths,
+      files: files,
+    );
+
+    await tester.pumpWidget(
+      buildDetailApp(mediaService: media, locale: const Locale('en')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('capture-load-error')), findsOneWidget);
+    expect(
+      find.text(AppStrings(const Locale('en')).captureLoadFailed),
+      findsWidgets,
+    );
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await disposeDetail(tester);
+  });
+}
+
+class _ErrorCaptureWatchDatabase extends _DetailDatabase {
+  @override
+  Stream<CaptureRecord?> watchCaptureById(String captureId) {
+    return Stream<CaptureRecord?>.error(StateError('lookup failed'));
+  }
 }
 
 class _DetailDatabase extends AppDatabase {

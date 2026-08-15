@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:archive/archive_io.dart';
+import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
+import 'package:sitemark/l10n/app_strings.dart';
 
 class DiagnosticBundleService {
   const DiagnosticBundleService({
@@ -35,11 +37,15 @@ class DiagnosticBundleService {
       'locale': Platform.localeName,
     });
     final eventText = events.map((event) => event.encode()).join('\n');
-    final summary =
-        'SiteMark 诊断包\n'
-        '生成时间：$generatedAt\n'
-        '事件数量：${events.length}\n'
-        '隐私：不包含照片、项目名称、工程内容、人员、位置、文件路径或原始异常。\n';
+    final english = AppStrings(const Locale('en')).diagnosticBundleSummary(
+      generatedAt: generatedAt,
+      eventCount: events.length,
+    );
+    final chinese = AppStrings(const Locale('zh')).diagnosticBundleSummary(
+      generatedAt: generatedAt,
+      eventCount: events.length,
+    );
+    final summary = '$english\n$chinese';
     final manifest = jsonEncode({
       'schema_version': 1,
       'generated_at': generatedAt,

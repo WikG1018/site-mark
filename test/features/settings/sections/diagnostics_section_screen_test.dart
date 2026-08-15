@@ -5,25 +5,70 @@ import 'package:sitemark/features/settings/sections/diagnostics_section_screen.d
 import 'package:sitemark/l10n/app_strings.dart';
 
 void main() {
-  testWidgets('always explains local-only diagnostics and share privacy', (
-    tester,
-  ) async {
+  Future<void> pumpScreen(WidgetTester tester, Locale locale) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        localizationsDelegates: [
+      MaterialApp(
+        localizationsDelegates: const [
           AppStrings.delegate,
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppStrings.supportedLocales,
-        locale: Locale('zh'),
-        home: DiagnosticsSectionScreen(),
+        locale: locale,
+        home: const DiagnosticsSectionScreen(),
       ),
     );
+  }
 
-    expect(find.textContaining('诊断记录只保存在本机，不会自动上传'), findsOneWidget);
-    expect(find.textContaining('不包含照片、项目名称'), findsOneWidget);
-    expect(find.text('生成并分享诊断包'), findsOneWidget);
-  });
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets(
+      '${locale.languageCode} explains local-only diagnostics and share privacy',
+      (tester) async {
+        await pumpScreen(tester, locale);
+        final strings = AppStrings(locale);
+
+        expect(find.text(strings.diagnosticsAndFeedback), findsOneWidget);
+        expect(find.text(strings.privacyProtection), findsOneWidget);
+        expect(find.text(strings.diagnosticsStoredLocally), findsOneWidget);
+        expect(
+          find.text(strings.diagnosticBundlePrivacyNotice),
+          findsOneWidget,
+        );
+        expect(find.text(strings.diagnosticsRetentionHint), findsOneWidget);
+        expect(
+          find.text(strings.generateAndShareDiagnosticBundle),
+          findsOneWidget,
+        );
+        expect(find.text(strings.clearLocalDiagnostics), findsOneWidget);
+
+        if (locale.languageCode == 'en') {
+          expect(find.textContaining('诊断'), findsNothing);
+          expect(find.textContaining('隐私保护'), findsNothing);
+          expect(find.textContaining('生成并分享诊断包'), findsNothing);
+          expect(find.textContaining('清除本机诊断记录'), findsNothing);
+        }
+
+        await tester.tap(find.text(strings.generateAndShareDiagnosticBundle));
+        await tester.pumpAndSettle();
+        expect(find.text(strings.shareDiagnosticBundleTitle), findsOneWidget);
+        expect(find.text(strings.shareDiagnosticBundleContent), findsOneWidget);
+        expect(find.text(strings.confirmGenerate), findsOneWidget);
+        if (locale.languageCode == 'en') {
+          expect(find.textContaining('分享诊断包'), findsNothing);
+          expect(find.textContaining('确认生成'), findsNothing);
+        }
+
+        await tester.tap(find.text(strings.cancel));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(strings.clearLocalDiagnostics));
+        await tester.pumpAndSettle();
+        expect(find.text(strings.clearDiagnosticsTitle), findsOneWidget);
+        expect(find.text(strings.clearDiagnosticsContent), findsOneWidget);
+        if (locale.languageCode == 'en') {
+          expect(find.textContaining('清除诊断记录'), findsNothing);
+        }
+      },
+    );
+  }
 }

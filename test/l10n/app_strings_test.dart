@@ -106,6 +106,39 @@ final _stringReaders = <String, _StringReader>{
       strings.captureMediaFailure(CaptureMediaFailure.renderedPhotoMissing),
   'mediaFailureOperationFailed': (strings) =>
       strings.captureMediaFailure(CaptureMediaFailure.operationFailed),
+  'privacyProtection': (strings) => strings.privacyProtection,
+  'diagnosticsStoredLocally': (strings) => strings.diagnosticsStoredLocally,
+  'diagnosticBundlePrivacyNotice': (strings) =>
+      strings.diagnosticBundlePrivacyNotice,
+  'diagnosticsRetentionHint': (strings) => strings.diagnosticsRetentionHint,
+  'generateAndShareDiagnosticBundle': (strings) =>
+      strings.generateAndShareDiagnosticBundle,
+  'shareDiagnosticBundleTitle': (strings) => strings.shareDiagnosticBundleTitle,
+  'shareDiagnosticBundleContent': (strings) =>
+      strings.shareDiagnosticBundleContent,
+  'confirmGenerate': (strings) => strings.confirmGenerate,
+  'diagnosticBundleFailed': (strings) => strings.diagnosticBundleFailed,
+  'clearLocalDiagnostics': (strings) => strings.clearLocalDiagnostics,
+  'clearDiagnosticsTitle': (strings) => strings.clearDiagnosticsTitle,
+  'clearDiagnosticsContent': (strings) => strings.clearDiagnosticsContent,
+  'backupWaitForProcessingTitle': (strings) =>
+      strings.backupWaitForProcessingTitle,
+  'backupWaitForProcessingMessage': (strings) =>
+      strings.backupWaitForProcessingMessage(2),
+  'backupFailedRecordsTitle': (strings) => strings.backupFailedRecordsTitle,
+  'backupFailedRecordsMessage': (strings) =>
+      strings.backupFailedRecordsMessage(3),
+  'backupReturnToProcess': (strings) => strings.backupReturnToProcess,
+  'backupCompletedRecordsOnly': (strings) => strings.backupCompletedRecordsOnly,
+  'backupEmptyProjectHint': (strings) => strings.backupEmptyProjectHint,
+  'gotIt': (strings) => strings.gotIt,
+  'diagnosticBundleSummary': (strings) => strings.diagnosticBundleSummary(
+    generatedAt: '2026-08-13T00:00:00.000Z',
+    eventCount: 4,
+  ),
+  'captureNotFound': (strings) => strings.captureNotFound,
+  'captureLoadFailed': (strings) => strings.captureLoadFailed,
+  'createProjectFailed': (strings) => strings.createProjectFailed,
 };
 
 const expectedZh = <String, String>{
@@ -182,6 +215,41 @@ const expectedZh = <String, String>{
   'mediaFailureOriginalMissing': '原图意外缺失，无法完成操作',
   'mediaFailureRenderedMissing': '水印照片文件缺失',
   'mediaFailureOperationFailed': '操作失败，请重试。',
+  'privacyProtection': '隐私保护',
+  'diagnosticsStoredLocally': '诊断记录只保存在本机，不会自动上传。',
+  'diagnosticBundlePrivacyNotice':
+      '诊断包不包含照片、项目名称、工程内容、拍摄人、位置坐标或原图路径；'
+      '只有你主动点击分享后，文件才会交给系统分享面板。',
+  'diagnosticsRetentionHint': '诊断记录最多保留 7 天，空间上限为 2 MB。',
+  'generateAndShareDiagnosticBundle': '生成并分享诊断包',
+  'shareDiagnosticBundleTitle': '分享诊断包？',
+  'shareDiagnosticBundleContent':
+      '包含：应用版本、系统环境、存储统计、操作结果与耗时。\n\n'
+      '不包含：照片、项目名称、工程内容、拍摄人、位置坐标、文件路径和原始异常。\n\n'
+      '确认后才会打开系统分享面板。',
+  'confirmGenerate': '确认生成',
+  'diagnosticBundleFailed': '诊断包生成失败，请稍后重试',
+  'clearLocalDiagnostics': '清除本机诊断记录',
+  'clearDiagnosticsTitle': '清除诊断记录？',
+  'clearDiagnosticsContent': '只清除本机诊断事件，不会删除照片、项目或备份。',
+  'backupWaitForProcessingTitle': '请等待照片处理完成',
+  'backupWaitForProcessingMessage': '有 2 张照片仍在处理中。为避免备份遗漏，请处理完成后再试。',
+  'backupFailedRecordsTitle': '存在处理失败的照片',
+  'backupFailedRecordsMessage':
+      '有 3 张失败记录不会进入备份。建议先返回项目重新处理；'
+      '也可以明确选择仅备份已完成记录。',
+  'backupReturnToProcess': '返回处理',
+  'backupCompletedRecordsOnly': '仅备份已完成记录',
+  'backupEmptyProjectHint': '空白项目也可以备份，项目说明和水印设置会保留。',
+  'gotIt': '知道了',
+  'diagnosticBundleSummary':
+      'SiteMark 诊断包\n'
+      '生成时间：2026-08-13T00:00:00.000Z\n'
+      '事件数量：4\n'
+      '隐私：不包含照片、项目名称、工程内容、人员、位置、文件路径或原始异常。\n',
+  'captureNotFound': '拍摄记录不存在或已删除',
+  'captureLoadFailed': '拍摄记录加载失败，请返回后重试',
+  'createProjectFailed': '项目创建失败，请稍后重试',
 };
 
 const expectedEn = <String, String>{
@@ -274,6 +342,45 @@ const expectedEn = <String, String>{
   'mediaFailureOriginalMissing': 'Original photo is unexpectedly missing',
   'mediaFailureRenderedMissing': 'Rendered photo is missing',
   'mediaFailureOperationFailed': 'Operation failed. Please try again.',
+  'privacyProtection': 'Privacy',
+  'diagnosticsStoredLocally':
+      'Diagnostic records stay on this device and are never uploaded automatically.',
+  'diagnosticBundlePrivacyNotice':
+      'The diagnostic bundle does not include photos, project names, work content, photographers, coordinates, or original file paths; the file is handed to the system share sheet only after you choose to share it.',
+  'diagnosticsRetentionHint':
+      'Diagnostic records are kept for at most 7 days, with a 2 MB size limit.',
+  'generateAndShareDiagnosticBundle': 'Generate and share diagnostic bundle',
+  'shareDiagnosticBundleTitle': 'Share diagnostic bundle?',
+  'shareDiagnosticBundleContent':
+      'Includes: app version, system environment, storage statistics, operation results, and timings.\n\n'
+      'Does not include: photos, project names, work content, photographers, coordinates, file paths, or raw exceptions.\n\n'
+      'The system share sheet opens only after you confirm.',
+  'confirmGenerate': 'Generate',
+  'diagnosticBundleFailed':
+      'Could not generate the diagnostic bundle. Please try again.',
+  'clearLocalDiagnostics': 'Clear local diagnostic records',
+  'clearDiagnosticsTitle': 'Clear diagnostic records?',
+  'clearDiagnosticsContent':
+      'Only local diagnostic events will be cleared. Photos, projects, and backups are not deleted.',
+  'backupWaitForProcessingTitle': 'Wait for photos to finish processing',
+  'backupWaitForProcessingMessage':
+      '2 photo(s) are still processing. Wait until they finish so the backup is complete.',
+  'backupFailedRecordsTitle': 'Some photos failed processing',
+  'backupFailedRecordsMessage':
+      '3 failed record(s) will not be included. Retry those photos first, or back up only completed records.',
+  'backupReturnToProcess': 'Go back and retry',
+  'backupCompletedRecordsOnly': 'Back up completed records only',
+  'backupEmptyProjectHint':
+      'Empty projects can also be backed up. The description and watermark settings are kept.',
+  'gotIt': 'Got it',
+  'diagnosticBundleSummary':
+      'SiteMark diagnostic bundle\n'
+      'Generated at: 2026-08-13T00:00:00.000Z\n'
+      'Event count: 4\n'
+      'Privacy: no photos, project names, work content, people, locations, file paths, or raw exceptions.\n',
+  'captureNotFound': 'Capture not found or deleted',
+  'captureLoadFailed': 'Could not load the capture. Go back and try again.',
+  'createProjectFailed': 'Could not create the project. Please try again.',
 };
 
 void main() {

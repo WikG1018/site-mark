@@ -450,6 +450,12 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         final project = loadedProject?.id == widget.projectId
             ? loadedProject
             : null;
+        final waitingForProject =
+            project == null &&
+            snapshot.connectionState == ConnectionState.waiting;
+        final projectLoadFailed = project == null && snapshot.hasError;
+        final projectMissing =
+            project == null && !waitingForProject && !projectLoadFailed;
         final permission = _permissionState;
         final prompt = permission != null && permission.showExplanation
             ? LocationPermissionPrompt(
@@ -463,8 +469,20 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
             project.lifecycleStatus != ProjectLifecycleStatus.active;
         return Scaffold(
           appBar: AppBar(title: Text(strings.captureFormTitle)),
-          body: project == null
+          body: waitingForProject
               ? const Center(child: CircularProgressIndicator())
+              : projectLoadFailed
+              ? _ResourceUnavailableState(
+                  key: const Key('project-load-error'),
+                  icon: Icons.cloud_off_outlined,
+                  message: strings.projectLoadFailed,
+                )
+              : projectMissing
+              ? _ResourceUnavailableState(
+                  key: const Key('project-not-found'),
+                  icon: Icons.folder_off_outlined,
+                  message: strings.projectNotFound,
+                )
               : readOnly
               ? Center(
                   child: Padding(
@@ -543,6 +561,42 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                 ),
         );
       },
+    );
+  }
+}
+
+class _ResourceUnavailableState extends StatelessWidget {
+  const _ResourceUnavailableState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

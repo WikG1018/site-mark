@@ -77,14 +77,14 @@ class _ProjectBackupSelectionScreenState
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('请等待照片处理完成'),
+          title: Text(strings.backupWaitForProcessingTitle),
           content: Text(
-            '有 ${snapshot.processingCount} 张照片仍在处理中。为避免备份遗漏，请处理完成后再试。',
+            strings.backupWaitForProcessingMessage(snapshot.processingCount),
           ),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('知道了'),
+              child: Text(strings.gotIt),
             ),
           ],
         ),
@@ -97,19 +97,18 @@ class _ProjectBackupSelectionScreenState
           await showDialog<bool>(
             context: context,
             builder: (dialogContext) => AlertDialog(
-              title: const Text('存在处理失败的照片'),
+              title: Text(strings.backupFailedRecordsTitle),
               content: Text(
-                '有 ${snapshot.failedCount} 张失败记录不会进入备份。建议先返回项目重新处理；'
-                '也可以明确选择仅备份已完成记录。',
+                strings.backupFailedRecordsMessage(snapshot.failedCount),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext, false),
-                  child: const Text('返回处理'),
+                  child: Text(strings.backupReturnToProcess),
                 ),
                 FilledButton(
                   onPressed: () => Navigator.pop(dialogContext, true),
-                  child: const Text('仅备份已完成记录'),
+                  child: Text(strings.backupCompletedRecordsOnly),
                 ),
               ],
             ),
@@ -305,11 +304,11 @@ class _ProjectBackupSelectionScreenState
                   ),
                 ],
               ),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  '空白项目也可以备份，项目说明和水印设置会保留。',
-                  style: TextStyle(fontSize: 13),
+                  strings.backupEmptyProjectHint,
+                  style: const TextStyle(fontSize: 13),
                 ),
               ),
               const SizedBox(height: 4),

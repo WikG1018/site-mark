@@ -28,6 +28,22 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
   final _notes = TextEditingController();
   bool _initialized = false;
   bool _working = false;
+  late Future<CaptureRecord?> _captureFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _captureFuture = ref.read(databaseProvider).captureById(widget.captureId);
+  }
+
+  @override
+  void didUpdateWidget(covariant CaptureEditScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.captureId != widget.captureId) {
+      _initialized = false;
+      _captureFuture = ref.read(databaseProvider).captureById(widget.captureId);
+    }
+  }
 
   @override
   void dispose() {
@@ -62,7 +78,11 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
               notes: _notes.text.trim().isEmpty ? null : _notes.text,
             ),
           );
-      if (mounted) {
+      if (!mounted) return;
+      setState(() => _working = false);
+      if (context.canPop()) {
+        context.pop();
+      } else {
         context.go(
           '/projects/${widget.projectId}/captures/${widget.captureId}',
         );
@@ -80,14 +100,32 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     return FutureBuilder<CaptureRecord?>(
-      future: ref.read(databaseProvider).captureById(widget.captureId),
+      future: _captureFuture,
       builder: (context, snapshot) {
         final capture = snapshot.data;
+        final waitingForCapture =
+            capture == null &&
+            snapshot.connectionState == ConnectionState.waiting;
+        final captureLoadFailed = capture == null && snapshot.hasError;
+        final captureMissing =
+            capture == null && !waitingForCapture && !captureLoadFailed;
         if (capture != null) _initialize(capture);
         return Scaffold(
           appBar: AppBar(title: Text(strings.editRecord)),
-          body: capture == null
+          body: waitingForCapture
               ? const Center(child: CircularProgressIndicator())
+              : captureLoadFailed
+              ? _ResourceUnavailableState(
+                  key: const Key('capture-load-error'),
+                  icon: Icons.cloud_off_outlined,
+                  message: strings.captureLoadFailed,
+                )
+              : captureMissing
+              ? _ResourceUnavailableState(
+                  key: const Key('capture-not-found'),
+                  icon: Icons.photo_outlined,
+                  message: strings.captureNotFound,
+                )
               : Form(
                   key: _formKey,
                   child: ListView(
@@ -147,6 +185,42 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
                 ),
         );
       },
+    );
+  }
+}
+
+class _ResourceUnavailableState extends StatelessWidget {
+  const _ResourceUnavailableState({
+    super.key,
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
