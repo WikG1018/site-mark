@@ -202,6 +202,25 @@ void main() {
     expect(record?.processingAttempts, 2);
   });
 
+  test(
+    'repeat process on a rendering row still consumes the attempt budget',
+    () async {
+      images.renderError = FileSystemException('temporary write failure');
+      await seedCaptured(attempts: 0);
+
+      expect(await processor.process('capture-1'), CaptureProcessResult.retry);
+      expect((await database.captureById('capture-1'))?.processingAttempts, 1);
+
+      expect(await processor.process('capture-1'), CaptureProcessResult.retry);
+      expect((await database.captureById('capture-1'))?.processingAttempts, 2);
+
+      expect(await processor.process('capture-1'), CaptureProcessResult.failed);
+      final afterThird = await database.captureById('capture-1');
+      expect(afterThird?.status, CaptureStatus.failed);
+      expect(afterThird?.processingAttempts, 3);
+    },
+  );
+
   test('missing record returns missing', () async {
     expect(
       await processor.process('does-not-exist'),

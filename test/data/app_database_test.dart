@@ -350,6 +350,52 @@ void main() {
     },
   );
 
+  test('markCaptured keeps an already assigned photo number', () async {
+    await database.createProject(
+      id: 'project',
+      name: '车间改造',
+      createdAt: DateTime.utc(2026, 7, 16),
+    );
+    final pending = await database.createPendingCapture(
+      id: 'capture-1',
+      projectId: 'project',
+      originalPath: '/private/capture-1.jpg',
+      workLocation: 'A 区',
+      workContent: '风管安装',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 9, 30),
+    );
+    final first = await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 32),
+    );
+    expect(first.photoNumber, '车间改造-SM-20260716-001');
+
+    final other = await database.createPendingCapture(
+      id: 'capture-2',
+      projectId: 'project',
+      originalPath: '/private/capture-2.jpg',
+      workLocation: 'B 区',
+      workContent: '保温检查',
+      photographer: '李工',
+      watermarkLocaleCode: 'zh',
+      createdAt: DateTime(2026, 7, 16, 9, 40),
+    );
+    await database.markCaptured(
+      captureId: other.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 41),
+    );
+
+    final again = await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 9, 45),
+    );
+
+    expect(again.photoNumber, '车间改造-SM-20260716-001');
+    expect(again.status, CaptureStatus.captured);
+  });
+
   test(
     'persists render and publish transitions with traceability metadata',
     () async {

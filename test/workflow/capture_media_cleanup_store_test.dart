@@ -49,20 +49,45 @@ void main() {
     },
   );
 
-  test('rejects a marker whose payload does not match its filename', () async {
+  test('skips corrupt and identity-mismatch markers and continues', () async {
     await store.write(
       const PendingCaptureMediaCleanup(
-        captureId: 'capture-1',
+        captureId: 'capture-mismatch',
         kind: CaptureMediaCleanupKind.clearOriginal,
         paths: ['/private/original.jpg'],
       ),
     );
+    await store.write(
+      const PendingCaptureMediaCleanup(
+        captureId: 'capture-corrupt',
+        kind: CaptureMediaCleanupKind.clearOriginal,
+        paths: ['/private/corrupt.jpg'],
+      ),
+    );
+    await store.write(
+      const PendingCaptureMediaCleanup(
+        captureId: 'capture-good',
+        kind: CaptureMediaCleanupKind.deleteCapture,
+        paths: ['/private/original.jpg', '/private/rendered.jpg'],
+        publishedUri: 'content://media/site-mark/1',
+      ),
+    );
     final directory = Directory('${root.path}/capture-media-cleanup');
-    final marker = await directory.list().where((entry) => entry is File).first;
-    await File(marker.path).writeAsString(
+    final clearOriginalFiles = await directory
+        .list()
+        .where((entry) => entry is File)
+        .cast<File>()
+        .where((file) => file.uri.pathSegments.last.contains('clear-original'))
+        .toList();
+    expect(clearOriginalFiles, hasLength(2));
+    await clearOriginalFiles[0].writeAsString(
       '{"captureId":"capture-2","kind":"clearOriginal","paths":[]}',
     );
+    await clearOriginalFiles[1].writeAsString('not-json');
 
-    await expectLater(store.list(), throwsFormatException);
+    final remaining = await store.list();
+    expect(remaining, hasLength(1));
+    expect(remaining.single.captureId, 'capture-good');
+    expect(remaining.single.kind, CaptureMediaCleanupKind.deleteCapture);
   });
 }

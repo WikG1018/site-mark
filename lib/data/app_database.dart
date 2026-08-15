@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -903,30 +904,37 @@ ORDER BY
         throw StateError('Capture project does not exist');
       }
 
-      final startOfDay = DateTime(
-        capturedAt.year,
-        capturedAt.month,
-        capturedAt.day,
-      );
-      final endOfDay = startOfDay.add(const Duration(days: 1));
-      final sameDay =
-          await (select(captureRecords)..where(
-                (row) =>
-                    row.capturedAt.isBiggerOrEqualValue(startOfDay) &
-                    row.capturedAt.isSmallerThanValue(endOfDay) &
-                    row.photoNumber.isNotNull(),
-              ))
-              .get();
-      final highestSequence = sameDay
-          .map(
-            (record) => int.tryParse(record.photoNumber!.split('-').last) ?? 0,
-          )
-          .fold(0, (highest, value) => value > highest ? value : highest);
-      final number = formatPhotoNumber(
-        projectName: project.name,
-        capturedAt: capturedAt,
-        sequence: highestSequence + 1,
-      );
+      final existingNumber = current.photoNumber;
+      final String number;
+      if (existingNumber != null && existingNumber.trim().isNotEmpty) {
+        number = existingNumber;
+      } else {
+        final startOfDay = DateTime(
+          capturedAt.year,
+          capturedAt.month,
+          capturedAt.day,
+        );
+        final endOfDay = startOfDay.add(const Duration(days: 1));
+        final sameDay =
+            await (select(captureRecords)..where(
+                  (row) =>
+                      row.capturedAt.isBiggerOrEqualValue(startOfDay) &
+                      row.capturedAt.isSmallerThanValue(endOfDay) &
+                      row.photoNumber.isNotNull(),
+                ))
+                .get();
+        final highestSequence = sameDay
+            .map(
+              (record) =>
+                  int.tryParse(record.photoNumber!.split('-').last) ?? 0,
+            )
+            .fold(0, (highest, value) => value > highest ? value : highest);
+        number = formatPhotoNumber(
+          projectName: project.name,
+          capturedAt: capturedAt,
+          sequence: highestSequence + 1,
+        );
+      }
 
       await (update(
         captureRecords,
@@ -1121,16 +1129,95 @@ ORDER BY
 
   Stream<List<CaptureSummary>> watchCaptureSummariesByIds(Set<String> ids) {
     if (ids.isEmpty) return Stream.value(const []);
-    final query = _captureSummariesByIdsSelectable(ids);
+    final chunks = _chunkIds(ids);
+    final selectables = [
+      for (final chunk in chunks) _captureSummariesByIdsSelectable(chunk),
+    ];
+
+    Future<List<CaptureSummary>> load() async {
+      final rows = <CaptureSummary>[];
+      for (final selectable in selectables) {
+        rows.addAll(await selectable.get());
+      }
+      _sortCaptureSummaries(rows);
+      return rows;
+    }
+
     return watchWithConditionalPolling(
-      source: query.watch(),
-      load: query.get,
+      source: _watchMergedSummaries(selectables),
+      load: load,
       shouldPoll: (rows) =>
           rows.any((summary) => _isProcessing(summary.capture.status)),
       equals: _sameCaptureSummaries,
       pollInterval: externalRefreshInterval,
       isPaused: () => _pollingPaused,
     );
+  }
+
+  List<Set<String>> _chunkIds(Set<String> ids) {
+    final list = ids.toList(growable: false);
+    final chunks = <Set<String>>[];
+    for (var start = 0; start < list.length; start += _captureIdChunkSize) {
+      final end = start + _captureIdChunkSize < list.length
+          ? start + _captureIdChunkSize
+          : list.length;
+      chunks.add(list.sublist(start, end).toSet());
+    }
+    return chunks;
+  }
+
+  Stream<List<CaptureSummary>> _watchMergedSummaries(
+    List<Selectable<CaptureSummary>> selectables,
+  ) {
+    if (selectables.length == 1) return selectables.single.watch();
+
+    late final StreamController<List<CaptureSummary>> controller;
+    final subscriptions = <StreamSubscription<List<CaptureSummary>>>[];
+    final latest = List<List<CaptureSummary>?>.filled(selectables.length, null);
+
+    void emitIfReady() {
+      if (latest.any((chunk) => chunk == null)) return;
+      final merged = <CaptureSummary>[for (final chunk in latest) ...chunk!];
+      _sortCaptureSummaries(merged);
+      if (!controller.isClosed) controller.add(merged);
+    }
+
+    controller = StreamController<List<CaptureSummary>>(
+      onListen: () {
+        for (var index = 0; index < selectables.length; index++) {
+          subscriptions.add(
+            selectables[index].watch().listen(
+              (rows) {
+                latest[index] = rows;
+                emitIfReady();
+              },
+              onError: (Object error, StackTrace stackTrace) {
+                if (!controller.isClosed) {
+                  controller.addError(error, stackTrace);
+                }
+              },
+            ),
+          );
+        }
+      },
+      onCancel: () async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+        subscriptions.clear();
+      },
+    );
+    return controller.stream;
+  }
+
+  void _sortCaptureSummaries(List<CaptureSummary> rows) {
+    rows.sort((left, right) {
+      final leftTime = left.capture.capturedAt ?? left.capture.createdAt;
+      final rightTime = right.capture.capturedAt ?? right.capture.createdAt;
+      final byTime = rightTime.compareTo(leftTime);
+      if (byTime != 0) return byTime;
+      return right.capture.id.compareTo(left.capture.id);
+    });
   }
 
   /// One-shot read used for app-private storage accounting.

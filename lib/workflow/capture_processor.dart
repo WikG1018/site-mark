@@ -103,6 +103,9 @@ final class CaptureProcessor {
     }
 
     // Step 4: increment the attempt counter in a single transaction.
+    // Both `captured` and `rendering` re-entries are real processing passes.
+    // Skipping increment on `rendering` would leave transient render failures
+    // retrying forever below maxAttempts.
     final attempted = await database.incrementProcessingAttempts(captureId);
     final attempts = attempted.processingAttempts;
 

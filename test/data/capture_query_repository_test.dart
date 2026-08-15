@@ -533,6 +533,24 @@ void main() {
     },
   );
 
+  test('watchByIds merges more IDs than one SQLite variable batch', () async {
+    final ids = {
+      for (var index = 0; index < 1000; index++)
+        'bulk-${index.toString().padLeft(5, '0')}',
+    };
+
+    final selected = StreamIterator(repository.watchByIds(ids));
+    addTearDown(selected.cancel);
+    expect(await selected.moveNext(), isTrue);
+    expect(selected.current, hasLength(1000));
+    expect(
+      selected.current.map((row) => row.capture.id),
+      containsAll(['bulk-00000', 'bulk-00999']),
+    );
+    expect(selected.current.first.capture.id, 'bulk-00999');
+    expect(selected.current.last.capture.id, 'bulk-00000');
+  });
+
   test('cursor query plans use global and project cursor indexes', () async {
     final globalPlan = await database
         .customSelect(

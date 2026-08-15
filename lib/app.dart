@@ -285,6 +285,7 @@ final captureWorkflowProvider = Provider<CaptureWorkflow>((ref) {
     fileStore: ref.watch(privateFileStoreProvider),
     scheduler: ref.watch(captureBackgroundSchedulerProvider),
     locationCoordinator: ref.watch(captureLocationCoordinatorProvider),
+    mediaService: ref.watch(captureMediaServiceProvider),
   );
 });
 

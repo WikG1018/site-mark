@@ -129,16 +129,22 @@ class AppCaptureMediaCleanupPendingStore
       final name = entity.uri.pathSegments.last;
       final identity = _parseMarkerName(name);
       if (identity == null) continue;
-      final decoded = jsonDecode(await entity.readAsString());
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('Cleanup marker is not a JSON object');
+      try {
+        final decoded = jsonDecode(await entity.readAsString());
+        if (decoded is! Map) continue;
+        final pending = PendingCaptureMediaCleanup.fromJson(
+          Map<String, dynamic>.from(decoded),
+        );
+        if (pending.captureId != identity.captureId ||
+            pending.kind != identity.kind) {
+          continue;
+        }
+        result.add(pending);
+      } on FormatException {
+        continue;
+      } on Object {
+        continue;
       }
-      final pending = PendingCaptureMediaCleanup.fromJson(decoded);
-      if (pending.captureId != identity.captureId ||
-          pending.kind != identity.kind) {
-        throw const FormatException('Cleanup marker identity mismatch');
-      }
-      result.add(pending);
     }
     return result;
   }
