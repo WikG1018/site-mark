@@ -86,6 +86,29 @@ jobs:
             echo "::warning::Release APK build failed; retrying after a transient-download backoff (attempt $attempt/3)."
             sleep "$((attempt * 10))"
           done
+      - name: Verify release APK has no forbidden permissions
+        run: |
+          AAPT2="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools/36.0.0/aapt2"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          test -x "$AAPT2"
+          test -f "$APK"
+          PERMISSIONS="$($AAPT2 dump permissions "$APK")"
+          for FORBIDDEN in \
+            android.permission.INTERNET \
+            android.permission.CAMERA \
+            android.permission.ACCESS_BACKGROUND_LOCATION \
+            android.permission.READ_MEDIA_IMAGES \
+            android.permission.ACCESS_NETWORK_STATE \
+            android.permission.WRITE_EXTERNAL_STORAGE \
+            android.permission.READ_EXTERNAL_STORAGE \
+            android.permission.MANAGE_EXTERNAL_STORAGE \
+            android.permission.READ_MEDIA_VIDEO \
+            android.permission.READ_MEDIA_AUDIO; do
+            if grep -Fq "$FORBIDDEN" <<<"$PERMISSIONS"; then
+              echo "APK contains forbidden permission $FORBIDDEN" >&2
+              exit 1
+            fi
+          done
       - uses: actions/upload-artifact@v6
         with:
           name: sitemark-debug-apk

@@ -1,9 +1,10 @@
 # SiteMark v1.0 真机回归清单
 
-> **背景：** [`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5) **已经发布并设为 Latest**。v1.0.0~v1.0.4 此前为 Pre-release。
+> **背景：** [`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5) **已经发布并设为 Latest**。[`v1.0.6`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.6) **已作为 Pre-release 发布**；在本清单于 **≥2 类 OEM 系统相机** 上实际填表完成前，保持 Pre-release，不提升为 Latest。v1.0.0~v1.0.4 此前亦为 Pre-release。
 > **用途：** 1.0 线上回归与后续 `1.0.x` 维护版本发布前的人工验收。  
 > 自动 CI 全绿**不能**替代本清单。  
-> 记录结果时填写机型、Android 版本、SiteMark 版本（`关于` 页）、日期与测试人。
+> 记录结果时填写机型、Android 版本、SiteMark 版本（`关于` 页）、日期与测试人。  
+> **不要**在未完成真机验收前勾选通过项或编造机型结果。
 
 相关文档：[`release-checklist.md`](release-checklist.md)、[`NEXT_AGENT_PROMPT.md`](../NEXT_AGENT_PROMPT.md)。
 
@@ -20,7 +21,7 @@
 ## 1. 安装与数据保留
 
 - [ ] 全新安装可完成引导并创建项目  
-- [ ] 从已安装的 **v1.0.4**（或更早版本）**覆盖安装**后，项目、记录、设置、私有原图仍在  
+- [ ] 从已安装的 **v1.0.5**（或更早版本）**覆盖安装**到 **v1.0.6** 后，项目、记录、设置、私有原图仍在  
 - [ ] 卸载警告已知：私有数据删除，系统相册 `Pictures/SiteMark` 通常保留  
 
 ## 2. 拍摄与后台队列
@@ -78,7 +79,7 @@
 
 本清单**不**决定「能否发布 1.0」——1.0 已发布。完成后可据此决定：
 
-1. 是否将 GitHub Release 上的 **Pre-release 标记去掉**（仅改发布状态，不是重新发版）— v1.0.5 已完成此步骤
+1. 是否将 GitHub Release 上的 **Pre-release 标记去掉**（仅改发布状态，不是重新发版）— v1.0.5 已为 Latest；**v1.0.6 仍为 Pre-release**，须本清单在 ≥2 类 OEM 相机上填表后再考虑提升
 2. 是否需要发布后续 **`1.0.x`** 补丁收录已合并的修复与 polish
 3. 是否更新 README「预发布阶段」等表述以匹配真实产品阶段  
 
@@ -98,8 +99,8 @@
 
 | 日期 | main SHA | 泄漏扫描 | 诊断接线 | 聚焦测试簇 |
 | --- | --- | --- | --- | --- |
-| 2026-08-06 | 9424579 | 备份/恢复/删除描述函数无 `$error` 拼接；`capture_media_service` 批量操作仍有 `error.toString()` 写入 failures 并可能进详情 SnackBar（记入 follow-up，非本轮 #35/#37 范围） | app.dart 三处 diagnostics；backup+restore+deletion 均有 DiagnosticCategory | 53 tests PASS（deletion/restore diagnostics、import mapping、glass、dock、project detail） |
+| 2026-08-06 | 9424579 | 备份/恢复/删除描述函数无 `$error` 拼接。**更正（v1.0.6 代码）：** `capture_media_service` 批量操作以 `CaptureMediaFailure` 枚举写入 `failures`，UI 经 `AppStrings.captureMediaFailure` 映射文案；不再将 `error.toString()` 写入 failures 或详情 SnackBar | app.dart 三处 diagnostics；backup+restore+deletion 均有 DiagnosticCategory | 53 tests PASS（deletion/restore diagnostics、import mapping、glass、dock、project detail） |
 
 **Merged:** #36 → #35 → #37 → #34（2026-08-06）
 
-**Task 7–8:** 真机填表已完成；v1.0.5 已设为 Latest。后续补丁的真机回归仍使用本清单。
+**Task 7–8:** v1.0.5 真机填表已完成并设为 Latest。**v1.0.6 真机矩阵尚未在本清单填表**；完成 ≥2 类 OEM 系统相机验收前保持 Pre-release。
