@@ -53,21 +53,21 @@ class PublishJpegOutcome {
 /// that happened between the native publish (row finalized, old rows
 /// deleted) and the caller's database commit.
 ///
-/// [displayName] is the photo number the publish used; callers reconcile
-/// their database row by that key. [contentUri] is already visible in the
-/// gallery. [supersededUris] lists every stale candidate the publisher
-/// intended to delete — some may already be gone, and re-queuing them is an
-/// idempotent no-op that converges.
+/// [captureId] is the stable capture identity the publish was keyed by;
+/// callers reconcile their database row by this ID — never by photo
+/// number, which a backup restore can duplicate across projects.
+/// [contentUri] is already visible in the gallery. [supersededUris] lists
+/// every stale candidate the publisher intended to delete — some may
+/// already be gone, and re-queuing them is an idempotent no-op that
+/// converges.
 class RecoveredPublishJournalEntry {
   const RecoveredPublishJournalEntry({
-    required this.journalId,
-    required this.displayName,
+    required this.captureId,
     required this.contentUri,
     required this.supersededUris,
   });
 
-  final String journalId;
-  final String displayName;
+  final String captureId;
   final String contentUri;
   final List<String> supersededUris;
 }
@@ -83,11 +83,23 @@ abstract interface class PlatformServices {
 
   Future<LocationResult> requestCurrentLocation(int timeoutMillis);
 
-  Future<PublishJpegOutcome> publishJpeg(String sourcePath, String displayName);
+  /// Publishes the JPEG under [displayName].
+  ///
+  /// [captureId] is the caller's stable identity for the capture: it keys
+  /// the durable publish journal and disambiguates records that share a
+  /// photo number after a backup restore. [publishedUri] is the exact URI
+  /// this capture previously published — the native side replaces ONLY
+  /// that URI, never every same-named gallery row.
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+    String captureId,
+    String? publishedUri,
+  );
 
   Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals();
 
-  Future<void> clearPublishJournal(String journalId);
+  Future<void> clearPublishJournal(String captureId);
 
   Future<void> deletePublishedImage(String contentUri);
 
@@ -130,8 +142,15 @@ class PigeonPlatformServices implements PlatformServices {
   Future<PublishJpegOutcome> publishJpeg(
     String sourcePath,
     String displayName,
+    String captureId,
+    String? publishedUri,
   ) async {
-    final result = await _api.publishJpeg(sourcePath, displayName);
+    final result = await _api.publishJpeg(
+      sourcePath,
+      displayName,
+      captureId,
+      publishedUri,
+    );
     return PublishJpegOutcome(
       contentUri: result.contentUri,
       supersededUris: result.supersededUris ?? const [],
@@ -145,8 +164,7 @@ class PigeonPlatformServices implements PlatformServices {
     return [
       for (final journal in journals)
         RecoveredPublishJournalEntry(
-          journalId: journal.journalId,
-          displayName: journal.displayName,
+          captureId: journal.captureId,
           contentUri: journal.contentUri,
           supersededUris: journal.supersededUris,
         ),
@@ -154,8 +172,8 @@ class PigeonPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<void> clearPublishJournal(String journalId) {
-    return _api.clearPublishJournal(journalId);
+  Future<void> clearPublishJournal(String captureId) {
+    return _api.clearPublishJournal(captureId);
   }
 
   @override

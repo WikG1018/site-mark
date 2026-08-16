@@ -273,6 +273,8 @@ class _CoordinatorPlatform implements PlatformServices {
   Future<PublishJpegOutcome> publishJpeg(
     String sourcePath,
     String displayName,
+    String captureId,
+    String? publishedUri,
   ) async =>
       const PublishJpegOutcome(contentUri: 'content://media/site-mark/1');
 

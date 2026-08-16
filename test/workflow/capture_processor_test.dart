@@ -618,6 +618,8 @@ class _ProcessorPlatformServices implements PlatformServices {
   Future<PublishJpegOutcome> publishJpeg(
     String sourcePath,
     String displayName,
+    String captureId,
+    String? publishedUri,
   ) async {
     publishedNames.add(displayName);
     _publishCounter += 1;
@@ -632,9 +634,9 @@ class _ProcessorPlatformServices implements PlatformServices {
       List.of(recoveredJournals);
 
   @override
-  Future<void> clearPublishJournal(String journalId) async {
-    clearedJournalIds.add(journalId);
-    recoveredJournals.removeWhere((entry) => entry.journalId == journalId);
+  Future<void> clearPublishJournal(String captureId) async {
+    clearedJournalIds.add(captureId);
+    recoveredJournals.removeWhere((entry) => entry.captureId == captureId);
   }
 
   @override

@@ -26,8 +26,7 @@ class PublishJournalStoreTest {
 
         assertTrue(recorded)
         val entry = store.recover().single()
-        assertEquals("SM-1", entry.journalId)
-        assertEquals("SM-1", entry.displayName)
+        assertEquals("SM-1", entry.captureId)
         assertEquals("content://media/external/images/2", entry.contentUri)
         assertEquals(listOf("u1", "u2"), entry.supersededUris)
     }
@@ -67,9 +66,9 @@ class PublishJournalStoreTest {
         store.clear("SM-1")
 
         val remaining = store.recover()
-        assertEquals(listOf("SM-2"), remaining.map { it.journalId })
+        assertEquals(listOf("SM-2"), remaining.map { it.captureId })
         val entry = remaining.single()
-        assertEquals("SM-2", entry.displayName)
+        assertEquals("SM-2", entry.captureId)
         assertEquals("content://media/external/images/2", entry.contentUri)
         assertTrue(entry.supersededUris.isEmpty())
     }

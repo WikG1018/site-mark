@@ -493,6 +493,8 @@ class _BackPlatform implements PlatformServices {
   Future<PublishJpegOutcome> publishJpeg(
     String sourcePath,
     String displayName,
+    String captureId,
+    String? publishedUri,
   ) async => const PublishJpegOutcome(contentUri: '');
 
   @override

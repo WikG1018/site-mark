@@ -51,8 +51,9 @@ enum CaptureProcessResult {
 ///    otherwise.
 /// 6. Compute SHA-256 when missing, or verify the current original against the
 ///    stored digest. A mismatch is a permanent failure (tampered original).
-/// 7. Mark `rendering`, render to `rendered/<captureId>.jpg`, then publish using
-///    the photo number (overwriting a same-named MediaStore entry).
+/// 7. Mark `rendering`, render to `rendered/<captureId>.jpg`, then publish
+///    under the photo number keyed by the capture ID (replacing only this
+///    capture's previously published URI).
 /// 8. Mark `ready` with the returned URI.
 /// 9. Return [CaptureProcessResult.retry] for IO/system failures while attempts
 ///    are below 3; on the third attempt mark `failed` and return
@@ -170,6 +171,8 @@ final class CaptureProcessor {
       final publishOutcome = await platform.publishJpeg(
         renderResult.outputPath,
         rendering.photoNumber!,
+        captureId,
+        rendering.publishedUri,
       );
       // The new URI and a delete-only cleanup task per stale duplicate URI
       // commit in ONE transaction: a process death between the two writes
@@ -182,9 +185,14 @@ final class CaptureProcessor {
         supersededUris: publishOutcome.supersededUris,
       );
       // The database commit survived, so the native publish journal has
-      // served its purpose; a crash before this point is reconciled by
-      // CaptureMediaService.cleanupInterrupted on the next launch.
-      await platform.clearPublishJournal(rendering.photoNumber!);
+      // served its purpose. This clear is BEST-EFFORT and must never turn
+      // the succeeded publish into a retry (a re-publish would duplicate
+      // the gallery photo): a stale journal left behind by a failed clear
+      // is reconciled safely by CaptureMediaService.cleanupInterrupted on
+      // the next launch (record ready + URI matches → clear only).
+      try {
+        await platform.clearPublishJournal(captureId);
+      } catch (_) {}
       return CaptureProcessResult.succeeded;
     } catch (error) {
       // Step 9: classify the error and decide retry vs. final failure.

@@ -178,9 +178,15 @@ class CaptureMediaService {
           failures[id] = CaptureMediaFailure.renderedPhotoMissing;
           continue;
         }
+        // Key the publish by THIS capture's ID and pass its exact previous
+        // URI: a backup restore preserves photo numbers, so another record
+        // (even in another project) may own a same-named gallery row that
+        // must never be superseded by this publish.
         final outcome = await platform.publishJpeg(
           renderedPath,
           record.photoNumber!,
+          id,
+          record.publishedUri,
         );
         // The new URI and a delete-only cleanup task per stale duplicate URI
         // commit in ONE database transaction: a process death (or a failed
@@ -194,8 +200,13 @@ class CaptureMediaService {
         );
         // The database commit survived, so the native publish journal has
         // served its purpose; a crash before this point is reconciled by
-        // [_recoverPublishJournals] on the next launch.
-        await platform.clearPublishJournal(record.photoNumber!);
+        // [_recoverPublishJournals] on the next launch. This clear is
+        // BEST-EFFORT: a stale journal never turns the completed republish
+        // into a failure — recovery sees `ready` + matching URI and clears
+        // the journal on the next launch.
+        try {
+          await platform.clearPublishJournal(id);
+        } catch (_) {}
         succeeded.add(id);
       } catch (_) {
         failures[id] = CaptureMediaFailure.operationFailed;
@@ -272,36 +283,39 @@ class CaptureMediaService {
   /// - Row is gone or terminal-without-retry (`failed`) → nothing will ever
   ///   reference the journaled URI → queue the new and stale URIs for
   ///   delete-only cleanup and clear the journal.
+  ///
+  /// The journal is keyed by the capture's stable ID, so the row is located
+  /// by `captureById` — NEVER by photo number, which a backup restore can
+  /// duplicate across projects (reconciling by number could write THIS
+  /// capture's URI into ANOTHER capture's row).
   Future<void> _recoverPublishJournals() async {
     final journals = await platform.recoverPublishJournals();
     for (final journal in journals) {
       try {
-        final record = await database.captureByPhotoNumber(journal.displayName);
+        final record = await database.captureById(journal.captureId);
         if (record == null) {
-          await database.enqueueSupersededCleanups(journal.displayName, [
+          await database.enqueueSupersededCleanups(journal.captureId, [
             journal.contentUri,
             ...journal.supersededUris,
           ]);
-          await platform.clearPublishJournal(journal.journalId);
+          await platform.clearPublishJournal(journal.captureId);
           continue;
         }
         switch (record.status) {
           case CaptureStatus.ready:
             if (record.publishedUri == journal.contentUri) {
-              await platform.clearPublishJournal(journal.journalId);
+              await platform.clearPublishJournal(journal.captureId);
             } else {
               final stale = <String>{
                 ...journal.supersededUris,
-                if (record.publishedUri != null &&
-                    record.publishedUri != journal.contentUri)
-                  record.publishedUri!,
+                if (record.publishedUri != null) record.publishedUri!,
               }.toList();
               await database.updatePublishedUri(
                 record.id,
                 journal.contentUri,
                 supersededUris: stale,
               );
-              await platform.clearPublishJournal(journal.journalId);
+              await platform.clearPublishJournal(journal.captureId);
             }
           case CaptureStatus.captured:
           case CaptureStatus.rendering:
@@ -316,7 +330,7 @@ class CaptureMediaService {
               journal.contentUri,
               ...journal.supersededUris,
             ]);
-            await platform.clearPublishJournal(journal.journalId);
+            await platform.clearPublishJournal(journal.captureId);
         }
       } catch (_) {
         // Keep the journal entry for a later launch; siblings still run.

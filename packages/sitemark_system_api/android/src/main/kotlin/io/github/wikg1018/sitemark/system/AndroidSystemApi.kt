@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.ClipData
 import android.content.ContentResolver
-import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -360,10 +359,12 @@ class AndroidSystemApi(
     override fun publishJpeg(
         sourcePath: String,
         displayName: String,
+        captureId: String,
+        publishedUri: String?,
         callback: (Result<MediaPublishResult>) -> Unit,
     ) {
         ioExecutor.execute {
-            val result = runCatching { publishJpegInternal(sourcePath, displayName) }
+            val result = runCatching { publishJpegInternal(sourcePath, displayName, captureId, publishedUri) }
             mainHandler.post { callback(result) }
         }
     }
@@ -432,33 +433,47 @@ class AndroidSystemApi(
         }
     }
 
-    private fun publishJpegInternal(sourcePath: String, displayName: String): MediaPublishResult {
+    private fun publishJpegInternal(
+        sourcePath: String,
+        displayName: String,
+        captureId: String,
+        publishedUri: String?,
+    ): MediaPublishResult {
+        require(captureId.isNotBlank()) { "Publish requires a capture ID" }
         val source = validatedPrivateFile(sourcePath)
         val safeName = normalizedJpegName(displayName)
         val resolver = context.contentResolver
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        // The ONLY rows this publish may supersede are explicit: the exact
+        // URI the caller's record previously published, plus any leftover
+        // journaled URI from an earlier crashed publish of the SAME capture.
+        // Same-named rows owned by OTHER captures (e.g. a restored project
+        // that preserved the photo number) are deliberately untouched.
+        val leftoverJournaledUri = publishJournal.peekContentUri(captureId)
+        val supersededCandidates = (listOfNotNull(publishedUri) + listOfNotNull(leftoverJournaledUri))
+            .distinct()
         val publisher = SafeMediaPublisher(
             store = AndroidPublishedImageStore(
                 resolver = resolver,
                 collection = collection,
                 relativePath = PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH,
             ),
-            // Journal under the CALLER's display name (the photo number, not
-            // the .jpg-safe name) so recovery can reconcile the database row
-            // by that key.
+            // Journal under the caller's stable capture ID so recovery
+            // reconciles exactly the right database row even when several
+            // records share a photo number after a backup restore.
             journal = PublishJournalSink { _, contentUri, supersededUris ->
-                publishJournal.record(displayName, contentUri, supersededUris)
+                publishJournal.record(captureId, contentUri, supersededUris)
             },
         )
-        val outcome = publisher.publish(source, safeName)
+        val outcome = publisher.publish(source, safeName, captureId, supersededCandidates)
         return MediaPublishResult(outcome.contentUri, outcome.supersededUris)
     }
 
     override fun recoverPublishJournals(): List<RecoveredPublishJournal>? =
         publishJournal.recover()
 
-    override fun clearPublishJournal(journalId: String) {
-        publishJournal.clear(journalId)
+    override fun clearPublishJournal(captureId: String) {
+        publishJournal.clear(captureId)
     }
 
     override fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit) {
@@ -615,8 +630,12 @@ class AndroidSystemApi(
      * MediaStore write inline (no executor hop) so the headless-safety
      * contract can be asserted without waiting on a background thread.
      */
-    internal fun publishJpegForTest(sourcePath: String, displayName: String): MediaPublishResult =
-        publishJpegInternal(sourcePath, displayName)
+    internal fun publishJpegForTest(
+        sourcePath: String,
+        displayName: String,
+        captureId: String,
+        publishedUri: String?,
+    ): MediaPublishResult = publishJpegInternal(sourcePath, displayName, captureId, publishedUri)
 
     /**
      * Test adapter for the synchronous delete body. Runs the policy checks +
@@ -633,32 +652,6 @@ private class AndroidPublishedImageStore(
     private val collection: Uri,
     private val relativePath: String,
 ) : PublishedImageStore {
-    override fun findAll(displayName: String): List<String> {
-        val projection = arrayOf(MediaStore.Images.Media._ID)
-        val selection =
-            "${MediaStore.Images.Media.DISPLAY_NAME} = ? AND " +
-                "${MediaStore.Images.Media.RELATIVE_PATH} = ? AND " +
-                "${MediaStore.Images.Media.IS_PENDING} = 0"
-        val arguments = arrayOf(displayName, relativePath)
-        // Every matching row is a superseded duplicate once the replacement
-        // is finalized, so collect them all — replacing only one arbitrary
-        // row would leave historical duplicates unconverged.
-        val cursor = resolver.query(collection, projection, selection, arguments, null)
-            // A null cursor means MediaProvider is temporarily unavailable
-            // (crashed, restarting, storage mounting) — NOT that no rows
-            // match. Treating it as "no duplicates" would silently switch to
-            // the publish-new path and accumulate gallery duplicates, so it
-            // must throw and let the caller retry the whole publish later.
-            ?: error("MediaStore did not answer the duplicate lookup")
-        val uris = mutableListOf<String>()
-        cursor.use {
-            while (it.moveToNext()) {
-                uris.add(ContentUris.withAppendedId(collection, it.getLong(0)).toString())
-            }
-        }
-        return uris
-    }
-
     override fun insertPending(displayName: String): String {
         val uri = resolver.insert(
             collection,

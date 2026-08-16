@@ -4,9 +4,6 @@ import java.io.File
 
 /** Minimal storage contract used to make MediaStore replacement testable. */
 internal interface PublishedImageStore {
-    /** Returns the URIs of ALL published rows with [displayName]. */
-    fun findAll(displayName: String): List<String>
-
     fun insertPending(displayName: String): String
 
     fun write(contentUri: String, source: File)
@@ -34,80 +31,66 @@ internal data class SafePublishOutcome(
  * between the native publish and the caller's database commit can be
  * reconciled on the next launch.
  *
- * Returns whether the entry was durably persisted. `null` (no journal
- * configured) counts as persisted so tests without a journal keep the
- * straightforward delete path.
+ * The key is the caller's stable CAPTURE ID (never the display name: a
+ * backup restore can duplicate photo numbers across projects). Returns
+ * whether the entry was durably persisted. `null` (no journal configured)
+ * counts as persisted so tests without a journal keep the straightforward
+ * delete path.
  */
 internal fun interface PublishJournalSink {
     fun record(
-        displayName: String,
+        captureId: String,
         contentUri: String,
         supersededUris: List<String>,
     ): Boolean
 }
 
 /**
- * Publishes a new image or safely replaces an existing one.
+ * Publishes a new image or safely replaces a previously published one.
  *
- * Replacement never mutates the old rows' bytes: a new pending row is
- * created, fully written, and finalized first; only then are the old rows
- * deleted. ALL published rows sharing the display name are superseded, so
- * duplicates left behind by earlier failed replacements also converge.
- * Once the new row is finalized the publish is a SUCCESS — later old-row
- * delete failures are reported through [SafePublishOutcome.supersededUris]
- * so the caller can retry just those deletes, never re-publish (which
- * would accumulate duplicates):
+ * WHICH rows may be superseded is decided EXCLUSIVELY by the caller through
+ * [supersededCandidates] — the exact previous URI of THIS capture plus any
+ * leftover journaled URI of the same capture. Rows that merely share the
+ * display name are NEVER touched: a backup restore preserves photo numbers,
+ * so another capture (even in another project) may legitimately own a
+ * same-named gallery row.
  *
- * - Write or finalize failure → the pending row is cleaned up, the old
- *   published photo is untouched, and the error propagates.
- * - Old-row delete failure → the finalized new photo stays published and
- *   the caller receives the stale URI in [SafePublishOutcome.supersededUris];
- *   a temporary duplicate is acceptable and later cleanup converges on it.
+ * The caller's rows are never mutated in place: a new pending row is
+ * created, fully written, and finalized first; only then are the superseded
+ * rows deleted. Once the new row is finalized the publish is a SUCCESS —
+ * later old-row delete failures are reported through
+ * [SafePublishOutcome.supersededUris] so the caller can retry just those
+ * deletes, never re-publish (which would accumulate duplicates):
+ *
+ * - Write or finalize failure → the pending row is cleaned up, superseded
+ *   rows are untouched, and the error propagates.
+ * - Journal persist failure → the finalized row is rolled back
+ *   (best-effort delete) and the error propagates. Without the journal a
+ *   process death before the caller's database commit would leave the new
+ *   gallery photo untracked by anyone — returning "success" here would
+ *   silently reopen that window.
+ * - Superseded-row delete failure → the finalized new photo stays published
+ *   and the caller receives the stale URI in
+ *   [SafePublishOutcome.supersededUris]; a temporary duplicate is
+ *   acceptable and later cleanup converges on it.
  * - Process death at any point → a partially written row stays
- *   `IS_PENDING` and is invisible to other apps.
+ *   `IS_PENDING` and is invisible to other apps; a journaled finalize is
+ *   reconciled by recovery.
  */
 internal class SafeMediaPublisher(
     private val store: PublishedImageStore,
     private val journal: PublishJournalSink? = null,
 ) {
-    fun publish(source: File, displayName: String): SafePublishOutcome {
-        val existing = store.findAll(displayName)
-        return if (existing.isEmpty()) {
-            publishNew(source, displayName)
-        } else {
-            replaceExisting(existing, source, displayName)
-        }
-    }
-
-    private fun publishNew(source: File, displayName: String): SafePublishOutcome {
-        val created = store.insertPending(displayName)
-        try {
-            store.write(created, source)
-            store.setPending(created, pending = false)
-        } catch (error: Throwable) {
-            try {
-                store.delete(created)
-            } catch (cleanupError: Throwable) {
-                error.addSuppressed(cleanupError)
-            }
-            throw error
-        }
-        // Journal the finalized new row even on the first publish: a crash
-        // before the caller commits would otherwise leave an untracked
-        // gallery orphan.
-        journal?.record(displayName, created, emptyList())
-        return SafePublishOutcome(contentUri = created)
-    }
-
-    private fun replaceExisting(
-        supersededCandidates: List<String>,
+    fun publish(
         source: File,
         displayName: String,
+        captureId: String,
+        supersededCandidates: List<String>,
     ): SafePublishOutcome {
         val created = store.insertPending(displayName)
         try {
-            // Write the complete replacement into the new pending row while
-            // the old published rows are still untouched and visible.
+            // Write the complete content into the new pending row while
+            // every superseded row is still untouched and visible.
             store.write(created, source)
             // Finalize the new row BEFORE removing the old ones. From this
             // point on the gallery holds a complete published photo, so the
@@ -127,20 +110,29 @@ internal class SafeMediaPublisher(
         // Persist the publish intent BEFORE deleting anything: if the
         // process dies mid-delete, recovery learns both the new URI and
         // every stale candidate (re-queuing an already-deleted URI is an
-        // idempotent no-op). When the journal cannot be persisted, keep the
-        // old rows and report them ALL as superseded — the caller's
-        // transactional cleanup queue then owns their tracking instead of a
-        // journal we know was never written.
-        val journaled = journal?.record(displayName, created, supersededCandidates) ?: true
+        // idempotent no-op). The journal is keyed by the capture ID, so a
+        // same-named row owned by ANOTHER capture is never affected.
+        //
+        // A failed durable persist MUST fail the publish: no journal means
+        // nobody could reconcile a crash between this return and the
+        // caller's database commit, and the finalized new row would become
+        // an untracked gallery orphan. Roll the new row back (best effort)
+        // and propagate so the caller retries the whole publish later; the
+        // superseded rows were never touched, so nothing is lost.
+        val journaled = journal?.record(captureId, created, supersededCandidates) ?: true
         if (!journaled) {
-            return SafePublishOutcome(contentUri = created, supersededUris = supersededCandidates)
+            try {
+                store.delete(created)
+            } catch (_: Throwable) {
+                // Best effort under an already-degraded disk: the row stays
+                // published but this publish is still reported as failed.
+            }
+            error("Unable to persist the publish journal")
         }
-        // Best effort: remove EVERY superseded row with this display name —
-        // including duplicates left behind by earlier failed replacements —
-        // so the gallery converges to a single row. A delete failure must
-        // NOT fail the publish (the caller would re-publish and accumulate
-        // more duplicates); report the stale URI so only that delete is
-        // retried later.
+        // Best effort: remove only the EXPLICIT superseded URIs. A delete
+        // failure must NOT fail the publish (the caller would re-publish
+        // and accumulate more duplicates); report the stale URI so only
+        // that delete is retried later.
         val superseded = mutableListOf<String>()
         for (candidate in supersededCandidates) {
             try {

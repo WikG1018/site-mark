@@ -1448,23 +1448,6 @@ ORDER BY
     }
   }
 
-  /// Finds the most recent capture whose photo number equals [photoNumber].
-  ///
-  /// Photo numbers are the display names used for MediaStore publishing, so
-  /// publish-journal reconciliation resolves its database row through this
-  /// lookup. Photo numbers are expected to be unique per project date; the
-  /// latest row wins defensively.
-  Future<CaptureRecord?> captureByPhotoNumber(String photoNumber) {
-    final query = select(captureRecords)
-      ..where((row) => row.photoNumber.equals(photoNumber))
-      ..orderBy([
-        (row) => OrderingTerm.desc(row.createdAt),
-        (row) => OrderingTerm.desc(row.id),
-      ])
-      ..limit(1);
-    return query.getSingleOrNull();
-  }
-
   /// Returns all pending superseded-URI deletes, oldest first.
   Future<List<CaptureMediaCleanup>> pendingSupersededCleanups() {
     return (select(

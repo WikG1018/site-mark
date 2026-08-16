@@ -426,17 +426,15 @@ class MediaPublishResult {
 /// the caller committed the new URI to its database.
 class RecoveredPublishJournal {
   RecoveredPublishJournal({
-    required this.journalId,
-    required this.displayName,
+    required this.captureId,
     required this.contentUri,
     required this.supersededUris,
   });
 
-  String journalId;
-
-  /// The display name (photo number) the publish used. Callers reconcile
-  /// their database row by this key.
-  String displayName;
+  /// The stable capture identity the publish was keyed by. Callers
+  /// reconcile their database row by this ID — NEVER by photo number,
+  /// which a backup restore can duplicate across projects.
+  String captureId;
 
   /// The finalized new MediaStore URI. It is already visible in the gallery.
   String contentUri;
@@ -447,7 +445,7 @@ class RecoveredPublishJournal {
   List<String> supersededUris;
 
   List<Object?> _toList() {
-    return <Object?>[journalId, displayName, contentUri, supersededUris];
+    return <Object?>[captureId, contentUri, supersededUris];
   }
 
   Object encode() {
@@ -457,10 +455,9 @@ class RecoveredPublishJournal {
   static RecoveredPublishJournal decode(Object result) {
     result as List<Object?>;
     return RecoveredPublishJournal(
-      journalId: result[0]! as String,
-      displayName: result[1]! as String,
-      contentUri: result[2]! as String,
-      supersededUris: (result[3]! as List<Object?>).cast<String>(),
+      captureId: result[0]! as String,
+      contentUri: result[1]! as String,
+      supersededUris: (result[2]! as List<Object?>).cast<String>(),
     );
   }
 
@@ -473,8 +470,7 @@ class RecoveredPublishJournal {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(journalId, other.journalId) &&
-        _deepEquals(displayName, other.displayName) &&
+    return _deepEquals(captureId, other.captureId) &&
         _deepEquals(contentUri, other.contentUri) &&
         _deepEquals(supersededUris, other.supersededUris);
   }
@@ -485,7 +481,7 @@ class RecoveredPublishJournal {
 
   @override
   String toString() {
-    return 'RecoveredPublishJournal(journalId: $journalId, displayName: $displayName, contentUri: $contentUri, supersededUris: $supersededUris)';
+    return 'RecoveredPublishJournal(captureId: $captureId, contentUri: $contentUri, supersededUris: $supersededUris)';
   }
 }
 
@@ -760,9 +756,20 @@ class SiteMarkSystemApi {
     return pigeonVar_replyValue! as LocationResult;
   }
 
+  /// Publishes [sourcePath] into the system gallery under [displayName].
+  ///
+  /// [captureId] is the caller's stable identity for the capture: it keys
+  /// the durable publish journal and disambiguates records that share a
+  /// photo number after a backup restore. [publishedUri] is the exact
+  /// previously published URI this publish replaces — the native side
+  /// deletes ONLY that URI (plus any leftover journaled URI of the same
+  /// capture), never every same-named gallery row, because a restored
+  /// project may legitimately own another row with the same display name.
   Future<MediaPublishResult> publishJpeg(
     String sourcePath,
     String displayName,
+    String captureId,
+    String? publishedUri,
   ) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.publishJpeg$pigeonVar_messageChannelSuffix';
@@ -772,7 +779,7 @@ class SiteMarkSystemApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[sourcePath, displayName],
+      <Object?>[sourcePath, displayName, captureId, publishedUri],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -804,7 +811,7 @@ class SiteMarkSystemApi {
         ?.cast<RecoveredPublishJournal>();
   }
 
-  Future<void> clearPublishJournal(String journalId) async {
+  Future<void> clearPublishJournal(String captureId) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.clearPublishJournal$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -813,7 +820,7 @@ class SiteMarkSystemApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[journalId],
+      <Object?>[captureId],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 

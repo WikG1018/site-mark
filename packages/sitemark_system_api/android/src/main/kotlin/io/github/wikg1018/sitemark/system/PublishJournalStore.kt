@@ -14,10 +14,15 @@ import android.content.SharedPreferences
  * database would keep pointing at an already-deleted URI and the new photo
  * would be an untracked orphan.
  *
- * Entries are keyed by display name: a same-named re-publish overwrites the
- * previous entry, which is safe because the overwritten new URI becomes a
- * superseded candidate of the next publish (found by `findAll`) and is either
- * deleted or reported through `supersededUris`, so it is never lost.
+ * Entries are keyed by the caller's stable CAPTURE ID — never by the display
+ * name / photo number. A backup restore preserves photo numbers, so the
+ * original and the restored project can hold records with the SAME photo
+ * number at the same time; keying by name would let one capture's publish
+ * or recovery mutate the other capture's row. Capture IDs are unique per
+ * record, so a same-capture re-publish overwrites the previous entry safely:
+ * before overwriting, the publisher folds the previous entry's URI into the
+ * new publish's superseded candidates, so the overwritten URI is deleted or
+ * reported through `supersededUris` and never lost.
  *
  * The entry intentionally records ALL superseded candidates (not just the
  * failed deletes): recovery re-queues them through the idempotent delete-only
@@ -27,11 +32,11 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
 
     /** Returns false when the synchronous commit failed (disk full/corrupt). */
     fun record(
-        displayName: String,
+        captureId: String,
         contentUri: String,
         supersededUris: List<String>,
     ): Boolean {
-        val prefix = keyPrefix(displayName)
+        val prefix = keyPrefix(captureId)
         val editor = preferences.edit()
             .putString("$prefix$KEY_NEW_URI", contentUri)
             .putInt("$prefix$KEY_STALE_COUNT", supersededUris.size)
@@ -39,30 +44,48 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
         supersededUris.forEachIndexed { index, uri ->
             editor.putString("$prefix$KEY_STALE_PREFIX$index", uri)
         }
+        // A same-capture re-publish replaces the previous entry outright:
+        // stale slots beyond the new count are removed so recovery can never
+        // mix URIs of two different publishes.
+        val previousCount = (preferences.all?.get("$prefix$KEY_STALE_COUNT") as? Int) ?: 0
+        for (index in supersededUris.size until previousCount) {
+            editor.remove("$prefix$KEY_STALE_PREFIX$index")
+        }
         return editor.commit()
     }
 
+    /**
+     * Returns the journaled content URI for [captureId], or null when no
+     * complete entry exists. The publisher consults this BEFORE publishing
+     * so a leftover row from a previously crashed publish of the SAME
+     * capture becomes a superseded candidate of the new publish instead of
+     * an untracked duplicate.
+     */
+    fun peekContentUri(captureId: String): String? {
+        val prefix = keyPrefix(captureId)
+        val entries = preferences.all ?: return null
+        if (entries["$prefix$KEY_EXISTS"] !is Boolean) return null
+        return entries["$prefix$KEY_NEW_URI"] as? String
+    }
+
     fun recover(): List<RecoveredPublishJournal> {
-        val entries = preferences.all
+        val entries = preferences.all ?: return emptyList()
         val result = mutableListOf<RecoveredPublishJournal>()
         for (key in entries.keys) {
             if (!key.endsWith(KEY_EXISTS)) continue
             val prefix = key.removeSuffix(KEY_EXISTS)
             if (!entries.containsKey("$prefix$KEY_NEW_URI")) continue
             val contentUri = entries["$prefix$KEY_NEW_URI"] as? String ?: continue
+            val captureId = prefix.removePrefix(JOURNAL_KEY_PREFIX).removeSuffix(KEY_SEPARATOR)
+            if (captureId.isEmpty()) continue
             val staleCount = (entries["$prefix$KEY_STALE_COUNT"] as? Int) ?: 0
             val staleUris = mutableListOf<String>()
             for (index in 0 until staleCount) {
                 (entries["$prefix$KEY_STALE_PREFIX$index"] as? String)?.let(staleUris::add)
             }
-            // Journal keys are prefixed with the display name, which is also
-            // the reconciliation key for the caller's database row.
-            val displayName = prefix.removePrefix(JOURNAL_KEY_PREFIX).removeSuffix(KEY_SEPARATOR)
-            if (displayName.isEmpty()) continue
             result.add(
                 RecoveredPublishJournal(
-                    journalId = displayName,
-                    displayName = displayName,
+                    captureId = captureId,
                     contentUri = contentUri,
                     supersededUris = staleUris,
                 ),
@@ -71,17 +94,17 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
         return result
     }
 
-    fun clear(journalId: String) {
-        val prefix = keyPrefix(journalId)
+    fun clear(captureId: String) {
+        val prefix = keyPrefix(captureId)
         val editor = preferences.edit()
-        for (key in preferences.all.keys) {
+        for (key in preferences.all.orEmpty().keys) {
             if (key.startsWith(prefix)) editor.remove(key)
         }
         editor.commit()
     }
 
-    private fun keyPrefix(displayName: String): String =
-        "$JOURNAL_KEY_PREFIX$displayName$KEY_SEPARATOR"
+    private fun keyPrefix(captureId: String): String =
+        "$JOURNAL_KEY_PREFIX$captureId$KEY_SEPARATOR"
 
     private companion object {
         private const val JOURNAL_KEY_PREFIX = "journal."

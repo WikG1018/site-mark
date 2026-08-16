@@ -81,7 +81,12 @@ class AndroidSystemApiTest {
         // validation guard instead - proving no Activity is required to reach
         // the publish logic.
         val error = assertThrows(IllegalArgumentException::class.java) {
-            api.publishJpegForTest(sourcePath = "/data/nonexistent.jpg", displayName = "SM-20260716-001")
+            api.publishJpegForTest(
+                sourcePath = "/data/nonexistent.jpg",
+                displayName = "SM-20260716-001",
+                captureId = "capture-1",
+                publishedUri = null,
+            )
         }
         assertEquals(false, error.message!!.contains("foreground activity"))
     }
@@ -345,7 +350,7 @@ class AndroidSystemApiTest {
     }
 
     @Test
-    fun publishFailsWhenDuplicateLookupReturnsNoCursor() {
+    fun publishFailsFastWhenCaptureIdIsBlank() {
         val resolver = mock(ContentResolver::class.java)
         `when`(context.contentResolver).thenReturn(resolver)
         // validatedPrivateFile 要求源文件在 dataDir 内且非空 —— dataDir 已被
@@ -360,25 +365,16 @@ class AndroidSystemApiTest {
                 staticMedia.`when`<Uri> {
                     MediaStore.Images.Media.getContentUri(anyString())
                 }.thenReturn(collection)
-                // findAll 的 duplicate lookup 返回 null：MediaProvider 暂不可用
-                // （崩溃/重启/存储挂载），绝不能当作"无重复"切到发布新行路径。
-                `when`(
-                    resolver.query(
-                        any(Uri::class.java),
-                        any(Array<String>::class.java),
-                        anyString(),
-                        any(Array<String>::class.java),
-                        isNull(),
-                    ),
-                ).thenReturn(null)
                 val api = AndroidSystemApi(context)
 
-                val error = assertThrows(IllegalStateException::class.java) {
-                    api.publishJpegForTest(source.absolutePath, "SM-20260716-001")
+                // The capture ID keys the durable publish journal; a blank
+                // one would journal under an unidentifiable key, so the
+                // publish must refuse before touching MediaStore.
+                assertThrows(IllegalArgumentException::class.java) {
+                    api.publishJpegForTest(source.absolutePath, "SM-20260716-001", "  ", null)
                 }
 
-                assertEquals("MediaStore did not answer the duplicate lookup", error.message)
-                // 查询失败时绝不 insert —— 否则会在未知状态下创建新行并累积重复。
+                // 绝不 insert —— 否则会在无 journal 键的情况下创建新行。
                 verify(resolver, never())
                     .insert(any(Uri::class.java), any(ContentValues::class.java))
             }

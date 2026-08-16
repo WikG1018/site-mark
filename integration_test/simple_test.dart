@@ -182,6 +182,8 @@ class _IntegrationPlatformServices implements PlatformServices {
   Future<PublishJpegOutcome> publishJpeg(
     String sourcePath,
     String displayName,
+    String captureId,
+    String? publishedUri,
   ) async =>
       PublishJpegOutcome(contentUri: 'content://media/site-mark/$displayName');
 

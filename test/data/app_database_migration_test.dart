@@ -498,6 +498,33 @@ Future<Map<String, String>> captureIndexes(AppDatabase database) async {
 /// capture templates, no lifecycle columns), seeds one project, and sets
 /// `PRAGMA user_version = 10`.
 QueryExecutor openMigratedV10Fixture() {
+  final db = buildV10Schema();
+  db.execute('PRAGMA user_version = 10;');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
+/// Opens a raw in-memory sqlite database with the genuine v11 schema: the v10
+/// shape plus the project lifecycle columns added by the v10→v11 migration.
+/// `PRAGMA user_version = 11`, so [AppDatabase.forTesting] exercises ONLY the
+/// v11→v12 upgrade (the superseded-cleanup queue) rather than the whole chain.
+QueryExecutor openMigratedV11Fixture() {
+  final db = buildV10Schema();
+  // Exactly what drift's v10→v11 `addColumn` emitted (ALTER TABLE ADD COLUMN),
+  // so this fixture is byte-compatible with a real upgraded v11 database.
+  db.execute(
+    "ALTER TABLE projects ADD COLUMN lifecycle_status TEXT NOT NULL "
+    "DEFAULT 'active' CHECK (lifecycle_status IN "
+    "('active', 'completed', 'archived'));",
+  );
+  db.execute(
+    'ALTER TABLE projects ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;',
+  );
+  db.execute('PRAGMA user_version = 11;');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
+/// Builds the v10 table shapes and seed rows WITHOUT stamping a user version.
+Database buildV10Schema() {
   final db = sqlite3.openInMemory();
   final projectCreated =
       DateTime.utc(2026, 8, 3).millisecondsSinceEpoch ~/ 1000;
@@ -598,8 +625,7 @@ QueryExecutor openMigratedV10Fixture() {
       'ready', $projectCreated
     );
   ''');
-  db.execute('PRAGMA user_version = 10;');
-  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+  return db;
 }
 
 /// Opens the v8 table shapes and index set, then lets the current database
@@ -966,8 +992,14 @@ void main() {
   });
 
   test('v11 to v12 migration creates the superseded cleanup queue', () async {
-    final database = AppDatabase.forTesting(openMigratedV10Fixture());
+    final database = AppDatabase.forTesting(openMigratedV11Fixture());
     addTearDown(database.close);
+
+    expect(database.schemaVersion, 12);
+    // The v11 lifecycle columns survive the v11→v12-only upgrade path.
+    final project = await database.projectById('existing');
+    expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
+    expect(project.isPinned, isFalse);
 
     // The queue table exists and one row per stale URI is enforced by the
     // URI primary key: re-enqueueing the same URI updates it in place.

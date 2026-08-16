@@ -101,17 +101,15 @@ class MediaPublishResult {
 /// the caller committed the new URI to its database.
 class RecoveredPublishJournal {
   RecoveredPublishJournal({
-    required this.journalId,
-    required this.displayName,
+    required this.captureId,
     required this.contentUri,
     required this.supersededUris,
   });
 
-  String journalId;
-
-  /// The display name (photo number) the publish used. Callers reconcile
-  /// their database row by this key.
-  String displayName;
+  /// The stable capture identity the publish was keyed by. Callers
+  /// reconcile their database row by this ID — NEVER by photo number,
+  /// which a backup restore can duplicate across projects.
+  String captureId;
 
   /// The finalized new MediaStore URI. It is already visible in the gallery.
   String contentUri;
@@ -146,12 +144,26 @@ abstract class SiteMarkSystemApi {
   @async
   LocationResult requestCurrentLocation(int timeoutMillis);
 
+  /// Publishes [sourcePath] into the system gallery under [displayName].
+  ///
+  /// [captureId] is the caller's stable identity for the capture: it keys
+  /// the durable publish journal and disambiguates records that share a
+  /// photo number after a backup restore. [publishedUri] is the exact
+  /// previously published URI this publish replaces — the native side
+  /// deletes ONLY that URI (plus any leftover journaled URI of the same
+  /// capture), never every same-named gallery row, because a restored
+  /// project may legitimately own another row with the same display name.
   @async
-  MediaPublishResult publishJpeg(String sourcePath, String displayName);
+  MediaPublishResult publishJpeg(
+    String sourcePath,
+    String displayName,
+    String captureId,
+    String? publishedUri,
+  );
 
   List<RecoveredPublishJournal>? recoverPublishJournals();
 
-  void clearPublishJournal(String journalId);
+  void clearPublishJournal(String captureId);
 
   @async
   ArchiveSaveOutcome saveArchive(String sourcePath, String suggestedName);
