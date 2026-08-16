@@ -179,8 +179,11 @@ class _IntegrationPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async =>
-      'content://media/site-mark/$displayName';
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+  ) async =>
+      PublishJpegOutcome(contentUri: 'content://media/site-mark/$displayName');
 
   @override
   Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;

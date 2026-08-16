@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/workflow/project_import_service.dart'
     show AtomicMarkerWriter, DartAtomicMarkerWriter;
 
-enum CaptureMediaCleanupKind { clearOriginal, deleteCapture, deleteSuperseded }
+enum CaptureMediaCleanupKind { clearOriginal, deleteCapture }
 
 class PendingCaptureMediaCleanup {
   const PendingCaptureMediaCleanup({
@@ -167,7 +167,7 @@ class AppCaptureMediaCleanupPendingStore
 
   static _CaptureCleanupMarkerIdentity? _parseMarkerName(String name) {
     final match = RegExp(
-      r'^capture-(clear-original|delete-capture|delete-superseded)-([A-Za-z0-9_-]+)\.json$',
+      r'^capture-(clear-original|delete-capture)-([A-Za-z0-9_-]+)\.json$',
     ).firstMatch(name);
     if (match == null) return null;
     try {
@@ -188,13 +188,11 @@ class AppCaptureMediaCleanupPendingStore
   static String _kindName(CaptureMediaCleanupKind kind) => switch (kind) {
     CaptureMediaCleanupKind.clearOriginal => 'clear-original',
     CaptureMediaCleanupKind.deleteCapture => 'delete-capture',
-    CaptureMediaCleanupKind.deleteSuperseded => 'delete-superseded',
   };
 
   static CaptureMediaCleanupKind? _kindFromName(String name) => switch (name) {
     'clear-original' => CaptureMediaCleanupKind.clearOriginal,
     'delete-capture' => CaptureMediaCleanupKind.deleteCapture,
-    'delete-superseded' => CaptureMediaCleanupKind.deleteSuperseded,
     _ => null,
   };
 }

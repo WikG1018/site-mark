@@ -86,15 +86,15 @@ class ImageMetadataResult {
 }
 
 class MediaPublishResult {
-  MediaPublishResult({required this.contentUri, this.supersededUri});
+  MediaPublishResult({required this.contentUri, this.supersededUris});
 
   String contentUri;
 
-  /// The previous published row that the new content superseded but whose
-  /// MediaStore deletion failed. Non-null means publish SUCCEEDED and the
-  /// caller must queue a best-effort delete of this URI; it must never
-  /// re-publish or report failure because of it.
-  String? supersededUri;
+  /// All previously published rows with the same display name that the new
+  /// content superseded but whose MediaStore deletion failed. Non-empty means
+  /// publish SUCCEEDED and the caller must queue a best-effort delete for
+  /// each URI; it must never re-publish or report failure because of them.
+  List<String>? supersededUris;
 }
 
 @HostApi()

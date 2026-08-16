@@ -20,7 +20,7 @@ class SafeMediaPublisherTest {
             val published = publisher.publish(source, "capture.jpg")
 
             assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
-            assertNull(published.supersededUri)
+            assertTrue(published.supersededUris.isEmpty())
             // The old row is gone and the new row is finalized with the new
             // bytes — never a half-written row left visible.
             assertNull(store.rows[FakePublishedImageStore.OLD_URI])
@@ -75,7 +75,7 @@ class SafeMediaPublisherTest {
             assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
             // The stale URI is reported so the caller can retry ONLY the
             // delete through the persistent cleanup queue.
-            assertEquals(FakePublishedImageStore.OLD_URI, published.supersededUri)
+            assertEquals(listOf(FakePublishedImageStore.OLD_URI), published.supersededUris)
             // The new row stays finalized and published — deleting both rows
             // could leave the gallery empty. The old row remains as a
             // temporary duplicate until the next cleanup pass retries the
@@ -83,6 +83,61 @@ class SafeMediaPublisherTest {
             assertEquals("new-image", store.rows[FakePublishedImageStore.NEW_URI]?.bytes)
             assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
             assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `every duplicate row with the same name is deleted on replacement`() {
+        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
+        try {
+            val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
+            val store = FakePublishedImageStore(
+                existingBytes = "old-image",
+                duplicateBytes = "older-image",
+            )
+            val publisher = SafeMediaPublisher(store)
+
+            val published = publisher.publish(source, "capture.jpg")
+
+            assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
+            assertTrue(published.supersededUris.isEmpty())
+            // Historical duplicates (e.g. left by an earlier failed
+            // replacement) converge too — only the finalized new row stays.
+            assertNull(store.rows[FakePublishedImageStore.OLD_URI])
+            assertNull(store.rows[FakePublishedImageStore.DUPLICATE_URI])
+            assertEquals("new-image", store.rows[FakePublishedImageStore.NEW_URI]?.bytes)
+            assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `failing duplicate deletes are all reported as superseded`() {
+        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
+        try {
+            val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
+            val store = FakePublishedImageStore(
+                existingBytes = "old-image",
+                duplicateBytes = "older-image",
+            ).apply {
+                failDeleteOldRow = true
+                failDeleteDuplicateRow = true
+            }
+            val publisher = SafeMediaPublisher(store)
+
+            // The new row was already finalized, so the publish is a SUCCESS
+            // and every un-deletable stale URI is reported independently.
+            val published = publisher.publish(source, "capture.jpg")
+
+            assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
+            assertEquals(
+                setOf(FakePublishedImageStore.OLD_URI, FakePublishedImageStore.DUPLICATE_URI),
+                published.supersededUris.toSet(),
+            )
+            assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
         } finally {
             directory.deleteRecursively()
         }
@@ -135,22 +190,29 @@ class SafeMediaPublisherTest {
     }
 }
 
-private class FakePublishedImageStore(existingBytes: String?) : PublishedImageStore {
+private class FakePublishedImageStore(
+    existingBytes: String?,
+    duplicateBytes: String? = null,
+) : PublishedImageStore {
     class Row(var bytes: String, var pending: Boolean)
 
     val rows = linkedMapOf<String, Row>()
     var failWrite = false
     var failFinalize = false
     var failDeleteOldRow = false
+    var failDeleteDuplicateRow = false
 
     init {
         if (existingBytes != null) {
             rows[OLD_URI] = Row(existingBytes, pending = false)
         }
+        if (duplicateBytes != null) {
+            rows[DUPLICATE_URI] = Row(duplicateBytes, pending = false)
+        }
     }
 
-    override fun find(displayName: String): String? =
-        rows.entries.firstOrNull { !it.value.pending }?.key
+    override fun findAll(displayName: String): List<String> =
+        rows.filterValues { !it.pending }.keys.toList()
 
     override fun insertPending(displayName: String): String {
         rows[NEW_URI] = Row("", pending = true)
@@ -171,11 +233,13 @@ private class FakePublishedImageStore(existingBytes: String?) : PublishedImageSt
 
     override fun delete(contentUri: String) {
         if (contentUri == OLD_URI && failDeleteOldRow) error("delete failed")
+        if (contentUri == DUPLICATE_URI && failDeleteDuplicateRow) error("delete failed")
         rows.remove(contentUri)
     }
 
     companion object {
         const val OLD_URI = "content://media/site-mark/1"
+        const val DUPLICATE_URI = "content://media/site-mark/0"
         const val NEW_URI = "content://media/site-mark/2"
     }
 }

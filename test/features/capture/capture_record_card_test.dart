@@ -333,7 +333,8 @@ class _CardPlatform implements PlatformServices {
   Future<PublishJpegOutcome> publishJpeg(
     String sourcePath,
     String displayName,
-  ) async => const PublishJpegOutcome(contentUri: 'content://media/site-mark/1');
+  ) async =>
+      const PublishJpegOutcome(contentUri: 'content://media/site-mark/1');
   @override
   Future<LocationPermissionState> getLocationPermissionState() async =>
       LocationPermissionState.denied;

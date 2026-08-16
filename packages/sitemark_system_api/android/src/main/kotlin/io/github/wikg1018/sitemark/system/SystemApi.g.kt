@@ -450,25 +450,25 @@ data class ImageMetadataResult (
 data class MediaPublishResult (
   val contentUri: String,
   /**
-   * The previous published row that the new content superseded but whose
-   * MediaStore deletion failed. Non-null means publish SUCCEEDED and the
-   * caller must queue a best-effort delete of this URI; it must never
-   * re-publish or report failure because of it.
+   * All previously published rows with the same display name that the new
+   * content superseded but whose MediaStore deletion failed. Non-empty means
+   * publish SUCCEEDED and the caller must queue a best-effort delete for
+   * each URI; it must never re-publish or report failure because of them.
    */
-  val supersededUri: String? = null
+  val supersededUris: List<String>? = null
 )
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): MediaPublishResult {
       val contentUri = pigeonVar_list[0] as String
-      val supersededUri = pigeonVar_list[1] as String?
-      return MediaPublishResult(contentUri, supersededUri)
+      val supersededUris = pigeonVar_list[1] as List<String>?
+      return MediaPublishResult(contentUri, supersededUris)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
       contentUri,
-      supersededUri,
+      supersededUris,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -479,17 +479,17 @@ data class MediaPublishResult (
       return true
     }
     val other = other as MediaPublishResult
-    return SystemApiPigeonUtils.deepEquals(this.contentUri, other.contentUri) && SystemApiPigeonUtils.deepEquals(this.supersededUri, other.supersededUri)
+    return SystemApiPigeonUtils.deepEquals(this.contentUri, other.contentUri) && SystemApiPigeonUtils.deepEquals(this.supersededUris, other.supersededUris)
   }
 
   override fun hashCode(): Int {
     var result = javaClass.hashCode()
     result = 31 * result + SystemApiPigeonUtils.deepHash(this.contentUri)
-    result = 31 * result + SystemApiPigeonUtils.deepHash(this.supersededUri)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.supersededUris)
     return result
   }
   override fun toString(): String {
-    return "MediaPublishResult(contentUri=$contentUri, supersededUri=$supersededUri)"
+    return "MediaPublishResult(contentUri=$contentUri, supersededUris=$supersededUris)"
   }
 }
 private open class SystemApiPigeonCodec : StandardMessageCodec() {

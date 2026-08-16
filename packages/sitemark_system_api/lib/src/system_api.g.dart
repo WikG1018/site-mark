@@ -373,18 +373,18 @@ class ImageMetadataResult {
 }
 
 class MediaPublishResult {
-  MediaPublishResult({required this.contentUri, this.supersededUri});
+  MediaPublishResult({required this.contentUri, this.supersededUris});
 
   String contentUri;
 
-  /// The previous published row that the new content superseded but whose
-  /// MediaStore deletion failed. Non-null means publish SUCCEEDED and the
-  /// caller must queue a best-effort delete of this URI; it must never
-  /// re-publish or report failure because of it.
-  String? supersededUri;
+  /// All previously published rows with the same display name that the new
+  /// content superseded but whose MediaStore deletion failed. Non-empty means
+  /// publish SUCCEEDED and the caller must queue a best-effort delete for
+  /// each URI; it must never re-publish or report failure because of them.
+  List<String>? supersededUris;
 
   List<Object?> _toList() {
-    return <Object?>[contentUri, supersededUri];
+    return <Object?>[contentUri, supersededUris];
   }
 
   Object encode() {
@@ -395,7 +395,7 @@ class MediaPublishResult {
     result as List<Object?>;
     return MediaPublishResult(
       contentUri: result[0]! as String,
-      supersededUri: result[1] as String?,
+      supersededUris: (result[1] as List<Object?>?)?.cast<String>(),
     );
   }
 
@@ -409,7 +409,7 @@ class MediaPublishResult {
       return true;
     }
     return _deepEquals(contentUri, other.contentUri) &&
-        _deepEquals(supersededUri, other.supersededUri);
+        _deepEquals(supersededUris, other.supersededUris);
   }
 
   @override
@@ -418,7 +418,7 @@ class MediaPublishResult {
 
   @override
   String toString() {
-    return 'MediaPublishResult(contentUri: $contentUri, supersededUri: $supersededUri)';
+    return 'MediaPublishResult(contentUri: $contentUri, supersededUris: $supersededUris)';
   }
 }
 

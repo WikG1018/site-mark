@@ -442,7 +442,7 @@ class AndroidSystemApi(
             ),
         )
         val outcome = publisher.publish(source, safeName)
-        return MediaPublishResult(outcome.contentUri, outcome.supersededUri)
+        return MediaPublishResult(outcome.contentUri, outcome.supersededUris)
     }
 
     override fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit) {
@@ -613,19 +613,23 @@ private class AndroidPublishedImageStore(
     private val collection: Uri,
     private val relativePath: String,
 ) : PublishedImageStore {
-    override fun find(displayName: String): String? {
+    override fun findAll(displayName: String): List<String> {
         val projection = arrayOf(MediaStore.Images.Media._ID)
         val selection =
             "${MediaStore.Images.Media.DISPLAY_NAME} = ? AND " +
                 "${MediaStore.Images.Media.RELATIVE_PATH} = ? AND " +
                 "${MediaStore.Images.Media.IS_PENDING} = 0"
         val arguments = arrayOf(displayName, relativePath)
+        // Every matching row is a superseded duplicate once the replacement
+        // is finalized, so collect them all — replacing only one arbitrary
+        // row would leave historical duplicates unconverged.
+        val uris = mutableListOf<String>()
         resolver.query(collection, projection, selection, arguments, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return ContentUris.withAppendedId(collection, cursor.getLong(0)).toString()
+            while (cursor.moveToNext()) {
+                uris.add(ContentUris.withAppendedId(collection, cursor.getLong(0)).toString())
             }
         }
-        return null
+        return uris
     }
 
     override fun insertPending(displayName: String): String {

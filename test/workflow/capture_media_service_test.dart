@@ -297,15 +297,15 @@ void main() {
 
   // Regression: the new gallery row is finalized but the old-row delete
   // failed. The republish has already SUCCEEDED — the record must point at
-  // the new URI and only a delete-only cleanup marker may be queued; the
-  // action must not be reported as failed (which would re-publish another
-  // duplicate photo).
+  // the new URI and a delete-only cleanup task must be committed in the SAME
+  // transaction; the action must not be reported as failed (which would
+  // re-publish another duplicate photo).
   test(
     'republish with failed old-row delete updates URI and queues delete-only cleanup',
     () async {
       files.existing.add('/rendered/capture-1.jpg');
       platform.nextPublishedUri = 'content://media/site-mark/2';
-      platform.nextSupersededUri = 'content://media/site-mark/1';
+      platform.nextSupersededUris = ['content://media/site-mark/1'];
 
       final result = await service.republish(['capture-1']);
 
@@ -315,24 +315,46 @@ void main() {
         (await database.captureById('capture-1'))?.publishedUri,
         'content://media/site-mark/2',
       );
-      final pendings = await pendingStore.list();
-      expect(pendings, hasLength(1));
-      expect(pendings.single.kind, CaptureMediaCleanupKind.deleteSuperseded);
-      expect(pendings.single.publishedUri, 'content://media/site-mark/1');
-      expect(pendings.single.paths, isEmpty);
+      final tasks = await database.pendingSupersededCleanups();
+      expect(tasks, hasLength(1));
+      expect(tasks.single.publishedUri, 'content://media/site-mark/1');
+      expect(tasks.single.captureId, 'capture-1');
+    },
+  );
+
+  // Regression: every superseded duplicate URI is an INDEPENDENT task (one
+  // row per URI), so consecutive saves never overwrite each other's
+  // tracking and historical duplicates all converge.
+  test(
+    'republish tracks every superseded URI as an independent task',
+    () async {
+      files.existing.add('/rendered/capture-1.jpg');
+      platform.nextPublishedUri = 'content://media/site-mark/3';
+      platform.nextSupersededUris = [
+        'content://media/site-mark/1',
+        'content://media/site-mark/2',
+      ];
+
+      await service.republish(['capture-1']);
+
+      final tasks = await database.pendingSupersededCleanups();
+      expect(tasks.map((task) => task.publishedUri).toSet(), {
+        'content://media/site-mark/1',
+        'content://media/site-mark/2',
+      });
     },
   );
 
   // Regression: startup recovery for a superseded URI must retry ONLY the
   // stale-row delete — never publish again (which would create yet another
-  // duplicate) — and must converge: the marker is cleared once the delete
+  // duplicate) — and must converge: the task is removed once the delete
   // succeeds.
   test(
     'startup cleanup retries only the superseded delete and never republishes',
     () async {
       files.existing.add('/rendered/capture-1.jpg');
       platform.nextPublishedUri = 'content://media/site-mark/2';
-      platform.nextSupersededUri = 'content://media/site-mark/1';
+      platform.nextSupersededUris = ['content://media/site-mark/1'];
       await service.republish(['capture-1']);
       expect(platform.publishCount, 1);
       expect(platform.deletedUris, isEmpty);
@@ -345,29 +367,56 @@ void main() {
         (await database.captureById('capture-1'))?.publishedUri,
         'content://media/site-mark/2',
       );
-      expect(await pendingStore.list(), isEmpty);
+      expect(await database.pendingSupersededCleanups(), isEmpty);
     },
   );
 
-  // Regression: a superseded-delete marker whose database commit never
-  // happened (the live record still references the "superseded" URI) must be
-  // discarded without deleting the photo the record still points at.
+  // Regression: cleanup tasks are completed independently — finishing task
+  // A must never clear sibling task B (the old captureId+kind single-slot
+  // marker could do exactly that).
+  test('completing one superseded task keeps sibling tasks pending', () async {
+    files.existing.add('/rendered/capture-1.jpg');
+    platform.nextPublishedUri = 'content://media/site-mark/3';
+    platform.nextSupersededUris = [
+      'content://media/site-mark/1',
+      'content://media/site-mark/2',
+    ];
+    await service.republish(['capture-1']);
+
+    // Only the delete of URI 1 keeps failing; URI 2 deletes fine.
+    platform.failingDeleteUris.add('content://media/site-mark/1');
+    await service.cleanupInterrupted();
+
+    expect(platform.deletedUris, ['content://media/site-mark/2']);
+    final tasks = await database.pendingSupersededCleanups();
+    expect(tasks, hasLength(1));
+    expect(tasks.single.publishedUri, 'content://media/site-mark/1');
+
+    // A later launch with a healthy gallery converges the leftover task.
+    platform.failingDeleteUris.clear();
+    await service.cleanupInterrupted();
+    expect(platform.deletedUris, [
+      'content://media/site-mark/2',
+      'content://media/site-mark/1',
+    ]);
+    expect(await database.pendingSupersededCleanups(), isEmpty);
+  });
+
+  // Regression: a task whose URI is still referenced by the live record
+  // (defensive: only reachable via a restored backup) must never delete the
+  // photo the record displays.
   test(
-    'startup discards a superseded marker still referenced by the record',
+    'startup skips a superseded task still referenced by the record',
     () async {
-      await pendingStore.write(
-        const PendingCaptureMediaCleanup(
-          captureId: 'capture-1',
-          kind: CaptureMediaCleanupKind.deleteSuperseded,
-          paths: [],
-          publishedUri: 'content://media/site-mark/1',
-        ),
+      await database.updatePublishedUri(
+        'capture-1',
+        'content://media/site-mark/1',
+        supersededUris: ['content://media/site-mark/1'],
       );
 
       await service.cleanupInterrupted();
 
       expect(platform.deletedUris, isEmpty);
-      expect(await pendingStore.list(), isEmpty);
       expect(
         (await database.captureById('capture-1'))?.publishedUri,
         'content://media/site-mark/1',
@@ -375,21 +424,21 @@ void main() {
     },
   );
 
-  // Regression: while the stale-row delete keeps failing the marker must
+  // Regression: while the stale-row delete keeps failing the task must
   // survive for a later launch — the action itself stays a success.
-  test('superseded cleanup marker survives a failing gallery delete', () async {
+  test('superseded cleanup task survives a failing gallery delete', () async {
     files.existing.add('/rendered/capture-1.jpg');
     platform.nextPublishedUri = 'content://media/site-mark/2';
-    platform.nextSupersededUri = 'content://media/site-mark/1';
+    platform.nextSupersededUris = ['content://media/site-mark/1'];
     await service.republish(['capture-1']);
 
     platform.deleteError = StateError('MediaStore failure');
     await service.cleanupInterrupted();
 
     expect(platform.publishCount, 1);
-    final pendings = await pendingStore.list();
-    expect(pendings, hasLength(1));
-    expect(pendings.single.kind, CaptureMediaCleanupKind.deleteSuperseded);
+    final tasks = await database.pendingSupersededCleanups();
+    expect(tasks, hasLength(1));
+    expect(tasks.single.publishedUri, 'content://media/site-mark/1');
   });
 }
 
@@ -436,9 +485,10 @@ class _MediaPlatform implements PlatformServices {
   Object? deleteError;
   Object? publishError;
   String nextPublishedUri = 'content://media/site-mark/1';
-  String? nextSupersededUri;
+  List<String> nextSupersededUris = const [];
   int publishCount = 0;
   final List<String> deletedUris = [];
+  final Set<String> failingDeleteUris = {};
 
   @override
   Future<ImageMetadataResult> inspectImage(String path) async =>
@@ -453,13 +503,16 @@ class _MediaPlatform implements PlatformServices {
     publishCount += 1;
     return PublishJpegOutcome(
       contentUri: nextPublishedUri,
-      supersededUri: nextSupersededUri,
+      supersededUris: nextSupersededUris,
     );
   }
 
   @override
   Future<void> deletePublishedImage(String contentUri) async {
     if (deleteError != null) throw deleteError!;
+    if (failingDeleteUris.contains(contentUri)) {
+      throw StateError('simulated gallery delete failure');
+    }
     deletedUris.add(contentUri);
   }
 

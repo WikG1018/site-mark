@@ -1352,7 +1352,6 @@ class _InlineProcessingScheduler implements CaptureBackgroundScheduler {
       platform: platform,
       images: images,
       outputPaths: outputPaths,
-      pendingStore: MemoryCaptureMediaCleanupPendingStore(),
     );
     await processor.process(captureId);
   }

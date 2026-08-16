@@ -8,7 +8,6 @@ import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
-import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 
@@ -21,7 +20,6 @@ void main() {
   late AppDatabase database;
   late _ProcessorPlatformServices platform;
   late _ProcessorImagePipeline images;
-  late MemoryCaptureMediaCleanupPendingStore pendingStore;
   late CaptureProcessor processor;
 
   setUp(() async {
@@ -33,13 +31,11 @@ void main() {
     );
     platform = _ProcessorPlatformServices();
     images = _ProcessorImagePipeline();
-    pendingStore = MemoryCaptureMediaCleanupPendingStore();
     processor = CaptureProcessor(
       database: database,
       platform: platform,
       images: images,
       outputPaths: _ProcessorOutputPaths(),
-      pendingStore: pendingStore,
     );
   });
 
@@ -109,13 +105,14 @@ void main() {
 
   // Regression: when the new gallery row is finalized but deleting the old
   // row fails, the publish has already succeeded. The record must be `ready`
-  // with the NEW URI and a delete-only cleanup marker must be queued — a
-  // failure here would re-publish and accumulate gallery duplicates.
+  // with the NEW URI and one durable delete-only cleanup task must be queued
+  // IN THE SAME transaction — a failure here would re-publish and accumulate
+  // gallery duplicates.
   test(
     'failed old-row delete still succeeds and queues delete-only cleanup',
     () async {
       await seedCaptured();
-      platform.nextSupersededUri = 'content://media/site-mark/0';
+      platform.nextSupersededUris = ['content://media/site-mark/0'];
 
       final result = await processor.process('capture-1');
 
@@ -124,36 +121,35 @@ void main() {
       expect(record?.status, CaptureStatus.ready);
       expect(record?.publishedUri, 'content://media/site-mark/1');
       expect(record?.failureReason, isNull);
-      final pendings = await pendingStore.list();
-      expect(pendings, hasLength(1));
-      expect(pendings.single.kind, CaptureMediaCleanupKind.deleteSuperseded);
-      expect(pendings.single.publishedUri, 'content://media/site-mark/0');
-      expect(pendings.single.paths, isEmpty);
+      final tasks = await database.pendingSupersededCleanups();
+      expect(tasks, hasLength(1));
+      expect(tasks.single.publishedUri, 'content://media/site-mark/0');
+      expect(tasks.single.captureId, 'capture-1');
     },
   );
 
-  // Regression: a cleanup-marker write failure after a successful publish
-  // must not fail the capture (which would re-publish a duplicate photo).
+  // Regression: ALL stale duplicates with the same display name must be
+  // tracked as independent cleanup tasks (one per URI), so historical
+  // duplicates converge instead of only one arbitrary row being deleted.
   test(
-    'cleanup marker failure does not fail an already published capture',
+    'every superseded duplicate URI becomes an independent cleanup task',
     () async {
       await seedCaptured();
-      platform.nextSupersededUri = 'content://media/site-mark/0';
-      final failingStore = _ThrowingCleanupPendingStore();
-      final failingProcessor = CaptureProcessor(
-        database: database,
-        platform: platform,
-        images: images,
-        outputPaths: _ProcessorOutputPaths(),
-        pendingStore: failingStore,
-      );
+      platform.nextSupersededUris = [
+        'content://media/site-mark/0',
+        'content://media/site-mark/-1',
+      ];
 
-      final result = await failingProcessor.process('capture-1');
+      final result = await processor.process('capture-1');
 
       expect(result, CaptureProcessResult.succeeded);
       final record = await database.captureById('capture-1');
-      expect(record?.status, CaptureStatus.ready);
       expect(record?.publishedUri, 'content://media/site-mark/1');
+      final tasks = await database.pendingSupersededCleanups();
+      expect(tasks.map((task) => task.publishedUri).toSet(), {
+        'content://media/site-mark/0',
+        'content://media/site-mark/-1',
+      });
     },
   );
 
@@ -596,7 +592,7 @@ void main() {
 class _ProcessorPlatformServices implements PlatformServices {
   final List<String> publishedNames = [];
   int _publishCounter = 0;
-  String? nextSupersededUri;
+  List<String> nextSupersededUris = const [];
 
   @override
   Future<String> createCameraTarget(String captureId) async =>
@@ -625,7 +621,7 @@ class _ProcessorPlatformServices implements PlatformServices {
     _publishCounter += 1;
     return PublishJpegOutcome(
       contentUri: 'content://media/site-mark/$_publishCounter',
-      supersededUri: nextSupersededUri,
+      supersededUris: nextSupersededUris,
     );
   }
 
@@ -736,17 +732,4 @@ class _ProcessorDeletionPendingStore implements ProjectDeletionPendingStore {
 
   @override
   Future<void> write(PendingProjectDeletion pending) async {}
-}
-
-class _ThrowingCleanupPendingStore implements CaptureMediaCleanupPendingStore {
-  @override
-  Future<void> clear(String captureId, CaptureMediaCleanupKind kind) async {}
-
-  @override
-  Future<List<PendingCaptureMediaCleanup>> list() async => const [];
-
-  @override
-  Future<void> write(PendingCaptureMediaCleanup pending) async {
-    throw StateError('marker write failed');
-  }
 }

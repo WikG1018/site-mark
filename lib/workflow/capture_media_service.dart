@@ -182,26 +182,16 @@ class CaptureMediaService {
           renderedPath,
           record.photoNumber!,
         );
-        await database.updatePublishedUri(id, outcome.contentUri);
-        if (outcome.supersededUri != null) {
-          // The publish succeeded and the record already points at the new
-          // URI; only the stale duplicate remains. Queue a durable
-          // delete-only cleanup — a marker failure must not turn a
-          // successful republish into a fake failure that re-publishes and
-          // accumulates duplicates.
-          try {
-            await pendingStore.write(
-              PendingCaptureMediaCleanup(
-                captureId: id,
-                kind: CaptureMediaCleanupKind.deleteSuperseded,
-                paths: const [],
-                publishedUri: outcome.supersededUri,
-              ),
-            );
-          } catch (_) {
-            // Best effort: the duplicate converges on the next replacement.
-          }
-        }
+        // The new URI and a delete-only cleanup task per stale duplicate URI
+        // commit in ONE database transaction: a process death (or a failed
+        // queue write) can no longer lose the tracking of a duplicate. A
+        // failure here retries the whole republish later — it must not be
+        // swallowed, or an untracked duplicate would linger forever.
+        await database.updatePublishedUri(
+          id,
+          outcome.contentUri,
+          supersededUris: outcome.supersededUris,
+        );
         succeeded.add(id);
       } catch (_) {
         failures[id] = CaptureMediaFailure.operationFailed;
@@ -229,6 +219,12 @@ class CaptureMediaService {
   /// Resumes media cleanup whose user-visible database commit survived a
   /// process death. Each marker is isolated so one bad file cannot block the
   /// remaining recovery work.
+  ///
+  /// Superseded-URI deletes come from the durable `capture_media_cleanups`
+  /// table (one row per stale URI, committed transactionally with the new
+  /// `publishedUri`). Recovery retries ONLY the delete — never a re-publish —
+  /// and completes each task independently, so sibling tasks survive a
+  /// failing or succeeding neighbor.
   Future<void> cleanupInterrupted() async {
     final pendings = await pendingStore.list();
     for (final pending in pendings) {
@@ -238,11 +234,6 @@ class CaptureMediaService {
           CaptureMediaCleanupKind.clearOriginal =>
             record == null || record.originalDeletedAt != null,
           CaptureMediaCleanupKind.deleteCapture => record == null,
-          // The superseded URI is only safe to delete once no live record
-          // references it anymore (markers are written after the database
-          // commit, so this holds unless the process died mid-commit).
-          CaptureMediaCleanupKind.deleteSuperseded =>
-            record == null || record.publishedUri != pending.publishedUri,
         };
         if (!committed) {
           // The database commit never happened. Preserve media that the live
@@ -255,12 +246,37 @@ class CaptureMediaService {
         // Keep the durable marker for a later launch and continue with others.
       }
     }
+    await _cleanupSuperseded();
+  }
+
+  Future<void> _cleanupSuperseded() async {
+    final tasks = await database.pendingSupersededCleanups();
+    for (final task in tasks) {
+      try {
+        final record = await database.captureById(task.captureId);
+        // The task commits atomically with the replacement URI, so a live
+        // record must never reference the task's URI. This guard is
+        // defensive against restored backups re-pointing a record at an old
+        // URI: deleting it would destroy the photo the record displays.
+        if (record != null && record.publishedUri == task.publishedUri) {
+          continue;
+        }
+        try {
+          await platform.deletePublishedImage(task.publishedUri);
+        } catch (_) {
+          // Keep the task for a later launch; siblings still run.
+          continue;
+        }
+        await database.completeSupersededCleanup(task.publishedUri);
+      } catch (_) {
+        // Keep the durable task for a later launch and continue with others.
+      }
+    }
   }
 
   Future<bool> _finishCleanup(PendingCaptureMediaCleanup pending) async {
     var cleaned = true;
-    if ((pending.kind == CaptureMediaCleanupKind.deleteCapture ||
-            pending.kind == CaptureMediaCleanupKind.deleteSuperseded) &&
+    if (pending.kind == CaptureMediaCleanupKind.deleteCapture &&
         pending.publishedUri != null) {
       try {
         await platform.deletePublishedImage(pending.publishedUri!);

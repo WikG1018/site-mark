@@ -3536,6 +3536,289 @@ class CaptureTemplatesCompanion extends UpdateCompanion<CaptureTemplate> {
   }
 }
 
+class $CaptureMediaCleanupsTable extends CaptureMediaCleanups
+    with TableInfo<$CaptureMediaCleanupsTable, CaptureMediaCleanup> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CaptureMediaCleanupsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _publishedUriMeta = const VerificationMeta(
+    'publishedUri',
+  );
+  @override
+  late final GeneratedColumn<String> publishedUri = GeneratedColumn<String>(
+    'published_uri',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _captureIdMeta = const VerificationMeta(
+    'captureId',
+  );
+  @override
+  late final GeneratedColumn<String> captureId = GeneratedColumn<String>(
+    'capture_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [publishedUri, captureId, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'capture_media_cleanups';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CaptureMediaCleanup> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('published_uri')) {
+      context.handle(
+        _publishedUriMeta,
+        publishedUri.isAcceptableOrUnknown(
+          data['published_uri']!,
+          _publishedUriMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_publishedUriMeta);
+    }
+    if (data.containsKey('capture_id')) {
+      context.handle(
+        _captureIdMeta,
+        captureId.isAcceptableOrUnknown(data['capture_id']!, _captureIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_captureIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {publishedUri};
+  @override
+  CaptureMediaCleanup map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CaptureMediaCleanup(
+      publishedUri: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}published_uri'],
+      )!,
+      captureId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}capture_id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CaptureMediaCleanupsTable createAlias(String alias) {
+    return $CaptureMediaCleanupsTable(attachedDatabase, alias);
+  }
+}
+
+class CaptureMediaCleanup extends DataClass
+    implements Insertable<CaptureMediaCleanup> {
+  /// The stale published URI to delete, and the primary key: each URI is an
+  /// independent task, so consecutive saves and concurrent cleanups never
+  /// overwrite each other's work.
+  final String publishedUri;
+
+  /// Origin capture for diagnostics. Intentionally NOT a foreign key — the
+  /// task must outlive the capture row, otherwise deleting a capture would
+  /// silently drop pending deletes and leak its superseded duplicates.
+  final String captureId;
+  final DateTime createdAt;
+  const CaptureMediaCleanup({
+    required this.publishedUri,
+    required this.captureId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['published_uri'] = Variable<String>(publishedUri);
+    map['capture_id'] = Variable<String>(captureId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CaptureMediaCleanupsCompanion toCompanion(bool nullToAbsent) {
+    return CaptureMediaCleanupsCompanion(
+      publishedUri: Value(publishedUri),
+      captureId: Value(captureId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CaptureMediaCleanup.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CaptureMediaCleanup(
+      publishedUri: serializer.fromJson<String>(json['publishedUri']),
+      captureId: serializer.fromJson<String>(json['captureId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'publishedUri': serializer.toJson<String>(publishedUri),
+      'captureId': serializer.toJson<String>(captureId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CaptureMediaCleanup copyWith({
+    String? publishedUri,
+    String? captureId,
+    DateTime? createdAt,
+  }) => CaptureMediaCleanup(
+    publishedUri: publishedUri ?? this.publishedUri,
+    captureId: captureId ?? this.captureId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  CaptureMediaCleanup copyWithCompanion(CaptureMediaCleanupsCompanion data) {
+    return CaptureMediaCleanup(
+      publishedUri: data.publishedUri.present
+          ? data.publishedUri.value
+          : this.publishedUri,
+      captureId: data.captureId.present ? data.captureId.value : this.captureId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CaptureMediaCleanup(')
+          ..write('publishedUri: $publishedUri, ')
+          ..write('captureId: $captureId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(publishedUri, captureId, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CaptureMediaCleanup &&
+          other.publishedUri == this.publishedUri &&
+          other.captureId == this.captureId &&
+          other.createdAt == this.createdAt);
+}
+
+class CaptureMediaCleanupsCompanion
+    extends UpdateCompanion<CaptureMediaCleanup> {
+  final Value<String> publishedUri;
+  final Value<String> captureId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const CaptureMediaCleanupsCompanion({
+    this.publishedUri = const Value.absent(),
+    this.captureId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CaptureMediaCleanupsCompanion.insert({
+    required String publishedUri,
+    required String captureId,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : publishedUri = Value(publishedUri),
+       captureId = Value(captureId),
+       createdAt = Value(createdAt);
+  static Insertable<CaptureMediaCleanup> custom({
+    Expression<String>? publishedUri,
+    Expression<String>? captureId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (publishedUri != null) 'published_uri': publishedUri,
+      if (captureId != null) 'capture_id': captureId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CaptureMediaCleanupsCompanion copyWith({
+    Value<String>? publishedUri,
+    Value<String>? captureId,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return CaptureMediaCleanupsCompanion(
+      publishedUri: publishedUri ?? this.publishedUri,
+      captureId: captureId ?? this.captureId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (publishedUri.present) {
+      map['published_uri'] = Variable<String>(publishedUri.value);
+    }
+    if (captureId.present) {
+      map['capture_id'] = Variable<String>(captureId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CaptureMediaCleanupsCompanion(')
+          ..write('publishedUri: $publishedUri, ')
+          ..write('captureId: $captureId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3545,6 +3828,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CaptureTemplatesTable captureTemplates = $CaptureTemplatesTable(
     this,
   );
+  late final $CaptureMediaCleanupsTable captureMediaCleanups =
+      $CaptureMediaCleanupsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3554,6 +3839,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     captureRecords,
     appSettings,
     captureTemplates,
+    captureMediaCleanups,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -5606,6 +5892,186 @@ typedef $$CaptureTemplatesTableProcessedTableManager =
       CaptureTemplate,
       PrefetchHooks Function({bool projectId})
     >;
+typedef $$CaptureMediaCleanupsTableCreateCompanionBuilder =
+    CaptureMediaCleanupsCompanion Function({
+      required String publishedUri,
+      required String captureId,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$CaptureMediaCleanupsTableUpdateCompanionBuilder =
+    CaptureMediaCleanupsCompanion Function({
+      Value<String> publishedUri,
+      Value<String> captureId,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$CaptureMediaCleanupsTableFilterComposer
+    extends Composer<_$AppDatabase, $CaptureMediaCleanupsTable> {
+  $$CaptureMediaCleanupsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get publishedUri => $composableBuilder(
+    column: $table.publishedUri,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get captureId => $composableBuilder(
+    column: $table.captureId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CaptureMediaCleanupsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CaptureMediaCleanupsTable> {
+  $$CaptureMediaCleanupsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get publishedUri => $composableBuilder(
+    column: $table.publishedUri,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get captureId => $composableBuilder(
+    column: $table.captureId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CaptureMediaCleanupsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CaptureMediaCleanupsTable> {
+  $$CaptureMediaCleanupsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get publishedUri => $composableBuilder(
+    column: $table.publishedUri,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get captureId =>
+      $composableBuilder(column: $table.captureId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$CaptureMediaCleanupsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CaptureMediaCleanupsTable,
+          CaptureMediaCleanup,
+          $$CaptureMediaCleanupsTableFilterComposer,
+          $$CaptureMediaCleanupsTableOrderingComposer,
+          $$CaptureMediaCleanupsTableAnnotationComposer,
+          $$CaptureMediaCleanupsTableCreateCompanionBuilder,
+          $$CaptureMediaCleanupsTableUpdateCompanionBuilder,
+          (
+            CaptureMediaCleanup,
+            BaseReferences<
+              _$AppDatabase,
+              $CaptureMediaCleanupsTable,
+              CaptureMediaCleanup
+            >,
+          ),
+          CaptureMediaCleanup,
+          PrefetchHooks Function()
+        > {
+  $$CaptureMediaCleanupsTableTableManager(
+    _$AppDatabase db,
+    $CaptureMediaCleanupsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CaptureMediaCleanupsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CaptureMediaCleanupsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CaptureMediaCleanupsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> publishedUri = const Value.absent(),
+                Value<String> captureId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CaptureMediaCleanupsCompanion(
+                publishedUri: publishedUri,
+                captureId: captureId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String publishedUri,
+                required String captureId,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CaptureMediaCleanupsCompanion.insert(
+                publishedUri: publishedUri,
+                captureId: captureId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CaptureMediaCleanupsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CaptureMediaCleanupsTable,
+      CaptureMediaCleanup,
+      $$CaptureMediaCleanupsTableFilterComposer,
+      $$CaptureMediaCleanupsTableOrderingComposer,
+      $$CaptureMediaCleanupsTableAnnotationComposer,
+      $$CaptureMediaCleanupsTableCreateCompanionBuilder,
+      $$CaptureMediaCleanupsTableUpdateCompanionBuilder,
+      (
+        CaptureMediaCleanup,
+        BaseReferences<
+          _$AppDatabase,
+          $CaptureMediaCleanupsTable,
+          CaptureMediaCleanup
+        >,
+      ),
+      CaptureMediaCleanup,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5618,4 +6084,6 @@ class $AppDatabaseManager {
       $$AppSettingsTableTableManager(_db, _db.appSettings);
   $$CaptureTemplatesTableTableManager get captureTemplates =>
       $$CaptureTemplatesTableTableManager(_db, _db.captureTemplates);
+  $$CaptureMediaCleanupsTableTableManager get captureMediaCleanups =>
+      $$CaptureMediaCleanupsTableTableManager(_db, _db.captureMediaCleanups);
 }

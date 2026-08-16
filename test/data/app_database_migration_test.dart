@@ -945,10 +945,33 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV10Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 11);
+    expect(database.schemaVersion, 12);
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);
+  });
+
+  test('v11 to v12 migration creates the superseded cleanup queue', () async {
+    final database = AppDatabase.forTesting(openMigratedV10Fixture());
+    addTearDown(database.close);
+
+    // The queue table exists and one row per stale URI is enforced by the
+    // URI primary key: re-enqueueing the same URI updates it in place.
+    await database.updatePublishedUri(
+      'existing',
+      'content://media/site-mark/2',
+      supersededUris: [
+        'content://media/site-mark/1',
+        'content://media/site-mark/1',
+      ],
+    );
+    final tasks = await database.pendingSupersededCleanups();
+    expect(tasks, hasLength(1));
+    expect(tasks.single.publishedUri, 'content://media/site-mark/1');
+    expect(tasks.single.captureId, 'existing');
+
+    await database.completeSupersededCleanup('content://media/site-mark/1');
+    expect(await database.pendingSupersededCleanups(), isEmpty);
   });
 
   test(
@@ -973,7 +996,7 @@ void main() {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 11);
+    expect(database.schemaVersion, 12);
     final project = await database.createProject(id: 'fresh', name: '新项目');
     expect(project.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);

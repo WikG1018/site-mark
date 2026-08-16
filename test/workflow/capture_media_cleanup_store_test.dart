@@ -49,32 +49,6 @@ void main() {
     },
   );
 
-  test('round-trips a delete-superseded marker across restarts', () async {
-    const captureId = 'capture-superseded';
-    await store.write(
-      const PendingCaptureMediaCleanup(
-        captureId: captureId,
-        kind: CaptureMediaCleanupKind.deleteSuperseded,
-        paths: [],
-        publishedUri: 'content://media/site-mark/1',
-      ),
-    );
-
-    // A fresh store instance simulates the next launch reading the marker.
-    final restored = AppCaptureMediaCleanupPendingStore(
-      documentsDirectory: () async => root,
-    );
-    final remaining = await restored.list();
-    expect(remaining, hasLength(1));
-    expect(remaining.single.captureId, captureId);
-    expect(remaining.single.kind, CaptureMediaCleanupKind.deleteSuperseded);
-    expect(remaining.single.publishedUri, 'content://media/site-mark/1');
-    expect(remaining.single.paths, isEmpty);
-
-    await restored.clear(captureId, CaptureMediaCleanupKind.deleteSuperseded);
-    expect(await restored.list(), isEmpty);
-  });
-
   test('skips corrupt and identity-mismatch markers and continues', () async {
     await store.write(
       const PendingCaptureMediaCleanup(

@@ -6,7 +6,6 @@ import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
-import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 
 /// Outcome of a single background processing pass for one capture.
 ///
@@ -64,14 +63,12 @@ final class CaptureProcessor {
     required this.platform,
     required this.images,
     required this.outputPaths,
-    required this.pendingStore,
   });
 
   final AppDatabase database;
   final PlatformServices platform;
   final ImagePipeline images;
   final CaptureOutputPaths outputPaths;
-  final CaptureMediaCleanupPendingStore pendingStore;
 
   /// Maximum number of processing attempts before a transient failure becomes
   /// permanent. The third failed attempt (i.e. `processingAttempts >= 3` after
@@ -174,28 +171,16 @@ final class CaptureProcessor {
         renderResult.outputPath,
         rendering.photoNumber!,
       );
+      // The new URI and a delete-only cleanup task per stale duplicate URI
+      // commit in ONE transaction: a process death between the two writes
+      // can no longer lose the tracking of a duplicate, and a write failure
+      // fails the whole pass so it is retried (rather than silently
+      // accepting an untracked duplicate).
       await database.markReady(
         captureId: captureId,
         publishedUri: publishOutcome.contentUri,
+        supersededUris: publishOutcome.supersededUris,
       );
-      if (publishOutcome.supersededUri != null) {
-        // The publish succeeded and the record already points at the new
-        // URI; queue a durable delete-only cleanup for the stale duplicate.
-        // A marker failure must not fail the capture — that would re-render
-        // and re-publish, accumulating gallery duplicates.
-        try {
-          await pendingStore.write(
-            PendingCaptureMediaCleanup(
-              captureId: captureId,
-              kind: CaptureMediaCleanupKind.deleteSuperseded,
-              paths: const [],
-              publishedUri: publishOutcome.supersededUri,
-            ),
-          );
-        } catch (_) {
-          // Best effort: the duplicate converges on the next replacement.
-        }
-      }
       return CaptureProcessResult.succeeded;
     } catch (error) {
       // Step 9: classify the error and decide retry vs. final failure.

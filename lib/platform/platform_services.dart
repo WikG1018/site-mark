@@ -33,16 +33,20 @@ Future<void> initializeForegroundRust() {
 
 /// Outcome of publishing a JPEG to the system gallery.
 ///
-/// [supersededUri] is non-null when the publish replaced an existing row
-/// but deleting that old row failed AFTER the new row was finalized. The
-/// publish itself SUCCEEDED — callers must update their records to
-/// [contentUri] and queue a best-effort delete of [supersededUri]; they
-/// must never re-publish or report failure because of it.
+/// [supersededUris] is non-empty when the publish replaced existing rows
+/// but deleting some of those old rows failed AFTER the new row was
+/// finalized. The publish itself SUCCEEDED — callers must update their
+/// records to [contentUri] and queue a best-effort delete for each entry of
+/// [supersededUris]; they must never re-publish or report failure because
+/// of them.
 class PublishJpegOutcome {
-  const PublishJpegOutcome({required this.contentUri, this.supersededUri});
+  const PublishJpegOutcome({
+    required this.contentUri,
+    this.supersededUris = const [],
+  });
 
   final String contentUri;
-  final String? supersededUri;
+  final List<String> supersededUris;
 }
 
 abstract interface class PlatformServices {
@@ -103,7 +107,7 @@ class PigeonPlatformServices implements PlatformServices {
     final result = await _api.publishJpeg(sourcePath, displayName);
     return PublishJpegOutcome(
       contentUri: result.contentUri,
-      supersededUri: result.supersededUri,
+      supersededUris: result.supersededUris ?? const [],
     );
   }
 
