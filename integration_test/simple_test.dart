@@ -192,7 +192,10 @@ class _IntegrationPlatformServices implements PlatformServices {
       [];
 
   @override
-  Future<void> clearPublishJournal(String journalId) async {}
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {}
 
   @override
   Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;

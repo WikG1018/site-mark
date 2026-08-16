@@ -185,13 +185,20 @@ final class CaptureProcessor {
         supersededUris: publishOutcome.supersededUris,
       );
       // The database commit survived, so the native publish journal has
-      // served its purpose. This clear is BEST-EFFORT and must never turn
-      // the succeeded publish into a retry (a re-publish would duplicate
-      // the gallery photo): a stale journal left behind by a failed clear
-      // is reconciled safely by CaptureMediaService.cleanupInterrupted on
-      // the next launch (record ready + URI matches → clear only).
+      // served its purpose. This clear is CONDITIONAL on the journal still
+      // recording THIS publish's URI — a newer same-capture publish may
+      // have overwritten it, and clearing that newer entry would make the
+      // newer finalized publish unrecoverable after a crash. It is also
+      // BEST-EFFORT and must never turn the succeeded publish into a retry
+      // (a re-publish would duplicate the gallery photo): a stale journal
+      // left behind by a failed clear is reconciled safely by
+      // CaptureMediaService.cleanupInterrupted on the next launch (record
+      // ready + URI matches → clear only).
       try {
-        await platform.clearPublishJournal(captureId);
+        await platform.clearPublishJournal(
+          captureId,
+          publishOutcome.contentUri,
+        );
       } catch (_) {}
       return CaptureProcessResult.succeeded;
     } catch (error) {

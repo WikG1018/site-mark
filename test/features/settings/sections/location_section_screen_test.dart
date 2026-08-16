@@ -152,7 +152,10 @@ class _SettingsTestPlatformServices implements PlatformServices {
       [];
 
   @override
-  Future<void> clearPublishJournal(String journalId) async {}
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {}
 
   @override
   Future<void> deletePublishedImage(String contentUri) async {}

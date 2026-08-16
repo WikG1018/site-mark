@@ -150,13 +150,22 @@ void main() {
     final result = await service.deleteAll(['capture-1']);
     expect(result.succeededIds, ['capture-1']);
     expect(await database.captureById('capture-1'), isNull);
-    expect(await pendingStore.list(), hasLength(1));
+    // The gallery delete failed but the durable superseded-cleanup task
+    // committed WITH the row deletion; the app-private marker only covers
+    // the private files, which deleted fine.
+    expect(await pendingStore.list(), isEmpty);
+    expect(
+      (await database.pendingSupersededCleanups()).map(
+        (task) => task.publishedUri,
+      ),
+      ['content://media/site-mark/1'],
+    );
 
     platform.deleteError = null;
     await service.cleanupInterrupted();
 
     expect(platform.deletedUris, ['content://media/site-mark/1']);
-    expect(await pendingStore.list(), isEmpty);
+    expect(await database.pendingSupersededCleanups(), isEmpty);
   });
 
   test(
@@ -411,6 +420,7 @@ void main() {
       await database.updatePublishedUri(
         'capture-1',
         'content://media/site-mark/1',
+        expectedPreviousUri: null,
         supersededUris: ['content://media/site-mark/1'],
       );
 
@@ -461,7 +471,13 @@ void main() {
         RecoveredPublishJournalEntry(
           captureId: 'capture-1',
           contentUri: 'content://media/site-mark/2',
-          supersededUris: ['content://media/site-mark/0'],
+          // The native publisher folds the CALLER'S database URI into the
+          // superseded candidates, so a journal of the crashed publish must
+          // list the row's current URI — plus any leftover it inherited.
+          supersededUris: [
+            'content://media/site-mark/1',
+            'content://media/site-mark/0',
+          ],
         ),
       );
 
@@ -734,6 +750,212 @@ void main() {
       );
     },
   );
+
+  // ------------------------------------------------------------------
+  // Legacy upgrade: two captures sharing ONE gallery URI.
+  //
+  // The old app overwrote gallery rows in place by file name, and a backup
+  // restore preserves photo numbers — so after upgrading, the original and
+  // the restored record can both reference the SAME URI. Re-publishing one
+  // of them must never delete the shared photo while the other still
+  // displays it.
+  // ------------------------------------------------------------------
+
+  test(
+    'republish of one capture never deletes a URI another capture shares',
+    () async {
+      await insertRestoredDuplicate();
+      // Simulate the legacy shared state: BOTH records reference URI 1.
+      await database.updatePublishedUri(
+        'capture-2',
+        'content://media/site-mark/1',
+        expectedPreviousUri: null,
+      );
+      files.existing.addAll([
+        '/rendered/capture-1.jpg',
+        '/rendered/capture-2.jpg',
+      ]);
+
+      // Re-publish capture-1: the native side reports the shared URI as a
+      // superseded candidate and the queue task commits with the new URI.
+      platform.nextPublishedUri = 'content://media/site-mark/2';
+      platform.nextSupersededUris = ['content://media/site-mark/1'];
+      final first = await service.republish(['capture-1']);
+      expect(first.succeededIds, ['capture-1']);
+
+      // The cleanup runs, but the shared URI is still referenced by
+      // capture-2 — the whole-database check must keep it alive.
+      await service.cleanupInterrupted();
+      expect(platform.deletedUris, isEmpty);
+      expect(
+        (await database.pendingSupersededCleanups()).map(
+          (task) => task.publishedUri,
+        ),
+        ['content://media/site-mark/1'],
+      );
+      expect(
+        (await database.captureById('capture-2'))?.publishedUri,
+        'content://media/site-mark/1',
+      );
+
+      // Re-publish capture-2 as well: now nothing references URI 1 anymore
+      // and the deferred delete converges.
+      platform.nextPublishedUri = 'content://media/site-mark/3';
+      platform.nextSupersededUris = ['content://media/site-mark/1'];
+      final second = await service.republish(['capture-2']);
+      expect(second.succeededIds, ['capture-2']);
+      await service.cleanupInterrupted();
+
+      expect(platform.deletedUris, ['content://media/site-mark/1']);
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+      expect(
+        (await database.captureById('capture-1'))?.publishedUri,
+        'content://media/site-mark/2',
+      );
+      expect(
+        (await database.captureById('capture-2'))?.publishedUri,
+        'content://media/site-mark/3',
+      );
+    },
+  );
+
+  // ------------------------------------------------------------------
+  // Interleaving: two same-capture publishes completing in REVERSE order.
+  //
+  // P1 publishes U2 (native done, DB commit pending); while P1 is between
+  // its native publish and its commit, P2 publishes U3 and commits FIRST.
+  // P1's late commit must not roll the record back to U2: the CAS fails,
+  // U2 becomes a delete-only orphan, and the conditional journal clear can
+  // never destroy P2's entry.
+  // ------------------------------------------------------------------
+
+  test('a late same-capture commit never rolls back a newer publish', () async {
+    files.existing.add('/rendered/capture-1.jpg');
+    platform.nextPublishedUri = 'content://media/site-mark/2';
+    platform.nextSupersededUris = ['content://media/site-mark/1'];
+    // While P1's native publish is "in flight", P2 overtakes it: the
+    // native journal is overwritten to U3 and P2's database commit lands.
+    platform.onPublishStarted = (index) async {
+      if (index != 1) return;
+      platform.nextPublishedUri = 'content://media/site-mark/3';
+      platform.nextSupersededUris = [
+        'content://media/site-mark/1',
+        'content://media/site-mark/2',
+      ];
+      platform.recoveredJournals.add(
+        RecoveredPublishJournalEntry(
+          captureId: 'capture-1',
+          contentUri: 'content://media/site-mark/3',
+          supersededUris: const [],
+        ),
+      );
+      final overtaken = await service.republish(['capture-1']);
+      expect(overtaken.succeededIds, ['capture-1']);
+      // Restore P1's outcome so the OUTER publish still returns U2.
+      platform.nextPublishedUri = 'content://media/site-mark/2';
+      platform.nextSupersededUris = ['content://media/site-mark/1'];
+    };
+
+    final result = await service.republish(['capture-1']);
+
+    expect(result.succeededIds, ['capture-1']);
+    // The record keeps the NEWER URI — never rolled back to U2.
+    expect(
+      (await database.captureById('capture-1'))?.publishedUri,
+      'content://media/site-mark/3',
+    );
+    // P1's U2 became an orphan cleanup task; U3 is not a task.
+    expect(
+      (await database.pendingSupersededCleanups()).map(
+        (task) => task.publishedUri,
+      ),
+      contains('content://media/site-mark/2'),
+    );
+    expect(
+      (await database.pendingSupersededCleanups()).map(
+        (task) => task.publishedUri,
+      ),
+      isNot(contains('content://media/site-mark/3')),
+    );
+    // P2's conditional clear ran with ITS URI; P1's conditional clear
+    // only ever named U2 — it could not have destroyed P2's entry.
+    expect(platform.clearedJournalCalls, [
+      ('capture-1', 'content://media/site-mark/3'),
+      ('capture-1', 'content://media/site-mark/2'),
+    ]);
+
+    // The orphan U2 converges; the record's U3 is never deleted.
+    platform.onPublishStarted = null;
+    await service.cleanupInterrupted();
+    expect(
+      platform.deletedUris,
+      isNot(contains('content://media/site-mark/3')),
+    );
+    expect(
+      (await database.captureById('capture-1'))?.publishedUri,
+      'content://media/site-mark/3',
+    );
+  });
+
+  // ------------------------------------------------------------------
+  // Interleaving: startup recovery racing a fresh publish.
+  //
+  // A crashed publish left journal U2 (native done, DB never committed).
+  // While recovery is starting, the user's new publish U3 completes and
+  // commits. Recovery must NOT adopt the stale U2 and must not queue U3.
+  // ------------------------------------------------------------------
+
+  test(
+    'recovery does not adopt a journal overtaken by a newer commit',
+    () async {
+      files.existing.add('/rendered/capture-1.jpg');
+      // The crashed P1: native finalized U2, journal written, DB still U1.
+      platform.recoveredJournals.add(
+        RecoveredPublishJournalEntry(
+          captureId: 'capture-1',
+          contentUri: 'content://media/site-mark/2',
+          supersededUris: ['content://media/site-mark/1'],
+        ),
+      );
+      platform.onRecoveryStarted = () async {
+        // Recovery has captured its snapshot; before reconciliation runs,
+        // a fresh publish U3 completes AND commits (its native journal
+        // overwrote the stale one and was cleared after the commit).
+        platform.recoveredJournals.clear();
+        platform.recoveredJournals.add(
+          RecoveredPublishJournalEntry(
+            captureId: 'capture-1',
+            contentUri: 'content://media/site-mark/3',
+            supersededUris: const [],
+          ),
+        );
+        platform.nextPublishedUri = 'content://media/site-mark/3';
+        platform.nextSupersededUris = [
+          'content://media/site-mark/1',
+          'content://media/site-mark/2',
+        ];
+        final fresh = await service.republish(['capture-1']);
+        expect(fresh.succeededIds, ['capture-1']);
+      };
+
+      await service.cleanupInterrupted();
+
+      // The record keeps the NEWER U3 — the stale journal U2 was never
+      // adopted (adopting it would have rolled the record back).
+      expect(
+        (await database.captureById('capture-1'))?.publishedUri,
+        'content://media/site-mark/3',
+      );
+      // The stale journal URI became an orphan task and converged; the
+      // record's U3 was never deleted.
+      expect(
+        platform.deletedUris,
+        isNot(contains('content://media/site-mark/3')),
+      );
+      expect(platform.deletedUris, contains('content://media/site-mark/2'));
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+    },
+  );
 }
 
 class _MediaFiles implements PrivateFileStore {
@@ -797,6 +1019,19 @@ class _MediaPlatform implements PlatformServices {
   final List<RecoveredPublishJournalEntry> recoveredJournals = [];
   final List<String> clearedJournalIds = [];
 
+  /// (captureId, expectedContentUri) of every conditional journal clear,
+  /// so tests can prove an OLDER operation never cleared a NEWER entry.
+  final List<(String, String)> clearedJournalCalls = [];
+
+  /// Invoked at the START of every publishJpeg call (before the outcome is
+  /// returned), letting tests interleave a concurrent same-capture publish
+  /// while an older one is between its native publish and its DB commit.
+  Future<void> Function(int publishIndex)? onPublishStarted;
+
+  /// Invoked AFTER the journal snapshot for recovery has been captured,
+  /// letting tests commit a concurrent publish before reconciliation runs.
+  Future<void> Function()? onRecoveryStarted;
+
   @override
   Future<PublishJpegOutcome> publishJpeg(
     String sourcePath,
@@ -807,6 +1042,8 @@ class _MediaPlatform implements PlatformServices {
     if (publishError != null) throw publishError!;
     publishCount += 1;
     publishCalls.add((captureId, publishedUri));
+    final hook = onPublishStarted;
+    if (hook != null) await hook(publishCount);
     return PublishJpegOutcome(
       contentUri: nextPublishedUri,
       supersededUris: nextSupersededUris,
@@ -814,12 +1051,25 @@ class _MediaPlatform implements PlatformServices {
   }
 
   @override
-  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
-      List.of(recoveredJournals);
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async {
+    final journals = List.of(recoveredJournals);
+    final hook = onRecoveryStarted;
+    if (hook != null) await hook();
+    return journals;
+  }
 
   @override
-  Future<void> clearPublishJournal(String captureId) async {
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {
     if (clearJournalError != null) throw clearJournalError!;
+    clearedJournalCalls.add((captureId, expectedContentUri));
+    for (final entry in recoveredJournals) {
+      if (entry.captureId != captureId) continue;
+      // Conditional clear: a newer overwritten entry must survive.
+      if (entry.contentUri != expectedContentUri) return;
+    }
     clearedJournalIds.add(captureId);
     recoveredJournals.removeWhere((entry) => entry.captureId == captureId);
   }

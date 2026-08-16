@@ -1008,6 +1008,7 @@ void main() {
     await database.updatePublishedUri(
       'capture-1',
       'content://media/site-mark/2',
+      expectedPreviousUri: 'content://media/site-mark/1',
       supersededUris: [
         'content://media/site-mark/1',
         'content://media/site-mark/1',

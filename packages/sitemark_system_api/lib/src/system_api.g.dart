@@ -762,9 +762,10 @@ class SiteMarkSystemApi {
   /// the durable publish journal and disambiguates records that share a
   /// photo number after a backup restore. [publishedUri] is the exact
   /// previously published URI this publish replaces — the native side
-  /// deletes ONLY that URI (plus any leftover journaled URI of the same
-  /// capture), never every same-named gallery row, because a restored
-  /// project may legitimately own another row with the same display name.
+  /// reports ONLY that URI (plus any leftover journaled URI of the same
+  /// capture) as a pending cleanup candidate; it never deletes gallery
+  /// rows itself, because a legacy upgrade can leave TWO records sharing
+  /// one URI and only the caller can check cross-record references.
   Future<MediaPublishResult> publishJpeg(
     String sourcePath,
     String displayName,
@@ -811,7 +812,14 @@ class SiteMarkSystemApi {
         ?.cast<RecoveredPublishJournal>();
   }
 
-  Future<void> clearPublishJournal(String captureId) async {
+  /// Clears the capture's publish journal ONLY when it still records
+  /// [expectedContentUri]. An older operation whose newer same-capture
+  /// publish already overwrote the journal must NOT clear the newer
+  /// entry, or the newer publish would become unrecoverable.
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.clearPublishJournal$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -820,7 +828,7 @@ class SiteMarkSystemApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[captureId],
+      <Object?>[captureId, expectedContentUri],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 

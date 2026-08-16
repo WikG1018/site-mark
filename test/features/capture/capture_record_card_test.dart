@@ -341,7 +341,10 @@ class _CardPlatform implements PlatformServices {
   Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
       [];
   @override
-  Future<void> clearPublishJournal(String journalId) async {}
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {}
   @override
   Future<LocationPermissionState> getLocationPermissionState() async =>
       LocationPermissionState.denied;

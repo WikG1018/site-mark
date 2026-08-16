@@ -445,13 +445,21 @@ class AndroidSystemApi(
         val resolver = context.contentResolver
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         // The ONLY rows this publish may supersede are explicit: the exact
-        // URI the caller's record previously published, plus any leftover
-        // journaled URI from an earlier crashed publish of the SAME capture.
-        // Same-named rows owned by OTHER captures (e.g. a restored project
-        // that preserved the photo number) are deliberately untouched.
-        val leftoverJournaledUri = publishJournal.peekContentUri(captureId)
-        val supersededCandidates = (listOfNotNull(publishedUri) + listOfNotNull(leftoverJournaledUri))
-            .distinct()
+        // URI the caller's record previously published, plus the COMPLETE
+        // leftover journal entry (content URI AND its superseded URIs) of
+        // an earlier crashed publish of the SAME capture. Reading the full
+        // entry matters: consecutive crashes would otherwise permanently
+        // lose tracking of the earliest stale URIs. Same-named rows owned
+        // by OTHER captures (e.g. a restored project that preserved the
+        // photo number) are deliberately never candidates.
+        val leftoverJournal = publishJournal.peek(captureId)
+        val supersededCandidates = buildList {
+            publishedUri?.let(::add)
+            leftoverJournal?.let {
+                add(it.contentUri)
+                addAll(it.supersededUris)
+            }
+        }.distinct()
         val publisher = SafeMediaPublisher(
             store = AndroidPublishedImageStore(
                 resolver = resolver,
@@ -472,8 +480,8 @@ class AndroidSystemApi(
     override fun recoverPublishJournals(): List<RecoveredPublishJournal>? =
         publishJournal.recover()
 
-    override fun clearPublishJournal(captureId: String) {
-        publishJournal.clear(captureId)
+    override fun clearPublishJournal(captureId: String, expectedContentUri: String) {
+        publishJournal.clear(captureId, expectedContentUri)
     }
 
     override fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit) {

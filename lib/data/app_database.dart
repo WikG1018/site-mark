@@ -884,10 +884,27 @@ ORDER BY
     )..where((row) => row.id.equals(captureId))).getSingleOrNull();
   }
 
+  /// Deletes the capture row AND, in the same transaction, queues its
+  /// `publishedUri` for the reference-checked delete-only cleanup.
+  ///
+  /// A legacy upgrade can leave TWO records sharing one gallery URI; even
+  /// after THIS row is gone, a sibling row may still display that URI. The
+  /// queue task only deletes once [isPublishedUriReferenced] reports no
+  /// remaining reference, so committing the row deletion can never orphan
+  /// another record's photo. Captures without a `publishedUri` (pending or
+  /// unprocessed states) enqueue nothing.
   Future<int> deleteCapture(String captureId) {
-    return (delete(
-      captureRecords,
-    )..where((row) => row.id.equals(captureId))).go();
+    return transaction(() async {
+      final record = await captureById(captureId);
+      final uri = record?.publishedUri;
+      final deleted = await (delete(
+        captureRecords,
+      )..where((row) => row.id.equals(captureId))).go();
+      if (deleted > 0 && uri != null && uri.trim().isNotEmpty) {
+        await enqueueSupersededCleanups(captureId, [uri]);
+      }
+      return deleted;
+    });
   }
 
   Future<CaptureRecord> updateCaptureDescription({
@@ -1415,17 +1432,54 @@ ORDER BY
   /// that re-publish an already-completed capture's watermarked JPEG and need
   /// to persist the new MediaStore URI. Superseded-cleanup tasks commit in
   /// the SAME transaction as the new URI (see [markReady]).
-  Future<CaptureRecord> updatePublishedUri(
+  ///
+  /// The update is a compare-and-swap: it applies ONLY while the row still
+  /// references [expectedPreviousUri] (null = expects a null column). Two
+  /// publishes of the same capture can interleave (manual re-save racing a
+  /// background processor or a startup recovery); without the CAS a
+  /// slower, OLDER publish could commit after a newer one and point the
+  /// record back at a stale URI. On CAS failure nothing is written and no
+  /// cleanup tasks are enqueued; the caller learns this via the returned
+  /// `false` and must queue its already-published URI for delete-only
+  /// cleanup instead.
+  Future<bool> updatePublishedUri(
     String captureId,
     String publishedUri, {
+    required String? expectedPreviousUri,
     List<String> supersededUris = const [],
   }) async {
     return transaction(() async {
-      await (update(captureRecords)..where((row) => row.id.equals(captureId)))
-          .write(CaptureRecordsCompanion(publishedUri: Value(publishedUri)));
+      final matched =
+          await (update(captureRecords)..where(
+                (row) =>
+                    row.id.equals(captureId) &
+                    (expectedPreviousUri == null
+                        ? row.publishedUri.isNull()
+                        : row.publishedUri.equals(expectedPreviousUri)),
+              ))
+              .write(
+                CaptureRecordsCompanion(publishedUri: Value(publishedUri)),
+              );
+      if (matched == 0) return false;
       await enqueueSupersededCleanups(captureId, supersededUris);
-      return captureById(captureId).then((row) => row!);
+      return true;
     });
+  }
+
+  /// Whether ANY capture row still references [publishedUri].
+  ///
+  /// Legacy upgrades can leave two records sharing one gallery URI (the
+  /// old app overwrote gallery rows in place by file name, and a backup
+  /// restore preserves photo numbers). Every delete of a published URI
+  /// must pass this check first, or one record's cleanup would destroy
+  /// the photo another record still displays.
+  Future<bool> isPublishedUriReferenced(String publishedUri) async {
+    final query = selectOnly(captureRecords)
+      ..addColumns([captureRecords.id])
+      ..where(captureRecords.publishedUri.equals(publishedUri))
+      ..limit(1);
+    final rows = await query.get();
+    return rows.isNotEmpty;
   }
 
   /// Inserts one independent cleanup task per superseded URI. Used inside

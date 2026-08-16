@@ -150,9 +150,10 @@ abstract class SiteMarkSystemApi {
   /// the durable publish journal and disambiguates records that share a
   /// photo number after a backup restore. [publishedUri] is the exact
   /// previously published URI this publish replaces — the native side
-  /// deletes ONLY that URI (plus any leftover journaled URI of the same
-  /// capture), never every same-named gallery row, because a restored
-  /// project may legitimately own another row with the same display name.
+  /// reports ONLY that URI (plus any leftover journaled URI of the same
+  /// capture) as a pending cleanup candidate; it never deletes gallery
+  /// rows itself, because a legacy upgrade can leave TWO records sharing
+  /// one URI and only the caller can check cross-record references.
   @async
   MediaPublishResult publishJpeg(
     String sourcePath,
@@ -163,7 +164,11 @@ abstract class SiteMarkSystemApi {
 
   List<RecoveredPublishJournal>? recoverPublishJournals();
 
-  void clearPublishJournal(String captureId);
+  /// Clears the capture's publish journal ONLY when it still records
+  /// [expectedContentUri]. An older operation whose newer same-capture
+  /// publish already overwrote the journal must NOT clear the newer
+  /// entry, or the newer publish would become unrecoverable.
+  void clearPublishJournal(String captureId, String expectedContentUri);
 
   @async
   ArchiveSaveOutcome saveArchive(String sourcePath, String suggestedName);

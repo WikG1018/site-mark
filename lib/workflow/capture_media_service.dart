@@ -112,8 +112,13 @@ class CaptureMediaService {
   /// row for each capture in [captureIds]. Permits `ready` and `failed` rows.
   /// The exact durable deletion order per row is:
   ///   1. persist an app-private cleanup marker
-  ///   2. `deleteCapture(id)` (the logical commit point)
-  ///   3. remove the published image and private files, then the marker
+  ///   2. `deleteCapture(id)` (the logical commit point) — which ALSO queues
+  ///      the row's `publishedUri` into the superseded-cleanup table in the
+  ///      same transaction
+  ///   3. remove the private files, then the marker
+  ///   4. process the superseded queue: each queued URI is deleted only
+  ///      after a whole-database check confirms no record still references
+  ///      it (a legacy upgrade can leave a sibling row sharing the URI)
   /// A crash or media cleanup failure after the commit point is retried by
   /// [cleanupInterrupted]. Per-record exceptions remain isolated. Once the
   /// database commit succeeds, leftover media cleanup is durable and
@@ -148,6 +153,9 @@ class CaptureMediaService {
         failures[id] = CaptureMediaFailure.operationFailed;
       }
     }
+    // Run the reference-checked queue now so an unreferenced URI is deleted
+    // in the same user action instead of lingering until the next launch.
+    await _cleanupSuperseded();
     return CaptureActionResult(
       succeededIds: succeeded,
       skippedIds: skipped,
@@ -190,23 +198,46 @@ class CaptureMediaService {
         );
         // The new URI and a delete-only cleanup task per stale duplicate URI
         // commit in ONE database transaction: a process death (or a failed
-        // queue write) can no longer lose the tracking of a duplicate. A
-        // failure here retries the whole republish later — it must not be
-        // swallowed, or an untracked duplicate would linger forever.
-        await database.updatePublishedUri(
+        // queue write) can no longer lose the tracking of a duplicate. The
+        // update is a compare-and-swap on the previously observed URI: a
+        // CAS failure means a NEWER publish of this capture already
+        // committed, so this older outcome must NOT overwrite it — its own
+        // URI is an orphan and is queued for delete-only cleanup instead.
+        final committed = await database.updatePublishedUri(
           id,
           outcome.contentUri,
+          expectedPreviousUri: record.publishedUri,
           supersededUris: outcome.supersededUris,
         );
-        // The database commit survived, so the native publish journal has
-        // served its purpose; a crash before this point is reconciled by
-        // [_recoverPublishJournals] on the next launch. This clear is
-        // BEST-EFFORT: a stale journal never turns the completed republish
-        // into a failure — recovery sees `ready` + matching URI and clears
-        // the journal on the next launch.
-        try {
-          await platform.clearPublishJournal(id);
-        } catch (_) {}
+        if (!committed) {
+          // CAS failed: a NEWER publish of this capture already committed.
+          // If that newer commit happens to hold THIS very URI (e.g. a
+          // journal recovery adopted it), there is no orphan at all — only
+          // the conditional journal clear remains. Otherwise this older
+          // outcome's URI is an orphan queued for delete-only cleanup; the
+          // whole-database reference check in _cleanupSuperseded guards
+          // the actual delete.
+          final fresh = await database.captureById(id);
+          if (fresh?.publishedUri != outcome.contentUri) {
+            await database.enqueueSupersededCleanups(id, [outcome.contentUri]);
+          }
+          try {
+            await platform.clearPublishJournal(id, outcome.contentUri);
+          } catch (_) {}
+        } else {
+          // The database commit survived, so the native publish journal has
+          // served its purpose; a crash before this point is reconciled by
+          // [_recoverPublishJournals] on the next launch. The clear is
+          // CONDITIONAL on the journal still recording THIS publish's URI:
+          // if a newer same-capture publish already overwrote the journal,
+          // clearing must not destroy that newer entry. It is also
+          // BEST-EFFORT — a leftover journal never turns the completed
+          // republish into a failure (recovery sees `ready` + matching URI
+          // and clears it on the next launch).
+          try {
+            await platform.clearPublishJournal(id, outcome.contentUri);
+          } catch (_) {}
+        }
         succeeded.add(id);
       } catch (_) {
         failures[id] = CaptureMediaFailure.operationFailed;
@@ -274,15 +305,30 @@ class CaptureMediaService {
   ///
   /// - Row already points at the journaled URI → the commit survived and
   ///   only the journal is stale → clear it.
-  /// - `ready` row still points at an older URI → the commit never
-  ///   happened → adopt the journaled URI and queue deletes for every
-  ///   stale candidate (already-deleted rows are an idempotent no-op).
+  /// - `ready` row still points at the URI the journaled publish replaced
+  ///   (its previous URI, or null for a first publish) → the commit never
+  ///   happened → adopt the journaled URI via CAS and queue deletes for
+  ///   every stale candidate (already-deleted rows are an idempotent no-op).
+  ///   A CAS failure means a NEWER publish committed after the journal was
+  ///   read: the journaled URI is then an orphan queued for delete-only
+  ///   cleanup, and the journal is LEFT UNTOUCHED — it may belong to that
+  ///   newer (possibly still uncommitted) operation.
+  /// - `ready` row points at a URI the journal NEVER replaced → a newer
+  ///   publish already committed and the journal is a leftover of an older
+  ///   superseded operation. Adopting the older URI would roll the record
+  ///   BACK; instead the journaled URI is queued as an orphan and the
+  ///   journal cleared conditionally.
   /// - Row is `captured`/`rendering` → the background processor will
   ///   re-publish and overwrite this journal; keep it and let the normal
   ///   flow converge.
   /// - Row is gone or terminal-without-retry (`failed`) → nothing will ever
   ///   reference the journaled URI → queue the new and stale URIs for
   ///   delete-only cleanup and clear the journal.
+  ///
+  /// Every clear is CONDITIONAL on the journal still recording the entry
+  /// being reconciled: an older operation must never clear an entry that a
+  /// newer same-capture publish has already overwritten — losing it would
+  /// make the newer finalized publish unrecoverable after a crash.
   ///
   /// The journal is keyed by the capture's stable ID, so the row is located
   /// by `captureById` — NEVER by photo number, which a backup restore can
@@ -298,24 +344,47 @@ class CaptureMediaService {
             journal.contentUri,
             ...journal.supersededUris,
           ]);
-          await platform.clearPublishJournal(journal.captureId);
+          await platform.clearPublishJournal(
+            journal.captureId,
+            journal.contentUri,
+          );
           continue;
         }
         switch (record.status) {
           case CaptureStatus.ready:
             if (record.publishedUri == journal.contentUri) {
-              await platform.clearPublishJournal(journal.captureId);
-            } else {
+              await platform.clearPublishJournal(
+                journal.captureId,
+                journal.contentUri,
+              );
+            } else if (record.publishedUri == null ||
+                journal.supersededUris.contains(record.publishedUri)) {
+              // The row still holds the state this journal was meant to
+              // replace — safe to adopt the journaled URI.
               final stale = <String>{
                 ...journal.supersededUris,
                 if (record.publishedUri != null) record.publishedUri!,
               }.toList();
-              await database.updatePublishedUri(
+              final committed = await database.updatePublishedUri(
                 record.id,
                 journal.contentUri,
+                expectedPreviousUri: record.publishedUri,
                 supersededUris: stale,
               );
-              await platform.clearPublishJournal(journal.captureId);
+              if (committed) {
+                await platform.clearPublishJournal(
+                  journal.captureId,
+                  journal.contentUri,
+                );
+              } else {
+                // A newer publish committed while reconciling; the
+                // journaled URI may already equal the committed one.
+                await _reconcileSupersededJournalOrphan(record.id, journal);
+              }
+            } else {
+              // A newer publish already committed; the journal belongs to
+              // an older superseded operation. Never roll the record back.
+              await _reconcileSupersededJournalOrphan(record.id, journal);
             }
           case CaptureStatus.captured:
           case CaptureStatus.rendering:
@@ -330,7 +399,10 @@ class CaptureMediaService {
               journal.contentUri,
               ...journal.supersededUris,
             ]);
-            await platform.clearPublishJournal(journal.captureId);
+            await platform.clearPublishJournal(
+              journal.captureId,
+              journal.contentUri,
+            );
         }
       } catch (_) {
         // Keep the journal entry for a later launch; siblings still run.
@@ -338,16 +410,34 @@ class CaptureMediaService {
     }
   }
 
+  /// Resolves a journal whose publish was superseded by a newer committed
+  /// one: the journaled URI is an orphan UNLESS the row already points at
+  /// it (another path committed the very same URI), and the journal itself
+  /// is cleared only while it still records [RecoveredPublishJournalEntry.contentUri].
+  Future<void> _reconcileSupersededJournalOrphan(
+    String captureId,
+    RecoveredPublishJournalEntry journal,
+  ) async {
+    final fresh = await database.captureById(captureId);
+    if (fresh?.publishedUri != journal.contentUri) {
+      // The whole-database reference check in _cleanupSuperseded is the
+      // final guard: a URI any row still references is never deleted.
+      await database.enqueueSupersededCleanups(captureId, [journal.contentUri]);
+    }
+    await platform.clearPublishJournal(captureId, journal.contentUri);
+  }
+
   Future<void> _cleanupSuperseded() async {
     final tasks = await database.pendingSupersededCleanups();
     for (final task in tasks) {
       try {
-        final record = await database.captureById(task.captureId);
-        // The task commits atomically with the replacement URI, so a live
-        // record must never reference the task's URI. This guard is
-        // defensive against restored backups re-pointing a record at an old
-        // URI: deleting it would destroy the photo the record displays.
-        if (record != null && record.publishedUri == task.publishedUri) {
+        // Check the WHOLE database, not just the task's own capture: a
+        // legacy upgrade can leave TWO records sharing one gallery URI, and
+        // deleting a URI that ANY row still references would destroy the
+        // photo that record displays. A referenced URI keeps its task for a
+        // later launch; once the last reference is gone (the sibling row is
+        // deleted or re-published), the delete converges.
+        if (await database.isPublishedUriReferenced(task.publishedUri)) {
           continue;
         }
         try {
@@ -364,15 +454,12 @@ class CaptureMediaService {
   }
 
   Future<bool> _finishCleanup(PendingCaptureMediaCleanup pending) async {
+    // The published URI is deliberately NOT deleted here: the database's
+    // deleteCapture already queued it (same transaction) into the durable
+    // superseded-cleanup table, whose processor checks the WHOLE database
+    // for remaining references — a legacy upgrade can leave a sibling row
+    // sharing this URI. Deleting it here would bypass that check.
     var cleaned = true;
-    if (pending.kind == CaptureMediaCleanupKind.deleteCapture &&
-        pending.publishedUri != null) {
-      try {
-        await platform.deletePublishedImage(pending.publishedUri!);
-      } catch (_) {
-        cleaned = false;
-      }
-    }
     for (final path in pending.paths) {
       try {
         await files.deleteIfExists(path);

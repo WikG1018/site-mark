@@ -30,6 +30,12 @@ import android.content.SharedPreferences
  */
 internal class PublishJournalStore(private val preferences: SharedPreferences) {
 
+    /** A complete journal entry as stored for one capture. */
+    data class JournalEntry(
+        val contentUri: String,
+        val supersededUris: List<String>,
+    )
+
     /** Returns false when the synchronous commit failed (disk full/corrupt). */
     fun record(
         captureId: String,
@@ -55,17 +61,24 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
     }
 
     /**
-     * Returns the journaled content URI for [captureId], or null when no
+     * Returns the COMPLETE journaled entry for [captureId], or null when no
      * complete entry exists. The publisher consults this BEFORE publishing
-     * so a leftover row from a previously crashed publish of the SAME
-     * capture becomes a superseded candidate of the new publish instead of
-     * an untracked duplicate.
+     * so the previous crashed publish's URI AND its superseded URIs all
+     * become cleanup candidates of the new publish: reading only the
+     * content URI would permanently lose tracking of the earlier stale
+     * URIs after a second consecutive crash.
      */
-    fun peekContentUri(captureId: String): String? {
+    fun peek(captureId: String): JournalEntry? {
         val prefix = keyPrefix(captureId)
         val entries = preferences.all ?: return null
         if (entries["$prefix$KEY_EXISTS"] !is Boolean) return null
-        return entries["$prefix$KEY_NEW_URI"] as? String
+        val contentUri = entries["$prefix$KEY_NEW_URI"] as? String ?: return null
+        val staleCount = (entries["$prefix$KEY_STALE_COUNT"] as? Int) ?: 0
+        val staleUris = mutableListOf<String>()
+        for (index in 0 until staleCount) {
+            (entries["$prefix$KEY_STALE_PREFIX$index"] as? String)?.let(staleUris::add)
+        }
+        return JournalEntry(contentUri = contentUri, supersededUris = staleUris)
     }
 
     fun recover(): List<RecoveredPublishJournal> {
@@ -94,13 +107,29 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
         return result
     }
 
-    fun clear(captureId: String) {
+    /**
+     * Clears the capture's entry ONLY while it still records
+     * [expectedContentUri]. An OLDER operation whose newer same-capture
+     * publish already overwrote the journal must not clear the newer
+     * entry: losing it would make the newer finalized publish
+     * unrecoverable after a crash. Clearing a missing entry is an
+     * idempotent success.
+     *
+     * @return true when the journal is (or already was) clear for this
+     *         capture; false when a NEWER entry was left untouched or the
+     *         durable commit failed.
+     */
+    fun clear(captureId: String, expectedContentUri: String): Boolean {
         val prefix = keyPrefix(captureId)
+        val entries = preferences.all
+        if (entries == null || entries["$prefix$KEY_EXISTS"] !is Boolean) return true
+        val current = entries["$prefix$KEY_NEW_URI"] as? String
+        if (current != null && current != expectedContentUri) return false
         val editor = preferences.edit()
-        for (key in preferences.all.orEmpty().keys) {
+        for (key in entries.keys) {
             if (key.startsWith(prefix)) editor.remove(key)
         }
-        editor.commit()
+        return editor.commit()
     }
 
     private fun keyPrefix(captureId: String): String =

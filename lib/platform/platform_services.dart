@@ -33,12 +33,14 @@ Future<void> initializeForegroundRust() {
 
 /// Outcome of publishing a JPEG to the system gallery.
 ///
-/// [supersededUris] is non-empty when the publish replaced existing rows
-/// but deleting some of those old rows failed AFTER the new row was
-/// finalized. The publish itself SUCCEEDED — callers must update their
-/// records to [contentUri] and queue a best-effort delete for each entry of
-/// [supersededUris]; they must never re-publish or report failure because
-/// of them.
+/// [supersededUris] lists every superseded candidate the caller passed in,
+/// reported verbatim: the native side never deletes gallery rows itself,
+/// because a legacy upgrade can leave TWO records sharing one URI and only
+/// the caller can check the whole database for remaining references before
+/// deleting. The publish itself SUCCEEDED — callers must update their
+/// records to [contentUri] and queue a reference-checked, delete-only
+/// cleanup for each entry of [supersededUris]; they must never re-publish
+/// or report failure because of them.
 class PublishJpegOutcome {
   const PublishJpegOutcome({
     required this.contentUri,
@@ -99,7 +101,11 @@ abstract interface class PlatformServices {
 
   Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals();
 
-  Future<void> clearPublishJournal(String captureId);
+  /// Clears the capture's publish journal ONLY while it still records
+  /// [expectedContentUri]. An older operation whose newer same-capture
+  /// publish already overwrote the journal must NOT clear the newer
+  /// entry, or the newer publish would become unrecoverable.
+  Future<void> clearPublishJournal(String captureId, String expectedContentUri);
 
   Future<void> deletePublishedImage(String contentUri);
 
@@ -172,8 +178,11 @@ class PigeonPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<void> clearPublishJournal(String captureId) {
-    return _api.clearPublishJournal(captureId);
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) {
+    return _api.clearPublishJournal(captureId, expectedContentUri);
   }
 
   @override

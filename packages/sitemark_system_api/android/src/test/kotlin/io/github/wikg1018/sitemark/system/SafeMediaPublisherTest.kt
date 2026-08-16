@@ -10,7 +10,7 @@ import java.nio.file.Files
 
 class SafeMediaPublisherTest {
     @Test
-    fun `replacement publishes a new row and deletes the explicit old one`() {
+    fun `replacement publishes a new row and reports the explicit old one`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {
             val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
@@ -25,10 +25,14 @@ class SafeMediaPublisherTest {
             )
 
             assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
-            assertTrue(published.supersededUris.isEmpty())
-            // The explicit old row is gone and the new row is finalized with
-            // the new bytes — never a half-written row left visible.
-            assertNull(store.rows[FakePublishedImageStore.OLD_URI])
+            // The publisher NEVER deletes the old row itself: a legacy
+            // upgrade can leave two records sharing one URI, so the caller
+            // must queue a reference-checked, delete-only cleanup instead.
+            assertEquals(listOf(FakePublishedImageStore.OLD_URI), published.supersededUris)
+            // The old row survives until the caller's cleanup runs, and the
+            // new row is finalized with the new bytes — never a half-written
+            // row left visible.
+            assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
             val newRow = store.rows[FakePublishedImageStore.NEW_URI]
             assertEquals("new-image", newRow?.bytes)
             assertEquals(false, newRow?.pending)
@@ -67,49 +71,50 @@ class SafeMediaPublisherTest {
     }
 
     @Test
-    fun `old row delete failure keeps the finalized new row published`() {
+    fun `every candidate is reported verbatim and no row is ever deleted`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {
             val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
-            val store = FakePublishedImageStore(existingBytes = "old-image").apply {
-                failDeleteOldRow = true
-            }
+            val store = FakePublishedImageStore(
+                existingBytes = "old-image",
+                duplicateBytes = "older-image",
+            )
             val publisher = SafeMediaPublisher(store)
 
-            // The new row was already finalized, so the publish is a SUCCESS
-            // even though the old-row delete failed. It must NOT throw: a
-            // fake failure would make the caller re-publish and accumulate
-            // gallery duplicates.
+            // The publish SUCCEEDED (new row finalized); every stale
+            // candidate — including ones whose delete could never succeed —
+            // is reported independently for the caller's cleanup queue.
             val published = publisher.publish(
                 source,
                 "capture.jpg",
                 "capture-1",
-                supersededCandidates = listOf(FakePublishedImageStore.OLD_URI),
+                supersededCandidates = listOf(
+                    FakePublishedImageStore.OLD_URI,
+                    FakePublishedImageStore.DUPLICATE_URI,
+                ),
             )
 
             assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
-            // The stale URI is reported so the caller can retry ONLY the
-            // delete through the persistent cleanup queue.
-            assertEquals(listOf(FakePublishedImageStore.OLD_URI), published.supersededUris)
-            // The new row stays finalized and published — deleting both rows
-            // could leave the gallery empty. The old row remains as a
-            // temporary duplicate until the next cleanup pass retries the
-            // delete.
-            assertEquals("new-image", store.rows[FakePublishedImageStore.NEW_URI]?.bytes)
+            assertEquals(
+                setOf(FakePublishedImageStore.OLD_URI, FakePublishedImageStore.DUPLICATE_URI),
+                published.supersededUris.toSet(),
+            )
             assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
+            // Neither stale row was touched by the publisher.
             assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
+            assertEquals("older-image", store.rows[FakePublishedImageStore.DUPLICATE_URI]?.bytes)
         } finally {
             directory.deleteRecursively()
         }
     }
 
-    // Regression (backup restore): which rows may be supersed is decided
+    // Regression (backup restore): which rows may be superseded is decided
     // EXCLUSIVELY by the caller's explicit candidate list. A same-named row
     // owned by ANOTHER capture — e.g. the original project's row while a
     // restored project re-saves its photo with the same preserved photo
-    // number — must NEVER be deleted.
+    // number — must NEVER become a candidate.
     @Test
-    fun `same-named rows outside the explicit candidates are never deleted`() {
+    fun `same-named rows outside the explicit candidates are never reported`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {
             val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
@@ -129,54 +134,16 @@ class SafeMediaPublisherTest {
             )
 
             assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
-            assertTrue(published.supersededUris.isEmpty())
-            // The explicit candidate is gone...
-            assertNull(store.rows[FakePublishedImageStore.OLD_URI])
-            // ...while the same-named row of the OTHER capture survives
-            // untouched — deleting it would destroy the original project's
-            // published photo.
+            // Only the explicit candidate is reported for cleanup...
+            assertEquals(listOf(FakePublishedImageStore.OLD_URI), published.supersededUris)
+            // ...while the same-named row of the OTHER capture is neither
+            // deleted nor queued — deleting it would destroy the original
+            // project's published photo.
             assertEquals(
                 "other-captures-image",
                 store.rows[FakePublishedImageStore.DUPLICATE_URI]?.bytes,
             )
             assertEquals(false, store.rows[FakePublishedImageStore.DUPLICATE_URI]?.pending)
-            assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
-        } finally {
-            directory.deleteRecursively()
-        }
-    }
-
-    @Test
-    fun `failing candidate deletes are all reported as superseded`() {
-        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
-        try {
-            val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
-            val store = FakePublishedImageStore(
-                existingBytes = "old-image",
-                duplicateBytes = "older-image",
-            ).apply {
-                failDeleteOldRow = true
-                failDeleteDuplicateRow = true
-            }
-            val publisher = SafeMediaPublisher(store)
-
-            // The new row was already finalized, so the publish is a SUCCESS
-            // and every un-deletable stale URI is reported independently.
-            val published = publisher.publish(
-                source,
-                "capture.jpg",
-                "capture-1",
-                supersededCandidates = listOf(
-                    FakePublishedImageStore.OLD_URI,
-                    FakePublishedImageStore.DUPLICATE_URI,
-                ),
-            )
-
-            assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
-            assertEquals(
-                setOf(FakePublishedImageStore.OLD_URI, FakePublishedImageStore.DUPLICATE_URI),
-                published.supersededUris.toSet(),
-            )
             assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
         } finally {
             directory.deleteRecursively()
@@ -215,7 +182,7 @@ class SafeMediaPublisherTest {
     }
 
     @Test
-    fun `journal records the finalized publish before deleting superseded rows`() {
+    fun `journal records the finalized publish before any superseded cleanup`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {
             val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
@@ -223,8 +190,10 @@ class SafeMediaPublisherTest {
             val calls = mutableListOf<Triple<String, String, List<String>>>()
             val journal = PublishJournalSink { captureId, uri, superseded ->
                 calls += Triple(captureId, uri, superseded)
-                // 时序证明：journal 被调用时旧行还在 —— 即转正之后、删除之前。
+                // 时序证明：journal 被调用时新行已转正、旧行还未被任何
+                // 清理触碰 —— 转正之后、清理之前。
                 assertTrue(store.rows.containsKey(FakePublishedImageStore.OLD_URI))
+                assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
                 true
             }
             val publisher = SafeMediaPublisher(store, journal)
@@ -248,9 +217,8 @@ class SafeMediaPublisherTest {
                 ),
                 calls,
             )
-            assertNull(store.rows[FakePublishedImageStore.OLD_URI])
             assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
-            assertTrue(published.supersededUris.isEmpty())
+            assertEquals(listOf(FakePublishedImageStore.OLD_URI), published.supersededUris)
         } finally {
             directory.deleteRecursively()
         }
@@ -357,8 +325,6 @@ private class FakePublishedImageStore(
     val rows = linkedMapOf<String, Row>()
     var failWrite = false
     var failFinalize = false
-    var failDeleteOldRow = false
-    var failDeleteDuplicateRow = false
 
     init {
         if (existingBytes != null) {
@@ -387,8 +353,6 @@ private class FakePublishedImageStore(
     }
 
     override fun delete(contentUri: String) {
-        if (contentUri == OLD_URI && failDeleteOldRow) error("delete failed")
-        if (contentUri == DUPLICATE_URI && failDeleteDuplicateRow) error("delete failed")
         rows.remove(contentUri)
     }
 

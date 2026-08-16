@@ -383,6 +383,82 @@ class AndroidSystemApiTest {
         }
     }
 
+    // Regression (consecutive crashes): a re-publish of the same capture
+    // must fold the COMPLETE leftover journal entry — its content URI AND
+    // its superseded URIs — plus the caller's database URI into the new
+    // superseded candidates, deduplicated. Reading only the journal's
+    // content URI would permanently lose tracking of the earliest stale
+    // URIs after a second consecutive crash.
+    @Test
+    fun publishFoldsDatabaseUriAndLeftoverJournalIntoSupersededCandidates() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val source = java.io.File(context.dataDir, "sm-publish-source.jpg")
+        source.writeText("jpeg-bytes")
+        try {
+            // Pre-seed the durable journal for capture-1: a crashed publish
+            // finalized U2 with stale candidate U1.
+            val prefix = "journal.capture-1\u0000"
+            val journalValues = mapOf<String, Any>(
+                "${prefix}.exists" to true,
+                "${prefix}.newUri" to "content://media/external/images/2",
+                "${prefix}.staleCount" to 1,
+                "${prefix}.stale.0" to "content://media/external/images/1",
+            )
+            val prefs = context.getSharedPreferences("publish_journal", Context.MODE_PRIVATE)
+            `when`(prefs.all).thenReturn(journalValues)
+            val editor = prefs.edit()
+            // The record() overwrite folds everything it read; commit must
+            // succeed so the publish is not rolled back.
+            `when`(editor.putInt(anyString(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(editor)
+
+            val collection = mock(Uri::class.java)
+            val newUri = mock(Uri::class.java)
+            `when`(resolver.insert(any(Uri::class.java), any(ContentValues::class.java)))
+                .thenReturn(newUri)
+            `when`(
+                resolver.openOutputStream(any(Uri::class.java), eq("w")),
+            ).thenReturn(java.io.ByteArrayOutputStream())
+            `when`(
+                resolver.update(any(Uri::class.java), any(ContentValues::class.java), isNull(), isNull()),
+            ).thenReturn(1)
+
+            mockStatic(Uri::class.java).use { staticUri ->
+                staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(newUri)
+                mockStatic(MediaStore.Images.Media::class.java).use { staticMedia ->
+                    staticMedia.`when`<Uri> {
+                        MediaStore.Images.Media.getContentUri(anyString())
+                    }.thenReturn(collection)
+                    val api = AndroidSystemApi(context)
+
+                    val result = api.publishJpegForTest(
+                        source.absolutePath,
+                        "SM-20260716-001",
+                        "capture-1",
+                        // The caller's database still references U3.
+                        "content://media/external/images/3",
+                    )
+
+                    // All three sources merge, deduplicated: the journal's
+                    // stale URI, the journal's content URI, and the
+                    // database's previous URI. None of them was deleted by
+                    // the publish itself.
+                    assertEquals(
+                        listOf(
+                            "content://media/external/images/3",
+                            "content://media/external/images/2",
+                            "content://media/external/images/1",
+                        ),
+                        result.supersededUris,
+                    )
+                }
+            }
+        } finally {
+            source.delete()
+        }
+    }
+
     /** Returns a Uri double that passes the MediaStore allowlist check. */
     private fun mediaUri(): Uri {
         val uri = mock(Uri::class.java)

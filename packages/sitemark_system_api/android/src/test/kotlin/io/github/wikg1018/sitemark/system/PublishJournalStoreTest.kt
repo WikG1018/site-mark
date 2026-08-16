@@ -63,7 +63,7 @@ class PublishJournalStoreTest {
         store.record("SM-1", "content://media/external/images/1", listOf("content://media/old/1"))
         store.record("SM-2", "content://media/external/images/2", emptyList())
 
-        store.clear("SM-1")
+        assertTrue(store.clear("SM-1", "content://media/external/images/1"))
 
         val remaining = store.recover()
         assertEquals(listOf("SM-2"), remaining.map { it.captureId })
@@ -71,6 +71,71 @@ class PublishJournalStoreTest {
         assertEquals("SM-2", entry.captureId)
         assertEquals("content://media/external/images/2", entry.contentUri)
         assertTrue(entry.supersededUris.isEmpty())
+    }
+
+    @Test
+    fun `clearing a missing entry is an idempotent success`() {
+        val preferences = FakeSharedPreferences()
+        val store = PublishJournalStore(preferences)
+
+        assertTrue(store.clear("SM-1", "content://media/external/images/1"))
+        assertTrue(store.recover().isEmpty())
+    }
+
+    // Regression (interleaved same-capture publishes): an OLDER operation
+    // must never clear an entry that a NEWER publish already overwrote —
+    // losing it would make the newer finalized publish unrecoverable after
+    // a crash. P1 journals U2; P2 journals U3 over it; P1's conditional
+    // clear(U2) must leave the journal (still U3) untouched.
+    @Test
+    fun `clear with a stale expected URI leaves a newer entry untouched`() {
+        val preferences = FakeSharedPreferences()
+        val store = PublishJournalStore(preferences)
+        store.record("SM-1", "content://media/external/images/2", listOf("content://media/old/1"))
+        store.record("SM-1", "content://media/external/images/3", listOf("content://media/old/2"))
+
+        assertFalse(store.clear("SM-1", "content://media/external/images/2"))
+
+        val entry = store.recover().single()
+        assertEquals("SM-1", entry.captureId)
+        assertEquals("content://media/external/images/3", entry.contentUri)
+        assertEquals(listOf("content://media/old/2"), entry.supersededUris)
+    }
+
+    @Test
+    fun `peek returns the complete entry including superseded URIs`() {
+        val preferences = FakeSharedPreferences()
+        val store = PublishJournalStore(preferences)
+
+        assertTrue(store.peek("SM-1") == null)
+        store.record("SM-1", "content://media/external/images/2", listOf("content://media/old/1"))
+
+        val entry = store.peek("SM-1")
+        assertEquals("content://media/external/images/2", entry?.contentUri)
+        assertEquals(listOf("content://media/old/1"), entry?.supersededUris)
+    }
+
+    // Regression (consecutive crashes): a second publish of the same
+    // capture must fold the ENTIRE leftover journal entry — its content URI
+    // AND its superseded URIs — into the new candidates. Reading only the
+    // content URI would permanently lose tracking of the earliest stale
+    // URIs. The overwrite must also drop stale slots beyond the new count
+    // so recovery can never mix URIs of two different publishes.
+    @Test
+    fun `re-publish over a leftover entry replaces it without residue`() {
+        val preferences = FakeSharedPreferences()
+        val store = PublishJournalStore(preferences)
+        // First crashed publish: U2 with two stale candidates.
+        store.record("SM-1", "content://media/external/images/2", listOf("u1", "u2"))
+        // Second publish overwrites the entry with fewer stale URIs.
+        store.record("SM-1", "content://media/external/images/3", listOf("u1"))
+
+        val entry = store.recover().single()
+        assertEquals("content://media/external/images/3", entry.contentUri)
+        assertEquals(listOf("u1"), entry.supersededUris)
+        // The stale slot of the overwritten entry is gone too.
+        val peeked = store.peek("SM-1")
+        assertEquals(listOf("u1"), peeked?.supersededUris)
     }
 }
 

@@ -634,7 +634,15 @@ class _ProcessorPlatformServices implements PlatformServices {
       List.of(recoveredJournals);
 
   @override
-  Future<void> clearPublishJournal(String captureId) async {
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {
+    for (final entry in recoveredJournals) {
+      if (entry.captureId != captureId) continue;
+      // Conditional clear: a newer overwritten entry must survive.
+      if (entry.contentUri != expectedContentUri) return;
+    }
     clearedJournalIds.add(captureId);
     recoveredJournals.removeWhere((entry) => entry.captureId == captureId);
   }
