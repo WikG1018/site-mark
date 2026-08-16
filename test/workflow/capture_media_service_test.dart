@@ -897,6 +897,88 @@ void main() {
     );
   });
 
+  // Regression: the native publisher can fold several leftover journal
+  // URIs into one outcome. If the capture disappears before the CAS commit,
+  // every URI in that outcome becomes cleanup work. Keeping only the new URI
+  // loses the older gallery rows forever once the journal is cleared.
+  test(
+    'CAS failure after deletion preserves the complete native cleanup set',
+    () async {
+      files.existing.add('/rendered/capture-1.jpg');
+      platform.nextPublishedUri = 'content://media/site-mark/3';
+      platform.nextSupersededUris = [
+        'content://media/site-mark/1',
+        'content://media/site-mark/2',
+        'content://media/site-mark/0',
+      ];
+      platform.onPublishStarted = (index) async {
+        if (index == 1) await database.deleteCapture('capture-1');
+      };
+
+      final result = await service.republish(['capture-1']);
+
+      expect(result.succeededIds, ['capture-1']);
+      expect(result.failures, isEmpty);
+      expect(await database.captureById('capture-1'), isNull);
+      expect(
+        (await database.pendingSupersededCleanups())
+            .map((task) => task.publishedUri)
+            .toSet(),
+        {
+          'content://media/site-mark/0',
+          'content://media/site-mark/1',
+          'content://media/site-mark/2',
+          'content://media/site-mark/3',
+        },
+      );
+      expect(platform.clearedJournalCalls, [
+        ('capture-1', 'content://media/site-mark/3'),
+      ]);
+    },
+  );
+
+  // Regression: when startup reconciliation discovers that a ready row has
+  // already moved beyond an older journal, both the journal content URI and
+  // all inherited superseded URIs are orphan candidates. Clearing the
+  // journal after queueing only its content URI drops the inherited set.
+  test(
+    'superseded journal recovery preserves its complete cleanup set',
+    () async {
+      final moved = await database.updatePublishedUri(
+        'capture-1',
+        'content://media/site-mark/3',
+        expectedPreviousUri: 'content://media/site-mark/1',
+      );
+      expect(moved, isTrue);
+      platform.recoveredJournals.add(
+        RecoveredPublishJournalEntry(
+          captureId: 'capture-1',
+          contentUri: 'content://media/site-mark/2',
+          supersededUris: [
+            'content://media/site-mark/1',
+            'content://media/site-mark/0',
+          ],
+        ),
+      );
+
+      await service.cleanupInterrupted();
+
+      expect(platform.deletedUris.toSet(), {
+        'content://media/site-mark/0',
+        'content://media/site-mark/1',
+        'content://media/site-mark/2',
+      });
+      expect(
+        platform.deletedUris,
+        isNot(contains('content://media/site-mark/3')),
+      );
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+      expect(platform.clearedJournalCalls, [
+        ('capture-1', 'content://media/site-mark/2'),
+      ]);
+    },
+  );
+
   // ------------------------------------------------------------------
   // Interleaving: startup recovery racing a fresh publish.
   //

@@ -377,10 +377,11 @@ class MediaPublishResult {
 
   String contentUri;
 
-  /// All previously published rows with the same display name that the new
-  /// content superseded but whose MediaStore deletion failed. Non-empty means
-  /// publish SUCCEEDED and the caller must queue a best-effort delete for
-  /// each URI; it must never re-publish or report failure because of them.
+  /// Every prior MediaStore URI explicitly owned by this stable capture and
+  /// superseded by the new content, including leftovers folded from an
+  /// interrupted publish journal. Native code does not delete these rows;
+  /// the caller must durably queue reference-checked, delete-only cleanup and
+  /// must never re-publish or report failure because this list is non-empty.
   List<String>? supersededUris;
 
   List<Object?> _toList() {

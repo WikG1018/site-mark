@@ -42,22 +42,24 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
         contentUri: String,
         supersededUris: List<String>,
     ): Boolean {
-        val prefix = keyPrefix(captureId)
-        val editor = preferences.edit()
-            .putString("$prefix$KEY_NEW_URI", contentUri)
-            .putInt("$prefix$KEY_STALE_COUNT", supersededUris.size)
-            .putBoolean("$prefix$KEY_EXISTS", true)
-        supersededUris.forEachIndexed { index, uri ->
-            editor.putString("$prefix$KEY_STALE_PREFIX$index", uri)
+        synchronized(JOURNAL_LOCK) {
+            val prefix = keyPrefix(captureId)
+            val editor = preferences.edit()
+                .putString("$prefix$KEY_NEW_URI", contentUri)
+                .putInt("$prefix$KEY_STALE_COUNT", supersededUris.size)
+                .putBoolean("$prefix$KEY_EXISTS", true)
+            supersededUris.forEachIndexed { index, uri ->
+                editor.putString("$prefix$KEY_STALE_PREFIX$index", uri)
+            }
+            // A same-capture re-publish replaces the previous entry outright:
+            // stale slots beyond the new count are removed so recovery can never
+            // mix URIs of two different publishes.
+            val previousCount = (preferences.all?.get("$prefix$KEY_STALE_COUNT") as? Int) ?: 0
+            for (index in supersededUris.size until previousCount) {
+                editor.remove("$prefix$KEY_STALE_PREFIX$index")
+            }
+            return editor.commit()
         }
-        // A same-capture re-publish replaces the previous entry outright:
-        // stale slots beyond the new count are removed so recovery can never
-        // mix URIs of two different publishes.
-        val previousCount = (preferences.all?.get("$prefix$KEY_STALE_COUNT") as? Int) ?: 0
-        for (index in supersededUris.size until previousCount) {
-            editor.remove("$prefix$KEY_STALE_PREFIX$index")
-        }
-        return editor.commit()
     }
 
     /**
@@ -69,42 +71,46 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
      * URIs after a second consecutive crash.
      */
     fun peek(captureId: String): JournalEntry? {
-        val prefix = keyPrefix(captureId)
-        val entries = preferences.all ?: return null
-        if (entries["$prefix$KEY_EXISTS"] !is Boolean) return null
-        val contentUri = entries["$prefix$KEY_NEW_URI"] as? String ?: return null
-        val staleCount = (entries["$prefix$KEY_STALE_COUNT"] as? Int) ?: 0
-        val staleUris = mutableListOf<String>()
-        for (index in 0 until staleCount) {
-            (entries["$prefix$KEY_STALE_PREFIX$index"] as? String)?.let(staleUris::add)
-        }
-        return JournalEntry(contentUri = contentUri, supersededUris = staleUris)
-    }
-
-    fun recover(): List<RecoveredPublishJournal> {
-        val entries = preferences.all ?: return emptyList()
-        val result = mutableListOf<RecoveredPublishJournal>()
-        for (key in entries.keys) {
-            if (!key.endsWith(KEY_EXISTS)) continue
-            val prefix = key.removeSuffix(KEY_EXISTS)
-            if (!entries.containsKey("$prefix$KEY_NEW_URI")) continue
-            val contentUri = entries["$prefix$KEY_NEW_URI"] as? String ?: continue
-            val captureId = prefix.removePrefix(JOURNAL_KEY_PREFIX).removeSuffix(KEY_SEPARATOR)
-            if (captureId.isEmpty()) continue
+        synchronized(JOURNAL_LOCK) {
+            val prefix = keyPrefix(captureId)
+            val entries = preferences.all ?: return null
+            if (entries["$prefix$KEY_EXISTS"] !is Boolean) return null
+            val contentUri = entries["$prefix$KEY_NEW_URI"] as? String ?: return null
             val staleCount = (entries["$prefix$KEY_STALE_COUNT"] as? Int) ?: 0
             val staleUris = mutableListOf<String>()
             for (index in 0 until staleCount) {
                 (entries["$prefix$KEY_STALE_PREFIX$index"] as? String)?.let(staleUris::add)
             }
-            result.add(
-                RecoveredPublishJournal(
-                    captureId = captureId,
-                    contentUri = contentUri,
-                    supersededUris = staleUris,
-                ),
-            )
+            return JournalEntry(contentUri = contentUri, supersededUris = staleUris)
         }
-        return result
+    }
+
+    fun recover(): List<RecoveredPublishJournal> {
+        synchronized(JOURNAL_LOCK) {
+            val entries = preferences.all ?: return emptyList()
+            val result = mutableListOf<RecoveredPublishJournal>()
+            for (key in entries.keys) {
+                if (!key.endsWith(KEY_EXISTS)) continue
+                val prefix = key.removeSuffix(KEY_EXISTS)
+                if (!entries.containsKey("$prefix$KEY_NEW_URI")) continue
+                val contentUri = entries["$prefix$KEY_NEW_URI"] as? String ?: continue
+                val captureId = prefix.removePrefix(JOURNAL_KEY_PREFIX).removeSuffix(KEY_SEPARATOR)
+                if (captureId.isEmpty()) continue
+                val staleCount = (entries["$prefix$KEY_STALE_COUNT"] as? Int) ?: 0
+                val staleUris = mutableListOf<String>()
+                for (index in 0 until staleCount) {
+                    (entries["$prefix$KEY_STALE_PREFIX$index"] as? String)?.let(staleUris::add)
+                }
+                result.add(
+                    RecoveredPublishJournal(
+                        captureId = captureId,
+                        contentUri = contentUri,
+                        supersededUris = staleUris,
+                    ),
+                )
+            }
+            return result
+        }
     }
 
     /**
@@ -120,22 +126,31 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
      *         durable commit failed.
      */
     fun clear(captureId: String, expectedContentUri: String): Boolean {
-        val prefix = keyPrefix(captureId)
-        val entries = preferences.all
-        if (entries == null || entries["$prefix$KEY_EXISTS"] !is Boolean) return true
-        val current = entries["$prefix$KEY_NEW_URI"] as? String
-        if (current != null && current != expectedContentUri) return false
-        val editor = preferences.edit()
-        for (key in entries.keys) {
-            if (key.startsWith(prefix)) editor.remove(key)
+        synchronized(JOURNAL_LOCK) {
+            val prefix = keyPrefix(captureId)
+            val entries = preferences.all
+            if (entries == null || entries["$prefix$KEY_EXISTS"] !is Boolean) return true
+            val current = entries["$prefix$KEY_NEW_URI"] as? String
+            if (current != null && current != expectedContentUri) return false
+            val editor = preferences.edit()
+            for (key in entries.keys) {
+                if (key.startsWith(prefix)) editor.remove(key)
+            }
+            return editor.commit()
         }
-        return editor.commit()
     }
 
     private fun keyPrefix(captureId: String): String =
         "$JOURNAL_KEY_PREFIX$captureId$KEY_SEPARATOR"
 
     private companion object {
+        // SharedPreferences offers atomicity per Editor.commit(), not across
+        // the compare-then-remove sequence in clear(). Publishing runs on an
+        // IO executor while Pigeon clear/recovery calls can arrive on another
+        // thread, and AndroidSystemApi may construct more than one store
+        // instance over the same preference file. A process-wide lock keeps
+        // every journal snapshot and mutation in one critical section.
+        private val JOURNAL_LOCK = Any()
         private const val JOURNAL_KEY_PREFIX = "journal."
         private const val KEY_SEPARATOR = "\u0000"
         private const val KEY_EXISTS = ".exists"

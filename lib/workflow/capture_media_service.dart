@@ -218,9 +218,10 @@ class CaptureMediaService {
           // whole-database reference check in _cleanupSuperseded guards
           // the actual delete.
           final fresh = await database.captureById(id);
-          if (fresh?.publishedUri != outcome.contentUri) {
-            await database.enqueueSupersededCleanups(id, [outcome.contentUri]);
-          }
+          await database.enqueueSupersededCleanups(id, [
+            ...outcome.supersededUris,
+            if (fresh?.publishedUri != outcome.contentUri) outcome.contentUri,
+          ]);
           try {
             await platform.clearPublishJournal(id, outcome.contentUri);
           } catch (_) {}
@@ -419,11 +420,14 @@ class CaptureMediaService {
     RecoveredPublishJournalEntry journal,
   ) async {
     final fresh = await database.captureById(captureId);
-    if (fresh?.publishedUri != journal.contentUri) {
-      // The whole-database reference check in _cleanupSuperseded is the
-      // final guard: a URI any row still references is never deleted.
-      await database.enqueueSupersededCleanups(captureId, [journal.contentUri]);
-    }
+    // Preserve the COMPLETE folded journal set before clearing its only
+    // durable native copy. The whole-database reference check in
+    // _cleanupSuperseded remains the final guard: a URI any row still
+    // references is never deleted.
+    await database.enqueueSupersededCleanups(captureId, [
+      ...journal.supersededUris,
+      if (fresh?.publishedUri != journal.contentUri) journal.contentUri,
+    ]);
     await platform.clearPublishJournal(captureId, journal.contentUri);
   }
 

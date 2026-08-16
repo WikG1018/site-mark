@@ -5,6 +5,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Verifies [PublishJournalStore] against an in-memory [SharedPreferences]
@@ -102,6 +105,61 @@ class PublishJournalStoreTest {
         assertEquals(listOf("content://media/old/2"), entry.supersededUris)
     }
 
+    // Regression (real thread interleaving): clear used to compare the
+    // expected URI and commit its removals in two separate critical
+    // sections. A newer record() could land between them, after which the
+    // older clear removed the newer entry. Use two store instances because
+    // AndroidSystemApi publishes on its IO executor while Pigeon clear calls
+    // arrive on the message thread.
+    @Test
+    fun `concurrent clear cannot remove a newer journal entry`() {
+        val preferences = FakeSharedPreferences()
+        val clearingStore = PublishJournalStore(preferences)
+        val recordingStore = PublishJournalStore(preferences)
+        assertTrue(clearingStore.record("SM-1", "content://media/external/images/1", emptyList()))
+
+        val clearReachedCommit = CountDownLatch(1)
+        val newerRecordStarted = CountDownLatch(1)
+        val newerRecordFinished = CountDownLatch(1)
+        preferences.beforeRemovalCommit = {
+            clearReachedCommit.countDown()
+            assertTrue(newerRecordStarted.await(2, TimeUnit.SECONDS))
+            // Without a shared lock, the newer write finishes inside this
+            // window and the stale removal then erases it. With the lock,
+            // the write waits and lands immediately after clear completes.
+            newerRecordFinished.await(250, TimeUnit.MILLISECONDS)
+        }
+
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val clearFuture = executor.submit<Boolean> {
+                clearingStore.clear("SM-1", "content://media/external/images/1")
+            }
+            assertTrue(clearReachedCommit.await(2, TimeUnit.SECONDS))
+            val recordFuture = executor.submit<Boolean> {
+                newerRecordStarted.countDown()
+                try {
+                    recordingStore.record(
+                        "SM-1",
+                        "content://media/external/images/2",
+                        listOf("content://media/external/images/1"),
+                    )
+                } finally {
+                    newerRecordFinished.countDown()
+                }
+            }
+
+            assertTrue(clearFuture.get(3, TimeUnit.SECONDS))
+            assertTrue(recordFuture.get(3, TimeUnit.SECONDS))
+        } finally {
+            executor.shutdownNow()
+        }
+
+        val entry = clearingStore.recover().single()
+        assertEquals("content://media/external/images/2", entry.contentUri)
+        assertEquals(listOf("content://media/external/images/1"), entry.supersededUris)
+    }
+
     @Test
     fun `peek returns the complete entry including superseded URIs`() {
         val preferences = FakeSharedPreferences()
@@ -145,6 +203,9 @@ private class FakeSharedPreferences : SharedPreferences {
 
     /** Returned by every editor [SharedPreferences.Editor.commit]; flip to simulate disk failure. */
     var commitResult = true
+
+    /** Test-only hook that pauses an editor containing removals before commit. */
+    var beforeRemovalCommit: (() -> Unit)? = null
 
     override fun getAll(): Map<String, *> = values
 
@@ -228,6 +289,9 @@ private class FakeSharedPreferences : SharedPreferences {
         }
 
         override fun commit(): Boolean {
+            if (pending.values.any { it === removed }) {
+                preferences.beforeRemovalCommit?.invoke()
+            }
             pending.forEach { (key, value) ->
                 if (value === removed || value == null) {
                     preferences.values.remove(key)
