@@ -1341,8 +1341,10 @@ class _DetailPlatform implements PlatformServices {
   @override
   Future<void> deletePublishedImage(String contentUri) async {}
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async =>
-      'content://media/site-mark/1';
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+  ) async => const PublishJpegOutcome(contentUri: 'content://media/site-mark/1');
   @override
   Future<LocationPermissionState> getLocationPermissionState() async =>
       LocationPermissionState.denied;

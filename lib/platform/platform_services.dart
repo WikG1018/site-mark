@@ -31,6 +31,20 @@ Future<void> initializeForegroundRust() {
   return created;
 }
 
+/// Outcome of publishing a JPEG to the system gallery.
+///
+/// [supersededUri] is non-null when the publish replaced an existing row
+/// but deleting that old row failed AFTER the new row was finalized. The
+/// publish itself SUCCEEDED — callers must update their records to
+/// [contentUri] and queue a best-effort delete of [supersededUri]; they
+/// must never re-publish or report failure because of it.
+class PublishJpegOutcome {
+  const PublishJpegOutcome({required this.contentUri, this.supersededUri});
+
+  final String contentUri;
+  final String? supersededUri;
+}
+
 abstract interface class PlatformServices {
   Future<String> createCameraTarget(String captureId);
 
@@ -42,7 +56,7 @@ abstract interface class PlatformServices {
 
   Future<LocationResult> requestCurrentLocation(int timeoutMillis);
 
-  Future<String> publishJpeg(String sourcePath, String displayName);
+  Future<PublishJpegOutcome> publishJpeg(String sourcePath, String displayName);
 
   Future<void> deletePublishedImage(String contentUri);
 
@@ -82,9 +96,15 @@ class PigeonPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async {
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+  ) async {
     final result = await _api.publishJpeg(sourcePath, displayName);
-    return result.contentUri;
+    return PublishJpegOutcome(
+      contentUri: result.contentUri,
+      supersededUri: result.supersededUri,
+    );
   }
 
   @override

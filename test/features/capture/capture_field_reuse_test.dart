@@ -3215,7 +3215,10 @@ class _FormPlatform implements PlatformServices {
   Future<void> openApplicationSettings() async {}
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async => '';
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+  ) async => const PublishJpegOutcome(contentUri: '');
 
   @override
   Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;

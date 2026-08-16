@@ -3,6 +3,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/platform/local_notification_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:workmanager/workmanager.dart';
 
@@ -170,6 +171,7 @@ CaptureProcessor buildHeadlessCaptureProcessor(AppDatabase database) {
     platform: PigeonPlatformServices(),
     images: RustImagePipeline(),
     outputPaths: AppCaptureOutputPaths(),
+    pendingStore: AppCaptureMediaCleanupPendingStore(),
   );
 }
 

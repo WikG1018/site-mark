@@ -1195,8 +1195,11 @@ class _WidgetTestPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async =>
-      'content://media/site-mark/1';
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+  ) async =>
+      const PublishJpegOutcome(contentUri: 'content://media/site-mark/1');
 
   @override
   Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;
@@ -1349,6 +1352,7 @@ class _InlineProcessingScheduler implements CaptureBackgroundScheduler {
       platform: platform,
       images: images,
       outputPaths: outputPaths,
+      pendingStore: MemoryCaptureMediaCleanupPendingStore(),
     );
     await processor.process(captureId);
   }

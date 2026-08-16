@@ -8,6 +8,7 @@ import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 import 'package:sitemark/src/rust/api/image_core.dart';
+import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
 
@@ -20,6 +21,7 @@ void main() {
   late AppDatabase database;
   late _ProcessorPlatformServices platform;
   late _ProcessorImagePipeline images;
+  late MemoryCaptureMediaCleanupPendingStore pendingStore;
   late CaptureProcessor processor;
 
   setUp(() async {
@@ -31,11 +33,13 @@ void main() {
     );
     platform = _ProcessorPlatformServices();
     images = _ProcessorImagePipeline();
+    pendingStore = MemoryCaptureMediaCleanupPendingStore();
     processor = CaptureProcessor(
       database: database,
       platform: platform,
       images: images,
       outputPaths: _ProcessorOutputPaths(),
+      pendingStore: pendingStore,
     );
   });
 
@@ -102,6 +106,56 @@ void main() {
     expect(images.lastRenderRequest?.sourcePath, '/private/capture-1.jpg');
     expect(images.lastRenderRequest?.photoNumber, '东区厂房改造-SM-20260716-001');
   });
+
+  // Regression: when the new gallery row is finalized but deleting the old
+  // row fails, the publish has already succeeded. The record must be `ready`
+  // with the NEW URI and a delete-only cleanup marker must be queued — a
+  // failure here would re-publish and accumulate gallery duplicates.
+  test(
+    'failed old-row delete still succeeds and queues delete-only cleanup',
+    () async {
+      await seedCaptured();
+      platform.nextSupersededUri = 'content://media/site-mark/0';
+
+      final result = await processor.process('capture-1');
+
+      expect(result, CaptureProcessResult.succeeded);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.ready);
+      expect(record?.publishedUri, 'content://media/site-mark/1');
+      expect(record?.failureReason, isNull);
+      final pendings = await pendingStore.list();
+      expect(pendings, hasLength(1));
+      expect(pendings.single.kind, CaptureMediaCleanupKind.deleteSuperseded);
+      expect(pendings.single.publishedUri, 'content://media/site-mark/0');
+      expect(pendings.single.paths, isEmpty);
+    },
+  );
+
+  // Regression: a cleanup-marker write failure after a successful publish
+  // must not fail the capture (which would re-publish a duplicate photo).
+  test(
+    'cleanup marker failure does not fail an already published capture',
+    () async {
+      await seedCaptured();
+      platform.nextSupersededUri = 'content://media/site-mark/0';
+      final failingStore = _ThrowingCleanupPendingStore();
+      final failingProcessor = CaptureProcessor(
+        database: database,
+        platform: platform,
+        images: images,
+        outputPaths: _ProcessorOutputPaths(),
+        pendingStore: failingStore,
+      );
+
+      final result = await failingProcessor.process('capture-1');
+
+      expect(result, CaptureProcessResult.succeeded);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.ready);
+      expect(record?.publishedUri, 'content://media/site-mark/1');
+    },
+  );
 
   test(
     'passes project font scale and capture locale to the renderer',
@@ -542,6 +596,7 @@ void main() {
 class _ProcessorPlatformServices implements PlatformServices {
   final List<String> publishedNames = [];
   int _publishCounter = 0;
+  String? nextSupersededUri;
 
   @override
   Future<String> createCameraTarget(String captureId) async =>
@@ -562,10 +617,16 @@ class _ProcessorPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async {
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+  ) async {
     publishedNames.add(displayName);
     _publishCounter += 1;
-    return 'content://media/site-mark/$_publishCounter';
+    return PublishJpegOutcome(
+      contentUri: 'content://media/site-mark/$_publishCounter',
+      supersededUri: nextSupersededUri,
+    );
   }
 
   @override
@@ -675,4 +736,17 @@ class _ProcessorDeletionPendingStore implements ProjectDeletionPendingStore {
 
   @override
   Future<void> write(PendingProjectDeletion pending) async {}
+}
+
+class _ThrowingCleanupPendingStore implements CaptureMediaCleanupPendingStore {
+  @override
+  Future<void> clear(String captureId, CaptureMediaCleanupKind kind) async {}
+
+  @override
+  Future<List<PendingCaptureMediaCleanup>> list() async => const [];
+
+  @override
+  Future<void> write(PendingCaptureMediaCleanup pending) async {
+    throw StateError('marker write failed');
+  }
 }

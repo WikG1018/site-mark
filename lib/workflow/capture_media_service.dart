@@ -178,11 +178,30 @@ class CaptureMediaService {
           failures[id] = CaptureMediaFailure.renderedPhotoMissing;
           continue;
         }
-        final uri = await platform.publishJpeg(
+        final outcome = await platform.publishJpeg(
           renderedPath,
           record.photoNumber!,
         );
-        await database.updatePublishedUri(id, uri);
+        await database.updatePublishedUri(id, outcome.contentUri);
+        if (outcome.supersededUri != null) {
+          // The publish succeeded and the record already points at the new
+          // URI; only the stale duplicate remains. Queue a durable
+          // delete-only cleanup — a marker failure must not turn a
+          // successful republish into a fake failure that re-publishes and
+          // accumulates duplicates.
+          try {
+            await pendingStore.write(
+              PendingCaptureMediaCleanup(
+                captureId: id,
+                kind: CaptureMediaCleanupKind.deleteSuperseded,
+                paths: const [],
+                publishedUri: outcome.supersededUri,
+              ),
+            );
+          } catch (_) {
+            // Best effort: the duplicate converges on the next replacement.
+          }
+        }
         succeeded.add(id);
       } catch (_) {
         failures[id] = CaptureMediaFailure.operationFailed;
@@ -219,6 +238,11 @@ class CaptureMediaService {
           CaptureMediaCleanupKind.clearOriginal =>
             record == null || record.originalDeletedAt != null,
           CaptureMediaCleanupKind.deleteCapture => record == null,
+          // The superseded URI is only safe to delete once no live record
+          // references it anymore (markers are written after the database
+          // commit, so this holds unless the process died mid-commit).
+          CaptureMediaCleanupKind.deleteSuperseded =>
+            record == null || record.publishedUri != pending.publishedUri,
         };
         if (!committed) {
           // The database commit never happened. Preserve media that the live
@@ -235,7 +259,8 @@ class CaptureMediaService {
 
   Future<bool> _finishCleanup(PendingCaptureMediaCleanup pending) async {
     var cleaned = true;
-    if (pending.kind == CaptureMediaCleanupKind.deleteCapture &&
+    if ((pending.kind == CaptureMediaCleanupKind.deleteCapture ||
+            pending.kind == CaptureMediaCleanupKind.deleteSuperseded) &&
         pending.publishedUri != null) {
       try {
         await platform.deletePublishedImage(pending.publishedUri!);

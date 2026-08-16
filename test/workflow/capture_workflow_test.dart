@@ -704,9 +704,12 @@ class _FakePlatformServices implements PlatformServices {
   }
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async {
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+  ) async {
     publishedNames.add(displayName);
-    return 'content://media/site-mark/1';
+    return const PublishJpegOutcome(contentUri: 'content://media/site-mark/1');
   }
 
   @override

@@ -448,18 +448,27 @@ data class ImageMetadataResult (
 
 /** Generated class from Pigeon that represents data sent in messages. */
 data class MediaPublishResult (
-  val contentUri: String
+  val contentUri: String,
+  /**
+   * The previous published row that the new content superseded but whose
+   * MediaStore deletion failed. Non-null means publish SUCCEEDED and the
+   * caller must queue a best-effort delete of this URI; it must never
+   * re-publish or report failure because of it.
+   */
+  val supersededUri: String? = null
 )
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): MediaPublishResult {
       val contentUri = pigeonVar_list[0] as String
-      return MediaPublishResult(contentUri)
+      val supersededUri = pigeonVar_list[1] as String?
+      return MediaPublishResult(contentUri, supersededUri)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
       contentUri,
+      supersededUri,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -470,16 +479,17 @@ data class MediaPublishResult (
       return true
     }
     val other = other as MediaPublishResult
-    return SystemApiPigeonUtils.deepEquals(this.contentUri, other.contentUri)
+    return SystemApiPigeonUtils.deepEquals(this.contentUri, other.contentUri) && SystemApiPigeonUtils.deepEquals(this.supersededUri, other.supersededUri)
   }
 
   override fun hashCode(): Int {
     var result = javaClass.hashCode()
     result = 31 * result + SystemApiPigeonUtils.deepHash(this.contentUri)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.supersededUri)
     return result
   }
   override fun toString(): String {
-    return "MediaPublishResult(contentUri=$contentUri)"
+    return "MediaPublishResult(contentUri=$contentUri, supersededUri=$supersededUri)"
   }
 }
 private open class SystemApiPigeonCodec : StandardMessageCodec() {

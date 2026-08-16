@@ -294,6 +294,103 @@ void main() {
       'content://media/site-mark/re-saved',
     );
   });
+
+  // Regression: the new gallery row is finalized but the old-row delete
+  // failed. The republish has already SUCCEEDED — the record must point at
+  // the new URI and only a delete-only cleanup marker may be queued; the
+  // action must not be reported as failed (which would re-publish another
+  // duplicate photo).
+  test(
+    'republish with failed old-row delete updates URI and queues delete-only cleanup',
+    () async {
+      files.existing.add('/rendered/capture-1.jpg');
+      platform.nextPublishedUri = 'content://media/site-mark/2';
+      platform.nextSupersededUri = 'content://media/site-mark/1';
+
+      final result = await service.republish(['capture-1']);
+
+      expect(result.succeededIds, ['capture-1']);
+      expect(result.failures, isEmpty);
+      expect(
+        (await database.captureById('capture-1'))?.publishedUri,
+        'content://media/site-mark/2',
+      );
+      final pendings = await pendingStore.list();
+      expect(pendings, hasLength(1));
+      expect(pendings.single.kind, CaptureMediaCleanupKind.deleteSuperseded);
+      expect(pendings.single.publishedUri, 'content://media/site-mark/1');
+      expect(pendings.single.paths, isEmpty);
+    },
+  );
+
+  // Regression: startup recovery for a superseded URI must retry ONLY the
+  // stale-row delete — never publish again (which would create yet another
+  // duplicate) — and must converge: the marker is cleared once the delete
+  // succeeds.
+  test(
+    'startup cleanup retries only the superseded delete and never republishes',
+    () async {
+      files.existing.add('/rendered/capture-1.jpg');
+      platform.nextPublishedUri = 'content://media/site-mark/2';
+      platform.nextSupersededUri = 'content://media/site-mark/1';
+      await service.republish(['capture-1']);
+      expect(platform.publishCount, 1);
+      expect(platform.deletedUris, isEmpty);
+
+      await service.cleanupInterrupted();
+
+      expect(platform.publishCount, 1);
+      expect(platform.deletedUris, ['content://media/site-mark/1']);
+      expect(
+        (await database.captureById('capture-1'))?.publishedUri,
+        'content://media/site-mark/2',
+      );
+      expect(await pendingStore.list(), isEmpty);
+    },
+  );
+
+  // Regression: a superseded-delete marker whose database commit never
+  // happened (the live record still references the "superseded" URI) must be
+  // discarded without deleting the photo the record still points at.
+  test(
+    'startup discards a superseded marker still referenced by the record',
+    () async {
+      await pendingStore.write(
+        const PendingCaptureMediaCleanup(
+          captureId: 'capture-1',
+          kind: CaptureMediaCleanupKind.deleteSuperseded,
+          paths: [],
+          publishedUri: 'content://media/site-mark/1',
+        ),
+      );
+
+      await service.cleanupInterrupted();
+
+      expect(platform.deletedUris, isEmpty);
+      expect(await pendingStore.list(), isEmpty);
+      expect(
+        (await database.captureById('capture-1'))?.publishedUri,
+        'content://media/site-mark/1',
+      );
+    },
+  );
+
+  // Regression: while the stale-row delete keeps failing the marker must
+  // survive for a later launch — the action itself stays a success.
+  test('superseded cleanup marker survives a failing gallery delete', () async {
+    files.existing.add('/rendered/capture-1.jpg');
+    platform.nextPublishedUri = 'content://media/site-mark/2';
+    platform.nextSupersededUri = 'content://media/site-mark/1';
+    await service.republish(['capture-1']);
+
+    platform.deleteError = StateError('MediaStore failure');
+    await service.cleanupInterrupted();
+
+    expect(platform.publishCount, 1);
+    final pendings = await pendingStore.list();
+    expect(pendings, hasLength(1));
+    expect(pendings.single.kind, CaptureMediaCleanupKind.deleteSuperseded);
+  });
 }
 
 class _MediaFiles implements PrivateFileStore {
@@ -339,6 +436,8 @@ class _MediaPlatform implements PlatformServices {
   Object? deleteError;
   Object? publishError;
   String nextPublishedUri = 'content://media/site-mark/1';
+  String? nextSupersededUri;
+  int publishCount = 0;
   final List<String> deletedUris = [];
 
   @override
@@ -346,9 +445,16 @@ class _MediaPlatform implements PlatformServices {
       metadataByPath[path]!;
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async {
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+  ) async {
     if (publishError != null) throw publishError!;
-    return nextPublishedUri;
+    publishCount += 1;
+    return PublishJpegOutcome(
+      contentUri: nextPublishedUri,
+      supersededUri: nextSupersededUri,
+    );
   }
 
   @override

@@ -441,7 +441,8 @@ class AndroidSystemApi(
                 relativePath = PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH,
             ),
         )
-        return MediaPublishResult(publisher.publish(source, safeName))
+        val outcome = publisher.publish(source, safeName)
+        return MediaPublishResult(outcome.contentUri, outcome.supersededUri)
     }
 
     override fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit) {

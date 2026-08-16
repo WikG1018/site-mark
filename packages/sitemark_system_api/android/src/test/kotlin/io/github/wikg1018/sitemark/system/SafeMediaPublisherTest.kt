@@ -19,7 +19,8 @@ class SafeMediaPublisherTest {
 
             val published = publisher.publish(source, "capture.jpg")
 
-            assertEquals(FakePublishedImageStore.NEW_URI, published)
+            assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
+            assertNull(published.supersededUri)
             // The old row is gone and the new row is finalized with the new
             // bytes — never a half-written row left visible.
             assertNull(store.rows[FakePublishedImageStore.OLD_URI])
@@ -65,14 +66,20 @@ class SafeMediaPublisherTest {
             }
             val publisher = SafeMediaPublisher(store)
 
-            assertThrows(IllegalStateException::class.java) {
-                publisher.publish(source, "capture.jpg")
-            }
+            // The new row was already finalized, so the publish is a SUCCESS
+            // even though the old-row delete failed. It must NOT throw: a
+            // fake failure would make the caller re-publish and accumulate
+            // gallery duplicates.
+            val published = publisher.publish(source, "capture.jpg")
 
-            // The new row was already finalized, so it must stay published —
-            // deleting both rows could leave the gallery empty. The old row
-            // remains as a temporary duplicate until the next cleanup pass
-            // retries the delete.
+            assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
+            // The stale URI is reported so the caller can retry ONLY the
+            // delete through the persistent cleanup queue.
+            assertEquals(FakePublishedImageStore.OLD_URI, published.supersededUri)
+            // The new row stays finalized and published — deleting both rows
+            // could leave the gallery empty. The old row remains as a
+            // temporary duplicate until the next cleanup pass retries the
+            // delete.
             assertEquals("new-image", store.rows[FakePublishedImageStore.NEW_URI]?.bytes)
             assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
             assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
