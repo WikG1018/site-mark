@@ -3,6 +3,7 @@ package io.github.wikg1018.sitemark.system
 import android.Manifest
 import android.app.Activity
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
@@ -288,6 +289,101 @@ class AndroidSystemApiTest {
             api.deletePublishedImageForTest(uri.toString())
 
             verify(resolver).delete(eq(uri), isNull(), isNull())
+        }
+    }
+
+    @Test
+    fun deletePublishedImageFailsWhenProviderReturnsNegativeRowCount() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val idCursor = mock(Cursor::class.java)
+        `when`(idCursor.moveToFirst()).thenReturn(true)
+        val pathCursor = mock(Cursor::class.java)
+        `when`(pathCursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)).thenReturn(0)
+        `when`(pathCursor.moveToFirst()).thenReturn(true)
+        `when`(pathCursor.getString(0)).thenReturn(PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            stubResolverQueries(resolver, idCursor = idCursor, pathCursor = pathCursor)
+            // -1 = 远端 Provider 未抛异常地失败了（AOSP 契约允许返回 -1），
+            // 删除结果未知，必须抛错让持久化清理任务存活并重试。
+            `when`(resolver.delete(any(Uri::class.java), isNull(), isNull())).thenReturn(-1)
+            val api = AndroidSystemApi(context)
+
+            val error = assertThrows(IllegalStateException::class.java) {
+                api.deletePublishedImageForTest(uri.toString())
+            }
+
+            assertEquals("MediaStore did not answer the delete", error.message)
+        }
+    }
+
+    @Test
+    fun deletePublishedImageTreatsZeroDeletedRowsAsIdempotentSuccess() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val idCursor = mock(Cursor::class.java)
+        `when`(idCursor.moveToFirst()).thenReturn(true)
+        val pathCursor = mock(Cursor::class.java)
+        `when`(pathCursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)).thenReturn(0)
+        `when`(pathCursor.moveToFirst()).thenReturn(true)
+        `when`(pathCursor.getString(0)).thenReturn(PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            stubResolverQueries(resolver, idCursor = idCursor, pathCursor = pathCursor)
+            // 0 = 行已不存在（例如用户自己删了），正是期望的终态；
+            // 抛错会让清理标记永远 pending 并在每次启动时重试。
+            `when`(resolver.delete(any(Uri::class.java), isNull(), isNull())).thenReturn(0)
+            val api = AndroidSystemApi(context)
+
+            api.deletePublishedImageForTest(uri.toString())
+
+            verify(resolver).delete(eq(uri), isNull(), isNull())
+        }
+    }
+
+    @Test
+    fun publishFailsWhenDuplicateLookupReturnsNoCursor() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        // validatedPrivateFile 要求源文件在 dataDir 内且非空 —— dataDir 已被
+        // setUp 指向 java.io.tmpdir，创建一个真实非空文件。
+        val source = java.io.File(context.dataDir, "sm-publish-source.jpg")
+        source.writeText("jpeg-bytes")
+        try {
+            val collection = mock(Uri::class.java)
+            mockStatic(MediaStore.Images.Media::class.java).use { staticMedia ->
+                // 纯 JVM 下 android.jar 静态方法未 stub，需要 mock 后
+                // getContentUri 才能返回可控的集合 Uri。
+                staticMedia.`when`<Uri> {
+                    MediaStore.Images.Media.getContentUri(anyString())
+                }.thenReturn(collection)
+                // findAll 的 duplicate lookup 返回 null：MediaProvider 暂不可用
+                // （崩溃/重启/存储挂载），绝不能当作"无重复"切到发布新行路径。
+                `when`(
+                    resolver.query(
+                        any(Uri::class.java),
+                        any(Array<String>::class.java),
+                        anyString(),
+                        any(Array<String>::class.java),
+                        isNull(),
+                    ),
+                ).thenReturn(null)
+                val api = AndroidSystemApi(context)
+
+                val error = assertThrows(IllegalStateException::class.java) {
+                    api.publishJpegForTest(source.absolutePath, "SM-20260716-001")
+                }
+
+                assertEquals("MediaStore did not answer the duplicate lookup", error.message)
+                // 查询失败时绝不 insert —— 否则会在未知状态下创建新行并累积重复。
+                verify(resolver, never())
+                    .insert(any(Uri::class.java), any(ContentValues::class.java))
+            }
+        } finally {
+            source.delete()
         }
     }
 

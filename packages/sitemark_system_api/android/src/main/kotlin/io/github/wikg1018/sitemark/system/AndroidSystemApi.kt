@@ -40,6 +40,9 @@ class AndroidSystemApi(
 ) : SiteMarkSystemApi {
     private val preferences =
         context.getSharedPreferences(CaptureSessionPolicy.PREFERENCES, Context.MODE_PRIVATE)
+    private val publishJournal = PublishJournalStore(
+        context.getSharedPreferences(PUBLISH_JOURNAL_PREFERENCES, Context.MODE_PRIVATE),
+    )
     private val locationManager = context.getSystemService(LocationManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor = Executors.newSingleThreadExecutor()
@@ -440,9 +443,22 @@ class AndroidSystemApi(
                 collection = collection,
                 relativePath = PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH,
             ),
+            // Journal under the CALLER's display name (the photo number, not
+            // the .jpg-safe name) so recovery can reconcile the database row
+            // by that key.
+            journal = PublishJournalSink { _, contentUri, supersededUris ->
+                publishJournal.record(displayName, contentUri, supersededUris)
+            },
         )
         val outcome = publisher.publish(source, safeName)
         return MediaPublishResult(outcome.contentUri, outcome.supersededUris)
+    }
+
+    override fun recoverPublishJournals(): List<RecoveredPublishJournal>? =
+        publishJournal.recover()
+
+    override fun clearPublishJournal(journalId: String) {
+        publishJournal.clear(journalId)
     }
 
     override fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit) {
@@ -466,7 +482,10 @@ class AndroidSystemApi(
         require(PublishedImageDeletePolicy.allowsRelativePath(relativePath)) {
             "Published image is outside Pictures/SiteMark"
         }
-        context.contentResolver.delete(uri, null, null)
+        // 0 rows = already gone (idempotent success); negative = the remote
+        // provider failed without throwing, which must surface so the
+        // durable cleanup task survives and the delete is retried.
+        requireDeleted(context.contentResolver.delete(uri, null, null))
     }
 
     private fun publishedRowExists(uri: Uri): Boolean {
@@ -578,6 +597,7 @@ class AndroidSystemApi(
         const val REQUEST_ARCHIVE_SAVE = 41003
         private const val DEFAULT_LOCATION_TIMEOUT_MILLIS = 10_000L
         private const val KEY_LOCATION_PERMISSION_REQUESTED = "location_permission_requested"
+        private const val PUBLISH_JOURNAL_PREFERENCES = "publish_journal"
     }
 
     // ------------------------------------------------------------------
@@ -623,10 +643,17 @@ private class AndroidPublishedImageStore(
         // Every matching row is a superseded duplicate once the replacement
         // is finalized, so collect them all — replacing only one arbitrary
         // row would leave historical duplicates unconverged.
+        val cursor = resolver.query(collection, projection, selection, arguments, null)
+            // A null cursor means MediaProvider is temporarily unavailable
+            // (crashed, restarting, storage mounting) — NOT that no rows
+            // match. Treating it as "no duplicates" would silently switch to
+            // the publish-new path and accumulate gallery duplicates, so it
+            // must throw and let the caller retry the whole publish later.
+            ?: error("MediaStore did not answer the duplicate lookup")
         val uris = mutableListOf<String>()
-        resolver.query(collection, projection, selection, arguments, null)?.use { cursor ->
-            while (cursor.moveToNext()) {
-                uris.add(ContentUris.withAppendedId(collection, cursor.getLong(0)).toString())
+        cursor.use {
+            while (it.moveToNext()) {
+                uris.add(ContentUris.withAppendedId(collection, it.getLong(0)).toString())
             }
         }
         return uris
@@ -666,6 +693,20 @@ private class AndroidPublishedImageStore(
     }
 
     override fun delete(contentUri: String) {
-        resolver.delete(Uri.parse(contentUri), null, null)
+        requireDeleted(resolver.delete(Uri.parse(contentUri), null, null))
     }
+}
+
+/**
+ * Interprets a [ContentResolver.delete] row count.
+ *
+ * `0` means the row is already gone — the desired end state, so it is an
+ * idempotent success (failing would keep a cleanup task pending forever).
+ * A negative count means the remote provider failed without throwing (the
+ * AOSP ContentResolver contract may return -1); the delete outcome is then
+ * UNKNOWN, so this throws to keep the durable cleanup task alive for a
+ * later retry instead of clearing it as if the delete had succeeded.
+ */
+internal fun requireDeleted(deletedRows: Int) {
+    check(deletedRows >= 0) { "MediaStore did not answer the delete" }
 }

@@ -277,6 +277,13 @@ class _CoordinatorPlatform implements PlatformServices {
       const PublishJpegOutcome(contentUri: 'content://media/site-mark/1');
 
   @override
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
+      [];
+
+  @override
+  Future<void> clearPublishJournal(String journalId) async {}
+
+  @override
   Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;
 
   @override

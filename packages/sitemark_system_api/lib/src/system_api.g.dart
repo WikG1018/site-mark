@@ -422,6 +422,73 @@ class MediaPublishResult {
   }
 }
 
+/// A natively persisted publish intent that survived a process death before
+/// the caller committed the new URI to its database.
+class RecoveredPublishJournal {
+  RecoveredPublishJournal({
+    required this.journalId,
+    required this.displayName,
+    required this.contentUri,
+    required this.supersededUris,
+  });
+
+  String journalId;
+
+  /// The display name (photo number) the publish used. Callers reconcile
+  /// their database row by this key.
+  String displayName;
+
+  /// The finalized new MediaStore URI. It is already visible in the gallery.
+  String contentUri;
+
+  /// Every superseded candidate URI the publisher intended to delete. Some
+  /// may already be gone — deletes are idempotent, so re-queuing them is
+  /// safe and converges.
+  List<String> supersededUris;
+
+  List<Object?> _toList() {
+    return <Object?>[journalId, displayName, contentUri, supersededUris];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static RecoveredPublishJournal decode(Object result) {
+    result as List<Object?>;
+    return RecoveredPublishJournal(
+      journalId: result[0]! as String,
+      displayName: result[1]! as String,
+      contentUri: result[2]! as String,
+      supersededUris: (result[3]! as List<Object?>).cast<String>(),
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RecoveredPublishJournal || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(journalId, other.journalId) &&
+        _deepEquals(displayName, other.displayName) &&
+        _deepEquals(contentUri, other.contentUri) &&
+        _deepEquals(supersededUris, other.supersededUris);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RecoveredPublishJournal(journalId: $journalId, displayName: $displayName, contentUri: $contentUri, supersededUris: $supersededUris)';
+  }
+}
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -456,6 +523,9 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is MediaPublishResult) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
+    } else if (value is RecoveredPublishJournal) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -486,6 +556,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return ImageMetadataResult.decode(readValue(buffer)!);
       case 137:
         return MediaPublishResult.decode(readValue(buffer)!);
+      case 138:
+        return RecoveredPublishJournal.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -710,6 +782,46 @@ class SiteMarkSystemApi {
       isNullValid: false,
     );
     return pigeonVar_replyValue! as MediaPublishResult;
+  }
+
+  Future<List<RecoveredPublishJournal>?> recoverPublishJournals() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.recoverPublishJournals$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+    return (pigeonVar_replyValue as List<Object?>?)
+        ?.cast<RecoveredPublishJournal>();
+  }
+
+  Future<void> clearPublishJournal(String journalId) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.clearPublishJournal$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[journalId],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<ArchiveSaveOutcome> saveArchive(

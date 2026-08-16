@@ -181,6 +181,10 @@ final class CaptureProcessor {
         publishedUri: publishOutcome.contentUri,
         supersededUris: publishOutcome.supersededUris,
       );
+      // The database commit survived, so the native publish journal has
+      // served its purpose; a crash before this point is reconciled by
+      // CaptureMediaService.cleanupInterrupted on the next launch.
+      await platform.clearPublishJournal(rendering.photoNumber!);
       return CaptureProcessResult.succeeded;
     } catch (error) {
       // Step 9: classify the error and decide retry vs. final failure.

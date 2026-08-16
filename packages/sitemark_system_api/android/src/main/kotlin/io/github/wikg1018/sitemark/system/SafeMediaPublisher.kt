@@ -29,6 +29,24 @@ internal data class SafePublishOutcome(
 )
 
 /**
+ * Durably persists a publish intent right after the replacement row is
+ * finalized but BEFORE any superseded row is deleted, so a process death
+ * between the native publish and the caller's database commit can be
+ * reconciled on the next launch.
+ *
+ * Returns whether the entry was durably persisted. `null` (no journal
+ * configured) counts as persisted so tests without a journal keep the
+ * straightforward delete path.
+ */
+internal fun interface PublishJournalSink {
+    fun record(
+        displayName: String,
+        contentUri: String,
+        supersededUris: List<String>,
+    ): Boolean
+}
+
+/**
  * Publishes a new image or safely replaces an existing one.
  *
  * Replacement never mutates the old rows' bytes: a new pending row is
@@ -50,6 +68,7 @@ internal data class SafePublishOutcome(
  */
 internal class SafeMediaPublisher(
     private val store: PublishedImageStore,
+    private val journal: PublishJournalSink? = null,
 ) {
     fun publish(source: File, displayName: String): SafePublishOutcome {
         val existing = store.findAll(displayName)
@@ -65,7 +84,6 @@ internal class SafeMediaPublisher(
         try {
             store.write(created, source)
             store.setPending(created, pending = false)
-            return SafePublishOutcome(contentUri = created)
         } catch (error: Throwable) {
             try {
                 store.delete(created)
@@ -74,6 +92,11 @@ internal class SafeMediaPublisher(
             }
             throw error
         }
+        // Journal the finalized new row even on the first publish: a crash
+        // before the caller commits would otherwise leave an untracked
+        // gallery orphan.
+        journal?.record(displayName, created, emptyList())
+        return SafePublishOutcome(contentUri = created)
     }
 
     private fun replaceExisting(
@@ -100,6 +123,17 @@ internal class SafeMediaPublisher(
                 error.addSuppressed(cleanupError)
             }
             throw error
+        }
+        // Persist the publish intent BEFORE deleting anything: if the
+        // process dies mid-delete, recovery learns both the new URI and
+        // every stale candidate (re-queuing an already-deleted URI is an
+        // idempotent no-op). When the journal cannot be persisted, keep the
+        // old rows and report them ALL as superseded — the caller's
+        // transactional cleanup queue then owns their tracking instead of a
+        // journal we know was never written.
+        val journaled = journal?.record(displayName, created, supersededCandidates) ?: true
+        if (!journaled) {
+            return SafePublishOutcome(contentUri = created, supersededUris = supersededCandidates)
         }
         // Best effort: remove EVERY superseded row with this display name —
         // including duplicates left behind by earlier failed replacements —

@@ -170,6 +170,102 @@ class SafeMediaPublisherTest {
     }
 
     @Test
+    fun `journal records the finalized publish before deleting superseded rows`() {
+        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
+        try {
+            val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
+            val store = FakePublishedImageStore(existingBytes = "old-image")
+            val calls = mutableListOf<Triple<String, String, List<String>>>()
+            val journal = PublishJournalSink { name, uri, superseded ->
+                calls += Triple(name, uri, superseded)
+                // 时序证明：journal 被调用时旧行还在 —— 即转正之后、删除之前。
+                assertTrue(store.rows.containsKey(FakePublishedImageStore.OLD_URI))
+                true
+            }
+            val publisher = SafeMediaPublisher(store, journal)
+
+            val published = publisher.publish(source, "capture.jpg")
+
+            // journal 恰好记录一次，内容为 (displayName, 新 URI, 全部被取代的旧 URI)。
+            assertEquals(
+                listOf(
+                    Triple(
+                        "capture.jpg",
+                        FakePublishedImageStore.NEW_URI,
+                        listOf(FakePublishedImageStore.OLD_URI),
+                    ),
+                ),
+                calls,
+            )
+            assertNull(store.rows[FakePublishedImageStore.OLD_URI])
+            assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
+            assertTrue(published.supersededUris.isEmpty())
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `journal write failure keeps old rows and reports them all superseded`() {
+        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
+        try {
+            val source = File(directory, "replacement.jpg").apply { writeText("new-image") }
+            val store = FakePublishedImageStore(
+                existingBytes = "old-image",
+                duplicateBytes = "older-image",
+            )
+            // journal 落盘失败：不能再删旧行（删了就没人跟踪了），
+            // 旧行全部上报为 superseded，交给调用方的清理队列跟踪。
+            val journal = PublishJournalSink { _, _, _ -> false }
+            val publisher = SafeMediaPublisher(store, journal)
+
+            val published = publisher.publish(source, "capture.jpg")
+
+            assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
+            assertEquals(
+                listOf(FakePublishedImageStore.OLD_URI, FakePublishedImageStore.DUPLICATE_URI),
+                published.supersededUris,
+            )
+            // 旧行 bytes 原样保留且仍非 pending。
+            assertEquals("old-image", store.rows[FakePublishedImageStore.OLD_URI]?.bytes)
+            assertEquals(false, store.rows[FakePublishedImageStore.OLD_URI]?.pending)
+            assertEquals("older-image", store.rows[FakePublishedImageStore.DUPLICATE_URI]?.bytes)
+            assertEquals(false, store.rows[FakePublishedImageStore.DUPLICATE_URI]?.pending)
+            // 新行已转正 —— 发布本身是成功的。
+            assertEquals(false, store.rows[FakePublishedImageStore.NEW_URI]?.pending)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `first publish journals the new row with no superseded candidates`() {
+        val directory = Files.createTempDirectory("safe-media-publisher").toFile()
+        try {
+            val source = File(directory, "new.jpg").apply { writeText("new-image") }
+            val store = FakePublishedImageStore(existingBytes = null)
+            val calls = mutableListOf<Triple<String, String, List<String>>>()
+            val journal = PublishJournalSink { name, uri, superseded ->
+                calls += Triple(name, uri, superseded)
+                true
+            }
+            val publisher = SafeMediaPublisher(store, journal)
+
+            val published = publisher.publish(source, "capture.jpg")
+
+            // 首次发布也要 journal：否则提交前崩溃会留下无人追踪的孤儿。
+            assertEquals(
+                listOf(Triple("capture.jpg", FakePublishedImageStore.NEW_URI, emptyList<String>())),
+                calls,
+            )
+            assertEquals(FakePublishedImageStore.NEW_URI, published.contentUri)
+            assertTrue(published.supersededUris.isEmpty())
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `new image failure deletes its pending row`() {
         val directory = Files.createTempDirectory("safe-media-publisher").toFile()
         try {

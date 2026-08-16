@@ -3653,7 +3653,7 @@ class CaptureMediaCleanup extends DataClass
   /// overwrite each other's work.
   final String publishedUri;
 
-  /// Origin capture for diagnostics. Intentionally NOT a foreign key — the
+  /// Origin capture for diagnostics. Intentionally NOT a foreign key —the
   /// task must outlive the capture row, otherwise deleting a capture would
   /// silently drop pending deletes and leak its superseded duplicates.
   final String captureId;

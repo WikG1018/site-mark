@@ -440,6 +440,183 @@ void main() {
     expect(tasks, hasLength(1));
     expect(tasks.single.publishedUri, 'content://media/site-mark/1');
   });
+
+  // ------------------------------------------------------------------
+  // Publish-journal reconciliation (_recoverPublishJournals).
+  //
+  // The Android publisher journals a finalized publish right after the
+  // new MediaStore row is finalized but before the caller's database
+  // commit. These tests cover every branch of the startup reconciliation
+  // that closes the native→Dart crash window.
+  // ------------------------------------------------------------------
+
+  // Regression (crash window): the native side finalized the new row and
+  // deleted the old ones, then the process died before Dart committed
+  // the new URI — the database still points at an already-deleted URI.
+  // Recovery must adopt the journaled URI and queue every stale URI.
+  test(
+    'startup adopts a journaled publish whose database commit never happened',
+    () async {
+      final photoNumber = (await database.captureById(
+        'capture-1',
+      ))!.photoNumber!;
+      platform.recoveredJournals.add(
+        RecoveredPublishJournalEntry(
+          journalId: photoNumber,
+          displayName: photoNumber,
+          contentUri: 'content://media/site-mark/2',
+          supersededUris: ['content://media/site-mark/0'],
+        ),
+      );
+
+      await service.cleanupInterrupted();
+
+      final record = await database.captureById('capture-1');
+      expect(record?.publishedUri, 'content://media/site-mark/2');
+      // Both the journal's stale candidate AND the record's orphaned old
+      // URI are queued, then deleted on this same startup pass.
+      expect(platform.deletedUris.toSet(), {
+        'content://media/site-mark/0',
+        'content://media/site-mark/1',
+      });
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+      expect(platform.clearedJournalIds, [photoNumber]);
+      // Recovery must never re-publish (that would create a duplicate).
+      expect(platform.publishCount, 0);
+    },
+  );
+
+  // Regression: the database commit survived the crash, so the journal
+  // is stale bookkeeping — clearing it must be the ONLY effect.
+  test('startup only clears a journal whose commit already survived', () async {
+    final photoNumber = (await database.captureById('capture-1'))!.photoNumber!;
+    platform.recoveredJournals.add(
+      RecoveredPublishJournalEntry(
+        journalId: photoNumber,
+        displayName: photoNumber,
+        contentUri: 'content://media/site-mark/1',
+        supersededUris: const [],
+      ),
+    );
+
+    await service.cleanupInterrupted();
+
+    expect(platform.clearedJournalIds, [photoNumber]);
+    expect(platform.deletedUris, isEmpty);
+    expect(
+      (await database.captureById('capture-1'))?.publishedUri,
+      'content://media/site-mark/1',
+    );
+    expect(await database.pendingSupersededCleanups(), isEmpty);
+  });
+
+  // Regression: a capture still being processed will be re-published by
+  // the background processor (overwriting this journal entry), so the
+  // recovery must KEEP the journal and touch nothing.
+  test('startup keeps a journal for a capture still being processed', () async {
+    final second = await database.createPendingCapture(
+      id: 'capture-2',
+      projectId: 'project-1',
+      originalPath: '/private/original-2.jpg',
+      workLocation: 'B 区',
+      workContent: '桥架检查',
+      photographer: '李工',
+      watermarkLocaleCode: 'zh',
+      locationResolution: 'resolved',
+    );
+    final captured = await database.markCaptured(
+      captureId: second.id,
+      capturedAt: DateTime(2026, 7, 16, 10),
+    );
+    platform.recoveredJournals.add(
+      RecoveredPublishJournalEntry(
+        journalId: captured.photoNumber!,
+        displayName: captured.photoNumber!,
+        contentUri: 'content://media/site-mark/9',
+        supersededUris: const [],
+      ),
+    );
+
+    await service.cleanupInterrupted();
+
+    expect(platform.clearedJournalIds, isEmpty);
+    expect(platform.recoveredJournals, hasLength(1));
+    expect(platform.deletedUris, isEmpty);
+    expect(await database.pendingSupersededCleanups(), isEmpty);
+    expect((await database.captureById('capture-2'))?.publishedUri, isNull);
+  });
+
+  // Regression: the record behind a journal is gone (deleted by the user
+  // after the crash) — nothing will ever reference the journaled URIs, so
+  // both the new and the stale URIs become delete-only cleanup work.
+  test(
+    'startup queues orphaned journal URIs when the record is gone',
+    () async {
+      final photoNumber = (await database.captureById(
+        'capture-1',
+      ))!.photoNumber!;
+      await database.deleteCapture('capture-1');
+      platform.recoveredJournals.add(
+        RecoveredPublishJournalEntry(
+          journalId: photoNumber,
+          displayName: photoNumber,
+          contentUri: 'content://media/site-mark/2',
+          supersededUris: ['content://media/site-mark/1'],
+        ),
+      );
+
+      await service.cleanupInterrupted();
+
+      expect(platform.deletedUris.toSet(), {
+        'content://media/site-mark/1',
+        'content://media/site-mark/2',
+      });
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+      expect(platform.clearedJournalIds, [photoNumber]);
+    },
+  );
+
+  // Regression: a `failed` capture is terminal-without-retry — nothing
+  // will ever reference the journaled URI, so it (and its stale
+  // candidates) must be queued for delete-only cleanup and the journal
+  // cleared.
+  test(
+    'startup queues a failed capture journal for delete-only cleanup',
+    () async {
+      final second = await database.createPendingCapture(
+        id: 'capture-2',
+        projectId: 'project-1',
+        originalPath: '/private/original-2.jpg',
+        workLocation: 'B 区',
+        workContent: '桥架检查',
+        photographer: '李工',
+        watermarkLocaleCode: 'zh',
+        locationResolution: 'resolved',
+      );
+      final captured = await database.markCaptured(
+        captureId: second.id,
+        capturedAt: DateTime(2026, 7, 16, 10),
+      );
+      await database.markFailed(captureId: second.id, reason: 'render failure');
+      platform.recoveredJournals.add(
+        RecoveredPublishJournalEntry(
+          journalId: captured.photoNumber!,
+          displayName: captured.photoNumber!,
+          contentUri: 'content://media/site-mark/9',
+          supersededUris: ['content://media/site-mark/8'],
+        ),
+      );
+
+      await service.cleanupInterrupted();
+
+      expect(platform.clearedJournalIds, [captured.photoNumber!]);
+      expect(platform.deletedUris.toSet(), {
+        'content://media/site-mark/8',
+        'content://media/site-mark/9',
+      });
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+    },
+  );
 }
 
 class _MediaFiles implements PrivateFileStore {
@@ -494,6 +671,9 @@ class _MediaPlatform implements PlatformServices {
   Future<ImageMetadataResult> inspectImage(String path) async =>
       metadataByPath[path]!;
 
+  final List<RecoveredPublishJournalEntry> recoveredJournals = [];
+  final List<String> clearedJournalIds = [];
+
   @override
   Future<PublishJpegOutcome> publishJpeg(
     String sourcePath,
@@ -505,6 +685,16 @@ class _MediaPlatform implements PlatformServices {
       contentUri: nextPublishedUri,
       supersededUris: nextSupersededUris,
     );
+  }
+
+  @override
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
+      List.of(recoveredJournals);
+
+  @override
+  Future<void> clearPublishJournal(String journalId) async {
+    clearedJournalIds.add(journalId);
+    recoveredJournals.removeWhere((entry) => entry.journalId == journalId);
   }
 
   @override

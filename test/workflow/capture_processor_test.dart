@@ -593,6 +593,8 @@ class _ProcessorPlatformServices implements PlatformServices {
   final List<String> publishedNames = [];
   int _publishCounter = 0;
   List<String> nextSupersededUris = const [];
+  final List<RecoveredPublishJournalEntry> recoveredJournals = [];
+  final List<String> clearedJournalIds = [];
 
   @override
   Future<String> createCameraTarget(String captureId) async =>
@@ -623,6 +625,16 @@ class _ProcessorPlatformServices implements PlatformServices {
       contentUri: 'content://media/site-mark/$_publishCounter',
       supersededUris: nextSupersededUris,
     );
+  }
+
+  @override
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
+      List.of(recoveredJournals);
+
+  @override
+  Future<void> clearPublishJournal(String journalId) async {
+    clearedJournalIds.add(journalId);
+    recoveredJournals.removeWhere((entry) => entry.journalId == journalId);
   }
 
   @override

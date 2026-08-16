@@ -186,7 +186,7 @@ class CaptureMediaCleanups extends Table {
   /// overwrite each other's work.
   TextColumn get publishedUri => text()();
 
-  /// Origin capture for diagnostics. Intentionally NOT a foreign key — the
+  /// Origin capture for diagnostics. Intentionally NOT a foreign key —the
   /// task must outlive the capture row, otherwise deleting a capture would
   /// silently drop pending deletes and leak its superseded duplicates.
   TextColumn get captureId => text()();
@@ -1031,7 +1031,7 @@ ORDER BY
           failureReason: const Value(null),
         ),
       );
-      await _enqueueSupersededCleanups(captureId, supersededUris);
+      await enqueueSupersededCleanups(captureId, supersededUris);
       return record;
     });
   }
@@ -1423,14 +1423,15 @@ ORDER BY
     return transaction(() async {
       await (update(captureRecords)..where((row) => row.id.equals(captureId)))
           .write(CaptureRecordsCompanion(publishedUri: Value(publishedUri)));
-      await _enqueueSupersededCleanups(captureId, supersededUris);
+      await enqueueSupersededCleanups(captureId, supersededUris);
       return captureById(captureId).then((row) => row!);
     });
   }
 
-  /// Inserts one independent cleanup task per superseded URI. Must run
-  /// inside the same transaction that persisted the replacement URI.
-  Future<void> _enqueueSupersededCleanups(
+  /// Inserts one independent cleanup task per superseded URI. Used inside
+  /// the same transaction that persisted the replacement URI, and by
+  /// publish-journal reconciliation to (re-)queue stale URIs.
+  Future<void> enqueueSupersededCleanups(
     String captureId,
     List<String> supersededUris,
   ) async {
@@ -1445,6 +1446,23 @@ ORDER BY
         ),
       );
     }
+  }
+
+  /// Finds the most recent capture whose photo number equals [photoNumber].
+  ///
+  /// Photo numbers are the display names used for MediaStore publishing, so
+  /// publish-journal reconciliation resolves its database row through this
+  /// lookup. Photo numbers are expected to be unique per project date; the
+  /// latest row wins defensively.
+  Future<CaptureRecord?> captureByPhotoNumber(String photoNumber) {
+    final query = select(captureRecords)
+      ..where((row) => row.photoNumber.equals(photoNumber))
+      ..orderBy([
+        (row) => OrderingTerm.desc(row.createdAt),
+        (row) => OrderingTerm.desc(row.id),
+      ])
+      ..limit(1);
+    return query.getSingleOrNull();
   }
 
   /// Returns all pending superseded-URI deletes, oldest first.

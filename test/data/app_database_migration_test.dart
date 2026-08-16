@@ -584,6 +584,20 @@ QueryExecutor openMigratedV10Fixture() {
   db.execute(
     "INSERT INTO app_settings (id, updated_at) VALUES ('global', $projectCreated);",
   );
+  // A genuine capture row so migrations that walk captures (and the v12
+  // superseded-cleanup queue) can be driven with a REAL capture ID —
+  // passing the project ID where a capture ID is expected crashes on the
+  // `row!` null assertion.
+  db.execute('''
+    INSERT INTO captures (
+      id, project_id, photo_number, work_location, work_content, photographer,
+      original_path, published_uri, status, created_at
+    ) VALUES (
+      'capture-1', 'existing', 'SM-20260803-001', 'A 区三层', '风管安装检查',
+      '张工', '/private/capture-1.jpg', 'content://media/site-mark/1',
+      'ready', $projectCreated
+    );
+  ''');
   db.execute('PRAGMA user_version = 10;');
   return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
 }
@@ -957,8 +971,10 @@ void main() {
 
     // The queue table exists and one row per stale URI is enforced by the
     // URI primary key: re-enqueueing the same URI updates it in place.
+    // Uses the fixture's REAL capture row — a missing row crashes on the
+    // `row!` null assertion inside updatePublishedUri.
     await database.updatePublishedUri(
-      'existing',
+      'capture-1',
       'content://media/site-mark/2',
       supersededUris: [
         'content://media/site-mark/1',
@@ -968,7 +984,7 @@ void main() {
     final tasks = await database.pendingSupersededCleanups();
     expect(tasks, hasLength(1));
     expect(tasks.single.publishedUri, 'content://media/site-mark/1');
-    expect(tasks.single.captureId, 'existing');
+    expect(tasks.single.captureId, 'capture-1');
 
     await database.completeSupersededCleanup('content://media/site-mark/1');
     expect(await database.pendingSupersededCleanups(), isEmpty);

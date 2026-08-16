@@ -492,6 +492,70 @@ data class MediaPublishResult (
     return "MediaPublishResult(contentUri=$contentUri, supersededUris=$supersededUris)"
   }
 }
+
+/**
+ * A natively persisted publish intent that survived a process death before
+ * the caller committed the new URI to its database.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class RecoveredPublishJournal (
+  val journalId: String,
+  /**
+   * The display name (photo number) the publish used. Callers reconcile
+   * their database row by this key.
+   */
+  val displayName: String,
+  /** The finalized new MediaStore URI. It is already visible in the gallery. */
+  val contentUri: String,
+  /**
+   * Every superseded candidate URI the publisher intended to delete. Some
+   * may already be gone — deletes are idempotent, so re-queuing them is
+   * safe and converges.
+   */
+  val supersededUris: List<String>
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): RecoveredPublishJournal {
+      val journalId = pigeonVar_list[0] as String
+      val displayName = pigeonVar_list[1] as String
+      val contentUri = pigeonVar_list[2] as String
+      val supersededUris = pigeonVar_list[3] as List<String>
+      return RecoveredPublishJournal(journalId, displayName, contentUri, supersededUris)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      journalId,
+      displayName,
+      contentUri,
+      supersededUris,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as RecoveredPublishJournal
+    return SystemApiPigeonUtils.deepEquals(this.journalId, other.journalId) && SystemApiPigeonUtils.deepEquals(this.displayName, other.displayName) && SystemApiPigeonUtils.deepEquals(this.contentUri, other.contentUri) && SystemApiPigeonUtils.deepEquals(this.supersededUris, other.supersededUris)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.journalId)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.displayName)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.contentUri)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.supersededUris)
+    return result
+  }
+  override fun toString(): String {
+    return "RecoveredPublishJournal(journalId=$journalId, displayName=$displayName, contentUri=$contentUri, supersededUris=$supersededUris)"
+  }
+}
 private open class SystemApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -540,6 +604,11 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
           MediaPublishResult.fromList(it)
         }
       }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          RecoveredPublishJournal.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -581,6 +650,10 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
         stream.write(137)
         writeValue(stream, value.toList())
       }
+      is RecoveredPublishJournal -> {
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
       else -> super.writeValue(stream, value)
     }
   }
@@ -599,6 +672,8 @@ interface SiteMarkSystemApi {
   fun inspectImage(path: String, callback: (Result<ImageMetadataResult>) -> Unit)
   fun requestCurrentLocation(timeoutMillis: Long, callback: (Result<LocationResult>) -> Unit)
   fun publishJpeg(sourcePath: String, displayName: String, callback: (Result<MediaPublishResult>) -> Unit)
+  fun recoverPublishJournals(): List<RecoveredPublishJournal>?
+  fun clearPublishJournal(journalId: String)
   fun saveArchive(sourcePath: String, suggestedName: String, callback: (Result<ArchiveSaveOutcome>) -> Unit)
   fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit)
 
@@ -787,6 +862,39 @@ interface SiteMarkSystemApi {
                 reply.reply(SystemApiPigeonUtils.wrapResult(data))
               }
             }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.recoverPublishJournals$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.recoverPublishJournals())
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.clearPublishJournal$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val journalIdArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.clearPublishJournal(journalIdArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)

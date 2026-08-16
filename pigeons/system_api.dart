@@ -97,6 +97,31 @@ class MediaPublishResult {
   List<String>? supersededUris;
 }
 
+/// A natively persisted publish intent that survived a process death before
+/// the caller committed the new URI to its database.
+class RecoveredPublishJournal {
+  RecoveredPublishJournal({
+    required this.journalId,
+    required this.displayName,
+    required this.contentUri,
+    required this.supersededUris,
+  });
+
+  String journalId;
+
+  /// The display name (photo number) the publish used. Callers reconcile
+  /// their database row by this key.
+  String displayName;
+
+  /// The finalized new MediaStore URI. It is already visible in the gallery.
+  String contentUri;
+
+  /// Every superseded candidate URI the publisher intended to delete. Some
+  /// may already be gone — deletes are idempotent, so re-queuing them is
+  /// safe and converges.
+  List<String> supersededUris;
+}
+
 @HostApi()
 abstract class SiteMarkSystemApi {
   String createCameraTarget(String captureId);
@@ -123,6 +148,10 @@ abstract class SiteMarkSystemApi {
 
   @async
   MediaPublishResult publishJpeg(String sourcePath, String displayName);
+
+  List<RecoveredPublishJournal>? recoverPublishJournals();
+
+  void clearPublishJournal(String journalId);
 
   @async
   ArchiveSaveOutcome saveArchive(String sourcePath, String suggestedName);

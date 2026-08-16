@@ -713,6 +713,13 @@ class _FakePlatformServices implements PlatformServices {
   }
 
   @override
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
+      [];
+
+  @override
+  Future<void> clearPublishJournal(String journalId) async {}
+
+  @override
   Future<RecoveredCameraCapture?> recoverCameraCapture() async =>
       recoveredCapture;
 

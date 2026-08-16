@@ -3221,6 +3221,13 @@ class _FormPlatform implements PlatformServices {
   ) async => const PublishJpegOutcome(contentUri: '');
 
   @override
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
+      [];
+
+  @override
+  Future<void> clearPublishJournal(String journalId) async {}
+
+  @override
   Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;
 
   @override

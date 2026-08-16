@@ -192,6 +192,10 @@ class CaptureMediaService {
           outcome.contentUri,
           supersededUris: outcome.supersededUris,
         );
+        // The database commit survived, so the native publish journal has
+        // served its purpose; a crash before this point is reconciled by
+        // [_recoverPublishJournals] on the next launch.
+        await platform.clearPublishJournal(record.photoNumber!);
         succeeded.add(id);
       } catch (_) {
         failures[id] = CaptureMediaFailure.operationFailed;
@@ -246,7 +250,78 @@ class CaptureMediaService {
         // Keep the durable marker for a later launch and continue with others.
       }
     }
+    await _recoverPublishJournals();
     await _cleanupSuperseded();
+  }
+
+  /// Reconciles natively journaled publishes against the database.
+  ///
+  /// The journal entry is written by the Android publisher AFTER the new
+  /// MediaStore row is finalized but BEFORE the superseded rows are deleted.
+  /// It closes the crash window that the Drift transaction cannot cover —
+  /// the gap between the native publish and the Dart database commit:
+  ///
+  /// - Row already points at the journaled URI → the commit survived and
+  ///   only the journal is stale → clear it.
+  /// - `ready` row still points at an older URI → the commit never
+  ///   happened → adopt the journaled URI and queue deletes for every
+  ///   stale candidate (already-deleted rows are an idempotent no-op).
+  /// - Row is `captured`/`rendering` → the background processor will
+  ///   re-publish and overwrite this journal; keep it and let the normal
+  ///   flow converge.
+  /// - Row is gone or terminal-without-retry (`failed`) → nothing will ever
+  ///   reference the journaled URI → queue the new and stale URIs for
+  ///   delete-only cleanup and clear the journal.
+  Future<void> _recoverPublishJournals() async {
+    final journals = await platform.recoverPublishJournals();
+    for (final journal in journals) {
+      try {
+        final record = await database.captureByPhotoNumber(journal.displayName);
+        if (record == null) {
+          await database.enqueueSupersededCleanups(journal.displayName, [
+            journal.contentUri,
+            ...journal.supersededUris,
+          ]);
+          await platform.clearPublishJournal(journal.journalId);
+          continue;
+        }
+        switch (record.status) {
+          case CaptureStatus.ready:
+            if (record.publishedUri == journal.contentUri) {
+              await platform.clearPublishJournal(journal.journalId);
+            } else {
+              final stale = <String>{
+                ...journal.supersededUris,
+                if (record.publishedUri != null &&
+                    record.publishedUri != journal.contentUri)
+                  record.publishedUri!,
+              }.toList();
+              await database.updatePublishedUri(
+                record.id,
+                journal.contentUri,
+                supersededUris: stale,
+              );
+              await platform.clearPublishJournal(journal.journalId);
+            }
+          case CaptureStatus.captured:
+          case CaptureStatus.rendering:
+            // The background processor owns these states and will
+            // re-publish, overwriting this journal entry; keep it.
+            break;
+          case CaptureStatus.failed:
+          case CaptureStatus.pendingCamera:
+            // Nothing will reference the journaled URI anymore — queue it
+            // (and its stale candidates) for delete-only cleanup.
+            await database.enqueueSupersededCleanups(record.id, [
+              journal.contentUri,
+              ...journal.supersededUris,
+            ]);
+            await platform.clearPublishJournal(journal.journalId);
+        }
+      } catch (_) {
+        // Keep the journal entry for a later launch; siblings still run.
+      }
+    }
   }
 
   Future<void> _cleanupSuperseded() async {
