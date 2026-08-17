@@ -41,6 +41,9 @@ import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
+import 'package:sitemark/platform/ohos_background_work_client.dart';
+import 'package:sitemark/platform/ohos_capability.dart';
+import 'package:sitemark/platform/ohos_platform_services.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
 import 'package:sitemark/workflow/app_storage_service.dart';
@@ -127,7 +130,7 @@ Locale? parseLocale(String? value) => switch (value) {
 };
 
 final platformServicesProvider = Provider<PlatformServices>(
-  (ref) => PigeonPlatformServices(),
+  (ref) => isOhosBuild ? OhosPlatformServices() : PigeonPlatformServices(),
 );
 
 /// Non-blocking location-permission coordinator shared by the capture form and
@@ -254,7 +257,9 @@ final externalLinkServiceProvider = Provider<ExternalLinkService>(
 );
 
 final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {
-  return WorkmanagerBackgroundWorkClient();
+  return isOhosBuild
+      ? UnimplementedOhosBackgroundWorkClient()
+      : WorkmanagerBackgroundWorkClient();
 });
 
 final captureBackgroundSchedulerProvider = Provider<CaptureBackgroundScheduler>(

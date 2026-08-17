@@ -22,3 +22,5 @@ flutter:
       android:
         package: io.github.wikg1018.sitemark.system
         pluginClass: SiteMarkSystemPlugin
+      ohos:
+        pluginClass: SiteMarkSystemPlugin

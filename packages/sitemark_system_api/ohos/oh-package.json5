@@ -1,0 +1,11 @@
+{
+  "name": "sitemark_system_api",
+  "version": "1.0.0",
+  "description": "SiteMark HarmonyOS system bridge stub.",
+  "main": "index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:har/flutter.har"
+  }
+}

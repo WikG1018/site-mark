@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "sitemark_system_api",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

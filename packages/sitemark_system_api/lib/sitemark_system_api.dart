@@ -6,3 +6,4 @@
 library;
 
 export 'src/system_api.g.dart';
+export 'src/ohos/ohos_system_api.dart';
