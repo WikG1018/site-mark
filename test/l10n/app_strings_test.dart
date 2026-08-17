@@ -139,6 +139,8 @@ final _stringReaders = <String, _StringReader>{
   'captureNotFound': (strings) => strings.captureNotFound,
   'captureLoadFailed': (strings) => strings.captureLoadFailed,
   'createProjectFailed': (strings) => strings.createProjectFailed,
+  'galleryPickerFallbackBanner': (strings) =>
+      strings.galleryPickerFallbackBanner,
 };
 
 const expectedZh = <String, String>{
@@ -250,6 +252,7 @@ const expectedZh = <String, String>{
   'captureNotFound': '拍摄记录不存在或已删除',
   'captureLoadFailed': '拍摄记录加载失败，请返回后重试',
   'createProjectFailed': '项目创建失败，请稍后重试',
+  'galleryPickerFallbackBanner': '照片将通过系统保存选择器或应用沙箱保存，未进入系统相册。',
 };
 
 const expectedEn = <String, String>{
@@ -381,6 +384,8 @@ const expectedEn = <String, String>{
   'captureNotFound': 'Capture not found or deleted',
   'captureLoadFailed': 'Could not load the capture. Go back and try again.',
   'createProjectFailed': 'Could not create the project. Please try again.',
+  'galleryPickerFallbackBanner':
+        'Photos are saved with the system picker or in the app sandbox. They are not in the system gallery.',
 };
 
 void main() {

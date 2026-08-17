@@ -76,4 +76,6 @@ class OhosSystemApi {
 
   Future<void> deletePublishedImage(String contentUri) =>
       _invoke('deletePublishedImage', {'contentUri': contentUri});
+
+  Future<String> detectGalleryAccess() => _invoke('detectGalleryAccess');
 }

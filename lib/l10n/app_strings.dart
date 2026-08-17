@@ -207,6 +207,9 @@ class AppStrings {
   String get captureWorkflowHint => _english
       ? 'System camera · background watermarking · continuous capture'
       : '系统相机拍摄 · 后台生成水印 · 支持连续拍摄';
+  String get galleryPickerFallbackBanner => _english
+      ? 'Photos are saved with the system picker or in the app sandbox. They are not in the system gallery.'
+      : '照片将通过系统保存选择器或应用沙箱保存，未进入系统相册。';
   String get ready => _english ? 'Ready' : '已完成';
   String get failed => _english ? 'Failed' : '失败';
   String get pendingCamera => _english ? 'Waiting for camera' : '等待相机';

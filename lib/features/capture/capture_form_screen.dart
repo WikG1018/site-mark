@@ -15,8 +15,10 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
+import 'package:sitemark/platform/ohos_capability.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 class CaptureFormScreen extends ConsumerStatefulWidget {
   const CaptureFormScreen({super.key, required this.projectId});
@@ -59,6 +61,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   /// explanation card reflects any permission change the user made in the
   /// system dialog or settings. `null` means the first load has not finished.
   LocationPermissionViewState? _permissionState;
+  GalleryAccessMode? _galleryAccess;
 
   bool _isCurrentInit(String projectId, int generation) =>
       mounted && widget.projectId == projectId && _initGeneration == generation;
@@ -111,6 +114,23 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     final state = await ref.read(locationPermissionServiceProvider).load();
     if (!mounted) return;
     setState(() => _permissionState = state);
+  }
+
+  Future<void> _loadGalleryAccess() async {
+    if (!isOhosBuild) return;
+    try {
+      final mode = await GalleryAccessProbe(
+        reader: () async {
+          final result = await OhosSystemApi().detectGalleryAccess();
+          return result == 'acl';
+        },
+      ).detect();
+      if (!mounted) return;
+      setState(() => _galleryAccess = mode);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _galleryAccess = GalleryAccessMode.pickerFallback);
+    }
   }
 
   @override
@@ -174,6 +194,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     if (_permissionState == null) {
       _loadPermission();
     }
+    if (isOhosBuild && _galleryAccess == null) {
+      _loadGalleryAccess();
+    }
   }
 
   @override
@@ -183,6 +206,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     // refresh on resume so the card and capture-draft fallback stay in sync.
     if (state == AppLifecycleState.resumed) {
       _loadPermission();
+      if (isOhosBuild) {
+        _loadGalleryAccess();
+      }
     }
   }
 
@@ -536,6 +562,22 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            if (_galleryAccess ==
+                                GalleryAccessMode.pickerFallback)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  key: const Key('gallery-picker-fallback'),
+                                  strings.galleryPickerFallbackBanner,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ),
                             Text(
                               strings.captureWorkflowHint,
                               maxLines: 1,

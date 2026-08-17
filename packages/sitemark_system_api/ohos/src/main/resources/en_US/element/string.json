@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "permission_camera_reason",
+      "value": "Used to open the system camera and capture site photos"
+    },
+    {
+      "name": "permission_location_reason",
+      "value": "Used to record the capture location. Approximate location is enough"
+    },
+    {
+      "name": "permission_gallery_reason",
+      "value": "Used to save watermarked photos to the system gallery"
+    }
+  ]
+}
