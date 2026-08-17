@@ -20,11 +20,11 @@
 - 发布日记与替换只按 **`captureId`** 记账，禁止按照片编号或文件名扫相册。
 - **真实 v1.0.8 语义（本计划以此为准，覆盖规格里“原生删旧图”的简化表述）：** `publishJpeg` 先落新图、同步写日记，**原生不删相册行**；返回 `PublishJpegOutcome(contentUri, supersededUris)`；Dart 更新 Drift 后做引用检查、只删无引用的旧 URI。`clearPublishJournal(captureId, expectedContentUri)` 必须条件清除。
 - 全量对等只能在 **AGC 批准 `READ/WRITE_IMAGEVIDEO` ACL** 且 **Rust 编出 `ohos-arm64`** 同时成立时对外宣称。picker / 降级水印可发测试包，必须标明降级。
-- 第 0 期是硬闸：空壳 HAP 不能在 NEXT 真机启动就停，改评纯 ArkTS，不堆业务。
+- 第 0 期是硬闸：空壳 HAP 不能在 NEXT **模拟器或真机**冷启动就停，改评纯 ArkTS，不堆业务。无真机时 DevEco NEXT 模拟器冷启动视为第 0 期过关。
 - 不做账号、联网、推送、自研相机、图库导入、iOS、折叠屏 / 多设备流转。
 - 动态取色、本地通知若 ohos 插件缺失，第一期可关，必须写入差异表，不得 silently 假装还在。
 - 不在 UI、记录卡片、SnackBar、诊断包对外文案里暴露原始异常或平台字符串。
-- 所有行为变更先写失败测试，再写最小实现并验证转绿。第 0 期工具链用真机启动作为验收，不编造单测替代表。
+- 所有行为变更先写失败测试，再写最小实现并验证转绿。第 0 期工具链用 NEXT 模拟器或真机冷启动作为验收，不编造单测替代表。
 
 ---
 
@@ -59,12 +59,12 @@
 **Files:**
 - Create branch: `ohos` from `origin/main` @ `847c74b`
 - Create: `ohos/` 空壳 HAP（社区 Flutter `flutter create --platforms ohos` 或官方 OHOS 模板）
-- Create: `tool/ohos/toolchain_probe.md`（只记录实测 SDK 版本、fork 提交、真机型号、过/不过；不是产品文档）
+- Create: `tool/ohos/toolchain_probe.md`（只记录实测 SDK 版本、fork 提交、模拟器或真机型号、过/不过；不是产品文档）
 - Do not modify: `.github/workflows/ci.yml`、`release.yml`、`android/`
 
 **Interfaces:**
 - Consumes: GitHub `origin/main` `847c74b`；本仓已提交的规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 与本计划（从当前提交 cherry-pick 到 `ohos`）
-- Produces: 可在 NEXT 真机启动的空壳 HAP；`OHOS_FLUTTER_ROOT` 本机约定；失败则停止后续 Task
+- Produces: 可在 NEXT 模拟器或真机冷启动的空壳 HAP；`OHOS_FLUTTER_ROOT` 本机约定；失败则停止后续 Task
 
 - [ ] **Step 1: 确认基线提交，不要在落后的本地树上开干**
 
@@ -101,7 +101,7 @@ echo %OHOS_FLUTTER_ROOT%
 
 Expected: `flutter doctor` 识别 HarmonyOS / OpenHarmony toolchain。若命令不存在或 doctor 失败，**停在 Task 0**，不要创建业务代码。把失败原因写入 `tool/ohos/toolchain_probe.md` 后改评纯 ArkTS。
 
-- [ ] **Step 4: 生成空壳 HAP 并在 NEXT 真机启动**
+- [ ] **Step 4: 生成空壳 HAP 并在 NEXT 模拟器或真机启动**
 
 在 `ohos` 分支根目录用社区 Flutter 生成平台目录（具体 flag 以该 fork 文档为准，常见为 `--platforms ohos`）：
 
@@ -112,13 +112,13 @@ Expected: `flutter doctor` 识别 HarmonyOS / OpenHarmony toolchain。若命令�
 "%OHOS_FLUTTER_ROOT%\bin\flutter" install
 ```
 
-Expected: 真机出现默认计数器 / 空 Flutter 界面，进程不秒退。把 SDK 版本、fork commit、设备型号、API 版本写入 `tool/ohos/toolchain_probe.md`。
+Expected: 模拟器或真机出现默认计数器 / 空 Flutter 界面，进程不秒退。无真机时先用 DevEco `emulator.exe` 装 Phone 镜像、建实例、冷启动，再 `hdc list targets` 必须非空。把 SDK 版本、fork commit、目标类型（emulator/device）、API 版本写入 `tool/ohos/toolchain_probe.md`。
 
 - [ ] **Step 5: 过关或停**
 
 过关条件（全部满足才进入 Task 1）：
 
-1. 空壳 HAP 在 HarmonyOS NEXT 真机冷启动成功
+1. 空壳 HAP 在 HarmonyOS NEXT 模拟器或真机冷启动成功
 2. 官方 Flutter 仍能在另一条 checkout / 另一 `PATH` 下执行 `flutter --version`（证明没被覆盖）
 3. `main` 工作树、`.github/workflows/ci.yml` 未被改
 
@@ -1182,7 +1182,7 @@ git commit -m "feat(ohos): add privacy consent and AppGallery release materials"
 | 规格项 | 任务 |
 |---|---|
 | NEXT 原生 HAP、v1.0.8 基线、长期 `ohos` 分支 | Task 0 |
-| 空壳真机硬闸、失败改评 ArkTS | Task 0 Step 5 |
+| 空壳模拟器/真机硬闸、失败改评 ArkTS | Task 0 Step 5 |
 | `ohos/` 骨架、联邦插件空实现、进主界面、不污染 `main` | Task 1 |
 | 相机 / 定位 / 会话恢复 / 相册探测 | Task 2 |
 | Rust `ohos-arm64` + 显式降级通道 | Task 3 |

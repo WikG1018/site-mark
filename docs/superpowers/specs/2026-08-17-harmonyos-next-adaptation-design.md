@@ -55,7 +55,7 @@
    理由：产品内核已经把系统契约收口，重写 UI 浪费最大；双 SDK 可隔离在 `ohos` 分支。
 
 2. 纯 ArkTS 重写，只借 Rust 水印  
-   上架和权限最干净，但等于再做一款 App，会与 Android 迅速分叉。仅当第 0 期空壳 HAP 无法在 NEXT 真机启动时改评。
+   上架和权限最干净，但等于再做一款 App，会与 Android 迅速分叉。仅当第 0 期空壳 HAP 无法在 NEXT 模拟器或真机冷启动时改评。
 
 3. 现有 APK 跑在兼容安卓的老鸿蒙  
    快，但不是 NEXT，也上不了纯血应用市场。明确不做。
@@ -108,7 +108,7 @@ Dart 业务只认现有 `PlatformServices`，不改方法签名：
 
 Android 仍走 Pigeon 生成的 Kotlin。鸿蒙用同名 method channel / NAPI，不把 Pigeon 的 Kotlin 生成器硬接到 ohos。
 
-第 0 期是硬闸：空壳 HAP 在 NEXT 真机启动之前，不写业务。工具链走不通就停，改评纯 ArkTS。
+第 0 期是硬闸：空壳 HAP 在 HarmonyOS NEXT **模拟器或真机**冷启动之前，不写业务。无真机时，DevEco NEXT 模拟器冷启动视为第 0 期过关。工具链走不通就停，改评纯 ArkTS。相机 / 相册 / ACL 全量对等仍不能只靠模拟器宣称完成。
 
 ## 组件
 
@@ -206,7 +206,7 @@ Dart 编排不改：`CaptureWorkflow` → 入队 → `CaptureProcessor` → `pub
 
 | 期 | 内容 | 过关 | 不过就停 |
 |---|---|---|---|
-| 0 工具链 | 独立 OHOS Flutter SDK，空壳 HAP | NEXT 真机启动 | 改评纯 ArkTS，不堆业务 |
+| 0 工具链 | 独立 OHOS Flutter SDK，空壳 HAP | NEXT 模拟器或真机冷启动 | 改评纯 ArkTS，不堆业务 |
 | 1 骨架 | `ohos/`、联邦插件空实现、中英文资源 | 同仓 Dart 打出 HAP，进主界面；`main` APK 不回归 | 不接相机 |
 | 2 系统契约 | 相机、定位、相机会话恢复、相册探测 | 真机「填表 → 拍 → 有记录」 | 不接完整队列 |
 | 3 引擎 | Rust `ohos-arm64` + FFI | 版式与 Android 对得上 | 降级水印可测，但对等未完成 |
@@ -231,7 +231,7 @@ Dart 编排不改：`CaptureWorkflow` → 入队 → `CaptureProcessor` → `pub
 ### 完成定义
 
 1. `ohos` 分支从 GitHub v1.0.8（`847c74b`）拉出；`main` 的 Android 3.41.2 发布线不被社区 Flutter 污染。
-2. NEXT 真机 HAP：建项目 → 填表 → 系统相机 → 串行出片 → 进相册（ACL）或明确降级提示（picker）。
+2. NEXT HAP（无真机时允许模拟器做第 0 期冷启动；相机 / 相册 / ACL 对等仍须真机或明确标降级）：建项目 → 填表 → 系统相机 → 串行出片 → 进相册（ACL）或明确降级提示（picker）。
 3. 水印字段与 Android 一致：工程部位、工作内容、拍摄人、时间、可选坐标；编号规则不变。
 4. 杀进程恢复四窗都在：相机半截、队列未跑完、相册已写库未提交、日记与 Drift 对账（按 `captureId`）。
 5. 删除 / 再生成 / 再发布 / 备份恢复语义与现网测试一致；不按文件名扫相册。
