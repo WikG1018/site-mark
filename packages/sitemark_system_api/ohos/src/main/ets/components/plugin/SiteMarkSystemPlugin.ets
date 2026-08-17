@@ -51,6 +51,10 @@ export default class SiteMarkSystemPlugin implements FlutterPlugin, AbilityAware
     host.handle(call.method, args).then((value: Object | null) => {
       result.success(value);
     }).catch((error: Error) => {
+      if (error.message === 'ohos_not_ready' || error.message.startsWith('ohos_not_ready')) {
+        result.error('ohos_not_ready', call.method, null);
+        return;
+      }
       if (error.message.startsWith('unimplemented:')) {
         result.notImplemented();
         return;
