@@ -3575,8 +3575,50 @@ class $CaptureMediaCleanupsTable extends CaptureMediaCleanups
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _retryCountMeta = const VerificationMeta(
+    'retryCount',
+  );
   @override
-  List<GeneratedColumn> get $columns => [publishedUri, captureId, createdAt];
+  late final GeneratedColumn<int> retryCount = GeneratedColumn<int>(
+    'retry_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastAttemptAtMeta = const VerificationMeta(
+    'lastAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastAttemptAt =
+      GeneratedColumn<DateTime>(
+        'last_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _stalledAtMeta = const VerificationMeta(
+    'stalledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> stalledAt = GeneratedColumn<DateTime>(
+    'stalled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    publishedUri,
+    captureId,
+    createdAt,
+    retryCount,
+    lastAttemptAt,
+    stalledAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -3616,6 +3658,27 @@ class $CaptureMediaCleanupsTable extends CaptureMediaCleanups
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('retry_count')) {
+      context.handle(
+        _retryCountMeta,
+        retryCount.isAcceptableOrUnknown(data['retry_count']!, _retryCountMeta),
+      );
+    }
+    if (data.containsKey('last_attempt_at')) {
+      context.handle(
+        _lastAttemptAtMeta,
+        lastAttemptAt.isAcceptableOrUnknown(
+          data['last_attempt_at']!,
+          _lastAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('stalled_at')) {
+      context.handle(
+        _stalledAtMeta,
+        stalledAt.isAcceptableOrUnknown(data['stalled_at']!, _stalledAtMeta),
+      );
+    }
     return context;
   }
 
@@ -3637,6 +3700,18 @@ class $CaptureMediaCleanupsTable extends CaptureMediaCleanups
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      retryCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}retry_count'],
+      )!,
+      lastAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_attempt_at'],
+      ),
+      stalledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}stalled_at'],
+      ),
     );
   }
 
@@ -3658,10 +3733,26 @@ class CaptureMediaCleanup extends DataClass
   /// silently drop pending deletes and leak its superseded duplicates.
   final String captureId;
   final DateTime createdAt;
+
+  /// Failed delete attempts since the task was (re-)enqueued. A task whose
+  /// delete keeps failing is parked via [stalledAt] instead of being retried
+  /// on every launch forever; re-enqueueing the same URI (the user
+  /// re-publishing that capture) resets the budget.
+  final int retryCount;
+
+  /// Timestamp of the most recent failed delete attempt, for diagnostics.
+  final DateTime? lastAttemptAt;
+
+  /// Non-null once the task exceeded the retry budget: it is excluded from
+  /// automatic processing until the same URI is deliberately re-enqueued.
+  final DateTime? stalledAt;
   const CaptureMediaCleanup({
     required this.publishedUri,
     required this.captureId,
     required this.createdAt,
+    required this.retryCount,
+    this.lastAttemptAt,
+    this.stalledAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3669,6 +3760,13 @@ class CaptureMediaCleanup extends DataClass
     map['published_uri'] = Variable<String>(publishedUri);
     map['capture_id'] = Variable<String>(captureId);
     map['created_at'] = Variable<DateTime>(createdAt);
+    map['retry_count'] = Variable<int>(retryCount);
+    if (!nullToAbsent || lastAttemptAt != null) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt);
+    }
+    if (!nullToAbsent || stalledAt != null) {
+      map['stalled_at'] = Variable<DateTime>(stalledAt);
+    }
     return map;
   }
 
@@ -3677,6 +3775,13 @@ class CaptureMediaCleanup extends DataClass
       publishedUri: Value(publishedUri),
       captureId: Value(captureId),
       createdAt: Value(createdAt),
+      retryCount: Value(retryCount),
+      lastAttemptAt: lastAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAttemptAt),
+      stalledAt: stalledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stalledAt),
     );
   }
 
@@ -3689,6 +3794,9 @@ class CaptureMediaCleanup extends DataClass
       publishedUri: serializer.fromJson<String>(json['publishedUri']),
       captureId: serializer.fromJson<String>(json['captureId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      retryCount: serializer.fromJson<int>(json['retryCount']),
+      lastAttemptAt: serializer.fromJson<DateTime?>(json['lastAttemptAt']),
+      stalledAt: serializer.fromJson<DateTime?>(json['stalledAt']),
     );
   }
   @override
@@ -3698,6 +3806,9 @@ class CaptureMediaCleanup extends DataClass
       'publishedUri': serializer.toJson<String>(publishedUri),
       'captureId': serializer.toJson<String>(captureId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'retryCount': serializer.toJson<int>(retryCount),
+      'lastAttemptAt': serializer.toJson<DateTime?>(lastAttemptAt),
+      'stalledAt': serializer.toJson<DateTime?>(stalledAt),
     };
   }
 
@@ -3705,10 +3816,18 @@ class CaptureMediaCleanup extends DataClass
     String? publishedUri,
     String? captureId,
     DateTime? createdAt,
+    int? retryCount,
+    Value<DateTime?> lastAttemptAt = const Value.absent(),
+    Value<DateTime?> stalledAt = const Value.absent(),
   }) => CaptureMediaCleanup(
     publishedUri: publishedUri ?? this.publishedUri,
     captureId: captureId ?? this.captureId,
     createdAt: createdAt ?? this.createdAt,
+    retryCount: retryCount ?? this.retryCount,
+    lastAttemptAt: lastAttemptAt.present
+        ? lastAttemptAt.value
+        : this.lastAttemptAt,
+    stalledAt: stalledAt.present ? stalledAt.value : this.stalledAt,
   );
   CaptureMediaCleanup copyWithCompanion(CaptureMediaCleanupsCompanion data) {
     return CaptureMediaCleanup(
@@ -3717,6 +3836,13 @@ class CaptureMediaCleanup extends DataClass
           : this.publishedUri,
       captureId: data.captureId.present ? data.captureId.value : this.captureId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      retryCount: data.retryCount.present
+          ? data.retryCount.value
+          : this.retryCount,
+      lastAttemptAt: data.lastAttemptAt.present
+          ? data.lastAttemptAt.value
+          : this.lastAttemptAt,
+      stalledAt: data.stalledAt.present ? data.stalledAt.value : this.stalledAt,
     );
   }
 
@@ -3725,20 +3851,33 @@ class CaptureMediaCleanup extends DataClass
     return (StringBuffer('CaptureMediaCleanup(')
           ..write('publishedUri: $publishedUri, ')
           ..write('captureId: $captureId, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('stalledAt: $stalledAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(publishedUri, captureId, createdAt);
+  int get hashCode => Object.hash(
+    publishedUri,
+    captureId,
+    createdAt,
+    retryCount,
+    lastAttemptAt,
+    stalledAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is CaptureMediaCleanup &&
           other.publishedUri == this.publishedUri &&
           other.captureId == this.captureId &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.retryCount == this.retryCount &&
+          other.lastAttemptAt == this.lastAttemptAt &&
+          other.stalledAt == this.stalledAt);
 }
 
 class CaptureMediaCleanupsCompanion
@@ -3746,17 +3885,26 @@ class CaptureMediaCleanupsCompanion
   final Value<String> publishedUri;
   final Value<String> captureId;
   final Value<DateTime> createdAt;
+  final Value<int> retryCount;
+  final Value<DateTime?> lastAttemptAt;
+  final Value<DateTime?> stalledAt;
   final Value<int> rowid;
   const CaptureMediaCleanupsCompanion({
     this.publishedUri = const Value.absent(),
     this.captureId = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.stalledAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CaptureMediaCleanupsCompanion.insert({
     required String publishedUri,
     required String captureId,
     required DateTime createdAt,
+    this.retryCount = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.stalledAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : publishedUri = Value(publishedUri),
        captureId = Value(captureId),
@@ -3765,12 +3913,18 @@ class CaptureMediaCleanupsCompanion
     Expression<String>? publishedUri,
     Expression<String>? captureId,
     Expression<DateTime>? createdAt,
+    Expression<int>? retryCount,
+    Expression<DateTime>? lastAttemptAt,
+    Expression<DateTime>? stalledAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (publishedUri != null) 'published_uri': publishedUri,
       if (captureId != null) 'capture_id': captureId,
       if (createdAt != null) 'created_at': createdAt,
+      if (retryCount != null) 'retry_count': retryCount,
+      if (lastAttemptAt != null) 'last_attempt_at': lastAttemptAt,
+      if (stalledAt != null) 'stalled_at': stalledAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -3779,12 +3933,18 @@ class CaptureMediaCleanupsCompanion
     Value<String>? publishedUri,
     Value<String>? captureId,
     Value<DateTime>? createdAt,
+    Value<int>? retryCount,
+    Value<DateTime?>? lastAttemptAt,
+    Value<DateTime?>? stalledAt,
     Value<int>? rowid,
   }) {
     return CaptureMediaCleanupsCompanion(
       publishedUri: publishedUri ?? this.publishedUri,
       captureId: captureId ?? this.captureId,
       createdAt: createdAt ?? this.createdAt,
+      retryCount: retryCount ?? this.retryCount,
+      lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+      stalledAt: stalledAt ?? this.stalledAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -3801,6 +3961,15 @@ class CaptureMediaCleanupsCompanion
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (retryCount.present) {
+      map['retry_count'] = Variable<int>(retryCount.value);
+    }
+    if (lastAttemptAt.present) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt.value);
+    }
+    if (stalledAt.present) {
+      map['stalled_at'] = Variable<DateTime>(stalledAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -3813,6 +3982,9 @@ class CaptureMediaCleanupsCompanion
           ..write('publishedUri: $publishedUri, ')
           ..write('captureId: $captureId, ')
           ..write('createdAt: $createdAt, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('stalledAt: $stalledAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5897,6 +6069,9 @@ typedef $$CaptureMediaCleanupsTableCreateCompanionBuilder =
       required String publishedUri,
       required String captureId,
       required DateTime createdAt,
+      Value<int> retryCount,
+      Value<DateTime?> lastAttemptAt,
+      Value<DateTime?> stalledAt,
       Value<int> rowid,
     });
 typedef $$CaptureMediaCleanupsTableUpdateCompanionBuilder =
@@ -5904,6 +6079,9 @@ typedef $$CaptureMediaCleanupsTableUpdateCompanionBuilder =
       Value<String> publishedUri,
       Value<String> captureId,
       Value<DateTime> createdAt,
+      Value<int> retryCount,
+      Value<DateTime?> lastAttemptAt,
+      Value<DateTime?> stalledAt,
       Value<int> rowid,
     });
 
@@ -5928,6 +6106,21 @@ class $$CaptureMediaCleanupsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get stalledAt => $composableBuilder(
+    column: $table.stalledAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5955,6 +6148,21 @@ class $$CaptureMediaCleanupsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get stalledAt => $composableBuilder(
+    column: $table.stalledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CaptureMediaCleanupsTableAnnotationComposer
@@ -5976,6 +6184,19 @@ class $$CaptureMediaCleanupsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get retryCount => $composableBuilder(
+    column: $table.retryCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get stalledAt =>
+      $composableBuilder(column: $table.stalledAt, builder: (column) => column);
 }
 
 class $$CaptureMediaCleanupsTableTableManager
@@ -6024,11 +6245,17 @@ class $$CaptureMediaCleanupsTableTableManager
                 Value<String> publishedUri = const Value.absent(),
                 Value<String> captureId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<DateTime?> stalledAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CaptureMediaCleanupsCompanion(
                 publishedUri: publishedUri,
                 captureId: captureId,
                 createdAt: createdAt,
+                retryCount: retryCount,
+                lastAttemptAt: lastAttemptAt,
+                stalledAt: stalledAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6036,11 +6263,17 @@ class $$CaptureMediaCleanupsTableTableManager
                 required String publishedUri,
                 required String captureId,
                 required DateTime createdAt,
+                Value<int> retryCount = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<DateTime?> stalledAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CaptureMediaCleanupsCompanion.insert(
                 publishedUri: publishedUri,
                 captureId: captureId,
                 createdAt: createdAt,
+                retryCount: retryCount,
+                lastAttemptAt: lastAttemptAt,
+                stalledAt: stalledAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
