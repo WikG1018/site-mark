@@ -101,7 +101,7 @@ echo %OHOS_FLUTTER_ROOT%
 
 Expected: `flutter doctor` 识别 HarmonyOS / OpenHarmony toolchain。若命令不存在或 doctor 失败，**停在 Task 0**，不要创建业务代码。把失败原因写入 `tool/ohos/toolchain_probe.md` 后改评纯 ArkTS。
 
-- [ ] **Step 4: 生成空壳 HAP 并在 NEXT 模拟器或真机启动**
+- [x] **Step 4: 生成空壳 HAP 并在 NEXT 模拟器或真机启动**
 
 在 `ohos` 分支根目录用社区 Flutter 生成平台目录（具体 flag 以该 fork 文档为准，常见为 `--platforms ohos`）：
 
@@ -114,7 +114,7 @@ Expected: `flutter doctor` 识别 HarmonyOS / OpenHarmony toolchain。若命令�
 
 Expected: 模拟器或真机出现默认计数器 / 空 Flutter 界面，进程不秒退。无真机时先用 DevEco `emulator.exe` 装 Phone 镜像、建实例、冷启动，再 `hdc list targets` 必须非空。把 SDK 版本、fork commit、目标类型（emulator/device）、API 版本写入 `tool/ohos/toolchain_probe.md`。
 
-- [ ] **Step 5: 过关或停**
+- [x] **Step 5: 过关或停**
 
 过关条件（全部满足才进入 Task 1）：
 
@@ -124,7 +124,7 @@ Expected: 模拟器或真机出现默认计数器 / 空 Flutter 界面，进程�
 
 不过：停止。不要实现相机、插件、Rust。回复用户：第 0 期失败，按规格改评纯 ArkTS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ohos tool/ohos/toolchain_probe.md

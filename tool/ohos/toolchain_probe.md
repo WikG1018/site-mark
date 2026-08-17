@@ -3,7 +3,7 @@
 Worktree: `C:\Users\Administrator\Documents\Codex\2026-07-15\new-chat\.worktrees\ohos`  
 Branch: `ohos`
 
-Overall verdict: **FAIL**. Empty HAP was not built and did not cold-start on HarmonyOS NEXT (device or emulator). Stop after this probe. Do not implement camera, plugin, or Rust.
+Overall verdict: **PASS (Phase 0 / emulator)**. Empty Flutter HAP cold-started on DevEco NEXT emulator `SiteMarkPhone602` (`127.0.0.1:15555`, OpenHarmony-6.0.2.130 API 22). Community OHOS Flutter is installed **outside** the repo. Official Flutter 3.44.6 was not overwritten. Camera / gallery / ACL full-parity claims remain blocked (no real device).
 
 ---
 
@@ -304,3 +304,175 @@ Human unlock before retrying Phase 0:
 If a DevEco-started emulator plus OHOS Flutter still cannot launch an empty HAP: re-evaluate a pure ArkTS path. Do not start Task 1+ camera / plugin / Rust on Flutter.
 
 Camera / gallery / ACL full-parity claims remain blocked even after a successful emulator Phase 0.
+
+---
+
+## Attempt 3 — emulator + community Flutter + empty HAP (2026-08-18 00:15 +08:00)
+
+HEAD at write time: `251fc0e` (`chore(ohos): record emulator probe failure`)  
+Parents: `7890263` (emulator gate) → `fa634e4` (first fail) → `0e267c0` (plan) → `a5d7992` (spec) → `847c74b` (v1.0.8)
+
+User constraint unchanged: no HarmonyOS NEXT real device. Phase 0 gate after `7890263`: empty HAP cold-start on DevEco NEXT emulator is sufficient.
+
+Verdict: **PASS (Phase 0 / emulator)**.
+
+### Gate result
+
+| Gate | Result | Evidence |
+|---|---|---|
+| Empty HAP cold-starts on HarmonyOS NEXT emulator | **PASS** | Bundle `com.sitemark.sitemark_ohos_empty` installed; `aa dump` mission FOREGROUND; pid 3032 still alive after screenshot |
+| Official Flutter still works / not overwritten | **PASS** | Official tree still `3.44.6` / `ee80f08`; `flutter.version.json` unchanged; `flutter --version` exit 0 (stdout empty in this runner, JSON is the source of truth) |
+| `main` checkout / `.github/workflows/ci.yml` / `android/` untouched by this task | **PASS** | Only this worktree was written. Empty spike lives **outside** the repo |
+| Community OHOS Flutter doctor sees HarmonyOS | **PASS** | Doctor: HarmonyOS toolchain √; device `127.0.0.1:15555 • ohos-x64 • OpenHarmony-6.0.2.130 (API 22)` |
+
+### Commands and outputs
+
+#### Live emulator / hdc
+
+```text
+AVD: SiteMarkPhone602
+Image: HarmonyOS-6.0.2 phone_all_x86, API 22
+hdc: C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe
+hdc list targets
+127.0.0.1:15555
+
+hdc -t 127.0.0.1:15555 shell id
+uid=2000(shell) gid=2000(shell) ...
+
+hdc -t 127.0.0.1:15555 shell param get const.ohos.fullname
+OpenHarmony-6.0.2.130
+```
+
+#### Community OHOS Flutter (outside repo)
+
+```text
+Path: C:\Users\Administrator\Development\flutter-ohos
+URL:  https://gitcode.com/CPF-Flutter/flutter_flutter.git
+Branch: br_3.27.4-ohos-1.0.4
+Commit: 269265738b3e388113f81f82f5aaa101011f3e18 (2026-07-28)
+Dart: 3.6.2
+Engine: e672b006cb34c921db85b8e2f482ed3144a4574b
+Dart-sdk zip host:
+  https://flutter-ohos.obs.cn-south-1.myhuaweicloud.com/flutter_infra_release/flutter/<engine.version>/dart-sdk-windows-x64.zip
+engine.ohos.version / stamp: 5588629ae9bd133b0096eaa66ff359d9c6a907a6
+```
+
+Shallow clone has no tags. `bin/cache/flutter.version.json` must be UTF-8 **without BOM** or Flutter rewrites version to `0.0.0-unknown` and `pub get` fails (`leak_tracker_flutter_testing` requires Flutter >=3.18). Helper `create-empty-hap.ps1` restamps `3.27.4` before every invoke.
+
+Reliable Windows invoke (avoid leftover `flutter.bat` lockfile hangs):
+
+```text
+dart = ...\flutter-ohos\bin\cache\dart-sdk\bin\dart.exe
+snap = ...\flutter-ohos\bin\cache\flutter_tools.snapshot
+pkgs = ...\flutter-ohos\packages\flutter_tools\.dart_tool\package_config.json
+& $dart --packages=$pkgs $snap --suppress-analytics --version
+
+Flutter 3.27.4 • channel [user-branch] • https://gitcode.com/CPF-Flutter/flutter_flutter.git
+Framework • revision 269265738b (3 weeks ago) • 2026-07-28 16:37:44 +0800
+Engine • revision e672b006cb
+Tools • Dart 3.6.2 • DevTools 2.40.0
+```
+
+`doctor` (via snapshot): `[√] HarmonyOS toolchain`. `devices`: `127.0.0.1:15555 • ohos-x64 • Ohos OpenHarmony-6.0.2.130 (API 22)`.
+
+Cannot run `flutter create --platforms ohos .` inside SiteMark: product `environment.sdk: ^3.12.2` vs community Dart 3.6.2.
+
+#### Empty HAP spike (outside repo)
+
+```text
+App: C:\Users\Administrator\Development\sitemark-ohos-empty
+Bundle: com.sitemark.sitemark_ohos_empty
+Ability: EntryAbility
+```
+
+`flutter create --platforms=ohos --org=com.sitemark --project-name=sitemark_ohos_empty` succeeded. `pub get` succeeded after version stamp + removing unused `flutter_test` (avoids leak_tracker Flutter-version pin).
+
+`flutter build hap --debug --target-platform ohos-x64` still exits 1:
+
+```text
+请通过DevEco Studio打开ohos工程后配置调试签名
+(File -> Project Structure -> Signing Configs 勾选Automatically generate signature)
+```
+
+Unsigned artifact is still produced and is what the emulator accepted:
+
+```text
+ohos\entry\build\default\outputs\default\entry-default-unsigned.hap
+size: 94593963
+native libs: intermediates\libs\default\x86_64\...
+```
+
+Default `build hap --debug` (no `--target-platform`) produced arm64 and hdc rejected it:
+
+```text
+error: failed to install bundle. code:9568347
+error: install parse native so failed.
+In the module named entry, the Abi type supported by the device does not match the Abi type configured in the C++ project.
+```
+
+x64 unsigned install:
+
+```text
+hdc -t 127.0.0.1:15555 install ...\entry-default-unsigned.hap
+[Info]App install path:... msg:install bundle successfully.
+bm dump -a → com.sitemark.sitemark_ohos_empty
+```
+
+First `aa start` failed because the emulator lock screen was up (developer mode cannot auto-unlock):
+
+```text
+Error Code:10106102
+The device screen is locked during the application launch, unlock screen failed.
+```
+
+Unlock + start:
+
+```text
+power-shell wakeup
+power-shell setmode 602
+uitest uiInput swipe 628 2200 628 600 800
+aa start -a EntryAbility -b com.sitemark.sitemark_ohos_empty
+```
+
+Process stayed up:
+
+```text
+20020059  3032  ... com.sitemark.sitemark_ohos_empty
+```
+
+`aa dump -a` after ~30s:
+
+```text
+Mission ID #34  mission name #[#com.sitemark.sitemark_ohos_empty:entry:EntryAbility]
+  app name [com.sitemark.sitemark_ohos_empty]
+  main name [EntryAbility]
+  state #FOREGROUND
+  app state #FOREGROUND
+AppRunningRecord ... process name [com.sitemark.sitemark_ohos_empty] pid #3032 state #FOREGROUND
+```
+
+Screenshot: `tool/ohos/sitemark-empty-coldstart.png` (pulled from `/data/local/tmp/sitemark_empty.png` via `uitest screenCap`).
+
+#### Official Flutter isolation
+
+```text
+C:\Users\Administrator\Development\flutter\bin\cache\flutter.version.json
+frameworkVersion: 3.44.6
+frameworkRevision: ee80f08bbf97172ec030b8751ceab557177a34a6
+dartSdkVersion: 3.12.2
+flutter --version EXIT=0
+```
+
+Official tree was not written. Community SDK is a second checkout.
+
+#### Isolation
+
+Primary checkout `C:\Users\Administrator\Documents\Codex\2026-07-15\new-chat` (dirty `agent/journal-key-and-cleanup-observability` @ `fc91300`) was not written. `android/`, `.github/workflows/ci.yml`, `release.yml` were not written. Empty app and community Flutter stay under `C:\Users\Administrator\Development\`.
+
+### Notes for Task 1+
+
+- Phase 0 hard gate is satisfied on **emulator**.
+- Do not claim camera / gallery / ACL / `ohos-arm64` Rust parity until a real NEXT device exists or the UI is explicitly labeled degraded.
+- Product `ohos/` tree is still **not** in this repo. Task 1 should add the federated plugin + product `ohos/` against community Flutter, not copy `sitemark-ohos-empty` as the product app.
+- Debug signing is still missing on this machine. Emulator accepted the unsigned HAP; a real device / AppGallery path will need DevEco auto-debug signature.
+- Keep using `--target-platform ohos-x64` for this AVD; arm64 HAP will fail ABI check.
