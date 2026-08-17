@@ -11,9 +11,9 @@
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | `io.github.wikg1018.sitemark` |
 | 默认基础分支 | `main` |
-| 当前版本 | 见 `pubspec.yaml`（撰写时准备发布 `1.0.7+22`；GitHub `v1.0.6` 已作为 Pre-release 发布，`v1.0.5` 仍为已完成真机回归的 Latest） |
+| 当前版本 | 见 `pubspec.yaml`（撰写时准备发布 `1.0.8+23`；GitHub `v1.0.6`/`v1.0.7`/`v1.0.8` 作为 Pre-release，`v1.0.5` 仍为已完成真机回归的 Latest） |
 | 平台 | Android 12+（API 31+） |
-| Drift schema | 见 `lib/data/app_database.dart` 的 `schemaVersion`（撰写时为 11） |
+| Drift schema | 见 `lib/data/app_database.dart` 的 `schemaVersion`（撰写时为 13） |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
 
 **默认起点：** 以远端 `main` 的最新提交为准，不要假设本文件中的版本号永远正确——先读 `pubspec.yaml` 和 `git log origin/main -5`。
