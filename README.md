@@ -10,12 +10,12 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.7-E67E22)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.7)
+[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.8-E67E22)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)
 
-**最新预发布版本：[`v1.0.7`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.7)**  
+**最新预发布版本：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**  
 **已完成真机回归的稳定版本：[`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5)**
 
-支持 Android 12（API 31）及以上系统。`v1.0.7` 修复恢复清理误删项目、拍摄处理幂等性、解码内存防线与英文文案缺失；完成真机回归前保持 Pre-release。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.8` 加固相册发布与媒体生命周期：新图转正后再清理旧图、跨层 journal 对账、共享 URI 安全删除，以及 journal 键 XML 安全与清理重试上限；完成真机回归前保持 Pre-release。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 ## 下载
 
@@ -35,6 +35,13 @@ manufacturer camera experience.
 3. 正式 Release 使用同一签名，可以直接覆盖升级并保留应用数据。
 4. Debug APK 与正式版签名不同，通常不能直接覆盖安装。
 5. 如果 Android 提示签名冲突，不要直接卸载保存着重要数据的旧版本；先完成项目备份并确认备份文件已复制到应用目录之外。
+
+## v1.0.8 重点更新
+
+- **相册替换不再截断旧图：** 重新保存到相册时先创建并转正新行，成功后再清理旧行；写入中途被杀时旧图仍完整可见，半写新行保持 pending。
+- **发布对账与身份隔离：** Native 转正后同步写入 publish journal；启动时按 captureId 对账恢复，不再用照片编号当全局身份，避免备份恢复后同编号项目互相误删。
+- **共享 URI 与并发安全：** 删除前全库检查引用；journal 仅在 URI 匹配时清除；连续崩溃会合并待清理 URI，避免旧清理任务丢失。
+- **journal 键与清理预算：** journal 键改为 base64url，避免 XML 非法字符导致持久化失败；清理任务最多重试 5 次后 Stall，失败与恢复写入诊断事件。
 
 ## v1.0.7 重点更新
 
@@ -270,7 +277,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.7` 发布后，下载和校验以对应 GitHub Release 中的实际资源为准；完成真机回归前该版本保持 Pre-release。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 发布后，下载和校验以对应 GitHub Release 中的实际资源为准；完成真机回归前该版本保持 Pre-release。
 
 ## 本地构建
 
