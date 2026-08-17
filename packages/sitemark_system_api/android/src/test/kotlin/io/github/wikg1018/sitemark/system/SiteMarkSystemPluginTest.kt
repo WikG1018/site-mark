@@ -2,6 +2,7 @@ package io.github.wikg1018.sitemark.system
 
 import android.app.Activity
 import android.content.Context
+import android.content.SharedPreferences
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.BinaryMessenger
@@ -10,6 +11,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
+import org.mockito.ArgumentMatchers.anyInt
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
@@ -27,6 +30,11 @@ class SiteMarkSystemPluginTest {
     @Before
     fun setUp() {
         context = mock(Context::class.java)
+        // AndroidSystemApi 的构造函数会读取两份 SharedPreferences（capture
+        // session 与 publish journal）。未 stub 时 mock 返回 null，Kotlin 的
+        // 平台类型空检查会在构造函数里抛 NPE，所以这里必须给出非空桩。
+        `when`(context.getSharedPreferences(anyString(), anyInt()))
+            .thenReturn(mock(SharedPreferences::class.java))
         plugin = SiteMarkSystemPlugin()
     }
 

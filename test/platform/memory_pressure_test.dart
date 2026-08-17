@@ -179,6 +179,29 @@ void main() {
       await controller.dispatch(MemoryPressureLevel.kill);
       expect(controller.lastLevel, MemoryPressureLevel.kill);
     });
+
+    test('dispatch reports trim releases as handled', () async {
+      final controller = MemoryPressureController();
+
+      final handled = await controller.dispatch(MemoryPressureLevel.trim);
+
+      expect(handled, isTrue);
+    });
+
+    test(
+      'a failing kill hook does not stop later hooks and reports failure',
+      () async {
+        final controller = MemoryPressureController();
+        controller.attachKillHook(_FailingKillHook());
+        final hook = _RecordingKillHook();
+        controller.attachKillHook(hook);
+
+        final handled = await controller.dispatch(MemoryPressureLevel.kill);
+
+        expect(handled, isFalse);
+        expect(hook.persistCalls, 1);
+      },
+    );
   });
 
   group('MemoryPressureCoordinator', () {
@@ -218,6 +241,40 @@ void main() {
         expect(service.ackEventIds, [42]);
       },
     );
+
+    test('a persisted kill is acked with success=true', () async {
+      final service = _RecordingMemoryPressureService();
+      final controller = MemoryPressureController();
+      controller.attachKillHook(_RecordingKillHook());
+      final coordinator = MemoryPressureCoordinator(
+        service: service,
+        controller: controller,
+      );
+      coordinator.start();
+      addTearDown(coordinator.dispose);
+
+      await service.handlers.first(MemoryPressureLevel.kill, 7);
+
+      expect(service.acks, [(MemoryPressureLevel.kill, true)]);
+      expect(service.ackEventIds, [7]);
+    });
+
+    test('a failed kill persist is acked with success=false', () async {
+      final service = _RecordingMemoryPressureService();
+      final controller = MemoryPressureController();
+      controller.attachKillHook(_FailingKillHook());
+      final coordinator = MemoryPressureCoordinator(
+        service: service,
+        controller: controller,
+      );
+      coordinator.start();
+      addTearDown(coordinator.dispose);
+
+      await service.handlers.first(MemoryPressureLevel.kill, 8);
+
+      expect(service.acks, [(MemoryPressureLevel.kill, false)]);
+      expect(service.ackEventIds, [8]);
+    });
 
     test('dispose unregisters the handler from the service', () async {
       final service = _RecordingMemoryPressureService();
@@ -287,6 +344,11 @@ class _RecordingKillHook implements KillBackupHook {
   Future<void> persistForKill() async {
     persistCalls++;
   }
+}
+
+class _FailingKillHook implements KillBackupHook {
+  @override
+  Future<void> persistForKill() async => throw StateError('disk full');
 }
 
 class _RecordingMemoryPressureService implements MemoryPressureService {

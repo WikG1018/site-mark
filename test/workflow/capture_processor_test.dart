@@ -103,6 +103,56 @@ void main() {
     expect(images.lastRenderRequest?.photoNumber, '东区厂房改造-SM-20260716-001');
   });
 
+  // Regression: when the new gallery row is finalized but deleting the old
+  // row fails, the publish has already succeeded. The record must be `ready`
+  // with the NEW URI and one durable delete-only cleanup task must be queued
+  // IN THE SAME transaction — a failure here would re-publish and accumulate
+  // gallery duplicates.
+  test(
+    'failed old-row delete still succeeds and queues delete-only cleanup',
+    () async {
+      await seedCaptured();
+      platform.nextSupersededUris = ['content://media/site-mark/0'];
+
+      final result = await processor.process('capture-1');
+
+      expect(result, CaptureProcessResult.succeeded);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.ready);
+      expect(record?.publishedUri, 'content://media/site-mark/1');
+      expect(record?.failureReason, isNull);
+      final tasks = await database.pendingSupersededCleanups();
+      expect(tasks, hasLength(1));
+      expect(tasks.single.publishedUri, 'content://media/site-mark/0');
+      expect(tasks.single.captureId, 'capture-1');
+    },
+  );
+
+  // Regression: ALL stale duplicates with the same display name must be
+  // tracked as independent cleanup tasks (one per URI), so historical
+  // duplicates converge instead of only one arbitrary row being deleted.
+  test(
+    'every superseded duplicate URI becomes an independent cleanup task',
+    () async {
+      await seedCaptured();
+      platform.nextSupersededUris = [
+        'content://media/site-mark/0',
+        'content://media/site-mark/-1',
+      ];
+
+      final result = await processor.process('capture-1');
+
+      expect(result, CaptureProcessResult.succeeded);
+      final record = await database.captureById('capture-1');
+      expect(record?.publishedUri, 'content://media/site-mark/1');
+      final tasks = await database.pendingSupersededCleanups();
+      expect(tasks.map((task) => task.publishedUri).toSet(), {
+        'content://media/site-mark/0',
+        'content://media/site-mark/-1',
+      });
+    },
+  );
+
   test(
     'passes project font scale and capture locale to the renderer',
     () async {
@@ -542,6 +592,9 @@ void main() {
 class _ProcessorPlatformServices implements PlatformServices {
   final List<String> publishedNames = [];
   int _publishCounter = 0;
+  List<String> nextSupersededUris = const [];
+  final List<RecoveredPublishJournalEntry> recoveredJournals = [];
+  final List<String> clearedJournalIds = [];
 
   @override
   Future<String> createCameraTarget(String captureId) async =>
@@ -562,10 +615,36 @@ class _ProcessorPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async {
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+    String captureId,
+    String? publishedUri,
+  ) async {
     publishedNames.add(displayName);
     _publishCounter += 1;
-    return 'content://media/site-mark/$_publishCounter';
+    return PublishJpegOutcome(
+      contentUri: 'content://media/site-mark/$_publishCounter',
+      supersededUris: nextSupersededUris,
+    );
+  }
+
+  @override
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
+      List.of(recoveredJournals);
+
+  @override
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {
+    for (final entry in recoveredJournals) {
+      if (entry.captureId != captureId) continue;
+      // Conditional clear: a newer overwritten entry must survive.
+      if (entry.contentUri != expectedContentUri) return;
+    }
+    clearedJournalIds.add(captureId);
+    recoveredJournals.removeWhere((entry) => entry.captureId == captureId);
   }
 
   @override

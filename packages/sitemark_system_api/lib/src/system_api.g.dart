@@ -373,12 +373,19 @@ class ImageMetadataResult {
 }
 
 class MediaPublishResult {
-  MediaPublishResult({required this.contentUri});
+  MediaPublishResult({required this.contentUri, this.supersededUris});
 
   String contentUri;
 
+  /// Every prior MediaStore URI explicitly owned by this stable capture and
+  /// superseded by the new content, including leftovers folded from an
+  /// interrupted publish journal. Native code does not delete these rows;
+  /// the caller must durably queue reference-checked, delete-only cleanup and
+  /// must never re-publish or report failure because this list is non-empty.
+  List<String>? supersededUris;
+
   List<Object?> _toList() {
-    return <Object?>[contentUri];
+    return <Object?>[contentUri, supersededUris];
   }
 
   Object encode() {
@@ -387,7 +394,10 @@ class MediaPublishResult {
 
   static MediaPublishResult decode(Object result) {
     result as List<Object?>;
-    return MediaPublishResult(contentUri: result[0]! as String);
+    return MediaPublishResult(
+      contentUri: result[0]! as String,
+      supersededUris: (result[1] as List<Object?>?)?.cast<String>(),
+    );
   }
 
   @override
@@ -399,7 +409,8 @@ class MediaPublishResult {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(contentUri, other.contentUri);
+    return _deepEquals(contentUri, other.contentUri) &&
+        _deepEquals(supersededUris, other.supersededUris);
   }
 
   @override
@@ -408,7 +419,70 @@ class MediaPublishResult {
 
   @override
   String toString() {
-    return 'MediaPublishResult(contentUri: $contentUri)';
+    return 'MediaPublishResult(contentUri: $contentUri, supersededUris: $supersededUris)';
+  }
+}
+
+/// A natively persisted publish intent that survived a process death before
+/// the caller committed the new URI to its database.
+class RecoveredPublishJournal {
+  RecoveredPublishJournal({
+    required this.captureId,
+    required this.contentUri,
+    required this.supersededUris,
+  });
+
+  /// The stable capture identity the publish was keyed by. Callers
+  /// reconcile their database row by this ID — NEVER by photo number,
+  /// which a backup restore can duplicate across projects.
+  String captureId;
+
+  /// The finalized new MediaStore URI. It is already visible in the gallery.
+  String contentUri;
+
+  /// Every superseded candidate URI the publisher intended to delete. Some
+  /// may already be gone — deletes are idempotent, so re-queuing them is
+  /// safe and converges.
+  List<String> supersededUris;
+
+  List<Object?> _toList() {
+    return <Object?>[captureId, contentUri, supersededUris];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static RecoveredPublishJournal decode(Object result) {
+    result as List<Object?>;
+    return RecoveredPublishJournal(
+      captureId: result[0]! as String,
+      contentUri: result[1]! as String,
+      supersededUris: (result[2]! as List<Object?>).cast<String>(),
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RecoveredPublishJournal || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(captureId, other.captureId) &&
+        _deepEquals(contentUri, other.contentUri) &&
+        _deepEquals(supersededUris, other.supersededUris);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RecoveredPublishJournal(captureId: $captureId, contentUri: $contentUri, supersededUris: $supersededUris)';
   }
 }
 
@@ -446,6 +520,9 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is MediaPublishResult) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
+    } else if (value is RecoveredPublishJournal) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -476,6 +553,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return ImageMetadataResult.decode(readValue(buffer)!);
       case 137:
         return MediaPublishResult.decode(readValue(buffer)!);
+      case 138:
+        return RecoveredPublishJournal.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -678,9 +757,21 @@ class SiteMarkSystemApi {
     return pigeonVar_replyValue! as LocationResult;
   }
 
+  /// Publishes [sourcePath] into the system gallery under [displayName].
+  ///
+  /// [captureId] is the caller's stable identity for the capture: it keys
+  /// the durable publish journal and disambiguates records that share a
+  /// photo number after a backup restore. [publishedUri] is the exact
+  /// previously published URI this publish replaces — the native side
+  /// reports ONLY that URI (plus any leftover journaled URI of the same
+  /// capture) as a pending cleanup candidate; it never deletes gallery
+  /// rows itself, because a legacy upgrade can leave TWO records sharing
+  /// one URI and only the caller can check cross-record references.
   Future<MediaPublishResult> publishJpeg(
     String sourcePath,
     String displayName,
+    String captureId,
+    String? publishedUri,
   ) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.publishJpeg$pigeonVar_messageChannelSuffix';
@@ -690,7 +781,7 @@ class SiteMarkSystemApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[sourcePath, displayName],
+      <Object?>[sourcePath, displayName, captureId, publishedUri],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -700,6 +791,53 @@ class SiteMarkSystemApi {
       isNullValid: false,
     );
     return pigeonVar_replyValue! as MediaPublishResult;
+  }
+
+  Future<List<RecoveredPublishJournal>?> recoverPublishJournals() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.recoverPublishJournals$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+    return (pigeonVar_replyValue as List<Object?>?)
+        ?.cast<RecoveredPublishJournal>();
+  }
+
+  /// Clears the capture's publish journal ONLY when it still records
+  /// [expectedContentUri]. An older operation whose newer same-capture
+  /// publish already overwrote the journal must NOT clear the newer
+  /// entry, or the newer publish would become unrecoverable.
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.clearPublishJournal$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[captureId, expectedContentUri],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 
   Future<ArchiveSaveOutcome> saveArchive(

@@ -51,8 +51,9 @@ enum CaptureProcessResult {
 ///    otherwise.
 /// 6. Compute SHA-256 when missing, or verify the current original against the
 ///    stored digest. A mismatch is a permanent failure (tampered original).
-/// 7. Mark `rendering`, render to `rendered/<captureId>.jpg`, then publish using
-///    the photo number (overwriting a same-named MediaStore entry).
+/// 7. Mark `rendering`, render to `rendered/<captureId>.jpg`, then publish
+///    under the photo number keyed by the capture ID (replacing only this
+///    capture's previously published URI).
 /// 8. Mark `ready` with the returned URI.
 /// 9. Return [CaptureProcessResult.retry] for IO/system failures while attempts
 ///    are below 3; on the third attempt mark `failed` and return
@@ -167,14 +168,38 @@ final class CaptureProcessor {
           localeCode: rendering.watermarkLocaleCode,
         ),
       );
-      final publishedUri = await platform.publishJpeg(
+      final publishOutcome = await platform.publishJpeg(
         renderResult.outputPath,
         rendering.photoNumber!,
+        captureId,
+        rendering.publishedUri,
       );
+      // The new URI and a delete-only cleanup task per stale duplicate URI
+      // commit in ONE transaction: a process death between the two writes
+      // can no longer lose the tracking of a duplicate, and a write failure
+      // fails the whole pass so it is retried (rather than silently
+      // accepting an untracked duplicate).
       await database.markReady(
         captureId: captureId,
-        publishedUri: publishedUri,
+        publishedUri: publishOutcome.contentUri,
+        supersededUris: publishOutcome.supersededUris,
       );
+      // The database commit survived, so the native publish journal has
+      // served its purpose. This clear is CONDITIONAL on the journal still
+      // recording THIS publish's URI — a newer same-capture publish may
+      // have overwritten it, and clearing that newer entry would make the
+      // newer finalized publish unrecoverable after a crash. It is also
+      // BEST-EFFORT and must never turn the succeeded publish into a retry
+      // (a re-publish would duplicate the gallery photo): a stale journal
+      // left behind by a failed clear is reconciled safely by
+      // CaptureMediaService.cleanupInterrupted on the next launch (record
+      // ready + URI matches → clear only).
+      try {
+        await platform.clearPublishJournal(
+          captureId,
+          publishOutcome.contentUri,
+        );
+      } catch (_) {}
       return CaptureProcessResult.succeeded;
     } catch (error) {
       // Step 9: classify the error and decide retry vs. final failure.

@@ -1195,8 +1195,23 @@ class _WidgetTestPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async =>
-      'content://media/site-mark/1';
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+    String captureId,
+    String? publishedUri,
+  ) async =>
+      const PublishJpegOutcome(contentUri: 'content://media/site-mark/1');
+
+  @override
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async =>
+      [];
+
+  @override
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) async {}
 
   @override
   Future<RecoveredCameraCapture?> recoverCameraCapture() async => null;

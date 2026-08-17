@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.ClipData
 import android.content.ContentResolver
-import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -40,6 +39,9 @@ class AndroidSystemApi(
 ) : SiteMarkSystemApi {
     private val preferences =
         context.getSharedPreferences(CaptureSessionPolicy.PREFERENCES, Context.MODE_PRIVATE)
+    private val publishJournal = PublishJournalStore(
+        context.getSharedPreferences(PUBLISH_JOURNAL_PREFERENCES, Context.MODE_PRIVATE),
+    )
     private val locationManager = context.getSystemService(LocationManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ioExecutor = Executors.newSingleThreadExecutor()
@@ -357,10 +359,12 @@ class AndroidSystemApi(
     override fun publishJpeg(
         sourcePath: String,
         displayName: String,
+        captureId: String,
+        publishedUri: String?,
         callback: (Result<MediaPublishResult>) -> Unit,
     ) {
         ioExecutor.execute {
-            val result = runCatching { publishJpegInternal(sourcePath, displayName) }
+            val result = runCatching { publishJpegInternal(sourcePath, displayName, captureId, publishedUri) }
             mainHandler.post { callback(result) }
         }
     }
@@ -429,23 +433,55 @@ class AndroidSystemApi(
         }
     }
 
-    private fun publishJpegInternal(sourcePath: String, displayName: String): MediaPublishResult {
+    private fun publishJpegInternal(
+        sourcePath: String,
+        displayName: String,
+        captureId: String,
+        publishedUri: String?,
+    ): MediaPublishResult {
+        require(captureId.isNotBlank()) { "Publish requires a capture ID" }
         val source = validatedPrivateFile(sourcePath)
         val safeName = normalizedJpegName(displayName)
         val resolver = context.contentResolver
         val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        // The ONLY rows this publish may supersede are explicit: the exact
+        // URI the caller's record previously published, plus the COMPLETE
+        // leftover journal entry (content URI AND its superseded URIs) of
+        // an earlier crashed publish of the SAME capture. Reading the full
+        // entry matters: consecutive crashes would otherwise permanently
+        // lose tracking of the earliest stale URIs. Same-named rows owned
+        // by OTHER captures (e.g. a restored project that preserved the
+        // photo number) are deliberately never candidates.
+        val leftoverJournal = publishJournal.peek(captureId)
+        val supersededCandidates = buildList {
+            publishedUri?.let(::add)
+            leftoverJournal?.let {
+                add(it.contentUri)
+                addAll(it.supersededUris)
+            }
+        }.distinct()
         val publisher = SafeMediaPublisher(
             store = AndroidPublishedImageStore(
                 resolver = resolver,
                 collection = collection,
                 relativePath = PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH,
             ),
-            createBackupFile = {
-                val cache = context.cacheDir.apply { mkdirs() }
-                File.createTempFile("sitemark-published-", ".jpg", cache)
+            // Journal under the caller's stable capture ID so recovery
+            // reconciles exactly the right database row even when several
+            // records share a photo number after a backup restore.
+            journal = PublishJournalSink { _, contentUri, supersededUris ->
+                publishJournal.record(captureId, contentUri, supersededUris)
             },
         )
-        return MediaPublishResult(publisher.publish(source, safeName))
+        val outcome = publisher.publish(source, safeName, captureId, supersededCandidates)
+        return MediaPublishResult(outcome.contentUri, outcome.supersededUris)
+    }
+
+    override fun recoverPublishJournals(): List<RecoveredPublishJournal>? =
+        publishJournal.recover()
+
+    override fun clearPublishJournal(captureId: String, expectedContentUri: String) {
+        publishJournal.clear(captureId, expectedContentUri)
     }
 
     override fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit) {
@@ -460,11 +496,36 @@ class AndroidSystemApi(
         require(PublishedImageDeletePolicy.allowsUri(uri.scheme, uri.authority)) {
             "Published image URI is not a MediaStore image"
         }
+        // The user may have deleted the photo from the gallery themselves.
+        // A missing row is the desired end state, so treat it as success —
+        // failing here would keep the cleanup marker pending forever and
+        // retry the delete on every launch.
+        if (!publishedRowExists(uri)) return
         val relativePath = queryPublishedRelativePath(uri)
         require(PublishedImageDeletePolicy.allowsRelativePath(relativePath)) {
             "Published image is outside Pictures/SiteMark"
         }
-        context.contentResolver.delete(uri, null, null)
+        // 0 rows = already gone (idempotent success); negative = the remote
+        // provider failed without throwing, which must surface so the
+        // durable cleanup task survives and the delete is retried.
+        requireDeleted(context.contentResolver.delete(uri, null, null))
+    }
+
+    private fun publishedRowExists(uri: Uri): Boolean {
+        // A null cursor means MediaProvider is temporarily unavailable
+        // (crashed, restarting, storage mounting) — NOT that the row is
+        // gone. Treating it as "missing" would report delete success,
+        // clear the retry marker and orphan the photo forever. Only a real
+        // cursor with zero rows proves the user deleted it themselves.
+        val cursor =
+            context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Images.Media._ID),
+                null,
+                null,
+                null,
+            ) ?: error("MediaStore did not answer the published image query")
+        return cursor.use { it.moveToFirst() }
     }
 
     private fun queryPublishedRelativePath(uri: Uri): String? {
@@ -559,6 +620,7 @@ class AndroidSystemApi(
         const val REQUEST_ARCHIVE_SAVE = 41003
         private const val DEFAULT_LOCATION_TIMEOUT_MILLIS = 10_000L
         private const val KEY_LOCATION_PERMISSION_REQUESTED = "location_permission_requested"
+        private const val PUBLISH_JOURNAL_PREFERENCES = "publish_journal"
     }
 
     // ------------------------------------------------------------------
@@ -576,8 +638,21 @@ class AndroidSystemApi(
      * MediaStore write inline (no executor hop) so the headless-safety
      * contract can be asserted without waiting on a background thread.
      */
-    internal fun publishJpegForTest(sourcePath: String, displayName: String): MediaPublishResult =
-        publishJpegInternal(sourcePath, displayName)
+    internal fun publishJpegForTest(
+        sourcePath: String,
+        displayName: String,
+        captureId: String,
+        publishedUri: String?,
+    ): MediaPublishResult = publishJpegInternal(sourcePath, displayName, captureId, publishedUri)
+
+    /**
+     * Test adapter for the synchronous delete body. Runs the policy checks +
+     * MediaStore query inline (no executor hop) so the idempotent-delete
+     * contract can be asserted without waiting on a background thread.
+     */
+    internal fun deletePublishedImageForTest(contentUri: String) {
+        deletePublishedImageInternal(contentUri)
+    }
 }
 
 private class AndroidPublishedImageStore(
@@ -585,20 +660,6 @@ private class AndroidPublishedImageStore(
     private val collection: Uri,
     private val relativePath: String,
 ) : PublishedImageStore {
-    override fun find(displayName: String): String? {
-        val projection = arrayOf(MediaStore.Images.Media._ID)
-        val selection =
-            "${MediaStore.Images.Media.DISPLAY_NAME} = ? AND " +
-                "${MediaStore.Images.Media.RELATIVE_PATH} = ?"
-        val arguments = arrayOf(displayName, relativePath)
-        resolver.query(collection, projection, selection, arguments, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return ContentUris.withAppendedId(collection, cursor.getLong(0)).toString()
-            }
-        }
-        return null
-    }
-
     override fun insertPending(displayName: String): String {
         val uri = resolver.insert(
             collection,
@@ -610,13 +671,6 @@ private class AndroidPublishedImageStore(
             },
         ) ?: error("MediaStore did not create an image")
         return uri.toString()
-    }
-
-    override fun backup(contentUri: String, destination: File) {
-        resolver.openInputStream(Uri.parse(contentUri))?.use { input ->
-            destination.outputStream().use { output -> input.copyTo(output) }
-        } ?: error("MediaStore did not open the existing image")
-        require(destination.length() > 0L) { "Existing MediaStore image is empty" }
     }
 
     override fun write(contentUri: String, source: File) {
@@ -640,6 +694,20 @@ private class AndroidPublishedImageStore(
     }
 
     override fun delete(contentUri: String) {
-        resolver.delete(Uri.parse(contentUri), null, null)
+        requireDeleted(resolver.delete(Uri.parse(contentUri), null, null))
     }
+}
+
+/**
+ * Interprets a [ContentResolver.delete] row count.
+ *
+ * `0` means the row is already gone — the desired end state, so it is an
+ * idempotent success (failing would keep a cleanup task pending forever).
+ * A negative count means the remote provider failed without throwing (the
+ * AOSP ContentResolver contract may return -1); the delete outcome is then
+ * UNKNOWN, so this throws to keep the durable cleanup task alive for a
+ * later retry instead of clearing it as if the delete had succeeded.
+ */
+internal fun requireDeleted(deletedRows: Int) {
+    check(deletedRows >= 0) { "MediaStore did not answer the delete" }
 }

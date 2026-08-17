@@ -712,27 +712,38 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
     // failed. Deferring to the post-frame callback keeps the fast first paint
     // while establishing the queue before the user can reach the capture form.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // The widget may already be unmounted by the time the first frame
+      // callback fires (e.g. immediate teardown in tests); never touch
+      // `ref` before confirming the State is still alive.
+      if (!mounted) return;
       try {
         await ref.read(captureBackgroundSchedulerProvider).initialize();
       } catch (_) {
         // The scheduler clears its failed initialization future. A later
         // capture enqueue retries it instead of letting startup fail.
       }
+      if (!mounted) return;
       if (ref.read(startupRecoveryEnabledProvider)) {
         await ref.read(appStartupRecoveryProvider).run();
       }
+      if (!mounted) return;
       // Wire completion notifications: taps (including the cold-start
       // launch payload) deep-link into the capture detail page.
       try {
         await ref.read(completionNotificationServiceProvider).initialize((
           path,
         ) {
+          // The service outlives this widget and may fire a saved tap
+          // long after dispose; never touch `ref` once unmounted.
+          if (!mounted) return;
           ref.read(routerProvider).push(path);
         });
-      } on UnimplementedError {
-        // No production implementation injected (e.g. widget tests);
-        // notifications stay inert.
+      } catch (_) {
+        // Best-effort: no production implementation injected (widget tests,
+        // UnimplementedError) or a failing plugin must not block the
+        // memory-pressure bridge below, which is safety-critical.
       }
+      if (!mounted) return;
       // Initialize the ITGSA fair-memory bridge. The native
       // `MemoryPressureReceiver` forwards `itgsa.intent.action.MEMORY_TRIM`
       // and `MEMORY_KILL` broadcasts through the
@@ -741,14 +752,26 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
       // kill hooks) and then ACKs the OEM Binder.
       // The provider defaults to [NoopMemoryPressureService] so tests that
       // don't override it still run without errors.
-      _pressureCoordinator = ref.read(memoryPressureCoordinatorProvider);
-      await ref.read(memoryPressureServiceProvider).initialize();
-      _pressureCoordinator!.start();
+      final coordinator = ref.read(memoryPressureCoordinatorProvider);
+      try {
+        await ref.read(memoryPressureServiceProvider).initialize();
+      } catch (_) {
+        // The channel may be unavailable (non-ITGSA ROM, tests); the bridge
+        // stays inert but startup must not crash.
+      }
+      if (!mounted) return;
+      _pressureCoordinator = coordinator;
+      coordinator.start();
     });
   }
 
   @override
   void dispose() {
+    // Detach from the service so a disposed root widget no longer receives
+    // (and ACKs) native pressure events. Idempotent with the coordinator
+    // provider's own onDispose, which calls dispose() again harmlessly.
+    _pressureCoordinator?.dispose();
+    _pressureCoordinator = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

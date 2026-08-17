@@ -31,6 +31,49 @@ Future<void> initializeForegroundRust() {
   return created;
 }
 
+/// Outcome of publishing a JPEG to the system gallery.
+///
+/// [supersededUris] lists every superseded candidate the caller passed in,
+/// reported verbatim: the native side never deletes gallery rows itself,
+/// because a legacy upgrade can leave TWO records sharing one URI and only
+/// the caller can check the whole database for remaining references before
+/// deleting. The publish itself SUCCEEDED — callers must update their
+/// records to [contentUri] and queue a reference-checked, delete-only
+/// cleanup for each entry of [supersededUris]; they must never re-publish
+/// or report failure because of them.
+class PublishJpegOutcome {
+  const PublishJpegOutcome({
+    required this.contentUri,
+    this.supersededUris = const [],
+  });
+
+  final String contentUri;
+  final List<String> supersededUris;
+}
+
+/// A natively persisted publish intent recovered after a process death
+/// that happened between the native publish (row finalized, old rows
+/// deleted) and the caller's database commit.
+///
+/// [captureId] is the stable capture identity the publish was keyed by;
+/// callers reconcile their database row by this ID — never by photo
+/// number, which a backup restore can duplicate across projects.
+/// [contentUri] is already visible in the gallery. [supersededUris] lists
+/// every stale candidate the publisher intended to delete — some may
+/// already be gone, and re-queuing them is an idempotent no-op that
+/// converges.
+class RecoveredPublishJournalEntry {
+  const RecoveredPublishJournalEntry({
+    required this.captureId,
+    required this.contentUri,
+    required this.supersededUris,
+  });
+
+  final String captureId;
+  final String contentUri;
+  final List<String> supersededUris;
+}
+
 abstract interface class PlatformServices {
   Future<String> createCameraTarget(String captureId);
 
@@ -42,7 +85,27 @@ abstract interface class PlatformServices {
 
   Future<LocationResult> requestCurrentLocation(int timeoutMillis);
 
-  Future<String> publishJpeg(String sourcePath, String displayName);
+  /// Publishes the JPEG under [displayName].
+  ///
+  /// [captureId] is the caller's stable identity for the capture: it keys
+  /// the durable publish journal and disambiguates records that share a
+  /// photo number after a backup restore. [publishedUri] is the exact URI
+  /// this capture previously published — the native side replaces ONLY
+  /// that URI, never every same-named gallery row.
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+    String captureId,
+    String? publishedUri,
+  );
+
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals();
+
+  /// Clears the capture's publish journal ONLY while it still records
+  /// [expectedContentUri]. An older operation whose newer same-capture
+  /// publish already overwrote the journal must NOT clear the newer
+  /// entry, or the newer publish would become unrecoverable.
+  Future<void> clearPublishJournal(String captureId, String expectedContentUri);
 
   Future<void> deletePublishedImage(String contentUri);
 
@@ -82,9 +145,44 @@ class PigeonPlatformServices implements PlatformServices {
   }
 
   @override
-  Future<String> publishJpeg(String sourcePath, String displayName) async {
-    final result = await _api.publishJpeg(sourcePath, displayName);
-    return result.contentUri;
+  Future<PublishJpegOutcome> publishJpeg(
+    String sourcePath,
+    String displayName,
+    String captureId,
+    String? publishedUri,
+  ) async {
+    final result = await _api.publishJpeg(
+      sourcePath,
+      displayName,
+      captureId,
+      publishedUri,
+    );
+    return PublishJpegOutcome(
+      contentUri: result.contentUri,
+      supersededUris: result.supersededUris ?? const [],
+    );
+  }
+
+  @override
+  Future<List<RecoveredPublishJournalEntry>> recoverPublishJournals() async {
+    final journals = await _api.recoverPublishJournals();
+    if (journals == null) return const [];
+    return [
+      for (final journal in journals)
+        RecoveredPublishJournalEntry(
+          captureId: journal.captureId,
+          contentUri: journal.contentUri,
+          supersededUris: journal.supersededUris,
+        ),
+    ];
+  }
+
+  @override
+  Future<void> clearPublishJournal(
+    String captureId,
+    String expectedContentUri,
+  ) {
+    return _api.clearPublishJournal(captureId, expectedContentUri);
   }
 
   @override

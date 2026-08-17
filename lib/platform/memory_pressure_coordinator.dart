@@ -123,12 +123,18 @@ class MemoryPressureController {
   /// TRIM this releases resources; for KILL this runs the kill hooks. The
   /// coordinator awaits this before ACKing the OEM Binder.
   ///
+  /// Returns whether the dispatch fully succeeded. KILL reports `false` when
+  /// any kill hook failed to persist its state; the coordinator forwards that
+  /// to the OEM ACK so the system knows the draft may be lost. TRIM/system
+  /// releases are best-effort and always report success — a failing release
+  /// handler must not make the OEM escalate.
+  ///
   /// TRIM does NOT pause background polling. Polling pause/resume is owned
   /// exclusively by the lifecycle (`paused`/`hidden` → pause, `resumed` →
   /// resume). This prevents a forged or real TRIM from stalling the polling
   /// streams when the app is in the foreground — the user would see "processing"
   /// / "completed" status stop refreshing with no way to recover.
-  Future<void> dispatch(MemoryPressureLevel level) async {
+  Future<bool> dispatch(MemoryPressureLevel level) async {
     _lastLevel = level;
     switch (level) {
       case MemoryPressureLevel.system:
@@ -136,18 +142,23 @@ class MemoryPressureController {
         // OEM TRIM: release caches and heavy resources. Polling is managed
         // by lifecycle, not by TRIM — see the doc comment above.
         releaseResources();
+        return true;
       case MemoryPressureLevel.kill:
         // Persist state before the process is killed. Drift writes through
         // on every mutation so captured records are already durable; the
         // hooks here cover in-memory buffers (e.g. an in-progress capture
         // form draft).
+        var allPersisted = true;
         for (final hook in List<KillBackupHook>.of(_killHooks)) {
           try {
             await hook.persistForKill();
           } catch (_) {
-            // Best-effort; the system is killing us anyway.
+            // The system is killing us anyway; keep persisting the
+            // remaining hooks and report the failure through the ACK.
+            allPersisted = false;
           }
         }
+        return allPersisted;
     }
   }
 
@@ -205,11 +216,13 @@ class MemoryPressureCoordinator {
   }
 
   Future<void> _handle(MemoryPressureLevel level, int? eventId) async {
-    await controller.dispatch(level);
+    final handled = await controller.dispatch(level);
     // ACK the OEM Binder. `acknowledge` is a no-op when no Binder is pending
     // (e.g. for `system` level, or when running on a non-ITGSA ROM). The
     // eventId ensures the ACK matches the correct pending Binder even when
-    // consecutive same-level events arrive.
-    await service.acknowledge(level, eventId: eventId, success: true);
+    // consecutive same-level events arrive. A KILL whose draft hooks failed
+    // to persist is ACKed with success=false so the OEM knows the draft may
+    // be lost instead of trusting a false positive.
+    await service.acknowledge(level, eventId: eventId, success: handled);
   }
 }

@@ -3,13 +3,17 @@ package io.github.wikg1018.sitemark.system
 import android.Manifest
 import android.app.Activity
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
+import android.database.Cursor
 import android.location.Location
 import android.location.LocationManager
+import android.net.Uri
 import android.os.CancellationSignal
+import android.provider.MediaStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -17,9 +21,13 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.ArgumentMatchers.any
 import org.mockito.ArgumentMatchers.eq
+import org.mockito.ArgumentMatchers.isNull
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.mockStatic
+import org.mockito.Mockito.never
+import org.mockito.Mockito.verify
 import org.mockito.Mockito.anyInt
 import org.mockito.Mockito.anyString
 import java.util.concurrent.Executor
@@ -73,7 +81,12 @@ class AndroidSystemApiTest {
         // validation guard instead - proving no Activity is required to reach
         // the publish logic.
         val error = assertThrows(IllegalArgumentException::class.java) {
-            api.publishJpegForTest(sourcePath = "/data/nonexistent.jpg", displayName = "SM-20260716-001")
+            api.publishJpegForTest(
+                sourcePath = "/data/nonexistent.jpg",
+                displayName = "SM-20260716-001",
+                captureId = "capture-1",
+                publishedUri = null,
+            )
         }
         assertEquals(false, error.message!!.contains("foreground activity"))
     }
@@ -215,5 +228,268 @@ class AndroidSystemApiTest {
         assertThrows(IllegalArgumentException::class.java) {
             api.normalizedJpegName("A\uFEFFB-SM-001")
         }
+    }
+
+    @Test
+    fun deletePublishedImageTreatsAMissingGalleryRowAsSuccess() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        // MediaStore reports "row not found" as a cursor with zero rows.
+        val emptyCursor = mock(Cursor::class.java)
+        `when`(emptyCursor.moveToFirst()).thenReturn(false)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            stubResolverQueries(resolver, idCursor = emptyCursor, pathCursor = null)
+            val api = AndroidSystemApi(context)
+
+            // The user may have deleted the photo from the gallery
+            // themselves; the missing row is the desired end state and must
+            // NOT throw — failing would keep the cleanup marker pending
+            // forever and retry the delete on every launch.
+            api.deletePublishedImageForTest(uri.toString())
+
+            verify(resolver, never()).delete(any(Uri::class.java), isNull(), isNull())
+        }
+    }
+
+    @Test
+    fun deletePublishedImageFailsWhenMediaStoreReturnsNoCursor() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            // A null cursor means MediaProvider is temporarily unavailable,
+            // not that the row is gone — this must throw so the cleanup
+            // marker survives and the delete is retried later.
+            stubResolverQueries(resolver, idCursor = null, pathCursor = null)
+            val api = AndroidSystemApi(context)
+
+            val error = assertThrows(IllegalStateException::class.java) {
+                api.deletePublishedImageForTest(uri.toString())
+            }
+
+            assertEquals("MediaStore did not answer the published image query", error.message)
+            verify(resolver, never()).delete(any(Uri::class.java), isNull(), isNull())
+        }
+    }
+
+    @Test
+    fun deletePublishedImageDeletesAnExistingRowInPicturesSiteMark() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val idCursor = mock(Cursor::class.java)
+        `when`(idCursor.moveToFirst()).thenReturn(true)
+        val pathCursor = mock(Cursor::class.java)
+        `when`(pathCursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)).thenReturn(0)
+        `when`(pathCursor.moveToFirst()).thenReturn(true)
+        `when`(pathCursor.getString(0)).thenReturn(PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            stubResolverQueries(resolver, idCursor = idCursor, pathCursor = pathCursor)
+            val api = AndroidSystemApi(context)
+
+            api.deletePublishedImageForTest(uri.toString())
+
+            verify(resolver).delete(eq(uri), isNull(), isNull())
+        }
+    }
+
+    @Test
+    fun deletePublishedImageFailsWhenProviderReturnsNegativeRowCount() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val idCursor = mock(Cursor::class.java)
+        `when`(idCursor.moveToFirst()).thenReturn(true)
+        val pathCursor = mock(Cursor::class.java)
+        `when`(pathCursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)).thenReturn(0)
+        `when`(pathCursor.moveToFirst()).thenReturn(true)
+        `when`(pathCursor.getString(0)).thenReturn(PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            stubResolverQueries(resolver, idCursor = idCursor, pathCursor = pathCursor)
+            // -1 = 远端 Provider 未抛异常地失败了（AOSP 契约允许返回 -1），
+            // 删除结果未知，必须抛错让持久化清理任务存活并重试。
+            `when`(resolver.delete(any(Uri::class.java), isNull(), isNull())).thenReturn(-1)
+            val api = AndroidSystemApi(context)
+
+            val error = assertThrows(IllegalStateException::class.java) {
+                api.deletePublishedImageForTest(uri.toString())
+            }
+
+            assertEquals("MediaStore did not answer the delete", error.message)
+        }
+    }
+
+    @Test
+    fun deletePublishedImageTreatsZeroDeletedRowsAsIdempotentSuccess() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val idCursor = mock(Cursor::class.java)
+        `when`(idCursor.moveToFirst()).thenReturn(true)
+        val pathCursor = mock(Cursor::class.java)
+        `when`(pathCursor.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH)).thenReturn(0)
+        `when`(pathCursor.moveToFirst()).thenReturn(true)
+        `when`(pathCursor.getString(0)).thenReturn(PublishedImageDeletePolicy.PUBLISHED_RELATIVE_PATH)
+        val uri = mediaUri()
+        mockStatic(Uri::class.java).use { staticUri ->
+            staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(uri)
+            stubResolverQueries(resolver, idCursor = idCursor, pathCursor = pathCursor)
+            // 0 = 行已不存在（例如用户自己删了），正是期望的终态；
+            // 抛错会让清理标记永远 pending 并在每次启动时重试。
+            `when`(resolver.delete(any(Uri::class.java), isNull(), isNull())).thenReturn(0)
+            val api = AndroidSystemApi(context)
+
+            api.deletePublishedImageForTest(uri.toString())
+
+            verify(resolver).delete(eq(uri), isNull(), isNull())
+        }
+    }
+
+    @Test
+    fun publishFailsFastWhenCaptureIdIsBlank() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        // validatedPrivateFile 要求源文件在 dataDir 内且非空 —— dataDir 已被
+        // setUp 指向 java.io.tmpdir，创建一个真实非空文件。
+        val source = java.io.File(context.dataDir, "sm-publish-source.jpg")
+        source.writeText("jpeg-bytes")
+        try {
+            val collection = mock(Uri::class.java)
+            mockStatic(MediaStore.Images.Media::class.java).use { staticMedia ->
+                // 纯 JVM 下 android.jar 静态方法未 stub，需要 mock 后
+                // getContentUri 才能返回可控的集合 Uri。
+                staticMedia.`when`<Uri> {
+                    MediaStore.Images.Media.getContentUri(anyString())
+                }.thenReturn(collection)
+                val api = AndroidSystemApi(context)
+
+                // The capture ID keys the durable publish journal; a blank
+                // one would journal under an unidentifiable key, so the
+                // publish must refuse before touching MediaStore.
+                assertThrows(IllegalArgumentException::class.java) {
+                    api.publishJpegForTest(source.absolutePath, "SM-20260716-001", "  ", null)
+                }
+
+                // 绝不 insert —— 否则会在无 journal 键的情况下创建新行。
+                verify(resolver, never())
+                    .insert(any(Uri::class.java), any(ContentValues::class.java))
+            }
+        } finally {
+            source.delete()
+        }
+    }
+
+    // Regression (consecutive crashes): a re-publish of the same capture
+    // must fold the COMPLETE leftover journal entry — its content URI AND
+    // its superseded URIs — plus the caller's database URI into the new
+    // superseded candidates, deduplicated. Reading only the journal's
+    // content URI would permanently lose tracking of the earliest stale
+    // URIs after a second consecutive crash.
+    @Test
+    fun publishFoldsDatabaseUriAndLeftoverJournalIntoSupersededCandidates() {
+        val resolver = mock(ContentResolver::class.java)
+        `when`(context.contentResolver).thenReturn(resolver)
+        val source = java.io.File(context.dataDir, "sm-publish-source.jpg")
+        source.writeText("jpeg-bytes")
+        try {
+            // Pre-seed the durable journal for capture-1: a crashed publish
+            // finalized U2 with stale candidate U1.
+            val prefix = "journal.capture-1\u0000"
+            val journalValues = mapOf<String, Any>(
+                "${prefix}.exists" to true,
+                "${prefix}.newUri" to "content://media/external/images/2",
+                "${prefix}.staleCount" to 1,
+                "${prefix}.stale.0" to "content://media/external/images/1",
+            )
+            val prefs = context.getSharedPreferences("publish_journal", Context.MODE_PRIVATE)
+            `when`(prefs.all).thenReturn(journalValues)
+            val editor = prefs.edit()
+            // The record() overwrite folds everything it read; commit must
+            // succeed so the publish is not rolled back.
+            `when`(editor.putInt(anyString(), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(editor)
+
+            val collection = mock(Uri::class.java)
+            val newUri = mock(Uri::class.java)
+            `when`(resolver.insert(any(Uri::class.java), any(ContentValues::class.java)))
+                .thenReturn(newUri)
+            `when`(
+                resolver.openOutputStream(any(Uri::class.java), eq("w")),
+            ).thenReturn(java.io.ByteArrayOutputStream())
+            `when`(
+                resolver.update(any(Uri::class.java), any(ContentValues::class.java), isNull(), isNull()),
+            ).thenReturn(1)
+
+            mockStatic(Uri::class.java).use { staticUri ->
+                staticUri.`when`<Uri> { Uri.parse(anyString()) }.thenReturn(newUri)
+                mockStatic(MediaStore.Images.Media::class.java).use { staticMedia ->
+                    staticMedia.`when`<Uri> {
+                        MediaStore.Images.Media.getContentUri(anyString())
+                    }.thenReturn(collection)
+                    val api = AndroidSystemApi(context)
+
+                    val result = api.publishJpegForTest(
+                        source.absolutePath,
+                        "SM-20260716-001",
+                        "capture-1",
+                        // The caller's database still references U3.
+                        "content://media/external/images/3",
+                    )
+
+                    // All three sources merge, deduplicated: the journal's
+                    // stale URI, the journal's content URI, and the
+                    // database's previous URI. None of them was deleted by
+                    // the publish itself.
+                    assertEquals(
+                        listOf(
+                            "content://media/external/images/3",
+                            "content://media/external/images/2",
+                            "content://media/external/images/1",
+                        ),
+                        result.supersededUris,
+                    )
+                }
+            }
+        } finally {
+            source.delete()
+        }
+    }
+
+    /** Returns a Uri double that passes the MediaStore allowlist check. */
+    private fun mediaUri(): Uri {
+        val uri = mock(Uri::class.java)
+        `when`(uri.scheme).thenReturn("content")
+        `when`(uri.authority).thenReturn(MediaStore.AUTHORITY)
+        return uri
+    }
+
+    /**
+     * Stubs [ContentResolver.query] to answer with the cursor matching the
+     * requested projection so the delete body runs without a real
+     * ContentProvider. Must be called inside an active [mockStatic] scope.
+     */
+    private fun stubResolverQueries(
+        resolver: ContentResolver,
+        idCursor: Cursor?,
+        pathCursor: Cursor?,
+    ) {
+        doAnswer { invocation ->
+            val projection = invocation.getArgument<Array<String>>(1)
+            when (projection.firstOrNull()) {
+                MediaStore.Images.Media._ID -> idCursor
+                MediaStore.Images.Media.RELATIVE_PATH -> pathCursor
+                else -> null
+            }
+        }.`when`(resolver).query(
+            any(Uri::class.java),
+            any(Array<String>::class.java),
+            isNull(),
+            isNull(),
+            isNull(),
+        )
     }
 }

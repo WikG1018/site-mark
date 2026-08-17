@@ -448,18 +448,28 @@ data class ImageMetadataResult (
 
 /** Generated class from Pigeon that represents data sent in messages. */
 data class MediaPublishResult (
-  val contentUri: String
+  val contentUri: String,
+  /**
+   * Every prior MediaStore URI explicitly owned by this stable capture and
+   * superseded by the new content, including leftovers folded from an
+   * interrupted publish journal. Native code does not delete these rows;
+   * the caller must durably queue reference-checked, delete-only cleanup and
+   * must never re-publish or report failure because this list is non-empty.
+   */
+  val supersededUris: List<String>? = null
 )
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): MediaPublishResult {
       val contentUri = pigeonVar_list[0] as String
-      return MediaPublishResult(contentUri)
+      val supersededUris = pigeonVar_list[1] as List<String>?
+      return MediaPublishResult(contentUri, supersededUris)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
       contentUri,
+      supersededUris,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -470,16 +480,78 @@ data class MediaPublishResult (
       return true
     }
     val other = other as MediaPublishResult
-    return SystemApiPigeonUtils.deepEquals(this.contentUri, other.contentUri)
+    return SystemApiPigeonUtils.deepEquals(this.contentUri, other.contentUri) && SystemApiPigeonUtils.deepEquals(this.supersededUris, other.supersededUris)
   }
 
   override fun hashCode(): Int {
     var result = javaClass.hashCode()
     result = 31 * result + SystemApiPigeonUtils.deepHash(this.contentUri)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.supersededUris)
     return result
   }
   override fun toString(): String {
-    return "MediaPublishResult(contentUri=$contentUri)"
+    return "MediaPublishResult(contentUri=$contentUri, supersededUris=$supersededUris)"
+  }
+}
+
+/**
+ * A natively persisted publish intent that survived a process death before
+ * the caller committed the new URI to its database.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class RecoveredPublishJournal (
+  /**
+   * The stable capture identity the publish was keyed by. Callers
+   * reconcile their database row by this ID — NEVER by photo number,
+   * which a backup restore can duplicate across projects.
+   */
+  val captureId: String,
+  /** The finalized new MediaStore URI. It is already visible in the gallery. */
+  val contentUri: String,
+  /**
+   * Every superseded candidate URI the publisher intended to delete. Some
+   * may already be gone — deletes are idempotent, so re-queuing them is
+   * safe and converges.
+   */
+  val supersededUris: List<String>
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): RecoveredPublishJournal {
+      val captureId = pigeonVar_list[0] as String
+      val contentUri = pigeonVar_list[1] as String
+      val supersededUris = pigeonVar_list[2] as List<String>
+      return RecoveredPublishJournal(captureId, contentUri, supersededUris)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      captureId,
+      contentUri,
+      supersededUris,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as RecoveredPublishJournal
+    return SystemApiPigeonUtils.deepEquals(this.captureId, other.captureId) && SystemApiPigeonUtils.deepEquals(this.contentUri, other.contentUri) && SystemApiPigeonUtils.deepEquals(this.supersededUris, other.supersededUris)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.captureId)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.contentUri)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.supersededUris)
+    return result
+  }
+  override fun toString(): String {
+    return "RecoveredPublishJournal(captureId=$captureId, contentUri=$contentUri, supersededUris=$supersededUris)"
   }
 }
 private open class SystemApiPigeonCodec : StandardMessageCodec() {
@@ -530,6 +602,11 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
           MediaPublishResult.fromList(it)
         }
       }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          RecoveredPublishJournal.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -571,6 +648,10 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
         stream.write(137)
         writeValue(stream, value.toList())
       }
+      is RecoveredPublishJournal -> {
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
       else -> super.writeValue(stream, value)
     }
   }
@@ -588,7 +669,27 @@ interface SiteMarkSystemApi {
   fun openApplicationSettings()
   fun inspectImage(path: String, callback: (Result<ImageMetadataResult>) -> Unit)
   fun requestCurrentLocation(timeoutMillis: Long, callback: (Result<LocationResult>) -> Unit)
-  fun publishJpeg(sourcePath: String, displayName: String, callback: (Result<MediaPublishResult>) -> Unit)
+  /**
+   * Publishes [sourcePath] into the system gallery under [displayName].
+   *
+   * [captureId] is the caller's stable identity for the capture: it keys
+   * the durable publish journal and disambiguates records that share a
+   * photo number after a backup restore. [publishedUri] is the exact
+   * previously published URI this publish replaces — the native side
+   * reports ONLY that URI (plus any leftover journaled URI of the same
+   * capture) as a pending cleanup candidate; it never deletes gallery
+   * rows itself, because a legacy upgrade can leave TWO records sharing
+   * one URI and only the caller can check cross-record references.
+   */
+  fun publishJpeg(sourcePath: String, displayName: String, captureId: String, publishedUri: String?, callback: (Result<MediaPublishResult>) -> Unit)
+  fun recoverPublishJournals(): List<RecoveredPublishJournal>?
+  /**
+   * Clears the capture's publish journal ONLY when it still records
+   * [expectedContentUri]. An older operation whose newer same-capture
+   * publish already overwrote the journal must NOT clear the newer
+   * entry, or the newer publish would become unrecoverable.
+   */
+  fun clearPublishJournal(captureId: String, expectedContentUri: String)
   fun saveArchive(sourcePath: String, suggestedName: String, callback: (Result<ArchiveSaveOutcome>) -> Unit)
   fun deletePublishedImage(contentUri: String, callback: (Result<Unit>) -> Unit)
 
@@ -768,7 +869,9 @@ interface SiteMarkSystemApi {
             val args = message as List<Any?>
             val sourcePathArg = args[0] as String
             val displayNameArg = args[1] as String
-            api.publishJpeg(sourcePathArg, displayNameArg) { result: Result<MediaPublishResult> ->
+            val captureIdArg = args[2] as String
+            val publishedUriArg = args[3] as String?
+            api.publishJpeg(sourcePathArg, displayNameArg, captureIdArg, publishedUriArg) { result: Result<MediaPublishResult> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SystemApiPigeonUtils.wrapError(error))
@@ -777,6 +880,40 @@ interface SiteMarkSystemApi {
                 reply.reply(SystemApiPigeonUtils.wrapResult(data))
               }
             }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.recoverPublishJournals$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.recoverPublishJournals())
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.clearPublishJournal$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val captureIdArg = args[0] as String
+            val expectedContentUriArg = args[1] as String
+            val wrapped: List<Any?> = try {
+              api.clearPublishJournal(captureIdArg, expectedContentUriArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)

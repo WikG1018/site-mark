@@ -498,6 +498,33 @@ Future<Map<String, String>> captureIndexes(AppDatabase database) async {
 /// capture templates, no lifecycle columns), seeds one project, and sets
 /// `PRAGMA user_version = 10`.
 QueryExecutor openMigratedV10Fixture() {
+  final db = buildV10Schema();
+  db.execute('PRAGMA user_version = 10;');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
+/// Opens a raw in-memory sqlite database with the genuine v11 schema: the v10
+/// shape plus the project lifecycle columns added by the v10→v11 migration.
+/// `PRAGMA user_version = 11`, so [AppDatabase.forTesting] exercises ONLY the
+/// v11→v12 upgrade (the superseded-cleanup queue) rather than the whole chain.
+QueryExecutor openMigratedV11Fixture() {
+  final db = buildV10Schema();
+  // Exactly what drift's v10→v11 `addColumn` emitted (ALTER TABLE ADD COLUMN),
+  // so this fixture is byte-compatible with a real upgraded v11 database.
+  db.execute(
+    "ALTER TABLE projects ADD COLUMN lifecycle_status TEXT NOT NULL "
+    "DEFAULT 'active' CHECK (lifecycle_status IN "
+    "('active', 'completed', 'archived'));",
+  );
+  db.execute(
+    'ALTER TABLE projects ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;',
+  );
+  db.execute('PRAGMA user_version = 11;');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
+/// Builds the v10 table shapes and seed rows WITHOUT stamping a user version.
+Database buildV10Schema() {
   final db = sqlite3.openInMemory();
   final projectCreated =
       DateTime.utc(2026, 8, 3).millisecondsSinceEpoch ~/ 1000;
@@ -584,8 +611,21 @@ QueryExecutor openMigratedV10Fixture() {
   db.execute(
     "INSERT INTO app_settings (id, updated_at) VALUES ('global', $projectCreated);",
   );
-  db.execute('PRAGMA user_version = 10;');
-  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+  // A genuine capture row so migrations that walk captures (and the v12
+  // superseded-cleanup queue) can be driven with a REAL capture ID —
+  // passing the project ID where a capture ID is expected crashes on the
+  // `row!` null assertion.
+  db.execute('''
+    INSERT INTO captures (
+      id, project_id, photo_number, work_location, work_content, photographer,
+      original_path, published_uri, status, created_at
+    ) VALUES (
+      'capture-1', 'existing', 'SM-20260803-001', 'A 区三层', '风管安装检查',
+      '张工', '/private/capture-1.jpg', 'content://media/site-mark/1',
+      'ready', $projectCreated
+    );
+  ''');
+  return db;
 }
 
 /// Opens the v8 table shapes and index set, then lets the current database
@@ -945,10 +985,42 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV10Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 11);
+    expect(database.schemaVersion, 12);
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);
+  });
+
+  test('v11 to v12 migration creates the superseded cleanup queue', () async {
+    final database = AppDatabase.forTesting(openMigratedV11Fixture());
+    addTearDown(database.close);
+
+    expect(database.schemaVersion, 12);
+    // The v11 lifecycle columns survive the v11→v12-only upgrade path.
+    final project = await database.projectById('existing');
+    expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
+    expect(project.isPinned, isFalse);
+
+    // The queue table exists and one row per stale URI is enforced by the
+    // URI primary key: re-enqueueing the same URI updates it in place.
+    // Uses the fixture's REAL capture row — a missing row crashes on the
+    // `row!` null assertion inside updatePublishedUri.
+    await database.updatePublishedUri(
+      'capture-1',
+      'content://media/site-mark/2',
+      expectedPreviousUri: 'content://media/site-mark/1',
+      supersededUris: [
+        'content://media/site-mark/1',
+        'content://media/site-mark/1',
+      ],
+    );
+    final tasks = await database.pendingSupersededCleanups();
+    expect(tasks, hasLength(1));
+    expect(tasks.single.publishedUri, 'content://media/site-mark/1');
+    expect(tasks.single.captureId, 'capture-1');
+
+    await database.completeSupersededCleanup('content://media/site-mark/1');
+    expect(await database.pendingSupersededCleanups(), isEmpty);
   });
 
   test(
@@ -973,7 +1045,7 @@ void main() {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 11);
+    expect(database.schemaVersion, 12);
     final project = await database.createProject(id: 'fresh', name: '新项目');
     expect(project.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);
