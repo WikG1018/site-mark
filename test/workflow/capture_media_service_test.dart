@@ -1,8 +1,12 @@
+import 'dart:io' show Directory;
 import 'dart:ui' show Locale;
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/domain/capture_media_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
@@ -62,6 +66,30 @@ void main() {
       pendingStore: pendingStore,
     );
   });
+
+  /// Creates a second fully-`ready` capture row referencing [publishedUri],
+  /// e.g. to simulate a legacy upgrade where two records share one URI.
+  Future<void> createSecondReadyCapture(String publishedUri) async {
+    final pending = await database.createPendingCapture(
+      id: 'capture-2',
+      projectId: 'project-1',
+      originalPath: '/private/original-2.jpg',
+      workLocation: 'B 区',
+      workContent: '桥架检查',
+      photographer: '李工',
+      watermarkLocaleCode: 'zh',
+      locationResolution: 'resolved',
+    );
+    await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 10),
+    );
+    await database.markRendering(
+      captureId: pending.id,
+      originalSha256: digestA,
+    );
+    await database.markReady(captureId: pending.id, publishedUri: publishedUri);
+  }
 
   CaptureRecord mediaRecord({DateTime? originalDeletedAt}) => CaptureRecord(
     id: 'capture-1',
@@ -167,6 +195,204 @@ void main() {
     expect(platform.deletedUris, ['content://media/site-mark/1']);
     expect(await database.pendingSupersededCleanups(), isEmpty);
   });
+
+  test(
+    'cleanup retry budget stalls a permanently failing URI until re-enqueued',
+    () async {
+      platform.failingDeleteUris.add('content://media/site-mark/1');
+      // deleteAll queues the task AND drives the queue once in the same
+      // user action, so the first failed attempt is already counted.
+      final result = await service.deleteAll(['capture-1']);
+      expect(result.succeededIds, ['capture-1']);
+      var task = (await database.pendingSupersededCleanups()).single;
+      expect(task.retryCount, 1);
+      expect(task.stalledAt, isNull);
+
+      // Each later launch records one more failed attempt; the loop stops
+      // BEFORE the budget-exhausting attempt, which runs below and parks
+      // the task out of the pending set.
+      for (
+        var attempt = 2;
+        attempt < CaptureMediaService.maxCleanupRetries;
+        attempt++
+      ) {
+        await service.cleanupInterrupted();
+        task = (await database.pendingSupersededCleanups()).single;
+        expect(task.retryCount, attempt);
+        expect(task.stalledAt, isNull);
+      }
+
+      // The attempt that exhausts the budget parks the task: no longer
+      // pending, visible as stalled, and NEVER retried on later launches.
+      await service.cleanupInterrupted();
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+      final stalled = await database.stalledSupersededCleanups();
+      expect(stalled, hasLength(1));
+      expect(stalled.single.retryCount, CaptureMediaService.maxCleanupRetries);
+      expect(stalled.single.stalledAt, isNotNull);
+
+      platform.failingDeleteUris.clear();
+      await service.cleanupInterrupted();
+      expect(platform.deletedUris, isEmpty);
+
+      // A URI still referenced by any record must NOT consume budget even
+      // after re-enqueue: waiting for the last reference to disappear is
+      // normal convergence, not a failure.
+      // Re-enqueueing the URI (a fresh publish of that capture) resets the
+      // budget and lets the delete converge.
+      await database.enqueueSupersededCleanups('capture-1', [
+        'content://media/site-mark/1',
+      ]);
+      final resumed = (await database.pendingSupersededCleanups()).single;
+      expect(resumed.retryCount, 0);
+      expect(resumed.stalledAt, isNull);
+      expect(await database.stalledSupersededCleanups(), isEmpty);
+
+      await service.cleanupInterrupted();
+      expect(platform.deletedUris, ['content://media/site-mark/1']);
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+    },
+  );
+
+  test('a referenced URI never consumes the cleanup retry budget', () async {
+    // Two rows share one legacy URI. The owner already republished to a
+    // NEW URI, so only the sibling still references the stale one — the
+    // upgrade scenario where the queue holds a URI another record uses.
+    await createSecondReadyCapture('content://media/site-mark/1');
+    await database.updatePublishedUri(
+      'capture-1',
+      'content://media/site-mark/2',
+      expectedPreviousUri: 'content://media/site-mark/1',
+    );
+    await database.enqueueSupersededCleanups('capture-1', [
+      'content://media/site-mark/1',
+    ]);
+
+    // Repeated launches keep skipping the referenced URI WITHOUT ever
+    // counting a failure or stalling it.
+    for (var i = 0; i < CaptureMediaService.maxCleanupRetries + 2; i++) {
+      await service.cleanupInterrupted();
+    }
+    final task = (await database.pendingSupersededCleanups()).single;
+    expect(task.retryCount, 0);
+    expect(task.stalledAt, isNull);
+    expect(platform.deletedUris, isEmpty);
+
+    // Once the last reference disappears the delete converges normally.
+    await database.deleteCapture('capture-2');
+    await service.cleanupInterrupted();
+    expect(platform.deletedUris, ['content://media/site-mark/1']);
+    expect(await database.pendingSupersededCleanups(), isEmpty);
+  });
+
+  test(
+    'cleanup failures, stalls, and journal recoveries emit diagnostic events',
+    () async {
+      final store = _RecordingDiagnosticStore();
+      final recorder = DiagnosticRecorder(store);
+      final observed = CaptureMediaService(
+        database: database,
+        platform: platform,
+        outputPaths: paths,
+        files: files,
+        pendingStore: pendingStore,
+        diagnostics: recorder,
+      );
+
+      // Drain the budget for one URI: deleteAll drives the queue once and
+      // each cleanupInterrupted() one more time until the stall event.
+      platform.failingDeleteUris.add('content://media/site-mark/1');
+      await observed.deleteAll(['capture-1']);
+      for (var i = 1; i < CaptureMediaService.maxCleanupRetries; i++) {
+        await observed.cleanupInterrupted();
+      }
+      await pumpEventQueue();
+
+      final deletions = store.events
+          .where((event) => event.category == DiagnosticCategory.deletion)
+          .toList();
+      final failed = deletions
+          .where((event) => event.outcome == DiagnosticOutcome.failed)
+          .toList();
+      final blocked = deletions
+          .where((event) => event.outcome == DiagnosticOutcome.blocked)
+          .toList();
+      expect(failed, hasLength(CaptureMediaService.maxCleanupRetries - 1));
+      expect(blocked, hasLength(1));
+      expect(blocked.single.retryCount, CaptureMediaService.maxCleanupRetries);
+      expect(
+        failed.map((event) => event.retryCount),
+        List.generate(
+          CaptureMediaService.maxCleanupRetries - 1,
+          (index) => index + 1,
+        ),
+      );
+
+      // A recovered journal emits one processing event per entry: success
+      // when its CAS commit lands.
+      platform.failingDeleteUris.clear();
+      platform.deleteError = null;
+      final second = await database.createPendingCapture(
+        id: 'capture-2',
+        projectId: 'project-1',
+        originalPath: '/private/original-2.jpg',
+        workLocation: 'B 区',
+        workContent: '桥架检查',
+        photographer: '李工',
+        watermarkLocaleCode: 'zh',
+        locationResolution: 'resolved',
+      );
+      await database.markCaptured(
+        captureId: second.id,
+        capturedAt: DateTime(2026, 7, 16, 10),
+      );
+      platform.recoveredJournals
+        ..clear()
+        ..add(
+          RecoveredPublishJournalEntry(
+            captureId: 'capture-2',
+            contentUri: 'content://media/site-mark/9',
+            supersededUris: const [],
+          ),
+        );
+      await observed.cleanupInterrupted();
+      await pumpEventQueue();
+
+      final recoveries = store.events
+          .where((event) => event.category == DiagnosticCategory.processing)
+          .toList();
+      // capture-2 is `captured`: the background processor owns the state,
+      // no CAS runs, and no recovery event is emitted — only real
+      // reconciliation outcomes are counted. Re-check with a ready row.
+      expect(recoveries, isEmpty);
+
+      await database.markRendering(
+        captureId: second.id,
+        originalSha256: digestA,
+      );
+      await database.markReady(
+        captureId: second.id,
+        publishedUri: 'content://media/site-mark/8',
+      );
+      platform.recoveredJournals
+        ..clear()
+        ..add(
+          RecoveredPublishJournalEntry(
+            captureId: 'capture-2',
+            contentUri: 'content://media/site-mark/9',
+            supersededUris: const ['content://media/site-mark/8'],
+          ),
+        );
+      await observed.cleanupInterrupted();
+      await pumpEventQueue();
+
+      final outcomes = store.events
+          .where((event) => event.category == DiagnosticCategory.processing)
+          .map((event) => event.outcome)
+          .toList();
+      expect(outcomes, contains(DiagnosticOutcome.success));
+    },
+  );
 
   test(
     'clear originals commits database state before retryable file cleanup',
@@ -1038,6 +1264,17 @@ void main() {
       expect(await database.pendingSupersededCleanups(), isEmpty);
     },
   );
+}
+
+/// Collects appended events in memory so tests can assert what the service
+/// reported to the diagnostics sink without touching the file system.
+class _RecordingDiagnosticStore extends DiagnosticEventStore {
+  _RecordingDiagnosticStore() : super(directory: Directory('unused'));
+
+  final events = <DiagnosticEvent>[];
+
+  @override
+  Future<void> append(DiagnosticEvent event) async => events.add(event);
 }
 
 class _MediaFiles implements PrivateFileStore {

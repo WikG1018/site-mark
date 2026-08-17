@@ -296,6 +296,7 @@ final captureMediaServiceProvider = Provider<CaptureMediaService>((ref) {
     outputPaths: ref.watch(captureOutputPathsProvider),
     files: ref.watch(privateFileStoreProvider),
     pendingStore: ref.watch(captureMediaCleanupPendingStoreProvider),
+    diagnostics: ref.watch(diagnosticRecorderProvider),
   );
 });
 

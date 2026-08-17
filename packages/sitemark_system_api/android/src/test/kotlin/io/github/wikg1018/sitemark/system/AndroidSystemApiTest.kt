@@ -397,8 +397,11 @@ class AndroidSystemApiTest {
         source.writeText("jpeg-bytes")
         try {
             // Pre-seed the durable journal for capture-1: a crashed publish
-            // finalized U2 with stale candidate U1.
-            val prefix = "journal.capture-1\u0000"
+            // finalized U2 with stale candidate U1. The key embeds the
+            // capture ID as unpadded base64url, exactly like the store.
+            val encodedId = java.util.Base64.getUrlEncoder()
+                .withoutPadding().encodeToString("capture-1".toByteArray())
+            val prefix = "journal.$encodedId"
             val journalValues = mapOf<String, Any>(
                 "${prefix}.exists" to true,
                 "${prefix}.newUri" to "content://media/external/images/2",

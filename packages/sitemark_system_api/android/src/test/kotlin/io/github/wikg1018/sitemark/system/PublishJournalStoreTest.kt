@@ -48,12 +48,58 @@ class PublishJournalStoreTest {
     fun `recover skips incomplete entries`() {
         val preferences = FakeSharedPreferences()
         // 残缺条目 A：有 .exists 与 .staleCount 但缺 .newUri —— 恢复时被跳过。
-        preferences.values["journal.Broken\u0000.exists"] = true
-        preferences.values["journal.Broken\u0000.staleCount"] = 1
-        preferences.values["journal.Broken\u0000.stale.0"] = "content://media/old/1"
+        val brokenPrefix = "journal.${encoded("Broken")}"
+        preferences.values["$brokenPrefix.exists"] = true
+        preferences.values["$brokenPrefix.staleCount"] = 1
+        preferences.values["$brokenPrefix.stale.0"] = "content://media/old/1"
         // 残缺条目 B：有 .newUri 但缺 .exists —— 扫描只从 .exists 键出发，不可见。
-        preferences.values["journal.Ghost\u0000.newUri"] = "content://media/ghost/9"
-        preferences.values["journal.Ghost\u0000.staleCount"] = 0
+        val ghostPrefix = "journal.${encoded("Ghost")}"
+        preferences.values["$ghostPrefix.newUri"] = "content://media/ghost/9"
+        preferences.values["$ghostPrefix.staleCount"] = 0
+        val store = PublishJournalStore(preferences)
+
+        assertTrue(store.recover().isEmpty())
+    }
+
+    // Regression (XML-unsafe keys): keys must never contain characters that
+    // XML 1.0 rejects — SharedPreferences persists to XML, and an earlier
+    // '\u0000' separator could make the real on-device persistence throw or
+    // silently drop characters. The capture ID is embedded as unpadded
+    // base64url, so ANY capture ID (NUL, '.', surrogate pairs, emoji, ...)
+    // still round-trips through keys drawn from a fixed safe alphabet, and
+    // legacy '\u0000'-separated keys are skipped instead of recovered.
+    @Test
+    fun `keys stay XML-safe and round-trip hostile capture IDs`() {
+        val preferences = FakeSharedPreferences()
+        val store = PublishJournalStore(preferences)
+        val hostile = "cap\u0000.id.值\uD83D\uDCF7"
+
+        assertTrue(store.record(hostile, "content://media/external/images/9", listOf("u1")))
+
+        // Every key the store wrote is restricted to the XML-1.0-safe
+        // alphabet [A-Za-z0-9._-]: no control chars, no ':' that SharedPreferences
+        // reserves, nothing a real device's XML serializer would reject.
+        assertTrue(preferences.values.keys.isNotEmpty())
+        preferences.values.keys.forEach { key ->
+            assertTrue("unsafe journal key: $key", key.matches(Regex("[A-Za-z0-9._\\-]+")))
+        }
+
+        val entry = store.recover().single()
+        assertEquals(hostile, entry.captureId)
+        assertEquals(store.peek(hostile)?.contentUri, "content://media/external/images/9")
+        assertTrue(store.clear(hostile, "content://media/external/images/9"))
+        assertTrue(store.recover().isEmpty())
+    }
+
+    @Test
+    fun `recover ignores residue of the retired NUL-separated key format`() {
+        val preferences = FakeSharedPreferences()
+        // Pre-release builds keyed entries as "journal.<id>\u0000.<field>".
+        // The '\u0000' is not base64url, so decoding must fail and recovery
+        // must skip the residue instead of returning a corrupted capture ID.
+        preferences.values["journal.capture-1\u0000.exists"] = true
+        preferences.values["journal.capture-1\u0000.newUri"] = "content://media/external/images/2"
+        preferences.values["journal.capture-1\u0000.staleCount"] = 0
         val store = PublishJournalStore(preferences)
 
         assertTrue(store.recover().isEmpty())
@@ -196,6 +242,12 @@ class PublishJournalStoreTest {
         assertEquals(listOf("u1"), peeked?.supersededUris)
     }
 }
+
+/** Encodes a capture ID exactly like [PublishJournalStore]'s key builder. */
+private fun encoded(captureId: String): String =
+    java.util.Base64.getUrlEncoder()
+        .withoutPadding()
+        .encodeToString(captureId.toByteArray(Charsets.UTF_8))
 
 /** In-memory [SharedPreferences] double; editor writes go straight into [values]. */
 private class FakeSharedPreferences : SharedPreferences {

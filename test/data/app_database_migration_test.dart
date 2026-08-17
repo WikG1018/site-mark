@@ -523,6 +523,121 @@ QueryExecutor openMigratedV11Fixture() {
   return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
 }
 
+/// Opens a raw in-memory sqlite database with the genuine v12 schema: the
+/// v11 shape plus the v12 superseded-cleanup queue WITHOUT the v13 retry
+/// columns, with one seeded pending task. `PRAGMA user_version = 12`, so
+/// [AppDatabase.forTesting] exercises ONLY the v12→v13 upgrade (the retry
+/// budget columns) rather than the whole chain.
+QueryExecutor openMigratedV12Fixture() {
+  final db = sqlite3.openInMemory();
+  final projectCreated =
+      DateTime.utc(2026, 8, 3).millisecondsSinceEpoch ~/ 1000;
+
+  // The v11 table shapes (projects with lifecycle columns + full v10 set).
+  // Inline rather than reusing buildV10Schema so the seeded cleanup task can
+  // share the fixture's timestamps.
+  db.execute('''
+    CREATE TABLE projects (
+      id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      restore_operation_id TEXT,
+      watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+      watermark_opacity REAL NOT NULL DEFAULT 0.78,
+      watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      lifecycle_status TEXT NOT NULL DEFAULT 'active',
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE app_settings (
+      id TEXT NOT NULL,
+      theme_mode TEXT NOT NULL DEFAULT 'system',
+      locale_code TEXT,
+      default_watermark_position TEXT NOT NULL DEFAULT 'bottomLeft',
+      default_watermark_opacity REAL NOT NULL DEFAULT 0.78,
+      default_watermark_accent_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      default_watermark_font_scale REAL NOT NULL DEFAULT 1.0,
+      location_permission_prompt_dismissed INTEGER NOT NULL DEFAULT 0,
+      use_dynamic_color INTEGER NOT NULL DEFAULT 0,
+      completion_notifications_enabled INTEGER NOT NULL DEFAULT 0,
+      app_seed_color_argb INTEGER NOT NULL DEFAULT 0xff37c58b,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE captures (
+      id TEXT NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+      photo_number TEXT,
+      work_location TEXT NOT NULL,
+      work_content TEXT NOT NULL,
+      photographer TEXT NOT NULL,
+      notes TEXT,
+      original_path TEXT NOT NULL,
+      published_uri TEXT,
+      original_sha256 TEXT,
+      status TEXT NOT NULL,
+      failure_reason TEXT,
+      created_at INTEGER NOT NULL,
+      captured_at INTEGER,
+      latitude REAL,
+      longitude REAL,
+      accuracy_meters REAL,
+      address TEXT,
+      location_outcome TEXT,
+      processing_attempts INTEGER NOT NULL DEFAULT 0,
+      watermark_locale_code TEXT NOT NULL DEFAULT 'zh',
+      location_resolution TEXT NOT NULL DEFAULT 'resolved',
+      original_deleted_at INTEGER,
+      PRIMARY KEY (id)
+    );
+  ''');
+  db.execute('''
+    CREATE TABLE capture_templates (
+      id TEXT NOT NULL,
+      project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      name_key TEXT NOT NULL,
+      work_location TEXT NOT NULL,
+      work_content TEXT NOT NULL,
+      photographer TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (id),
+      UNIQUE (project_id, name_key)
+    );
+  ''');
+  // Exactly the v12 queue shape: no retry_count / last_attempt_at / stalled_at.
+  db.execute('''
+    CREATE TABLE capture_media_cleanups (
+      published_uri TEXT NOT NULL,
+      capture_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (published_uri)
+    );
+  ''');
+  db.execute(
+    "INSERT INTO projects (id, name, created_at, updated_at) "
+    "VALUES ('existing', '既有项目', $projectCreated, $projectCreated);",
+  );
+  db.execute(
+    "INSERT INTO app_settings (id, updated_at) VALUES ('global', $projectCreated);",
+  );
+  // One pending cleanup task from a real v12 install.
+  db.execute(
+    "INSERT INTO capture_media_cleanups (published_uri, capture_id, created_at) "
+    "VALUES ('content://media/site-mark/1', 'capture-1', $projectCreated);",
+  );
+  db.execute('PRAGMA user_version = 12;');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
 /// Builds the v10 table shapes and seed rows WITHOUT stamping a user version.
 Database buildV10Schema() {
   final db = sqlite3.openInMemory();
@@ -985,7 +1100,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV10Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 12);
+    expect(database.schemaVersion, 13);
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);
@@ -995,7 +1110,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV11Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 12);
+    expect(database.schemaVersion, 13);
     // The v11 lifecycle columns survive the v11→v12-only upgrade path.
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
@@ -1023,6 +1138,34 @@ void main() {
     expect(await database.pendingSupersededCleanups(), isEmpty);
   });
 
+  test('v12 to v13 migration adds the cleanup retry budget', () async {
+    final database = AppDatabase.forTesting(openMigratedV12Fixture());
+    addTearDown(database.close);
+
+    expect(database.schemaVersion, 13);
+
+    // The seeded v12 task survives with a FULL budget: retry count 0 and
+    // not stalled, so automatic processing keeps serving it.
+    final pending = await database.pendingSupersededCleanups();
+    expect(pending, hasLength(1));
+    expect(pending.single.publishedUri, 'content://media/site-mark/1');
+    expect(pending.single.captureId, 'capture-1');
+    expect(pending.single.retryCount, 0);
+    expect(pending.single.lastAttemptAt, isNull);
+    expect(pending.single.stalledAt, isNull);
+
+    // The new columns are live: a recorded failure bumps the count and
+    // stamps the attempt without stalling (budget not yet exhausted).
+    final updated = await database.recordSupersededCleanupFailure(
+      'content://media/site-mark/1',
+      maxRetries: 5,
+    );
+    expect(updated?.retryCount, 1);
+    expect(updated?.lastAttemptAt, isNotNull);
+    expect(updated?.stalledAt, isNull);
+    expect(await database.stalledSupersededCleanups(), isEmpty);
+  });
+
   test(
     'v10 migration rejects lifecycle values outside the stable enum',
     () async {
@@ -1045,7 +1188,7 @@ void main() {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 12);
+    expect(database.schemaVersion, 13);
     final project = await database.createProject(id: 'fresh', name: '新项目');
     expect(project.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);

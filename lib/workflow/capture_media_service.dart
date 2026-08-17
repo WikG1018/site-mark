@@ -1,4 +1,6 @@
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_media_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
@@ -32,7 +34,19 @@ class CaptureMediaService {
     required this.outputPaths,
     required this.files,
     CaptureMediaCleanupPendingStore? pendingStore,
+    this.diagnostics,
   }) : pendingStore = pendingStore ?? MemoryCaptureMediaCleanupPendingStore();
+
+  /// Optional diagnostics sink. When attached, superseded-cleanup failures,
+  /// stalled tasks, journal recoveries, and reconciliation CAS conflicts
+  /// become visible in diagnostic bundles instead of silent loops.
+  final DiagnosticRecorder? diagnostics;
+
+  /// Failed delete attempts tolerated per superseded URI before the task is
+  /// parked (stalled) and excluded from automatic retries. A URI still
+  /// referenced by any record does NOT consume budget — waiting for the
+  /// last reference to disappear is normal, not a failure.
+  static const maxCleanupRetries = 5;
 
   final AppDatabase database;
   final PlatformServices platform;
@@ -373,6 +387,7 @@ class CaptureMediaService {
                 supersededUris: stale,
               );
               if (committed) {
+                _recordJournalRecovery(DiagnosticOutcome.success);
                 await platform.clearPublishJournal(
                   journal.captureId,
                   journal.contentUri,
@@ -380,6 +395,7 @@ class CaptureMediaService {
               } else {
                 // A newer publish committed while reconciling; the
                 // journaled URI may already equal the committed one.
+                _recordJournalRecovery(DiagnosticOutcome.cancelled);
                 await _reconcileSupersededJournalOrphan(record.id, journal);
               }
             } else {
@@ -411,6 +427,22 @@ class CaptureMediaService {
     }
   }
 
+  /// Emits one diagnostic event per reconciled journal entry: `success`
+  /// for an adopted (or already-committed) recovery, `cancelled` when the
+  /// CAS detected a newer publish had committed and the journal was routed
+  /// to orphan cleanup instead. Makes recovery volume and conflict rate
+  /// visible in diagnostic bundles.
+  void _recordJournalRecovery(DiagnosticOutcome outcome) {
+    diagnostics?.record(
+      DiagnosticEvent(
+        timestamp: DateTime.now(),
+        category: DiagnosticCategory.processing,
+        outcome: outcome,
+        count: 1,
+      ),
+    );
+  }
+
   /// Resolves a journal whose publish was superseded by a newer committed
   /// one: the journaled URI is an orphan UNLESS the row already points at
   /// it (another path committed the very same URI), and the journal itself
@@ -440,14 +472,38 @@ class CaptureMediaService {
         // deleting a URI that ANY row still references would destroy the
         // photo that record displays. A referenced URI keeps its task for a
         // later launch; once the last reference is gone (the sibling row is
-        // deleted or re-published), the delete converges.
+        // deleted or re-published), the delete converges. Waiting for a
+        // reference to disappear is NOT a failure and never consumes the
+        // task's retry budget.
         if (await database.isPublishedUriReferenced(task.publishedUri)) {
           continue;
         }
         try {
           await platform.deletePublishedImage(task.publishedUri);
         } catch (_) {
-          // Keep the task for a later launch; siblings still run.
+          // The delete failed (e.g. a remote provider error): count it, and
+          // park the task once the budget is exhausted so a permanently
+          // failing URI stops being retried on every launch.
+          final updated = await database.recordSupersededCleanupFailure(
+            task.publishedUri,
+            maxRetries: maxCleanupRetries,
+          );
+          if (updated != null) {
+            diagnostics?.record(
+              DiagnosticEvent(
+                timestamp: DateTime.now(),
+                category: DiagnosticCategory.deletion,
+                // blocked marks the transition into the stalled state (the
+                // task just exhausted its budget); plain failed means the
+                // delete failed but budget remains.
+                outcome: updated.stalledAt != null
+                    ? DiagnosticOutcome.blocked
+                    : DiagnosticOutcome.failed,
+                code: DiagnosticCode.unexpected,
+                retryCount: updated.retryCount,
+              ),
+            );
+          }
           continue;
         }
         await database.completeSupersededCleanup(task.publishedUri);

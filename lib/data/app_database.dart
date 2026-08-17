@@ -193,6 +193,19 @@ class CaptureMediaCleanups extends Table {
 
   DateTimeColumn get createdAt => dateTime()();
 
+  /// Failed delete attempts since the task was (re-)enqueued. A task whose
+  /// delete keeps failing is parked via [stalledAt] instead of being retried
+  /// on every launch forever; re-enqueueing the same URI (the user
+  /// re-publishing that capture) resets the budget.
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+
+  /// Timestamp of the most recent failed delete attempt, for diagnostics.
+  DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+
+  /// Non-null once the task exceeded the retry budget: it is excluded from
+  /// automatic processing until the same URI is deliberately re-enqueued.
+  DateTimeColumn get stalledAt => dateTime().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {publishedUri};
 }
@@ -242,7 +255,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -326,6 +339,38 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 12) {
         await migrator.createTable(captureMediaCleanups);
+      }
+      if (from < 13) {
+        // Retry budget for the superseded-cleanup queue: existing rows
+        // start with a full budget (retry_count = 0, not stalled).
+        // When the table was just created by the `from < 12` step it
+        // already carries the CURRENT schema, so the addColumn calls must
+        // be skipped or SQLite raises "duplicate column name" — the same
+        // convergence rule as `appSettingsJustCreated` above.
+        final cleanupTableColumns = await customSelect(
+          'PRAGMA table_info(capture_media_cleanups)',
+        ).get();
+        final cleanupColumnNames = cleanupTableColumns
+            .map((row) => row.read<String>('name'))
+            .toSet();
+        if (!cleanupColumnNames.contains('retry_count')) {
+          await migrator.addColumn(
+            captureMediaCleanups,
+            captureMediaCleanups.retryCount,
+          );
+        }
+        if (!cleanupColumnNames.contains('last_attempt_at')) {
+          await migrator.addColumn(
+            captureMediaCleanups,
+            captureMediaCleanups.lastAttemptAt,
+          );
+        }
+        if (!cleanupColumnNames.contains('stalled_at')) {
+          await migrator.addColumn(
+            captureMediaCleanups,
+            captureMediaCleanups.stalledAt,
+          );
+        }
       }
       await _ensureGlobalSettingsRow(this);
     },
@@ -1485,6 +1530,10 @@ ORDER BY
   /// Inserts one independent cleanup task per superseded URI. Used inside
   /// the same transaction that persisted the replacement URI, and by
   /// publish-journal reconciliation to (re-)queue stale URIs.
+  ///
+  /// Re-enqueueing a URI that already has a task RESETS its retry budget
+  /// (retry count zeroed, stall cleared): a fresh publish of the same
+  /// capture is the deliberate, user-driven way to resume a stalled task.
   Future<void> enqueueSupersededCleanups(
     String captureId,
     List<String> supersededUris,
@@ -1497,16 +1546,22 @@ ORDER BY
           publishedUri: uri,
           captureId: captureId,
           createdAt: now,
+          retryCount: const Value(0),
+          lastAttemptAt: Value(null),
+          stalledAt: Value(null),
         ),
       );
     }
   }
 
-  /// Returns all pending superseded-URI deletes, oldest first.
+  /// Returns the superseded-URI deletes eligible for automatic processing,
+  /// oldest first. Stalled tasks (retry budget exhausted) are excluded
+  /// until their URI is deliberately re-enqueued.
   Future<List<CaptureMediaCleanup>> pendingSupersededCleanups() {
-    return (select(
-      captureMediaCleanups,
-    )..orderBy([(row) => OrderingTerm.asc(row.createdAt)])).get();
+    return (select(captureMediaCleanups)
+          ..where((row) => row.stalledAt.isNull())
+          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+        .get();
   }
 
   /// Removes exactly the cleanup task for [publishedUri] after its delete
@@ -1515,6 +1570,48 @@ ORDER BY
     await (delete(
       captureMediaCleanups,
     )..where((row) => row.publishedUri.equals(publishedUri))).go();
+  }
+
+  /// Records one failed delete attempt for [publishedUri]: bumps the retry
+  /// count, stamps [CaptureMediaCleanups.lastAttemptAt], and — once the
+  /// count reaches [maxRetries] — parks the task by stamping
+  /// `stalledAt` so automatic processing stops retrying it every launch.
+  ///
+  /// Returns the updated task, or null when no task exists for the URI.
+  Future<CaptureMediaCleanup?> recordSupersededCleanupFailure(
+    String publishedUri, {
+    required int maxRetries,
+  }) {
+    return transaction(() async {
+      final task =
+          await (select(captureMediaCleanups)
+                ..where((row) => row.publishedUri.equals(publishedUri)))
+              .getSingleOrNull();
+      if (task == null) return null;
+      final retries = task.retryCount + 1;
+      final now = DateTime.now();
+      final updated =
+          await (update(captureMediaCleanups)
+                ..where((row) => row.publishedUri.equals(publishedUri)))
+              .writeReturning(
+                CaptureMediaCleanupsCompanion(
+                  retryCount: Value(retries),
+                  lastAttemptAt: Value(now),
+                  stalledAt: retries >= maxRetries
+                      ? Value(now)
+                      : const Value.absent(),
+                ),
+              );
+      return updated.isEmpty ? null : updated.first;
+    });
+  }
+
+  /// Returns the cleanup tasks parked after exhausting their retry budget.
+  Future<List<CaptureMediaCleanup>> stalledSupersededCleanups() {
+    return (select(captureMediaCleanups)
+          ..where((row) => row.stalledAt.isNotNull())
+          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+        .get();
   }
 
   /// Returns captures matching any of the provided IDs, ordered by

@@ -90,12 +90,14 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
             val entries = preferences.all ?: return emptyList()
             val result = mutableListOf<RecoveredPublishJournal>()
             for (key in entries.keys) {
-                if (!key.endsWith(KEY_EXISTS)) continue
-                val prefix = key.removeSuffix(KEY_EXISTS)
+                if (!key.endsWith(".$KEY_EXISTS")) continue
+                // `key` is `journal.<encoded-id>.exists`, so the stripped
+                // prefix has NO trailing dot — re-attach it before looking
+                // up the sibling field keys (`journal.<encoded-id>.<field>`).
+                val prefix = "${key.removeSuffix(".$KEY_EXISTS")}."
                 if (!entries.containsKey("$prefix$KEY_NEW_URI")) continue
                 val contentUri = entries["$prefix$KEY_NEW_URI"] as? String ?: continue
-                val captureId = prefix.removePrefix(JOURNAL_KEY_PREFIX).removeSuffix(KEY_SEPARATOR)
-                if (captureId.isEmpty()) continue
+                val captureId = decodeCaptureId(prefix) ?: continue
                 val staleCount = (entries["$prefix$KEY_STALE_COUNT"] as? Int) ?: 0
                 val staleUris = mutableListOf<String>()
                 for (index in 0 until staleCount) {
@@ -140,8 +142,33 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
         }
     }
 
+    // The capture ID is embedded in preference keys as unpadded base64url
+    // ([A-Za-z0-9_-], no '.'), so ANY capture ID — including ones holding
+    // '.', NUL, or surrogate pairs — maps to keys drawn from a fixed,
+    // XML-1.0-safe alphabet that can never collide with the field-suffix
+    // separator. The full key layout is therefore always
+    // `journal.<base64url-id>.<field>` with a SINGLE '.' separator. A
+    // literal '\u0000' separator (used by an earlier draft) is illegal in
+    // XML 1.0 and could make the underlying SharedPreferences XML
+    // persistence throw or silently corrupt on real devices.
     private fun keyPrefix(captureId: String): String =
-        "$JOURNAL_KEY_PREFIX$captureId$KEY_SEPARATOR"
+        "$JOURNAL_KEY_PREFIX${encodeCaptureId(captureId)}."
+
+    private fun encodeCaptureId(captureId: String): String =
+        CAPTURE_ID_ENCODER.encodeToString(captureId.toByteArray(Charsets.UTF_8))
+
+    private fun decodeCaptureId(keyPrefix: String): String? {
+        if (!keyPrefix.startsWith(JOURNAL_KEY_PREFIX)) return null
+        val encoded = keyPrefix.removePrefix(JOURNAL_KEY_PREFIX).removeSuffix(".")
+        if (encoded.isEmpty()) return null
+        return try {
+            String(CAPTURE_ID_DECODER.decode(encoded), Charsets.UTF_8)
+        } catch (_: IllegalArgumentException) {
+            // Not a base64url capture ID (e.g. residue of the retired
+            // '\u0000' key format): ignore the entry entirely.
+            null
+        }
+    }
 
     private companion object {
         // SharedPreferences offers atomicity per Editor.commit(), not across
@@ -151,11 +178,12 @@ internal class PublishJournalStore(private val preferences: SharedPreferences) {
         // instance over the same preference file. A process-wide lock keeps
         // every journal snapshot and mutation in one critical section.
         private val JOURNAL_LOCK = Any()
+        private val CAPTURE_ID_ENCODER = java.util.Base64.getUrlEncoder().withoutPadding()
+        private val CAPTURE_ID_DECODER = java.util.Base64.getUrlDecoder()
         private const val JOURNAL_KEY_PREFIX = "journal."
-        private const val KEY_SEPARATOR = "\u0000"
-        private const val KEY_EXISTS = ".exists"
-        private const val KEY_NEW_URI = ".newUri"
-        private const val KEY_STALE_COUNT = ".staleCount"
-        private const val KEY_STALE_PREFIX = ".stale."
+        private const val KEY_EXISTS = "exists"
+        private const val KEY_NEW_URI = "newUri"
+        private const val KEY_STALE_COUNT = "staleCount"
+        private const val KEY_STALE_PREFIX = "stale."
     }
 }
