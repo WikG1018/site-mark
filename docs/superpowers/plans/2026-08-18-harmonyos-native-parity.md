@@ -1,6 +1,8 @@
 # SiteMark 鸿蒙原生（ArkTS）从零到对齐实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **配套设计规划：** [`docs/superpowers/specs/2026-08-18-harmonyos-native-parity-design.md`](../specs/2026-08-18-harmonyos-native-parity-design.md)。目标、边界、架构、数据流与对等门槛以规划为准；本文件只拆 Task 与验收步骤。
 
 **Goal:** 在 GitHub `origin/main` 的 SiteMark v1.0.8（`abc0164`）功能基线上，**从零**用原生 ArkTS 按 2026-08 最新 HarmonyOS 开发规范开发独立鸿蒙应用，交付在 DevEco Studio NEXT **模拟器**上完整验证的签名 HAP（产物同时保持 arm64 + x86_64 双架构，真机就绪），产品语义与 Android v1.0.8 **对齐到模拟器验证级**；产品代码全部落在从 `abc0164` 拉出的长期分支 `ohos-native`。
 
@@ -104,7 +106,7 @@
 - Do not modify: `main` 的任何文件
 
 **Interfaces:**
-- Consumes: GitHub `origin/main` `abc0164`；本计划（经 PR 合入 `main` 后拉分支，或先 cherry-pick 本提交到 `ohos-native`）
+- Consumes: GitHub `origin/main` `abc0164`；本计划与配套设计规划（经 PR 合入 `main` 后拉分支，或先 cherry-pick 本提交到 `ohos-native`）
 - Produces: 可在 DevEco NEXT 模拟器冷启动的签名空壳 HAP；五项技术探测结论（相机 picker、相册直写/删除授权流、应用详情页跳转、文件保存托底、openLink）
 
 - [ ] **Step 1: 安装并锁定工具链**
