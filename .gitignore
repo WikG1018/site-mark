@@ -69,6 +69,9 @@ Thumbs.db
 /docs/superpowers/reviews/*.patch
 /docs/superpowers/reviews/*.json
 
+# Flutter-OH crash reports in worktree root
+/flutter_*.log
+
 # Temporary analysis/test output
 /analyze_out.txt
 /dart_ver.txt

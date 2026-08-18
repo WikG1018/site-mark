@@ -10,7 +10,7 @@
 
 **Spec:** [2026-08-17-harmonyos-next-adaptation-design.md](../specs/2026-08-17-harmonyos-next-adaptation-design.md)
 
-**Predecessor:** Tasks 0–5 见 [2026-08-17-harmonyos-next-adaptation.md](2026-08-17-harmonyos-next-adaptation.md)。本计划从「审查壳已过模拟器、全量 Dart 尚未进 HAP」接着做。
+**Predecessor:** Tasks 0–5 见 [2026-08-17-harmonyos-next-adaptation.md](2026-08-17-harmonyos-next-adaptation.md)。Tasks 6–8 已在模拟器量到真实首页。后续 runtime 见 [2026-08-18-harmonyos-product-runtime.md](2026-08-18-harmonyos-product-runtime.md)。
 
 ## Global Constraints
 
@@ -22,8 +22,8 @@
 - 发布日记只按 `captureId`。`publishJpeg` 先落新图、原生不删相册行。
 - 引擎保持 **degraded**，直到 Rust 编出 `ohos-arm64`。模拟器不得宣称相机 / ACL / 相册替换 / 水印对等。
 - 第三方插件（`workmanager`、`flutter_local_notifications`、`dynamic_color`、`file_picker`、`share_plus`、`package_info_plus`）缺 ohos 实现时第一期可关或 no-op，必须写入差异表，不得 silently 假装还在。
-- 无真机：验收在 AVD `SiteMarkPhone602`（HarmonyOS-6.0.2 phone_all_x86 API 22，hdc `127.0.0.1:15555`）。
-- 3.44.9-dev 是 canary；DevEco 6.1.1 / API 22 可能不够新。若 `build hap` 因 API 不匹配失败，记录实测错误，不得偷偷降官方 SDK。
+- 无真机：验收在 AVD `SiteMarkPhone602`（HarmonyOS-6.0.2 phone_all_x86 API 22）。本机实测 hdc 为 `127.0.0.1:5555`（`15555` 常 Offline）；`hdc list targets` 不带 `-t` 可能看起来是空的。
+- 3.44.9-dev 是 canary；本机 DevEco SDK 只有 API 24 头文件，模拟器是 HarmonyOS-6.0.2 / API 22。Flutter-OH 3.44 AutoFill 按 API 26 写。`build hap` 必须用仓库内 API 24 编译桩过 ArkTS，不得偷偷降官方 Dart SDK，也不得假装自动填充可用。
 - 官方测试只允许用 `C:\Users\Administrator\Development\flutter`（3.44.6 / Dart 3.12.2）。不要用社区 3.27.4 跑产品 `pubspec.yaml`。
 - 不提交 `ohos/local.properties`、`ohos/**/build/`、`ohos/**/oh_modules/`、HAP 二进制、`.superpowers/`。
 - 用户可见失败文案不暴露原始异常或平台字符串。

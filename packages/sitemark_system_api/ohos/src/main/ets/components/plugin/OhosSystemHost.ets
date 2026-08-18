@@ -1,4 +1,4 @@
-import { common, Want, abilityAccessCtrl } from '@kit.AbilityKit';
+import { common, Want, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { camera, cameraPicker } from '@kit.CameraKit';
 import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
@@ -6,6 +6,52 @@ import { geoLocationManager } from '@kit.LocationKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { preferences } from '@kit.ArkData';
 import UIAbility from '@ohos.app.ability.UIAbility';
+
+interface PermissionAskResult {
+  authResults: Array<number>;
+  dialogShownResults?: Array<boolean>;
+}
+
+interface CameraCaptureResult {
+  outcome: number;
+  outputPath: string;
+  errorMessage: string | null;
+}
+
+interface RecoveredCapture {
+  captureId: string;
+  outputPath: string;
+  hasContent: boolean;
+}
+
+interface LocationFixResult {
+  outcome: number;
+  latitude: number | null;
+  longitude: number | null;
+  accuracyMeters: number | null;
+  address: string | null;
+  errorMessage: string | null;
+}
+
+interface PublishJpegResult {
+  contentUri: string;
+  supersededUris: Array<string>;
+}
+
+interface PublishJournalSnapshot {
+  captureId: string;
+  contentUri: string;
+  supersededUris: Array<string>;
+}
+
+interface JpegCreateOptions {
+  title: string;
+}
+
+interface CameraPickerSaveProfile {
+  cameraPosition: camera.CameraPosition;
+  saveUri: string;
+}
 
 const CAPTURE_PREFERENCES = 'sitemark_capture_recovery';
 const PUBLISH_PREFERENCES = 'sitemark_publish_journal';
@@ -84,6 +130,11 @@ export default class OhosSystemHost {
         return await this.requestCurrentLocation(this.numberArg(args, 'timeoutMillis', 10000));
       case 'detectGalleryAccess':
         return await this.detectGalleryAccess();
+      case 'getTemporaryDirectory':
+      case 'getApplicationSupportDirectory':
+      case 'getApplicationDocumentsDirectory':
+      case 'getApplicationCacheDirectory':
+        return this.resolveAppDirectory(method);
       case 'publishJpeg':
         return await this.publishJpeg(
           this.requiredString(args, 'sourcePath'),
@@ -123,7 +174,7 @@ export default class OhosSystemHost {
     return target;
   }
 
-  private async launchCamera(captureId: string): Promise<Record<string, Object | null>> {
+  private async launchCamera(captureId: string): Promise<CameraCaptureResult> {
     if (this.cameraBusy) {
       throw new Error('A camera capture is already active');
     }
@@ -143,13 +194,14 @@ export default class OhosSystemHost {
       let launched = false;
       let userCancelled = false;
       try {
+        const pickerProfile: CameraPickerSaveProfile = {
+          cameraPosition: camera.CameraPosition.CAMERA_POSITION_BACK,
+          saveUri: saveUri,
+        };
         const pickerResult = await cameraPicker.pick(
           abilityContext,
           [cameraPicker.PickerMediaType.PHOTO],
-          {
-            cameraPosition: camera.CameraPosition.CAMERA_POSITION_BACK,
-            saveUri: saveUri,
-          },
+          pickerProfile as cameraPicker.PickerProfile,
         );
         launched = true;
         if (!this.hasCaptureContent(target) && pickerResult?.resultUri) {
@@ -161,11 +213,13 @@ export default class OhosSystemHost {
         userCancelled = pickerResult === undefined || pickerResult.resultCode !== 0;
       } catch (_pickerError) {
         try {
+          const captureParams: Record<string, Object> = {
+            'ability.params.stream': saveUri,
+          };
           const want: Want = {
             action: 'ohos.want.action.imageCapture',
-            parameters: {},
+            parameters: captureParams,
           };
-          want.parameters![wantConstantParamStream()] = saveUri;
           const result = await abilityContext.startAbilityForResult(want);
           launched = true;
           if (this.hasCaptureContent(target)) {
@@ -190,18 +244,19 @@ export default class OhosSystemHost {
     }
   }
 
-  private async recoverCameraCapture(): Promise<Record<string, Object> | null> {
+  private async recoverCameraCapture(): Promise<RecoveredCapture | null> {
     const store = await this.capturePreferences();
     const captureId = await store.get(KEY_CAPTURE_ID, '') as string;
     const outputPath = await store.get(KEY_CAPTURE_PATH, '') as string;
     if (captureId.length === 0 || outputPath.length === 0) {
       return null;
     }
-    return {
+    const recovered: RecoveredCapture = {
       captureId: captureId,
       outputPath: outputPath,
       hasContent: this.hasCaptureContent(outputPath),
     };
+    return recovered;
   }
 
   private async finishCameraCapture(captureId: string, keepOriginal: boolean): Promise<void> {
@@ -236,10 +291,7 @@ export default class OhosSystemHost {
     const store = await this.capturePreferences();
     await store.put(KEY_LOCATION_PERMISSION_REQUESTED, true);
     await store.flush();
-    const result = await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(
-      abilityContext,
-      [PERMISSION_APPROXIMATE, PERMISSION_LOCATION],
-    );
+    const result = await this.requestPermissions(abilityContext, [PERMISSION_APPROXIMATE, PERMISSION_LOCATION]);
     if (this.anyGranted(result.authResults)) {
       return PERMISSION_GRANTED;
     }
@@ -251,18 +303,19 @@ export default class OhosSystemHost {
 
   private async openApplicationSettings(): Promise<void> {
     const context = this.abilityContextOrApp();
+    const settingsParams: Record<string, Object> = {
+      'pushParams': context.applicationInfo.name,
+    };
     const want: Want = {
       bundleName: 'com.huawei.hmos.settings',
       abilityName: 'com.huawei.hmos.settings.MainAbility',
       uri: 'application_info_entry',
-      parameters: {
-        pushParams: context.applicationInfo.name,
-      },
+      parameters: settingsParams,
     };
-    await context.startAbility(want);
+    await this.requireAbilityContext('Opening settings requires a foreground ability').startAbility(want);
   }
 
-  private async requestCurrentLocation(timeoutMillis: number): Promise<Record<string, Object | null>> {
+  private async requestCurrentLocation(timeoutMillis: number): Promise<LocationFixResult> {
     if (this.locationBusy) {
       throw new Error('A location request is already active');
     }
@@ -276,13 +329,13 @@ export default class OhosSystemHost {
       }
       const request: geoLocationManager.CurrentLocationRequest = {
         timeoutMs: Math.min(Math.max(timeoutMillis, 1000), 30000),
-        locatingPriority: (await this.hasPermission(PERMISSION_LOCATION))
-          ? geoLocationManager.LocatingPriority.PRIORITY_ACCURACY
-          : geoLocationManager.LocatingPriority.PRIORITY_LOCATING_SPEED,
+        priority: (await this.hasPermission(PERMISSION_LOCATION))
+          ? geoLocationManager.LocationRequestPriority.ACCURACY
+          : geoLocationManager.LocationRequestPriority.FIRST_FIX,
       };
       try {
         const location = await geoLocationManager.getCurrentLocation(request);
-        return {
+        const fix: LocationFixResult = {
           outcome: (await this.hasPermission(PERMISSION_LOCATION)) ? LOCATION_PRECISE : LOCATION_APPROXIMATE,
           latitude: location.latitude,
           longitude: location.longitude,
@@ -290,6 +343,7 @@ export default class OhosSystemHost {
           address: null,
           errorMessage: null,
         };
+        return fix;
       } catch (error) {
         const code = (error as BusinessError).code;
         if (code === 3301100) {
@@ -320,7 +374,7 @@ export default class OhosSystemHost {
     displayName: string,
     captureId: string,
     publishedUri: string | null,
-  ): Promise<Record<string, Object>> {
+  ): Promise<PublishJpegResult> {
     this.assertCaptureId(captureId);
     const source = this.validatedPrivateFile(sourcePath);
     this.normalizedJpegName(displayName);
@@ -331,10 +385,11 @@ export default class OhosSystemHost {
     if (!recorded) {
       throw new Error('Failed to persist the publish journal');
     }
-    return {
+    const published: PublishJpegResult = {
       contentUri: contentUri,
       supersededUris: superseded,
     };
+    return published;
   }
 
   private async writePublishedJpeg(
@@ -355,10 +410,13 @@ export default class OhosSystemHost {
   private async writeAclJpeg(sourcePath: string, displayName: string): Promise<string> {
     const helper = photoAccessHelper.getPhotoAccessHelper(this.context);
     const title = this.normalizedJpegName(displayName).replace(/\.jpe?g$/i, '');
+    const createOptions: JpegCreateOptions = {
+      title: title,
+    };
     const created = await helper.createAsset(
       photoAccessHelper.PhotoType.IMAGE,
       'jpg',
-      { title: title },
+      createOptions,
     );
     const uri = typeof created === 'string' ? created : (created as photoAccessHelper.PhotoAsset).uri;
     await this.copyFileToUri(sourcePath, uri);
@@ -382,9 +440,9 @@ export default class OhosSystemHost {
     if (destinations === undefined || destinations.length === 0) {
       throw new Error('User cancelled the save picker');
     }
-    const destination = destinations[0];
+    const destination = this.stringAt(destinations, 0);
     if (destination.startsWith('file://')) {
-      this.copyFile(sourcePath, fileUri.getPathFromUriSync(destination));
+      this.copyFile(sourcePath, this.pathFromUri(destination));
       return destination;
     }
     await this.copyFileToUri(sourcePath, destination);
@@ -433,11 +491,12 @@ export default class OhosSystemHost {
     if (contentUri.length === 0) {
       return null;
     }
-    return {
+    const snapshot: PublishJournalSnapshot = {
       captureId: captureId,
       contentUri: contentUri,
       supersededUris: await this.readStaleUris(store, prefix),
     };
+    return snapshot;
   }
 
   private async recordPublishJournal(
@@ -452,7 +511,7 @@ export default class OhosSystemHost {
     await store.put(`${prefix}${JOURNAL_STALE_COUNT}`, `${supersededUris.length}`);
     await store.put(`${prefix}${JOURNAL_EXISTS}`, 'true');
     for (let index = 0; index < supersededUris.length; index++) {
-      await store.put(`${prefix}${JOURNAL_STALE_PREFIX}${index}`, supersededUris[index]);
+      await store.put(`${prefix}${JOURNAL_STALE_PREFIX}${index}`, this.stringAt(supersededUris, index));
     }
     for (let index = supersededUris.length; index < previousCount; index++) {
       await store.delete(`${prefix}${JOURNAL_STALE_PREFIX}${index}`);
@@ -465,10 +524,10 @@ export default class OhosSystemHost {
     }
   }
 
-  private async recoverPublishJournals(): Promise<Array<Record<string, Object>>> {
+  private async recoverPublishJournals(): Promise<Array<PublishJournalSnapshot>> {
     const store = await this.publishPreferences();
     const keys = await this.publishJournalKeys(store);
-    const recovered: Array<Record<string, Object>> = [];
+    const recovered: Array<PublishJournalSnapshot> = [];
     for (const key of keys) {
       if (!key.endsWith(`.${JOURNAL_EXISTS}`)) {
         continue;
@@ -482,11 +541,12 @@ export default class OhosSystemHost {
       if (captureId === null) {
         continue;
       }
-      recovered.push({
+      const item: PublishJournalSnapshot = {
         captureId: captureId,
         contentUri: contentUri,
         supersededUris: await this.readStaleUris(store, prefix),
-      });
+      };
+      recovered.push(item);
     }
     return recovered;
   }
@@ -517,7 +577,7 @@ export default class OhosSystemHost {
     }
     if (contentUri.startsWith('file://')) {
       try {
-        const path = fileUri.getPathFromUriSync(contentUri);
+        const path = this.pathFromUri(contentUri);
         if (this.pathExists(path)) {
           fs.unlinkSync(path);
         }
@@ -530,8 +590,7 @@ export default class OhosSystemHost {
       return;
     }
     try {
-      const helper = photoAccessHelper.getPhotoAccessHelper(this.context);
-      await helper.deleteAssets([contentUri]);
+      await photoAccessHelper.MediaAssetChangeRequest.deleteAssets(this.context, [contentUri]);
     } catch (_error) {
       return;
     }
@@ -572,12 +631,12 @@ export default class OhosSystemHost {
     const bytes = this.utf8Bytes(captureId);
     let bits = '';
     for (let index = 0; index < bytes.length; index++) {
-      bits += bytes[index].toString(2).padStart(8, '0');
+      bits += this.numberAt(bytes, index).toString(2).padStart(8, '0');
     }
     let encoded = '';
     for (let index = 0; index < bits.length; index += 6) {
       const chunk = bits.substring(index, index + 6).padEnd(6, '0');
-      encoded += BASE64URL_TABLE[Number.parseInt(chunk, 2)];
+      encoded += this.charAt(BASE64URL_TABLE, Number.parseInt(chunk, 2));
     }
     return encoded;
   }
@@ -593,7 +652,7 @@ export default class OhosSystemHost {
     try {
       let bits = '';
       for (let index = 0; index < encoded.length; index++) {
-        const tableIndex = BASE64URL_TABLE.indexOf(encoded[index]);
+        const tableIndex = BASE64URL_TABLE.indexOf(this.charAt(encoded, index));
         if (tableIndex < 0) {
           return null;
         }
@@ -643,22 +702,22 @@ export default class OhosSystemHost {
     let result = '';
     let index = 0;
     while (index < bytes.length) {
-      const lead = bytes[index];
+      const lead = this.numberAt(bytes, index);
       let code = 0;
       let size = 1;
       if (lead <= 0x7f) {
         code = lead;
       } else if ((lead & 0xe0) === 0xc0 && index + 1 < bytes.length) {
-        code = ((lead & 0x1f) << 6) | (bytes[index + 1] & 0x3f);
+        code = ((lead & 0x1f) << 6) | (this.numberAt(bytes, index + 1) & 0x3f);
         size = 2;
       } else if ((lead & 0xf0) === 0xe0 && index + 2 < bytes.length) {
-        code = ((lead & 0x0f) << 12) | ((bytes[index + 1] & 0x3f) << 6) | (bytes[index + 2] & 0x3f);
+        code = ((lead & 0x0f) << 12) | ((this.numberAt(bytes, index + 1) & 0x3f) << 6) | (this.numberAt(bytes, index + 2) & 0x3f);
         size = 3;
       } else if ((lead & 0xf8) === 0xf0 && index + 3 < bytes.length) {
         code = ((lead & 0x07) << 18) |
-          ((bytes[index + 1] & 0x3f) << 12) |
-          ((bytes[index + 2] & 0x3f) << 6) |
-          (bytes[index + 3] & 0x3f);
+          ((this.numberAt(bytes, index + 1) & 0x3f) << 12) |
+          ((this.numberAt(bytes, index + 2) & 0x3f) << 6) |
+          (this.numberAt(bytes, index + 3) & 0x3f);
         size = 4;
       } else {
         throw new Error('invalid utf8');
@@ -739,7 +798,10 @@ export default class OhosSystemHost {
 
   private async hasPermission(permission: string): Promise<boolean> {
     const tokenId = this.context.applicationInfo.accessTokenId;
-    const status = await abilityAccessCtrl.createAtManager().checkAccessToken(tokenId, permission);
+    const status = await abilityAccessCtrl.createAtManager().checkAccessToken(
+      tokenId,
+      permission as Permissions,
+    );
     return status === abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED;
   }
 
@@ -747,10 +809,7 @@ export default class OhosSystemHost {
     if (await this.hasPermission(permission)) {
       return PERMISSION_GRANTED;
     }
-    const result = await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(
-      abilityContext,
-      [permission],
-    );
+    const result = await this.requestPermissions(abilityContext, [permission]);
     if (this.anyGranted(result.authResults)) {
       return PERMISSION_GRANTED;
     }
@@ -761,9 +820,27 @@ export default class OhosSystemHost {
     return authResults.some((value: number) => value === 0);
   }
 
-  private dialogWasHidden(result: abilityAccessCtrl.PermissionRequestResult): boolean {
+  private dialogWasHidden(result: PermissionAskResult): boolean {
     const shown = result.dialogShownResults;
     return shown !== undefined && shown.length > 0 && shown.every((value: boolean) => !value);
+  }
+
+  private async requestPermissions(
+    abilityContext: common.UIAbilityContext,
+    permissions: Array<string>,
+  ): Promise<PermissionAskResult> {
+    const permissionList: Array<Permissions> = [];
+    for (let index = 0; index < permissions.length; index++) {
+      permissionList.push(this.stringAt(permissions, index) as Permissions);
+    }
+    return await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(
+      abilityContext,
+      permissionList,
+    ) as PermissionAskResult;
+  }
+
+  private pathFromUri(uri: string): string {
+    return new fileUri.FileUri(uri).path;
   }
 
   private requireAbilityContext(message: string): common.UIAbilityContext {
@@ -832,7 +909,7 @@ export default class OhosSystemHost {
   }
 
   private async copyUriToPath(uri: string, destination: string): Promise<void> {
-    const source = uri.startsWith('file://') ? fileUri.getPathFromUriSync(uri) : uri;
+    const source = uri.startsWith('file://') ? this.pathFromUri(uri) : uri;
     if (source.startsWith('/')) {
       this.copyFile(source, destination);
       return;
@@ -850,32 +927,35 @@ export default class OhosSystemHost {
     }
   }
 
-  private cameraCaptured(outputPath: string): Record<string, Object | null> {
-    return {
+  private cameraCaptured(outputPath: string): CameraCaptureResult {
+    const result: CameraCaptureResult = {
       outcome: CAMERA_OUTCOME_CAPTURED,
       outputPath: outputPath,
       errorMessage: null,
     };
+    return result;
   }
 
-  private cameraCancelled(outputPath: string): Record<string, Object | null> {
-    return {
+  private cameraCancelled(outputPath: string): CameraCaptureResult {
+    const result: CameraCaptureResult = {
       outcome: CAMERA_OUTCOME_CANCELLED,
       outputPath: outputPath,
       errorMessage: null,
     };
+    return result;
   }
 
-  private cameraFailed(outputPath: string): Record<string, Object | null> {
-    return {
+  private cameraFailed(outputPath: string): CameraCaptureResult {
+    const result: CameraCaptureResult = {
       outcome: CAMERA_OUTCOME_FAILED,
       outputPath: outputPath,
       errorMessage: null,
     };
+    return result;
   }
 
-  private locationResult(outcome: number): Record<string, Object | null> {
-    return {
+  private locationResult(outcome: number): LocationFixResult {
+    const result: LocationFixResult = {
       outcome: outcome,
       latitude: null,
       longitude: null,
@@ -883,6 +963,43 @@ export default class OhosSystemHost {
       address: null,
       errorMessage: null,
     };
+    return result;
+  }
+
+  private stringAt(values: Array<string>, index: number): string {
+    let current = 0;
+    for (const value of values) {
+      if (current === index) {
+        return value;
+      }
+      current += 1;
+    }
+    throw new Error(`Missing string at ${index}`);
+  }
+
+  private numberAt(values: Array<number>, index: number): number {
+    let current = 0;
+    for (const value of values) {
+      if (current === index) {
+        return value;
+      }
+      current += 1;
+    }
+    throw new Error(`Missing number at ${index}`);
+  }
+
+  private charAt(value: string, index: number): string {
+    return value.substring(index, index + 1);
+  }
+
+  private resolveAppDirectory(method: string): string {
+    if (method === 'getTemporaryDirectory') {
+      return this.context.tempDir;
+    }
+    if (method === 'getApplicationCacheDirectory') {
+      return this.context.cacheDir;
+    }
+    return this.context.filesDir;
   }
 
   private requiredString(args: Record<string, Object | null | undefined> | null, key: string): string {
@@ -916,14 +1033,4 @@ export default class OhosSystemHost {
     const value = args?.[key];
     return typeof value === 'number' ? value : fallback;
   }
-}
-
-interface PublishJournalSnapshot {
-  captureId: string;
-  contentUri: string;
-  supersededUris: Array<string>;
-}
-
-function wantConstantParamStream(): string {
-  return 'ability.params.stream';
 }

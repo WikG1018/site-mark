@@ -13,6 +13,7 @@ import OhosSystemHost from './OhosSystemHost';
 
 export default class SiteMarkSystemPlugin implements FlutterPlugin, AbilityAware, MethodCallHandler {
   private channel: MethodChannel | null = null;
+  private pathChannel: MethodChannel | null = null;
   private host: OhosSystemHost | null = null;
 
   getUniqueClassName(): string {
@@ -23,13 +24,19 @@ export default class SiteMarkSystemPlugin implements FlutterPlugin, AbilityAware
     this.host = new OhosSystemHost(binding.getApplicationContext() as common.Context);
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'sitemark.system.ohos');
     this.channel.setMethodCallHandler(this);
+    this.pathChannel = new MethodChannel(binding.getBinaryMessenger(), 'plugins.flutter.io/path_provider');
+    this.pathChannel.setMethodCallHandler(this);
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
     if (this.channel !== null) {
       this.channel.setMethodCallHandler(null);
     }
+    if (this.pathChannel !== null) {
+      this.pathChannel.setMethodCallHandler(null);
+    }
     this.channel = null;
+    this.pathChannel = null;
     this.host = null;
   }
 

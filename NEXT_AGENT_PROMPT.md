@@ -20,7 +20,7 @@
 **默认起点：**
 
 - 做 Android 产品：以远端 `main` 为准，先读 `pubspec.yaml` 和 `git log origin/main -5`。
-- 做鸿蒙适配：只在 `ohos` 工作树，先读 `git log origin/ohos -5`、`README.md` 顶部、`docs/superpowers/plans/2026-08-18-harmonyos-full-product-hap.md`。禁止把社区 Flutter / `ohos/` 合进 `main`。
+- 做鸿蒙适配：只在 `ohos` 工作树，先读 `git log origin/ohos -5`、`README.md` 顶部、`tool/ohos/product_hap_review.md`、`docs/superpowers/plans/2026-08-18-harmonyos-product-runtime.md`。禁止把社区 Flutter / `ohos/` 合进 `main`。模拟器 hdc 用 `127.0.0.1:5555`。引擎 degraded。首页已验证，下一步是新建项目 / 设置，不是重做审查壳。
 
 历史阶段性计划保留在 `docs/superpowers/`，只供追溯；**当前行为**以：
 

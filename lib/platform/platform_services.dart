@@ -41,7 +41,7 @@ Future<void> guardForegroundRustInit(
 /// future, keeping immediate user actions safe.
 Future<void> initializeForegroundRust() {
   return bindForegroundRustInit(
-    startInitialization: RustLib.init,
+    startInitialization: () => RustLib.init(),
     ohosBuild: isOhosBuild,
   );
 }

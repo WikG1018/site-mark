@@ -10,7 +10,7 @@
 
 **Spec:** [2026-08-17-harmonyos-next-adaptation-design.md](../specs/2026-08-17-harmonyos-next-adaptation-design.md)
 
-**Status:** Tasks 0–5 已在 `ohos` 落地（推到 `a204981`）。产品 `ohos/` 宿主与审查壳已在模拟器跑过，但全量 `lib/main.dart` HAP 未交付。后续只跟 [2026-08-18-harmonyos-full-product-hap.md](2026-08-18-harmonyos-full-product-hap.md)，不要再把审查壳当完整鸿蒙版。
+**Status:** Tasks 0–5 已落地。Tasks 6–8：模拟器已跑全量 `lib/main.dart` 首页。后续跟 [2026-08-18-harmonyos-product-runtime.md](2026-08-18-harmonyos-product-runtime.md)。不要把审查壳当完整鸿蒙版，也不要把首页当 Android 对等。
 
 ## Global Constraints
 
