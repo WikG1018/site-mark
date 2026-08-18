@@ -10,20 +10,19 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.8-E67E22)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)
+[![Latest](https://img.shields.io/badge/latest-v1.0.8-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)
 
-**最新预发布版本：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**  
-**已完成真机回归的稳定版本：[`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5)**
+**当前稳定版本：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**
 
-支持 Android 12（API 31）及以上系统。`v1.0.8` 加固相册发布与媒体生命周期：新图转正后再清理旧图、跨层 journal 对账、共享 URI 安全删除，以及 journal 键 XML 安全与清理重试上限；完成真机回归前保持 Pre-release。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.8` 已完成真机回归并设为 Latest：加固相册发布与媒体生命周期，新图转正后再清理旧图、跨层 journal 对账、共享 URI 安全删除，以及 journal 键 XML 安全与清理重试上限。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 ## 下载
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.7-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/sitemark-v1.0.7-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.7-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/sitemark-v1.0.7-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.8-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/sitemark-v1.0.8-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.8-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/sitemark-v1.0.8-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -36,65 +35,14 @@ manufacturer camera experience.
 4. Debug APK 与正式版签名不同，通常不能直接覆盖安装。
 5. 如果 Android 提示签名冲突，不要直接卸载保存着重要数据的旧版本；先完成项目备份并确认备份文件已复制到应用目录之外。
 
-## v1.0.8 重点更新
+## 近期更新
 
-- **相册替换不再截断旧图：** 重新保存到相册时先创建并转正新行，成功后再清理旧行；写入中途被杀时旧图仍完整可见，半写新行保持 pending。
-- **发布对账与身份隔离：** Native 转正后同步写入 publish journal；启动时按 captureId 对账恢复，不再用照片编号当全局身份，避免备份恢复后同编号项目互相误删。
-- **共享 URI 与并发安全：** 删除前全库检查引用；journal 仅在 URI 匹配时清除；连续崩溃会合并待清理 URI，避免旧清理任务丢失。
-- **journal 键与清理预算：** journal 键改为 base64url，避免 XML 非法字符导致持久化失败；清理任务最多重试 5 次后 Stall，失败与恢复写入诊断事件。
+完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
-## v1.0.7 重点更新
-
-- **恢复不再误删项目：** 恢复流程在文件落位后立即持久化提交阶段标记；启动清理不再把已恢复完成的项目当作中断导入而删除。
-- **拍摄处理幂等：** 相机恢复不再重铸每日照片编号、不再把已完成记录拉回待处理；处理重试只扣减一次次数预算；大批量选择的记录监听按 900 条分片，避开 SQLite 变量上限。
-- **解码与相册防线收紧：** 非 JPEG/PNG 或超大尺寸的照片在分配解码内存前被拒绝，防止构造图片导致 OOM；拍摄完成后撤销相机 URI 授权；相册删除仅允许作用于 `Pictures/SiteMark` 条目。
-- **英文文案补齐：** 残留中文的诊断、备份预检与诊断 ZIP 摘要文案全部双语化；项目或记录缺失、加载失败时显示明确状态，不再无限转圈。
-- **诊断可观测：** 诊断事件存储失败不再静默，丢弃计数写入诊断包清单，便于排查存储异常。
-
-## v1.0.6 重点更新
-
-- **媒体清理可恢复：** 清除原图和删除记录采用持久化意图、数据库提交、幂等物理清理的顺序；应用在任意阶段退出后均可安全续作。
-- **启动恢复相互隔离：** 单个恢复阶段失败不会跳过后续阶段，也不会向根级启动回调泄漏未处理异常。
-- **Android 相册发布可回滚：** 替换已有水印照片失败时恢复旧内容；无法完整恢复时保持 pending 隐藏，避免暴露半写入文件。
-- **验证链路更稳定：** Android 模拟器覆盖创建工程、拍摄处理和日期筛选主路径；Gradle、SQLite 原生库与 APK 构建的瞬时下载失败使用有界重试。
-
-## v1.0.5 重点更新
-
-- **首页搜索不再闪烁：** 输入项目名称的 250ms 防抖等待期间继续显示当前项目列表，不再逐字闪回骨架占位；查询切换后再更新结果。
-- **版本信息统一：** README 下载入口、应用内“关于”版本和安装包版本统一为 `1.0.5+20`。
-
-## v1.0.4 重点更新
-
-- **详情 Hero 链路修复：** 详情页图片预览把 Hero 标识继续传递到全屏查看器，恢复列表、详情与全屏之间连续一致的图片飞行动画。
-- **发布工程修复：** 统一 Dart 格式并修复发布分支中的异常文件内容，恢复完整 CI 验证。
-
-## v1.0.3 重点更新
-
-- **返回键逐级退出：** 「全部记录」筛选/编辑/搜索状态下按系统返回，先取消选择、再关闭搜索、再清除筛选，不再一次返回直接退出应用（按钮返回路径已由回归测试全链路锁定）。
-- **品牌化启动画面：** 启动时不再显示放大版应用图标，改为品牌深绿圆盘 + 白色相机符号的专用启动图形，亮暗模式背景与首页衔接无闪色。
-- **全屏查看体验：** 双指可从 1x 直接放大（此前需先双击）；点开照片改为 Hero 一镜到底飞入（替代覆盖式转场）；左右滑动相邻照片即时显示降采样预览，不再黑屏等全尺寸解码。
-- **首页搜索性能：** 搜索输入增加 250ms 去抖并复用查询流，减少逐字输入触发的数据库查询；关于页与 `pubspec` 版本对齐为 `1.0.3+18`。
-
-## v1.0.2 重点更新
-
-- **整页横滑与 Dock 修复：** 首页切换改为整页边对边平移（一镜到底）；项目详情与图片详情不再出现首页 Dock；快速连点切换、反向跳切不再闪出背景或跳到中心回弹。
-- **失败信息收口：** 拍摄记录批量操作失败原因改为枚举与本地化文案，界面不再显示内部异常与私有路径；删除/恢复诊断口径修正。
-- **工程与测试：** 切换动画规划器抽为纯函数，新增随机链视口覆盖 property 测试（含反向跳切、快速连击场景）；关于页与 `pubspec` 版本对齐为 `1.0.2+17`。
-
-## v1.0.1 重点更新
-
-- **失败文案与诊断：** 备份/恢复/删除路径的用户可见错误不再拼接原始异常；删除与恢复诊断事件入库（无路径/项目内容）。
-- **玻璃与根导航：** 根分支滑动增强空间感与 scale；GlassSurface 高光/内描边，overlay 画在内容下方，blur 路径 opacity 有 clamp。
-- **工程与文档：** Agent 常驻入口刷新；真机回归清单；integration 夜间/手动工作流；关于页与 `pubspec` 版本对齐为 `1.0.1+16`。
-
-## v1.0.0 重点更新
-
-- **项目生命周期**：项目分为进行中、已完成、已归档；已完成/已归档禁止新建拍摄，仍可查看、编辑、导出和管理已有记录。
-- **置顶与排序**：置顶与生命周期独立；首页按置顶、最近拍摄时间、创建时间、项目 ID 稳定排序。
-- **状态筛选与跨状态搜索**：首页默认显示进行中；底部弹层切换状态；搜索覆盖全部状态并显示状态标识。
-- **备份保留状态**：单项目 ZIP 升级至 schema v5，精确保留生命周期与置顶；v1–v4 恢复为进行中且未置顶；多项目外层 bundle 仍为 schema v1。
-- **全新悬浮导航**：项目、全部记录、设置使用更低、更紧凑的悬浮 Dock，选中背景完整覆盖图标和文字；根页面只绘制当前分支，避免返回时照片列表闪现。
-- **清晰的多选管理**：复选框覆盖缩略图而不挤压内容，悬浮操作栏同时显示图标和文字，支持导出、保存到相册、清理原图及全部删除。
+- **v1.0.8**：相册安全替换、跨层 journal 对账、共享 URI 保护、清理重试上限。
+- **v1.0.7**：恢复不再误删项目；拍摄处理幂等；解码与相册防线收紧。
+- **v1.0.6**：媒体清理可恢复；相册发布失败可回滚。
+- **v1.0.0–v1.0.5**：项目生命周期与备份、悬浮导航、搜索与全屏浏览、发布链路稳定化。
 
 ## 从早期版本累计完成的改进
 
@@ -277,7 +225,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 发布后，下载和校验以对应 GitHub Release 中的实际资源为准；完成真机回归前该版本保持 Pre-release。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 已完成真机回归并设为 Latest；下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
