@@ -9,4 +9,6 @@ export 'src/system_api.g.dart';
 export 'src/ohos/capture_session_store.dart';
 export 'src/ohos/capture_target_policy.dart';
 export 'src/ohos/gallery_access.dart';
+export 'src/ohos/gallery_store.dart';
 export 'src/ohos/ohos_system_api.dart';
+export 'src/ohos/publish_journal_store.dart';

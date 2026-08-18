@@ -1,12 +1,20 @@
 import { common, Want, abilityAccessCtrl } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { camera, cameraPicker } from '@kit.CameraKit';
-import { fileIo as fs, fileUri } from '@kit.CoreFileKit';
+import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
 import { geoLocationManager } from '@kit.LocationKit';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { preferences } from '@kit.ArkData';
 import UIAbility from '@ohos.app.ability.UIAbility';
 
 const CAPTURE_PREFERENCES = 'sitemark_capture_recovery';
+const PUBLISH_PREFERENCES = 'sitemark_publish_journal';
+const JOURNAL_PREFIX = 'journal.';
+const JOURNAL_EXISTS = 'exists';
+const JOURNAL_NEW_URI = 'newUri';
+const JOURNAL_STALE_COUNT = 'staleCount';
+const JOURNAL_STALE_PREFIX = 'stale.';
+const BASE64URL_TABLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 const KEY_CAPTURE_ID = 'capture_id';
 const KEY_CAPTURE_PATH = 'capture_path';
 const KEY_LOCATION_PERMISSION_REQUESTED = 'location_permission_requested';
@@ -35,6 +43,7 @@ export default class OhosSystemHost {
   private context: common.Context;
   private ability: UIAbility | null = null;
   private captureStore: preferences.Preferences | null = null;
+  private publishStore: preferences.Preferences | null = null;
   private cameraBusy: boolean = false;
   private locationBusy: boolean = false;
 
@@ -75,12 +84,26 @@ export default class OhosSystemHost {
         return await this.requestCurrentLocation(this.numberArg(args, 'timeoutMillis', 10000));
       case 'detectGalleryAccess':
         return await this.detectGalleryAccess();
-      case 'inspectImage':
       case 'publishJpeg':
+        return await this.publishJpeg(
+          this.requiredString(args, 'sourcePath'),
+          this.requiredString(args, 'displayName'),
+          this.requiredString(args, 'captureId'),
+          this.optionalString(args, 'publishedUri'),
+        );
       case 'recoverPublishJournals':
+        return await this.recoverPublishJournals();
       case 'clearPublishJournal':
-      case 'saveArchive':
+        await this.clearPublishJournal(
+          this.requiredString(args, 'captureId'),
+          this.requiredString(args, 'expectedContentUri'),
+        );
+        return null;
       case 'deletePublishedImage':
+        await this.deletePublishedImage(this.requiredString(args, 'contentUri'));
+        return null;
+      case 'inspectImage':
+      case 'saveArchive':
         throw new Error('ohos_not_ready');
       default:
         throw new Error(`unimplemented:${method}`);
@@ -292,6 +315,400 @@ export default class OhosSystemHost {
     return 'pickerFallback';
   }
 
+  private async publishJpeg(
+    sourcePath: string,
+    displayName: string,
+    captureId: string,
+    publishedUri: string | null,
+  ): Promise<Record<string, Object>> {
+    this.assertCaptureId(captureId);
+    const source = this.validatedPrivateFile(sourcePath);
+    this.normalizedJpegName(displayName);
+    const leftover = await this.peekPublishJournal(captureId);
+    const contentUri = await this.writePublishedJpeg(source, captureId, displayName);
+    const superseded = this.collectSuperseded(publishedUri, leftover, contentUri);
+    const recorded = await this.recordPublishJournal(captureId, contentUri, superseded);
+    if (!recorded) {
+      throw new Error('Failed to persist the publish journal');
+    }
+    return {
+      contentUri: contentUri,
+      supersededUris: superseded,
+    };
+  }
+
+  private async writePublishedJpeg(
+    sourcePath: string,
+    captureId: string,
+    displayName: string,
+  ): Promise<string> {
+    if (await this.detectGalleryAccess() === 'acl') {
+      try {
+        return await this.writeAclJpeg(sourcePath, displayName);
+      } catch (_error) {
+        return await this.writePickerOrSandboxJpeg(sourcePath, captureId, displayName);
+      }
+    }
+    return await this.writePickerOrSandboxJpeg(sourcePath, captureId, displayName);
+  }
+
+  private async writeAclJpeg(sourcePath: string, displayName: string): Promise<string> {
+    const helper = photoAccessHelper.getPhotoAccessHelper(this.context);
+    const title = this.normalizedJpegName(displayName).replace(/\.jpe?g$/i, '');
+    const created = await helper.createAsset(
+      photoAccessHelper.PhotoType.IMAGE,
+      'jpg',
+      { title: title },
+    );
+    const uri = typeof created === 'string' ? created : (created as photoAccessHelper.PhotoAsset).uri;
+    await this.copyFileToUri(sourcePath, uri);
+    return uri;
+  }
+
+  private async writePickerOrSandboxJpeg(
+    sourcePath: string,
+    captureId: string,
+    displayName: string,
+  ): Promise<string> {
+    const abilityContext = this.ability?.context as common.UIAbilityContext | undefined;
+    if (abilityContext === undefined) {
+      return await this.writeSandboxJpeg(sourcePath, captureId);
+    }
+    const documentPicker = new picker.DocumentViewPicker(abilityContext);
+    const destinations = await documentPicker.save({
+      newFileNames: [this.normalizedJpegName(displayName)],
+      fileSuffixChoices: ['jpg'],
+    });
+    if (destinations === undefined || destinations.length === 0) {
+      throw new Error('User cancelled the save picker');
+    }
+    const destination = destinations[0];
+    if (destination.startsWith('file://')) {
+      this.copyFile(sourcePath, fileUri.getPathFromUriSync(destination));
+      return destination;
+    }
+    await this.copyFileToUri(sourcePath, destination);
+    return destination;
+  }
+
+  private async writeSandboxJpeg(sourcePath: string, captureId: string): Promise<string> {
+    const directory = `${this.context.filesDir}/published`;
+    await this.ensureDir(directory);
+    const destination = `${directory}/${captureId}.jpg`;
+    this.copyFile(sourcePath, destination);
+    return fileUri.getUriFromPath(destination);
+  }
+
+  private collectSuperseded(
+    publishedUri: string | null,
+    leftover: PublishJournalSnapshot | null,
+    contentUri: string,
+  ): Array<string> {
+    const uris: Array<string> = [];
+    const seen: Record<string, boolean> = {};
+    seen[contentUri] = true;
+    const add = (uri: string | null | undefined): void => {
+      if (uri === undefined || uri === null || uri.length === 0 || seen[uri]) {
+        return;
+      }
+      seen[uri] = true;
+      uris.push(uri);
+    };
+    add(publishedUri);
+    if (leftover !== null) {
+      add(leftover.contentUri);
+      leftover.supersededUris.forEach((uri: string) => add(uri));
+    }
+    return uris;
+  }
+
+  private async peekPublishJournal(captureId: string): Promise<PublishJournalSnapshot | null> {
+    const store = await this.publishPreferences();
+    const prefix = this.journalPrefix(captureId);
+    const exists = await store.get(`${prefix}${JOURNAL_EXISTS}`, '') as string;
+    if (exists.length === 0) {
+      return null;
+    }
+    const contentUri = await store.get(`${prefix}${JOURNAL_NEW_URI}`, '') as string;
+    if (contentUri.length === 0) {
+      return null;
+    }
+    return {
+      captureId: captureId,
+      contentUri: contentUri,
+      supersededUris: await this.readStaleUris(store, prefix),
+    };
+  }
+
+  private async recordPublishJournal(
+    captureId: string,
+    contentUri: string,
+    supersededUris: Array<string>,
+  ): Promise<boolean> {
+    const store = await this.publishPreferences();
+    const prefix = this.journalPrefix(captureId);
+    const previousCount = Number.parseInt(await store.get(`${prefix}${JOURNAL_STALE_COUNT}`, '0') as string, 10) || 0;
+    await store.put(`${prefix}${JOURNAL_NEW_URI}`, contentUri);
+    await store.put(`${prefix}${JOURNAL_STALE_COUNT}`, `${supersededUris.length}`);
+    await store.put(`${prefix}${JOURNAL_EXISTS}`, 'true');
+    for (let index = 0; index < supersededUris.length; index++) {
+      await store.put(`${prefix}${JOURNAL_STALE_PREFIX}${index}`, supersededUris[index]);
+    }
+    for (let index = supersededUris.length; index < previousCount; index++) {
+      await store.delete(`${prefix}${JOURNAL_STALE_PREFIX}${index}`);
+    }
+    try {
+      await store.flush();
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  private async recoverPublishJournals(): Promise<Array<Record<string, Object>>> {
+    const store = await this.publishPreferences();
+    const keys = await this.publishJournalKeys(store);
+    const recovered: Array<Record<string, Object>> = [];
+    for (const key of keys) {
+      if (!key.endsWith(`.${JOURNAL_EXISTS}`)) {
+        continue;
+      }
+      const prefix = `${key.substring(0, key.length - `.${JOURNAL_EXISTS}`.length)}.`;
+      const contentUri = await store.get(`${prefix}${JOURNAL_NEW_URI}`, '') as string;
+      if (contentUri.length === 0) {
+        continue;
+      }
+      const captureId = this.decodeJournalCaptureId(prefix);
+      if (captureId === null) {
+        continue;
+      }
+      recovered.push({
+        captureId: captureId,
+        contentUri: contentUri,
+        supersededUris: await this.readStaleUris(store, prefix),
+      });
+    }
+    return recovered;
+  }
+
+  private async clearPublishJournal(captureId: string, expectedContentUri: string): Promise<void> {
+    const store = await this.publishPreferences();
+    const prefix = this.journalPrefix(captureId);
+    const exists = await store.get(`${prefix}${JOURNAL_EXISTS}`, '') as string;
+    if (exists.length === 0) {
+      return;
+    }
+    const current = await store.get(`${prefix}${JOURNAL_NEW_URI}`, '') as string;
+    if (current.length > 0 && current !== expectedContentUri) {
+      return;
+    }
+    const keys = await this.publishJournalKeys(store);
+    for (const key of keys) {
+      if (key.startsWith(prefix)) {
+        await store.delete(key);
+      }
+    }
+    await store.flush();
+  }
+
+  private async deletePublishedImage(contentUri: string): Promise<void> {
+    if (contentUri.length === 0) {
+      return;
+    }
+    if (contentUri.startsWith('file://')) {
+      try {
+        const path = fileUri.getPathFromUriSync(contentUri);
+        if (this.pathExists(path)) {
+          fs.unlinkSync(path);
+        }
+      } catch (_error) {
+        return;
+      }
+      return;
+    }
+    if (await this.detectGalleryAccess() !== 'acl') {
+      return;
+    }
+    try {
+      const helper = photoAccessHelper.getPhotoAccessHelper(this.context);
+      await helper.deleteAssets([contentUri]);
+    } catch (_error) {
+      return;
+    }
+  }
+
+  private async readStaleUris(
+    store: preferences.Preferences,
+    prefix: string,
+  ): Promise<Array<string>> {
+    const count = Number.parseInt(await store.get(`${prefix}${JOURNAL_STALE_COUNT}`, '0') as string, 10) || 0;
+    const uris: Array<string> = [];
+    for (let index = 0; index < count; index++) {
+      const uri = await store.get(`${prefix}${JOURNAL_STALE_PREFIX}${index}`, '') as string;
+      if (uri.length > 0) {
+        uris.push(uri);
+      }
+    }
+    return uris;
+  }
+
+  private async publishPreferences(): Promise<preferences.Preferences> {
+    if (this.publishStore === null) {
+      this.publishStore = await preferences.getPreferences(this.context, PUBLISH_PREFERENCES);
+    }
+    return this.publishStore;
+  }
+
+  private async publishJournalKeys(store: preferences.Preferences): Promise<Array<string>> {
+    const values = await store.getAll();
+    return Object.keys(values);
+  }
+
+  private journalPrefix(captureId: string): string {
+    return `${JOURNAL_PREFIX}${this.encodeJournalCaptureId(captureId)}.`;
+  }
+
+  private encodeJournalCaptureId(captureId: string): string {
+    const bytes = this.utf8Bytes(captureId);
+    let bits = '';
+    for (let index = 0; index < bytes.length; index++) {
+      bits += bytes[index].toString(2).padStart(8, '0');
+    }
+    let encoded = '';
+    for (let index = 0; index < bits.length; index += 6) {
+      const chunk = bits.substring(index, index + 6).padEnd(6, '0');
+      encoded += BASE64URL_TABLE[Number.parseInt(chunk, 2)];
+    }
+    return encoded;
+  }
+
+  private decodeJournalCaptureId(keyPrefix: string): string | null {
+    if (!keyPrefix.startsWith(JOURNAL_PREFIX) || !keyPrefix.endsWith('.')) {
+      return null;
+    }
+    const encoded = keyPrefix.substring(JOURNAL_PREFIX.length, keyPrefix.length - 1);
+    if (encoded.length === 0) {
+      return null;
+    }
+    try {
+      let bits = '';
+      for (let index = 0; index < encoded.length; index++) {
+        const tableIndex = BASE64URL_TABLE.indexOf(encoded[index]);
+        if (tableIndex < 0) {
+          return null;
+        }
+        bits += tableIndex.toString(2).padStart(6, '0');
+      }
+      const byteLength = Math.floor(bits.length / 8);
+      const bytes: Array<number> = [];
+      for (let index = 0; index < byteLength; index++) {
+        bytes.push(Number.parseInt(bits.substring(index * 8, index * 8 + 8), 2));
+      }
+      return this.utf8String(bytes);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  private utf8Bytes(value: string): Array<number> {
+    const bytes: Array<number> = [];
+    for (let index = 0; index < value.length; index++) {
+      let code = value.charCodeAt(index);
+      if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
+        const next = value.charCodeAt(index + 1);
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          code = ((code - 0xd800) << 10) + (next - 0xdc00) + 0x10000;
+          index += 1;
+        }
+      }
+      if (code <= 0x7f) {
+        bytes.push(code);
+      } else if (code <= 0x7ff) {
+        bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
+      } else if (code <= 0xffff) {
+        bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
+      } else {
+        bytes.push(
+          0xf0 | (code >> 18),
+          0x80 | ((code >> 12) & 0x3f),
+          0x80 | ((code >> 6) & 0x3f),
+          0x80 | (code & 0x3f),
+        );
+      }
+    }
+    return bytes;
+  }
+
+  private utf8String(bytes: Array<number>): string {
+    let result = '';
+    let index = 0;
+    while (index < bytes.length) {
+      const lead = bytes[index];
+      let code = 0;
+      let size = 1;
+      if (lead <= 0x7f) {
+        code = lead;
+      } else if ((lead & 0xe0) === 0xc0 && index + 1 < bytes.length) {
+        code = ((lead & 0x1f) << 6) | (bytes[index + 1] & 0x3f);
+        size = 2;
+      } else if ((lead & 0xf0) === 0xe0 && index + 2 < bytes.length) {
+        code = ((lead & 0x0f) << 12) | ((bytes[index + 1] & 0x3f) << 6) | (bytes[index + 2] & 0x3f);
+        size = 3;
+      } else if ((lead & 0xf8) === 0xf0 && index + 3 < bytes.length) {
+        code = ((lead & 0x07) << 18) |
+          ((bytes[index + 1] & 0x3f) << 12) |
+          ((bytes[index + 2] & 0x3f) << 6) |
+          (bytes[index + 3] & 0x3f);
+        size = 4;
+      } else {
+        throw new Error('invalid utf8');
+      }
+      if (code > 0xffff) {
+        const extra = code - 0x10000;
+        result += String.fromCharCode(0xd800 + (extra >> 10), 0xdc00 + (extra & 0x3ff));
+      } else {
+        result += String.fromCharCode(code);
+      }
+      index += size;
+    }
+    return result;
+  }
+
+  private validatedPrivateFile(sourcePath: string): string {
+    if (!sourcePath.startsWith(`${this.context.filesDir}/`) || !this.hasCaptureContent(sourcePath)) {
+      throw new Error('Publish source is outside private storage');
+    }
+    return sourcePath;
+  }
+
+  private normalizedJpegName(displayName: string): string {
+    const trimmed = displayName.trim();
+    if (trimmed.length === 0) {
+      throw new Error('Display name is empty');
+    }
+    const base = trimmed.toLowerCase().endsWith('.jpg') || trimmed.toLowerCase().endsWith('.jpeg')
+      ? trimmed
+      : `${trimmed}.jpg`;
+    if (!/^[A-Za-z0-9._-]+$/.test(base)) {
+      throw new Error('Display name is invalid');
+    }
+    return base;
+  }
+
+  private async copyFileToUri(sourcePath: string, destinationUri: string): Promise<void> {
+    const input = fs.openSync(sourcePath, fs.OpenMode.READ_ONLY);
+    const output = fs.openSync(destinationUri, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+    try {
+      const stat = fs.statSync(sourcePath);
+      const buffer = new ArrayBuffer(stat.size);
+      fs.readSync(input.fd, buffer);
+      fs.writeSync(output.fd, buffer);
+    } finally {
+      fs.closeSync(input);
+      fs.closeSync(output);
+    }
+  }
+
   private async preparedTarget(captureId: string): Promise<string> {
     const store = await this.capturePreferences();
     const pendingId = await store.get(KEY_CAPTURE_ID, '') as string;
@@ -476,6 +893,17 @@ export default class OhosSystemHost {
     return value;
   }
 
+  private optionalString(
+    args: Record<string, Object | null | undefined> | null,
+    key: string,
+  ): string | null {
+    const value = args?.[key];
+    if (typeof value !== 'string' || value.length === 0) {
+      return null;
+    }
+    return value;
+  }
+
   private boolArg(args: Record<string, Object | null | undefined> | null, key: string): boolean {
     return args?.[key] === true;
   }
@@ -488,6 +916,12 @@ export default class OhosSystemHost {
     const value = args?.[key];
     return typeof value === 'number' ? value : fallback;
   }
+}
+
+interface PublishJournalSnapshot {
+  captureId: string;
+  contentUri: string;
+  supersededUris: Array<string>;
 }
 
 function wantConstantParamStream(): string {

@@ -210,6 +210,13 @@ class AppStrings {
   String get galleryPickerFallbackBanner => _english
       ? 'Photos are saved with the system picker or in the app sandbox. They are not in the system gallery.'
       : '照片将通过系统保存选择器或应用沙箱保存，未进入系统相册。';
+  String get galleryNotInSystemAlbum =>
+      _english ? 'Not saved to the system gallery' : '未进入系统相册';
+  String get galleryPickerFallbackHint => _english
+      ? 'Photos stay in the app sandbox or a file you pick. This is not full Android parity.'
+      : '成片留在应用沙箱或你选择的保存位置，尚未进入系统相册，不能称为与 Android 全量对等。';
+  String get watermarkEngineDegraded =>
+      _english ? 'Degraded watermark engine' : '降级水印引擎';
   String get ready => _english ? 'Ready' : '已完成';
   String get failed => _english ? 'Failed' : '失败';
   String get pendingCamera => _english ? 'Waiting for camera' : '等待相机';

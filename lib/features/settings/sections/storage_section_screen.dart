@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 class StorageSectionScreen extends ConsumerStatefulWidget {
   const StorageSectionScreen({super.key});
@@ -14,6 +15,11 @@ class StorageSectionScreen extends ConsumerStatefulWidget {
 }
 
 class _StorageSectionScreenState extends ConsumerState<StorageSectionScreen> {
+  late final Future<String?> _galleryAccessMode = OhosSystemApi()
+      .detectGalleryAccess()
+      .then<String?>((value) => value)
+      .catchError((_) => null);
+
   Future<void> _clearLocalExports(BuildContext context) async {
     final strings = AppStrings.of(context);
     final confirmed = await showDialog<bool>(
@@ -57,6 +63,7 @@ class _StorageSectionScreenState extends ConsumerState<StorageSectionScreen> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final usage = ref.watch(storageUsageProvider);
+    final degraded = ref.watch(imagePipelineProvider).isDegraded;
     return Scaffold(
       appBar: AppBar(title: Text(strings.storageScope)),
       body: ListView(
@@ -78,6 +85,29 @@ class _StorageSectionScreenState extends ConsumerState<StorageSectionScreen> {
                 ],
               ),
               const SizedBox(height: 8),
+              if (degraded)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    strings.watermarkEngineDegraded,
+                    key: const Key('watermark-engine-degraded'),
+                  ),
+                ),
+              FutureBuilder<String?>(
+                future: _galleryAccessMode,
+                builder: (context, snapshot) {
+                  if (snapshot.data != 'pickerFallback') {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      strings.galleryPickerFallbackHint,
+                      key: const Key('gallery-picker-fallback-hint'),
+                    ),
+                  );
+                },
+              ),
               usage.when(
                 data: (value) => Column(
                   children: [

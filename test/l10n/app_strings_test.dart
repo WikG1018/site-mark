@@ -141,6 +141,9 @@ final _stringReaders = <String, _StringReader>{
   'createProjectFailed': (strings) => strings.createProjectFailed,
   'galleryPickerFallbackBanner': (strings) =>
       strings.galleryPickerFallbackBanner,
+  'galleryNotInSystemAlbum': (strings) => strings.galleryNotInSystemAlbum,
+  'galleryPickerFallbackHint': (strings) => strings.galleryPickerFallbackHint,
+  'watermarkEngineDegraded': (strings) => strings.watermarkEngineDegraded,
 };
 
 const expectedZh = <String, String>{
@@ -253,6 +256,10 @@ const expectedZh = <String, String>{
   'captureLoadFailed': '拍摄记录加载失败，请返回后重试',
   'createProjectFailed': '项目创建失败，请稍后重试',
   'galleryPickerFallbackBanner': '照片将通过系统保存选择器或应用沙箱保存，未进入系统相册。',
+  'galleryNotInSystemAlbum': '未进入系统相册',
+  'galleryPickerFallbackHint':
+      '成片留在应用沙箱或你选择的保存位置，尚未进入系统相册，不能称为与 Android 全量对等。',
+  'watermarkEngineDegraded': '降级水印引擎',
 };
 
 const expectedEn = <String, String>{
@@ -386,6 +393,10 @@ const expectedEn = <String, String>{
   'createProjectFailed': 'Could not create the project. Please try again.',
   'galleryPickerFallbackBanner':
         'Photos are saved with the system picker or in the app sandbox. They are not in the system gallery.',
+  'galleryNotInSystemAlbum': 'Not saved to the system gallery',
+  'galleryPickerFallbackHint':
+      'Photos stay in the app sandbox or a file you pick. This is not full Android parity.',
+  'watermarkEngineDegraded': 'Degraded watermark engine',
 };
 
 void main() {

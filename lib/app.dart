@@ -51,6 +51,7 @@ import 'package:sitemark/workflow/app_storage_service.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
 import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
+import 'package:sitemark/workflow/capture_processor.dart';
 import 'package:sitemark/workflow/capture_template_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
@@ -291,9 +292,36 @@ final externalLinkServiceProvider = Provider<ExternalLinkService>(
   (ref) => const UrlLauncherExternalLinkService(),
 );
 
+Future<void> processCaptureOnOhos(String captureId, Ref ref) async {
+  final processor = CaptureProcessor(
+    database: ref.read(databaseProvider),
+    platform: ref.read(platformServicesProvider),
+    images: ref.read(imagePipelineProvider),
+    outputPaths: ref.read(captureOutputPathsProvider),
+  );
+  final result = await processor.process(captureId);
+  if (result != CaptureProcessResult.succeeded) return;
+  try {
+    final database = ref.read(databaseProvider);
+    final settings = await database.getAppSettings();
+    final record = await database.captureById(captureId);
+    final photoNumber = record?.photoNumber;
+    if (record == null || photoNumber == null || photoNumber.isEmpty) return;
+    await sendCaptureReadyNotificationIfEnabled(
+      enabled: settings.completionNotificationsEnabled,
+      service: ref.read(completionNotificationServiceProvider),
+      projectId: record.projectId,
+      captureId: captureId,
+      photoNumber: photoNumber,
+    );
+  } catch (_) {}
+}
+
 final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {
   return isOhosBuild
-      ? UnimplementedOhosBackgroundWorkClient()
+      ? InAppSerialBackgroundWorkClient(
+          runner: (captureId) => processCaptureOnOhos(captureId, ref),
+        )
       : WorkmanagerBackgroundWorkClient();
 });
 

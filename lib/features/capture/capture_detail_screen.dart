@@ -353,6 +353,23 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                               ),
                             ),
                           preview,
+                          if (capture.publishedUri != null &&
+                              capture.publishedUri!.startsWith('file:///'))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                strings.galleryNotInSystemAlbum,
+                                key: const Key('gallery-not-in-system-album'),
+                              ),
+                            ),
+                          if (ref.watch(imagePipelineProvider).isDegraded)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                strings.watermarkEngineDegraded,
+                                key: const Key('watermark-engine-degraded'),
+                              ),
+                            ),
                           const SizedBox(height: 14),
                           CaptureDetailTabs(
                             value: _section,

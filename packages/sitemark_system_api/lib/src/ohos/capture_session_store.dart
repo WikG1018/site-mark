@@ -11,6 +11,37 @@ abstract class KeyValueStore {
 
 class MemoryKeyValueStore implements KeyValueStore {
   final Map<String, String> _values = <String, String>{};
+  final Map<String, String?> _draft = <String, String?>{};
+
+  bool commitFails = false;
+
+  Iterable<String> get keys => _values.keys;
+
+  String? get(String key) => _values[key];
+
+  void put(String key, String value) {
+    _draft[key] = value;
+  }
+
+  void removeKey(String key) {
+    _draft[key] = null;
+  }
+
+  bool commit() {
+    if (commitFails) {
+      _draft.clear();
+      return false;
+    }
+    for (final entry in _draft.entries) {
+      if (entry.value == null) {
+        _values.remove(entry.key);
+      } else {
+        _values[entry.key] = entry.value!;
+      }
+    }
+    _draft.clear();
+    return true;
+  }
 
   @override
   Future<void> write(Map<String, String> entries) async {
