@@ -1,0 +1,8 @@
+{
+  "name": "sitemark_core",
+  "version": "1.0.0",
+  "description": "SiteMark Rust ffi plugin stub for HarmonyOS.",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

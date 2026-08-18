@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
+import 'package:sitemark/platform/ohos_capability.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
 import 'package:sitemark/src/rust/frb_generated.dart';
 
@@ -21,10 +22,13 @@ Future<void> initializeForegroundRust() {
   final created = RustLib.init();
   _foregroundRustInitialization = created;
   created.then<void>(
-    (_) {},
+    (_) {
+      rustInitFailed = false;
+    },
     onError: (Object error, StackTrace stackTrace) {
       if (identical(_foregroundRustInitialization, created)) {
         _foregroundRustInitialization = null;
+        rustInitFailed = true;
       }
     },
   );
@@ -217,6 +221,8 @@ class PigeonPlatformServices implements PlatformServices {
 }
 
 abstract interface class ImagePipeline {
+  bool get isDegraded => false;
+
   Future<rust.ExportProjectResult> export(rust.ExportProjectRequest request);
 
   Future<rust.ExportProjectResult> exportSelection(
@@ -277,6 +283,9 @@ class ImagePipelineException implements Exception {
 }
 
 class RustImagePipeline implements ImagePipeline {
+  @override
+  bool get isDegraded => false;
+
   @override
   Future<rust.ExportProjectResult> export(rust.ExportProjectRequest request) {
     return _translateRustError(() => rust.exportProject(request: request));

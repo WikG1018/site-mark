@@ -1271,6 +1271,9 @@ class _DelayedScheduler implements CaptureBackgroundScheduler {
 
 class _WidgetTestImagePipeline implements ImagePipeline {
   @override
+  bool get isDegraded => false;
+
+  @override
   Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
       throw UnimplementedError();
 

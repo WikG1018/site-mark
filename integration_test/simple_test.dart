@@ -228,6 +228,9 @@ class _IntegrationPlatformServices implements PlatformServices {
 
 class _IntegrationImagePipeline implements ImagePipeline {
   @override
+  bool get isDegraded => false;
+
+  @override
   Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
       throw UnimplementedError();
 

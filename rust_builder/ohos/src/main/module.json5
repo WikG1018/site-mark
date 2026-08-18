@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "sitemark_core",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

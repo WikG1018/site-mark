@@ -814,6 +814,9 @@ class _TestOutputPaths implements CaptureOutputPaths {
 
 class _TestImagePipeline implements ImagePipeline {
   @override
+  bool get isDegraded => false;
+
+  @override
   Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
       throw UnimplementedError();
 

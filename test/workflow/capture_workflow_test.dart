@@ -769,6 +769,9 @@ class _FakeImagePipeline implements ImagePipeline {
   RenderPhotoRequest? lastRenderRequest;
 
   @override
+  bool get isDegraded => false;
+
+  @override
   Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
       throw UnimplementedError();
 

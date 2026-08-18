@@ -389,6 +389,9 @@ class _ExportImagePipeline implements ImagePipeline {
   ExportSelectionRequest? selectionRequest;
 
   @override
+  bool get isDegraded => false;
+
+  @override
   Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
       throw UnimplementedError();
 

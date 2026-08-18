@@ -84,6 +84,10 @@ class Target {
       darwinPlatform: 'iphonesimulator',
       darwinArch: 'x86_64',
     ),
+    Target(
+      rust: 'aarch64-unknown-linux-ohos',
+      flutter: 'ohos-arm64',
+    ),
   ];
 
   static Target? forFlutterName(String flutterName) {

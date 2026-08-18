@@ -41,6 +41,7 @@ import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
+import 'package:sitemark/platform/degraded_image_pipeline.dart';
 import 'package:sitemark/platform/ohos_background_work_client.dart';
 import 'package:sitemark/platform/ohos_capability.dart';
 import 'package:sitemark/platform/ohos_platform_services.dart';
@@ -144,9 +145,12 @@ final locationPermissionServiceProvider = Provider<LocationPermissionService>(
   ),
 );
 
-final imagePipelineProvider = Provider<ImagePipeline>(
-  (ref) => RustImagePipeline(),
-);
+final imagePipelineProvider = Provider<ImagePipeline>((ref) {
+  if (isOhosBuild && rustInitFailed) {
+    return const DegradedImagePipeline();
+  }
+  return RustImagePipeline();
+});
 
 final projectBundlePipelineProvider = Provider<ProjectBundlePipeline>(
   (ref) => RustProjectBundlePipeline(),

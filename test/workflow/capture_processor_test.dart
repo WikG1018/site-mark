@@ -689,6 +689,9 @@ class _ProcessorImagePipeline implements ImagePipeline {
   Map<String, String> sha256ByPath = const {};
 
   @override
+  bool get isDegraded => false;
+
+  @override
   Future<ProjectArchivePreview> readProjectArchive(String zipPath) =>
       throw UnimplementedError();
 

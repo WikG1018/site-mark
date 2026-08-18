@@ -1959,6 +1959,9 @@ class _RecordingProjectImagePipeline implements ImagePipeline {
   final requests = <rust.ExportProjectRequest>[];
 
   @override
+  bool get isDegraded => false;
+
+  @override
   Future<rust.ExportProjectResult> export(
     rust.ExportProjectRequest request,
   ) async {
@@ -2230,6 +2233,9 @@ class _IntegrationImportPipeline implements ImagePipeline {
   _IntegrationImportPipeline(this.preview);
 
   final rust.ProjectArchivePreview preview;
+
+  @override
+  bool get isDegraded => false;
 
   @override
   Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath) async =>

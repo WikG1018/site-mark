@@ -1785,6 +1785,9 @@ class _ImportImagePipeline implements ImagePipeline {
   final extractRequests = <ExtractArchivePhotoRequest>[];
 
   @override
+  bool get isDegraded => false;
+
+  @override
   Future<ProjectArchivePreview> readProjectArchive(String zipPath) async =>
       preview;
 
@@ -1827,6 +1830,9 @@ class _WritingImportImagePipeline implements ImagePipeline {
 
   final ProjectArchivePreview preview;
   final extractRequests = <ExtractArchivePhotoRequest>[];
+
+  @override
+  bool get isDegraded => false;
 
   @override
   Future<ProjectArchivePreview> readProjectArchive(String zipPath) async =>
