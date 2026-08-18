@@ -1,6 +1,6 @@
 # SiteMark v1.0 真机回归清单
 
-> **背景：** [`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5) **已经发布并设为 Latest**。[`v1.0.6`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.6) **已作为 Pre-release 发布**；在本清单于 **≥2 类 OEM 系统相机** 上实际填表完成前，保持 Pre-release，不提升为 Latest。v1.0.0~v1.0.4 此前亦为 Pre-release。
+> **背景：** [`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8) **已经发布并设为 Latest**。v1.0.6/v1.0.7 此前为 Pre-release。
 > **用途：** 1.0 线上回归与后续 `1.0.x` 维护版本发布前的人工验收。  
 > 自动 CI 全绿**不能**替代本清单。  
 > 记录结果时填写机型、Android 版本、SiteMark 版本（`关于` 页）、日期与测试人。  
@@ -79,7 +79,7 @@
 
 本清单**不**决定「能否发布 1.0」——1.0 已发布。完成后可据此决定：
 
-1. 是否将 GitHub Release 上的 **Pre-release 标记去掉**（仅改发布状态，不是重新发版）— v1.0.5 已为 Latest；**v1.0.6 仍为 Pre-release**，须本清单在 ≥2 类 OEM 相机上填表后再考虑提升
+1. 是否将 GitHub Release 上的 **Pre-release 标记去掉**（仅改发布状态，不是重新发版）— v1.0.8 已完成此步骤
 2. 是否需要发布后续 **`1.0.x`** 补丁收录已合并的修复与 polish
 3. 是否更新 README「预发布阶段」等表述以匹配真实产品阶段  
 
@@ -103,4 +103,4 @@
 
 **Merged:** #36 → #35 → #37 → #34（2026-08-06）
 
-**Task 7–8:** v1.0.5 真机填表已完成并设为 Latest。**v1.0.6 真机矩阵尚未在本清单填表**；完成 ≥2 类 OEM 系统相机验收前保持 Pre-release。
+**Task 7–8:** v1.0.8 真机填表已完成并设为 Latest。后续补丁的真机回归仍使用本清单。

@@ -10,20 +10,19 @@ manufacturer camera experience.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.8-E67E22)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)
+[![Latest](https://img.shields.io/badge/latest-v1.0.8-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)
 
-**最新预发布版本：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**  
-**已完成真机回归的稳定版本：[`v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.5)**
+**当前稳定版本：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**
 
-支持 Android 12（API 31）及以上系统。`v1.0.8` 加固相册发布与媒体生命周期：新图转正后再清理旧图、跨层 journal 对账、共享 URI 安全删除，以及 journal 键 XML 安全与清理重试上限；完成真机回归前保持 Pre-release。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.8` 已完成真机回归并设为 Latest：加固相册发布与媒体生命周期，新图转正后再清理旧图、跨层 journal 对账、共享 URI 安全删除，以及 journal 键 XML 安全与清理重试上限。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 ## 下载
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.7-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/sitemark-v1.0.7-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.7-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/sitemark-v1.0.7-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.7/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.8-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/sitemark-v1.0.8-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.8-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/sitemark-v1.0.8-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -277,7 +276,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 发布后，下载和校验以对应 GitHub Release 中的实际资源为准；完成真机回归前该版本保持 Pre-release。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 已完成真机回归并设为 Latest；下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
