@@ -501,15 +501,21 @@ class AppStrings {
   String get about => _english ? 'About' : '关于';
   String get version => _english ? 'Version' : '版本';
   String get privacyStatements => _english
-      ? 'No ads · No account · No cloud sync · No network permission · System camera'
-      : '无广告 · 无账号 · 无云同步 · 发布包无网络权限 · 调用系统相机';
+      ? 'No ads · No account · No cloud sync · No network permission · System camera · Album ACL'
+      : '无广告 · 无账号 · 无云同步 · 发布包无网络权限 · 调用系统相机 · 申请相册 ACL';
   String get repository => _english ? 'GitHub Repository' : 'GitHub 代码仓库';
   String get repositoryValue => siteMarkRepositoryUrl;
   String get openLinkFailed =>
       _english ? 'Could not open the browser' : '无法打开浏览器';
   String get privacySummary => _english
-      ? 'The release APK requests no network permission; GitHub links open in an external browser. Foreground location is used only when requested, and a diagnostic bundle reaches the system share sheet only after confirmation.'
-      : '发布包不申请网络权限；GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。';
+      ? 'The release package requests no network permission; GitHub links open in an external browser. Foreground location is used only when requested. HarmonyOS may request restricted album access (READ/WRITE_IMAGEVIDEO) to save and replace watermarked photos; if that access is not granted, photos stay in the system save picker or the app sandbox. A diagnostic bundle reaches the system share sheet only after confirmation.'
+      : '发布包不申请网络权限；GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用。鸿蒙会申请受限相册权限（READ/WRITE_IMAGEVIDEO）以保存并按本条记录替换或删除水印成片；未获授权时成片留在系统保存选择器或应用沙箱。诊断包仅在用户确认后交给系统分享面板。';
+  String get privacyConsentTitle => _english ? 'Before you start' : '使用前说明';
+  String get privacyConsentBody => _english
+      ? 'SiteMark works offline. It uses the system camera when you capture, optional location only when you request it, and photo access only to save watermarked photos. There is no account and no cloud sync.'
+      : '工程印记离线工作。拍摄时调用系统相机；定位仅在你主动使用时申请；相册权限仅用于保存水印成片。无账号、无云同步。';
+  String get privacyConsentAgree => _english ? 'Agree and continue' : '同意并继续';
+  String get privacyConsentExit => _english ? 'Exit' : '退出';
   String get license => _english ? 'License' : '许可证';
   String get licenseValue => 'Apache-2.0';
   String get licenses => _english ? 'Open-source licenses' : '开源许可证';

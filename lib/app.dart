@@ -13,6 +13,8 @@ import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/diagnostics/diagnostic_bundle_service.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
+import 'package:sitemark/features/onboarding/privacy_consent_store.dart';
+import 'package:sitemark/features/onboarding/privacy_consent_gate.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
 import 'package:sitemark/features/projects/project_form_screen.dart';
 import 'package:sitemark/features/projects/project_list_screen.dart';
@@ -108,6 +110,12 @@ class _DatabasePollingControl implements BackgroundWorkControl {
 
 final initialLocaleProvider = Provider<Locale?>((ref) => null);
 final startupRecoveryEnabledProvider = Provider<bool>((ref) => true);
+
+final privacyConsentStoreProvider = Provider<PrivacyConsentStore>((ref) {
+  return isOhosBuild
+      ? FilePrivacyConsentStore()
+      : MemoryPrivacyConsentStore(accepted: true);
+});
 
 /// Streams the singleton `global` [AppSetting] row so the [SiteMarkApp]
 /// MaterialApp can react to persisted theme/locale/watermark-default changes.
@@ -754,6 +762,7 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
   /// redundant resume when the app was never backgrounded (e.g. a transient
   /// `inactive` from a permission dialog).
   bool _backgroundPaused = false;
+  bool _runtimeStarted = false;
 
   @override
   void initState() {
@@ -781,57 +790,44 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
     // failed. Deferring to the post-frame callback keeps the fast first paint
     // while establishing the queue before the user can reach the capture form.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // The widget may already be unmounted by the time the first frame
-      // callback fires (e.g. immediate teardown in tests); never touch
-      // `ref` before confirming the State is still alive.
       if (!mounted) return;
-      try {
-        await ref.read(captureBackgroundSchedulerProvider).initialize();
-      } catch (_) {
-        // The scheduler clears its failed initialization future. A later
-        // capture enqueue retries it instead of letting startup fail.
+      if (isOhosBuild &&
+          !await ref.read(privacyConsentStoreProvider).isAccepted()) {
+        return;
       }
       if (!mounted) return;
-      if (ref.read(startupRecoveryEnabledProvider)) {
-        await ref.read(appStartupRecoveryProvider).run();
-      }
-      if (!mounted) return;
-      // Wire completion notifications: taps (including the cold-start
-      // launch payload) deep-link into the capture detail page.
-      try {
-        await ref.read(completionNotificationServiceProvider).initialize((
-          path,
-        ) {
-          // The service outlives this widget and may fire a saved tap
-          // long after dispose; never touch `ref` once unmounted.
-          if (!mounted) return;
-          ref.read(routerProvider).push(path);
-        });
-      } catch (_) {
-        // Best-effort: no production implementation injected (widget tests,
-        // UnimplementedError) or a failing plugin must not block the
-        // memory-pressure bridge below, which is safety-critical.
-      }
-      if (!mounted) return;
-      // Initialize the ITGSA fair-memory bridge. The native
-      // `MemoryPressureReceiver` forwards `itgsa.intent.action.MEMORY_TRIM`
-      // and `MEMORY_KILL` broadcasts through the
-      // `sitemark/memory_pressure` MethodChannel; the coordinator dispatches
-      // them to the controller (image cache flush, background-work pause,
-      // kill hooks) and then ACKs the OEM Binder.
-      // The provider defaults to [NoopMemoryPressureService] so tests that
-      // don't override it still run without errors.
-      final coordinator = ref.read(memoryPressureCoordinatorProvider);
-      try {
-        await ref.read(memoryPressureServiceProvider).initialize();
-      } catch (_) {
-        // The channel may be unavailable (non-ITGSA ROM, tests); the bridge
-        // stays inert but startup must not crash.
-      }
-      if (!mounted) return;
-      _pressureCoordinator = coordinator;
-      coordinator.start();
+      await _startRuntime();
     });
+  }
+
+  Future<void> _startRuntime() async {
+    if (_runtimeStarted) return;
+    _runtimeStarted = true;
+    try {
+      await ref.read(captureBackgroundSchedulerProvider).initialize();
+    } catch (_) {
+      // The scheduler clears its failed initialization future. A later
+      // capture enqueue retries it instead of letting startup fail.
+    }
+    if (!mounted) return;
+    if (ref.read(startupRecoveryEnabledProvider)) {
+      await ref.read(appStartupRecoveryProvider).run();
+    }
+    if (!mounted) return;
+    try {
+      await ref.read(completionNotificationServiceProvider).initialize((path) {
+        if (!mounted) return;
+        ref.read(routerProvider).push(path);
+      });
+    } catch (_) {}
+    if (!mounted) return;
+    final coordinator = ref.read(memoryPressureCoordinatorProvider);
+    try {
+      await ref.read(memoryPressureServiceProvider).initialize();
+    } catch (_) {}
+    if (!mounted) return;
+    _pressureCoordinator = coordinator;
+    coordinator.start();
   }
 
   @override
@@ -935,6 +931,19 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
             seedColor: seedColor,
             dynamicColor: useDynamicColor ? darkDynamic : null,
           ),
+          builder: (context, child) {
+            return PrivacyConsentGate(
+              store: ref.watch(privacyConsentStoreProvider),
+              onAccepted: () {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _startRuntime();
+                  }
+                });
+              },
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           routerConfig: ref.watch(routerProvider),
         );
       },
@@ -962,6 +971,7 @@ class MyApp extends StatelessWidget {
     this.captureFormDraftStore,
     this.captureMediaCleanupPendingStore,
     this.memoryPressureController,
+    this.privacyConsentStore,
   });
 
   final AppDatabase? database;
@@ -981,6 +991,7 @@ class MyApp extends StatelessWidget {
   final CaptureFormDraftStore? captureFormDraftStore;
   final CaptureMediaCleanupPendingStore? captureMediaCleanupPendingStore;
   final MemoryPressureController? memoryPressureController;
+  final PrivacyConsentStore? privacyConsentStore;
 
   @override
   Widget build(BuildContext context) {
@@ -1033,6 +1044,8 @@ class MyApp extends StatelessWidget {
           memoryPressureControllerProvider.overrideWithValue(
             memoryPressureController!,
           ),
+        if (privacyConsentStore != null)
+          privacyConsentStoreProvider.overrideWithValue(privacyConsentStore!),
       ],
       child: const SiteMarkApp(),
     );

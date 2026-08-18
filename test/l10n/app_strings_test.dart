@@ -144,6 +144,10 @@ final _stringReaders = <String, _StringReader>{
   'galleryNotInSystemAlbum': (strings) => strings.galleryNotInSystemAlbum,
   'galleryPickerFallbackHint': (strings) => strings.galleryPickerFallbackHint,
   'watermarkEngineDegraded': (strings) => strings.watermarkEngineDegraded,
+  'privacyConsentTitle': (strings) => strings.privacyConsentTitle,
+  'privacyConsentBody': (strings) => strings.privacyConsentBody,
+  'privacyConsentAgree': (strings) => strings.privacyConsentAgree,
+  'privacyConsentExit': (strings) => strings.privacyConsentExit,
 };
 
 const expectedZh = <String, String>{
@@ -260,6 +264,11 @@ const expectedZh = <String, String>{
   'galleryPickerFallbackHint':
       '成片留在应用沙箱或你选择的保存位置，尚未进入系统相册，不能称为与 Android 全量对等。',
   'watermarkEngineDegraded': '降级水印引擎',
+  'privacyConsentTitle': '使用前说明',
+  'privacyConsentBody':
+      '工程印记离线工作。拍摄时调用系统相机；定位仅在你主动使用时申请；相册权限仅用于保存水印成片。无账号、无云同步。',
+  'privacyConsentAgree': '同意并继续',
+  'privacyConsentExit': '退出',
 };
 
 const expectedEn = <String, String>{
@@ -397,6 +406,11 @@ const expectedEn = <String, String>{
   'galleryPickerFallbackHint':
       'Photos stay in the app sandbox or a file you pick. This is not full Android parity.',
   'watermarkEngineDegraded': 'Degraded watermark engine',
+  'privacyConsentTitle': 'Before you start',
+  'privacyConsentBody':
+      'SiteMark works offline. It uses the system camera when you capture, optional location only when you request it, and photo access only to save watermarked photos. There is no account and no cloud sync.',
+  'privacyConsentAgree': 'Agree and continue',
+  'privacyConsentExit': 'Exit',
 };
 
 void main() {

@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "permission_camera_reason",
-      "value": "用于打开系统相机拍摄施工现场照片"
+      "value": "拍摄现场原图"
     },
     {
       "name": "permission_location_reason",
-      "value": "用于在拍摄时记录现场位置，可仅授权模糊位置"
+      "value": "水印可选坐标，可在设置关闭"
     },
     {
       "name": "permission_gallery_reason",
-      "value": "用于将水印照片保存到系统相册"
+      "value": "把成片写入系统相册并按本条记录替换或删除"
     }
   ]
 }

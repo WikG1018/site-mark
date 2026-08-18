@@ -65,20 +65,25 @@ void main() {
         find.text(
           locale.languageCode == 'en'
               ? 'No ads · No account · No cloud sync · '
-                    'No network permission · System camera'
-              : '无广告 · 无账号 · 无云同步 · 发布包无网络权限 · 调用系统相机',
+                    'No network permission · System camera · Album ACL'
+              : '无广告 · 无账号 · 无云同步 · 发布包无网络权限 · 调用系统相机 · 申请相册 ACL',
         ),
         findsOneWidget,
       );
       expect(
         find.text(
           locale.languageCode == 'en'
-              ? 'The release APK requests no network permission; GitHub '
+              ? 'The release package requests no network permission; GitHub '
                     'links open in an external browser. Foreground location '
-                    'is used only when requested, and a diagnostic bundle '
-                    'reaches the system share sheet only after confirmation.'
-              : '发布包不申请网络权限；GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，'
-                    '诊断包仅在用户确认后交给系统分享面板。',
+                    'is used only when requested. HarmonyOS may request '
+                    'restricted album access (READ/WRITE_IMAGEVIDEO) to save '
+                    'and replace watermarked photos; if that access is not '
+                    'granted, photos stay in the system save picker or the '
+                    'app sandbox. A diagnostic bundle reaches the system '
+                    'share sheet only after confirmation.'
+              : '发布包不申请网络权限；GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用。'
+                    '鸿蒙会申请受限相册权限（READ/WRITE_IMAGEVIDEO）以保存并按本条记录替换或删除水印成片；'
+                    '未获授权时成片留在系统保存选择器或应用沙箱。诊断包仅在用户确认后交给系统分享面板。',
         ),
         findsOneWidget,
       );
