@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "SiteMark HarmonyOS NEXT entry"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "SiteMark"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "SiteMark"
+    },
+    {
+      "name": "permission_camera_reason",
+      "value": "Capture the original site photo"
+    },
+    {
+      "name": "permission_location_reason",
+      "value": "Optional watermark coordinates; can be turned off in Settings"
+    },
+    {
+      "name": "permission_gallery_reason",
+      "value": "Write finished photos to the system gallery and replace or delete them per record"
+    }
+  ]
+}

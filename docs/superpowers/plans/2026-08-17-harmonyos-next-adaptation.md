@@ -10,6 +10,8 @@
 
 **Spec:** [2026-08-17-harmonyos-next-adaptation-design.md](../specs/2026-08-17-harmonyos-next-adaptation-design.md)
 
+**Status:** Tasks 0–5 已在 `ohos` 落地（推到 `a204981`）。产品 `ohos/` 宿主与审查壳已在模拟器跑过，但全量 `lib/main.dart` HAP 未交付。后续只跟 [2026-08-18-harmonyos-full-product-hap.md](2026-08-18-harmonyos-full-product-hap.md)，不要再把审查壳当完整鸿蒙版。
+
 ## Global Constraints
 
 - 基线是 GitHub `origin/main` **v1.0.8 / `847c74b`**，不是本工作区可能落后的 `1.0.7+22`。

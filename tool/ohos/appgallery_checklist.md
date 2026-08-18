@@ -1,6 +1,6 @@
 # AppGallery 提交材料清单
 
-本文件是材料清单，不是过审证明。当前分支没有产品 `ohos/` HAP 树，也没有真机 / ACL 授权结果。`flutter build hap --release` 和 AGC 截图不作为 Task 5 完成门槛。
+本文件是材料清单，不是过审证明。产品 `ohos/` 宿主已接上，模拟器上跑的是审查壳 `lib/ohos_review_main.dart`，不是全量 `lib/main.dart`。没有真机 / ACL 授权结果。`flutter build hap --release` 和 AGC 截图不作为完成门槛。详见 `tool/ohos/product_hap_review.md`。
 
 当前引擎状态见 `tool/ohos/engine_status.md`：**degraded**。相册在未获 `READ/WRITE_IMAGEVIDEO` ACL 时走系统保存选择器或应用沙箱。**不能称为与 Android SiteMark v1.0.8 全量对等。**
 
@@ -29,7 +29,7 @@
 
 ## 构建说明（未验证）
 
-产品 HAP 树尚未接入本仓库。社区 Flutter 仅允许在仓库外使用。不要在 `main` 的 `ci.yml` 安装社区 Flutter。
+产品 `ohos/` 宿主已在本分支。社区 Flutter 只允许在仓库外使用。不要在 `main` 的 `ci.yml` 安装社区 Flutter。全量入口必须是 `lib/main.dart`，审查壳 `lib/ohos_review_main.dart` 不能当发布物。
 
 ```text
 "%OHOS_FLUTTER_ROOT%\bin\flutter" build hap --release

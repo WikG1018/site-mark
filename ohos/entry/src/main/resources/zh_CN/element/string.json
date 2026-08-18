@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "SiteMark 鸿蒙入口"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "SiteMark"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "SiteMark"
+    },
+    {
+      "name": "permission_camera_reason",
+      "value": "拍摄现场原图"
+    },
+    {
+      "name": "permission_location_reason",
+      "value": "水印可选坐标，可在设置关闭"
+    },
+    {
+      "name": "permission_gallery_reason",
+      "value": "把成片写入系统相册并按本条记录替换或删除"
+    }
+  ]
+}

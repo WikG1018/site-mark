@@ -10,6 +10,21 @@ doc/api/
 __pycache__/
 *.py[cod]
 
+# HarmonyOS NEXT host (ohos branch only)
+ohos/local.properties
+ohos/**/oh_modules/
+ohos/**/node_modules/
+ohos/.hvigor/
+ohos/**/build/
+ohos/**/oh-package-lock.json5
+ohos/package.json
+ohos/package-lock.json
+ohos/entry/src/main/ets/plugins/GeneratedPluginRegistrant.ets
+ohos/**/src/main/resources/rawfile/flutter_assets/
+ohos/**/libs/**/libapp.so
+ohos/**/libs/**/libflutter.so
+ohos/**/libs/**/libvmservice_snapshot.so
+
 # Android
 android/.gradle/
 android/local.properties

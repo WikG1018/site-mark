@@ -7,16 +7,20 @@
 
 | 项 | 当前值 |
 | --- | --- |
-| 产品 | SiteMark（工程印记）：离线优先的 Android 工程水印相机 |
+| 产品 | SiteMark（工程印记）：离线优先的工程水印相机 |
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | `io.github.wikg1018.sitemark` |
-| 默认基础分支 | `main` |
-| 当前版本 | 见 `pubspec.yaml`（撰写时准备发布 `1.0.8+23`；GitHub `v1.0.6`/`v1.0.7`/`v1.0.8` 作为 Pre-release，`v1.0.5` 仍为已完成真机回归的 Latest） |
-| 平台 | Android 12+（API 31+） |
+| Android 主线 | `main`（官方 Flutter，发 APK） |
+| 鸿蒙适配 | 长期分支 `ohos`；**不要合回 `main`** |
+| 当前版本 | 见 `pubspec.yaml`（撰写时 `1.0.8+23`） |
+| 平台 | `main`：Android 12+。`ohos`：HarmonyOS NEXT HAP（未宣称全量对等） |
 | Drift schema | 见 `lib/data/app_database.dart` 的 `schemaVersion`（撰写时为 13） |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
 
-**默认起点：** 以远端 `main` 的最新提交为准，不要假设本文件中的版本号永远正确——先读 `pubspec.yaml` 和 `git log origin/main -5`。
+**默认起点：**
+
+- 做 Android 产品：以远端 `main` 为准，先读 `pubspec.yaml` 和 `git log origin/main -5`。
+- 做鸿蒙适配：只在 `ohos` 工作树，先读 `git log origin/ohos -5`、`README.md` 顶部、`docs/superpowers/plans/2026-08-18-harmonyos-full-product-hap.md`。禁止把社区 Flutter / `ohos/` 合进 `main`。
 
 历史阶段性计划保留在 `docs/superpowers/`，只供追溯；**当前行为**以：
 

@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.8",
+  "description": "SiteMark HarmonyOS NEXT entry module.",
+  "main": "",
+  "author": "wikg1018",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

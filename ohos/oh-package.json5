@@ -1,0 +1,13 @@
+{
+  "modelVersion": "5.0.0",
+  "name": "sitemark",
+  "version": "1.0.8",
+  "description": "SiteMark HarmonyOS NEXT host.",
+  "main": "",
+  "author": "wikg1018",
+  "license": "Apache-2.0",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.6"
+  }
+}

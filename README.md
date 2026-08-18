@@ -1,4 +1,57 @@
-# SiteMark 工程印记
+# SiteMark 工程印记 · `ohos` 分支
+
+> **你正在看 HarmonyOS NEXT 适配分支，不是 Android 产品主线。**
+>
+> 仓库首页默认是 [`main`](https://github.com/WikG1018/site-mark/tree/main)。`main` 继续发 Android APK。本分支从 Android **v1.0.8**（`847c74b`）拉出，只承载鸿蒙 HAP、社区 Flutter 与 ohos 插件，**禁止合回 `main`**。
+
+面向工程现场记录的离线水印相机。Android 产品语义见下方原文；鸿蒙目标是同一套项目 / 拍摄 / 记录 / 备份语义，交付 HarmonyOS NEXT 原生 HAP。
+
+[![ohos Dart tests](https://github.com/WikG1018/site-mark/actions/workflows/ohos.yml/badge.svg?branch=ohos)](https://github.com/WikG1018/site-mark/actions/workflows/ohos.yml)
+![HarmonyOS NEXT](https://img.shields.io/badge/HarmonyOS-NEXT-EE2B2B)
+![Android baseline v1.0.8](https://img.shields.io/badge/Android_baseline-v1.0.8-3DDC84?logo=android&logoColor=white)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+![Engine degraded](https://img.shields.io/badge/watermark_engine-degraded-E67E22)
+
+**当前状态（请按字面理解，不要当成已上架鸿蒙版）：**
+
+| 项 | 事实 |
+| --- | --- |
+| 产品主线 | 仍在 `main`，安装包是 Android APK |
+| 本分支基线 | SiteMark Android **v1.0.8** / `1.0.8+23` |
+| HAP 宿主 | `ohos/`，包名 `io.github.wikg1018.sitemark` |
+| 已验证 | DevEco 模拟器 `SiteMarkPhone602` 上审查壳冷启动 + 隐私门 |
+| 未完成 | 全量 `lib/main.dart` HAP、签名 release、相机 / ACL / `ohos-arm64` 对等 |
+| 引擎 | `tool/ohos/engine_status.md`：**degraded** |
+
+后续实施计划：[2026-08-18-harmonyos-full-product-hap.md](docs/superpowers/plans/2026-08-18-harmonyos-full-product-hap.md)。前期 Tasks 0–5 见 [2026-08-17-harmonyos-next-adaptation.md](docs/superpowers/plans/2026-08-17-harmonyos-next-adaptation.md)。规格见 [harmonyos-next-adaptation-design.md](docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md)。
+
+---
+
+## 鸿蒙适配说明
+
+本分支保留 `android/`，是为了对照 Android v1.0.8 语义，**不是**本分支的发布物。不要改 `ci.yml` / `release.yml` / `android/`。`main` 的产品修复只允许 cherry-pick 进 `ohos`。
+
+已落地（Tasks 0–5）：
+
+- `packages/sitemark_system_api` 的 ohos 宿主与 JSON channel `sitemark.system.ohos`
+- `OhosPlatformServices`、应用内串行队列、按 `captureId` 的发布日记
+- ACL 相册 + picker / 沙箱托底（代码在，模拟器未证明 ACL）
+- 首次启动隐私同意（产品路径走 `FilePrivacyConsentStore`）
+- 产品 `ohos/` HAP 树；模拟器上跑过 `lib/ohos_review_main.dart` 审查壳
+
+明确还不是完整鸿蒙版：
+
+- 审查壳不是 `lib/main.dart` 全量产品 UI
+- 水印引擎未编出 `ohos-arm64`，运行时走降级管线
+- 无真机，不能声称相机、定位、系统相册替换与 Android 对等
+- 无签名 `flutter build hap --release`，不能当应用市场上架包
+- GitHub Releases 里的 APK 属于 Android 主线，不是本分支产物
+
+模拟器审查记录：`tool/ohos/product_hap_review.md`。应用市场材料清单：`tool/ohos/appgallery_checklist.md`。
+
+---
+
+# Android 产品说明（本分支语义基线，不是鸿蒙发布说明）
 
 > 面向工程现场记录的 Android 水印相机：调用手机系统/厂商相机，无广告、无账号、无云端，照片与项目数据均在本机处理。
 
