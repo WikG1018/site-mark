@@ -40,10 +40,75 @@ void main() {
       rustInitFailed = false;
     });
 
-    await guardForegroundRustInit(Future<void>.error(StateError('init failed')));
+    await guardForegroundRustInit(
+      Future<void>.error(StateError('init failed')),
+      ohosBuild: true,
+    );
 
     expect(rustInitFailed, isTrue);
   });
+
+  test(
+    'non-ohos rust init failure clears cache so the next call can retry',
+    () async {
+      debugResetForegroundRustInitialization();
+      rustInitFailed = false;
+      addTearDown(() {
+        debugResetForegroundRustInitialization();
+        rustInitFailed = false;
+      });
+
+      var attempts = 0;
+      Future<void> initialize() async {
+        attempts++;
+        if (attempts == 1) throw StateError('init failed');
+      }
+
+      await bindForegroundRustInit(
+        startInitialization: initialize,
+        ohosBuild: false,
+      );
+      expect(rustInitFailed, isFalse);
+
+      await bindForegroundRustInit(
+        startInitialization: initialize,
+        ohosBuild: false,
+      );
+
+      expect(attempts, 2);
+      expect(rustInitFailed, isFalse);
+    },
+  );
+
+  test(
+    'ohos rust init failure stays cached and rustInitFailed remains true',
+    () async {
+      debugResetForegroundRustInitialization();
+      rustInitFailed = false;
+      addTearDown(() {
+        debugResetForegroundRustInitialization();
+        rustInitFailed = false;
+      });
+
+      var attempts = 0;
+      Future<void> initialize() async {
+        attempts++;
+        throw StateError('init failed');
+      }
+
+      await bindForegroundRustInit(
+        startInitialization: initialize,
+        ohosBuild: true,
+      );
+      await bindForegroundRustInit(
+        startInitialization: initialize,
+        ohosBuild: true,
+      );
+
+      expect(attempts, 1);
+      expect(rustInitFailed, isTrue);
+    },
+  );
 
   test('rendered paths initialize the documents directory once', () async {
     final root = await Directory.systemTemp.createTemp('sitemark-rendered-');

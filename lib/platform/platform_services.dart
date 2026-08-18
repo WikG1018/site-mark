@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -10,12 +11,26 @@ import 'package:sitemark/src/rust/frb_generated.dart';
 
 Future<void>? _foregroundRustInitialization;
 
-Future<void> guardForegroundRustInit(Future<void> initialization) async {
+@visibleForTesting
+void debugResetForegroundRustInitialization() {
+  _foregroundRustInitialization = null;
+}
+
+Future<void> guardForegroundRustInit(
+  Future<void> initialization, {
+  bool? ohosBuild,
+}) async {
+  final ohos = ohosBuild ?? isOhosBuild;
   try {
     await initialization;
     rustInitFailed = false;
   } catch (_) {
-    rustInitFailed = true;
+    if (ohos) {
+      rustInitFailed = true;
+      return;
+    }
+    rustInitFailed = false;
+    _foregroundRustInitialization = null;
   }
 }
 
@@ -25,10 +40,24 @@ Future<void> guardForegroundRustInit(Future<void> initialization) async {
 /// system splash. Every foreground image operation also awaits this same
 /// future, keeping immediate user actions safe.
 Future<void> initializeForegroundRust() {
+  return bindForegroundRustInit(
+    startInitialization: RustLib.init,
+    ohosBuild: isOhosBuild,
+  );
+}
+
+@visibleForTesting
+Future<void> bindForegroundRustInit({
+  required Future<void> Function() startInitialization,
+  required bool ohosBuild,
+}) {
   final cached = _foregroundRustInitialization;
   if (cached != null) return cached;
 
-  final created = guardForegroundRustInit(RustLib.init());
+  final created = guardForegroundRustInit(
+    startInitialization(),
+    ohosBuild: ohosBuild,
+  );
   _foregroundRustInitialization = created;
   return created;
 }
