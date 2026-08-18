@@ -145,16 +145,47 @@ final locationPermissionServiceProvider = Provider<LocationPermissionService>(
   ),
 );
 
-final imagePipelineProvider = Provider<ImagePipeline>((ref) {
-  if (isOhosBuild && rustInitFailed) {
+void attachRustInitFailureWatch(Ref ref) {
+  void listener() => ref.invalidateSelf();
+  rustInitFailedNotifier.addListener(listener);
+  ref.onDispose(() => rustInitFailedNotifier.removeListener(listener));
+}
+
+ImagePipeline resolveImagePipeline({
+  required bool ohosBuild,
+  required bool rustFailed,
+}) {
+  if (useDegradedRustPipelines(ohosBuild: ohosBuild, rustFailed: rustFailed)) {
     return const DegradedImagePipeline();
   }
   return RustImagePipeline();
+}
+
+ProjectBundlePipeline resolveProjectBundlePipeline({
+  required bool ohosBuild,
+  required bool rustFailed,
+}) {
+  if (useDegradedRustPipelines(ohosBuild: ohosBuild, rustFailed: rustFailed)) {
+    return const DegradedProjectBundlePipeline();
+  }
+  return RustProjectBundlePipeline();
+}
+
+final imagePipelineProvider = Provider<ImagePipeline>((ref) {
+  attachRustInitFailureWatch(ref);
+  return resolveImagePipeline(
+    ohosBuild: isOhosBuild,
+    rustFailed: rustInitFailed,
+  );
 });
 
-final projectBundlePipelineProvider = Provider<ProjectBundlePipeline>(
-  (ref) => RustProjectBundlePipeline(),
-);
+final projectBundlePipelineProvider = Provider<ProjectBundlePipeline>((ref) {
+  attachRustInitFailureWatch(ref);
+  return resolveProjectBundlePipeline(
+    ohosBuild: isOhosBuild,
+    rustFailed: rustInitFailed,
+  );
+});
 
 final captureOutputPathsProvider = Provider<CaptureOutputPaths>(
   (ref) => AppCaptureOutputPaths(),

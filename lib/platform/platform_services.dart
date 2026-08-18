@@ -10,6 +10,15 @@ import 'package:sitemark/src/rust/frb_generated.dart';
 
 Future<void>? _foregroundRustInitialization;
 
+Future<void> guardForegroundRustInit(Future<void> initialization) async {
+  try {
+    await initialization;
+    rustInitFailed = false;
+  } catch (_) {
+    rustInitFailed = true;
+  }
+}
+
 /// Initializes the foreground Rust bridge once per isolate.
 ///
 /// The first call is started after [runApp] so it cannot extend Android's
@@ -19,19 +28,8 @@ Future<void> initializeForegroundRust() {
   final cached = _foregroundRustInitialization;
   if (cached != null) return cached;
 
-  final created = RustLib.init();
+  final created = guardForegroundRustInit(RustLib.init());
   _foregroundRustInitialization = created;
-  created.then<void>(
-    (_) {
-      rustInitFailed = false;
-    },
-    onError: (Object error, StackTrace stackTrace) {
-      if (identical(_foregroundRustInitialization, created)) {
-        _foregroundRustInitialization = null;
-        rustInitFailed = true;
-      }
-    },
-  );
   return created;
 }
 
@@ -325,6 +323,12 @@ class RustImagePipeline implements ImagePipeline {
   Future<T> _translateRustError<T>(Future<T> Function() operation) async {
     try {
       await initializeForegroundRust();
+      if (rustInitFailed) {
+        throw const ImagePipelineException(
+          ImagePipelineFailureKind.invalidData,
+          'invalid_data:rust init failed',
+        );
+      }
       return await operation();
     } catch (error) {
       final translated = ImagePipelineException.tryParseRustError(error);
@@ -361,6 +365,12 @@ class RustProjectBundlePipeline implements ProjectBundlePipeline {
   Future<T> _translateRustError<T>(Future<T> Function() operation) async {
     try {
       await initializeForegroundRust();
+      if (rustInitFailed) {
+        throw const ImagePipelineException(
+          ImagePipelineFailureKind.invalidData,
+          'invalid_data:rust init failed',
+        );
+      }
       return await operation();
     } catch (error) {
       final translated = ImagePipelineException.tryParseRustError(error);

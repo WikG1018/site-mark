@@ -80,6 +80,29 @@ class DegradedImagePipeline implements ImagePipeline {
   }
 }
 
+class DegradedProjectBundlePipeline implements ProjectBundlePipeline {
+  const DegradedProjectBundlePipeline();
+
+  @override
+  Future<rust.ExportProjectResult> exportBundle(
+    rust.ExportProjectBundleRequest request,
+  ) {
+    throw _invalidData('degraded zip exportBundle is not implemented');
+  }
+
+  @override
+  Future<void> extractBundleEntry(
+    rust.ExtractProjectBundleEntryRequest request,
+  ) {
+    throw _invalidData('degraded zip extractBundleEntry is not implemented');
+  }
+
+  @override
+  Future<rust.ProjectBundlePreview> readBundle(String zipPath) {
+    throw _invalidData('degraded zip readBundle is not implemented');
+  }
+}
+
 Never _invalidData(String detail) {
   throw ImagePipelineException(
     ImagePipelineFailureKind.invalidData,

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/platform/ohos_capability.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -31,6 +32,17 @@ void main() {
       ),
     );
     expect(ImagePipelineException.tryParseRustError('unknown'), isNull);
+  });
+
+  test('guarded rust init swallows failure and marks rustInitFailed', () async {
+    rustInitFailed = false;
+    addTearDown(() {
+      rustInitFailed = false;
+    });
+
+    await guardForegroundRustInit(Future<void>.error(StateError('init failed')));
+
+    expect(rustInitFailed, isTrue);
   });
 
   test('rendered paths initialize the documents directory once', () async {
