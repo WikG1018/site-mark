@@ -423,4 +423,68 @@ void main() {
 
     expect(tapped, '/projects/p1/captures/c1');
   });
+
+  test('OhosExternalLinkService maps missing plugin to ohos_not_ready', () async {
+    final service = OhosExternalLinkService();
+    await expectLater(
+      service.open(Uri.parse('https://github.com/WikG1018/site-mark')),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          'ohos_not_ready',
+        ),
+      ),
+    );
+  });
+
+  test('OhosExternalLinkService invokes openLink with https url', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    String? method;
+    Object? arguments;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          method = call.method;
+          arguments = call.arguments;
+          return true;
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    expect(
+      await OhosExternalLinkService().open(
+        Uri.parse('https://github.com/WikG1018/site-mark'),
+      ),
+      isTrue,
+    );
+    expect(method, 'openLink');
+    expect(arguments, {
+      'url': 'https://github.com/WikG1018/site-mark',
+    });
+  });
+
+  test(
+    'OhosExternalLinkService rejects non-http schemes without the channel',
+    () async {
+      var invoked = false;
+      const channel = MethodChannel('sitemark.system.ohos');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            invoked = true;
+            return true;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      expect(
+        await OhosExternalLinkService().open(Uri.parse('mailto:a@b.c')),
+        isFalse,
+      );
+      expect(invoked, isFalse);
+    },
+  );
 }

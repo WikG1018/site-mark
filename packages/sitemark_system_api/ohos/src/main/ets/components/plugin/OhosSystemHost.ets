@@ -174,6 +174,8 @@ export default class OhosSystemHost {
       case 'shareFile':
         await this.shareFile(this.requiredString(args, 'path'));
         return null;
+      case 'openLink':
+        return await this.openLink(this.requiredString(args, 'url'));
       case 'requestEnableNotification':
         return await this.requestEnableNotification();
       case 'publishCaptureReady':
@@ -543,6 +545,27 @@ export default class OhosSystemHost {
       throw new Error('picked archive is empty');
     }
     return destination;
+  }
+
+  private async openLink(url: string): Promise<boolean> {
+    if (!url.startsWith('https://') && !url.startsWith('http://')) {
+      return false;
+    }
+    const abilityContext = this.ability?.context as common.UIAbilityContext | undefined;
+    if (abilityContext === undefined) {
+      return false;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      entities: ['entity.system.browsable'],
+      uri: url,
+    };
+    try {
+      await abilityContext.startAbility(want);
+      return true;
+    } catch (_error) {
+      return false;
+    }
   }
 
   private async shareFile(path: string): Promise<void> {

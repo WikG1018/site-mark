@@ -32,6 +32,10 @@
         ]
       }
     ],
+    "querySchemes": [
+      "https",
+      "http"
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET"

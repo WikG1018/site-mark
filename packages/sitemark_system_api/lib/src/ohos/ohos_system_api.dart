@@ -78,6 +78,11 @@ class OhosSystemApi {
 
   Future<void> shareFile(String path) => _invoke('shareFile', {'path': path});
 
+  Future<bool> openLink(String url) async {
+    final result = await _invoke<bool>('openLink', {'url': url});
+    return result == true;
+  }
+
   Future<bool> requestEnableNotification() async {
     final result = await _invoke<bool>('requestEnableNotification');
     return result == true;

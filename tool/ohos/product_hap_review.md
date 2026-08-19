@@ -81,11 +81,25 @@
 | 官方测试 | `ohos_platform_services_test` 19 项通过 |
 | 模拟器 dump | **无**。不得写系统通知已通 |
 
+## 2026-08-19 Tasks 37–38
+
+关于页 GitHub 改走鸿蒙 `startAbility` 隐式 Want，并修掉 `main.dart` 把外链覆盖成 no-op。官方通道测试闭环，未重编 HAP，未在模拟器打开系统浏览器。
+
+| 项 | 结果 |
+| --- | --- |
+| 通道 | `OhosSystemApi.openLink` |
+| 产品接线 | `OhosExternalLinkService`；`main.dart` 鸿蒙外链走该服务 |
+| 宿主 | `ohos.want.action.viewData` + `entity.system.browsable` + `startAbility` |
+| `querySchemes` | `https` / `http` |
+| 官方测试 | `ohos_platform_services_test` 22 项通过 |
+| 模拟器 dump | **无**。不得写系统外链已通 |
+
 ## 仍禁止写成已完成
 
 - picker 真正写入系统文件
 - 系统文件选择恢复（接线已改原生 picker，无成功 dump）
 - 系统分享面板（接线已改原生 ShareKit，无成功 dump）
 - 系统通知（接线已改 NotificationKit，无成功 dump）
+- 系统外链（接线已改 `startAbility`，无浏览器 dump）
 - 相机拍成 / ACL / `ohos-arm64`
 - 签名 release / 真机

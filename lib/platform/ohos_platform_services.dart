@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -134,6 +135,20 @@ class OhosShareFileService implements ShareFileService {
   @override
   Future<void> shareFile(String path) {
     return _api.shareFile(path);
+  }
+}
+
+class OhosExternalLinkService implements ExternalLinkService {
+  OhosExternalLinkService({OhosSystemApi? api}) : _api = api ?? OhosSystemApi();
+
+  final OhosSystemApi _api;
+
+  @override
+  Future<bool> open(Uri uri) {
+    if (uri.scheme != 'https' && uri.scheme != 'http') {
+      return Future<bool>.value(false);
+    }
+    return _api.openLink(uri.toString());
   }
 }
 

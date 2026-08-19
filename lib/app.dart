@@ -305,7 +305,7 @@ final storageUsageProvider = FutureProvider((ref) {
 
 final externalLinkServiceProvider = Provider<ExternalLinkService>(
   (ref) => isOhosBuild
-      ? const NoopExternalLinkService()
+      ? OhosExternalLinkService()
       : const UrlLauncherExternalLinkService(),
 );
 

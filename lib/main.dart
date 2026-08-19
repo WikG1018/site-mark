@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/bootstrap.dart';
-import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/local_notification_service.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/ohos_capability.dart';
@@ -35,9 +34,7 @@ Future<void> main() async {
         completionNotificationService: notificationService,
         memoryPressureService: memoryPressureService,
         shareService: isOhosBuild ? OhosShareFileService() : null,
-        externalLinkService: isOhosBuild
-            ? const NoopExternalLinkService()
-            : null,
+        externalLinkService: isOhosBuild ? OhosExternalLinkService() : null,
       ),
     ),
     waitForFirstFrame: () => WidgetsBinding.instance.endOfFrame,
