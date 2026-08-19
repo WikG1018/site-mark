@@ -1,11 +1,11 @@
 # 产品 HAP 树 + 模拟器审查（2026-08-19）
 
 Worktree: `.worktrees/ohos`  
-Branch: `ohos`（基线 GitHub `v1.0.8` / `847c74b`；远端验证停在 `8f616b6`，本轮 Task 10–12 尚未推送）  
+Branch: `ohos`（基线 GitHub `v1.0.8` / `847c74b`；远端 `origin/ohos` = `e408878`）  
 AVD: `SiteMarkPhone602`（HarmonyOS-6.0.2 phone_all_x86 API 22，hdc **`127.0.0.1:5555`**）
 
-Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项目 → 设置 / 通知 / 关于）**。  
-**不是** Android SiteMark v1.0.8 能力对等，**不证明** 相机 / 相册 ACL / `ohos-arm64` 布局。
+Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项目 → 设置 / 关于 → 项目详情 → 拍摄表单；定位/相机权限框已出）**。  
+**不是** Android SiteMark v1.0.8 能力对等，**不证明** 相机拍成 / 相册 ACL / `ohos-arm64` 布局。
 
 ---
 
@@ -77,20 +77,25 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项
 
 卸载会清 userdata，下次会再出隐私门。
 
+### Task 13–15：项目详情 / 拍摄表单 / 权限探测（2026-08-19）
+
+1. 首页空库 → 新建 `Task13Demo` → 点进详情：`Task13Demo` / 进行中 / `0 张照片` / FAB「拍摄」。
+2. FAB `1031,2508` → `CaptureFormScreen` 标题「水印内容」；定位卡「为照片记录 GPS（拒绝后仍可拍摄）」；三个 TextInput + 底部「拍摄」。
+3. 填写 `Gongdi` / `Xunjian` / `Tance`。
+4. 「开启定位」`919,444` → 系统框「允许 SiteMark 访问你的位置？」；「本次使用允许」后定位卡消失，仍在表单。
+5. 底部「拍摄」`628,2578` → 系统框「允许 SiteMark 访问你的相机？」。
+6. 「允许」后 hilog：`CameraPicker::Pick`，`saveUri file://.../originals/<uuid>.jpg`。未见相机 UI；`files/originals` 空；应用回表单仍 FOREGROUND。**未拍成，未改宿主。**
+
 ---
 
 ## 官方测试
 
-官方 Flutter `C:\Users\Administrator\Development\flutter`（3.44.6 / Dart 3.12.2），2026-08-19：
+官方 Flutter `C:\Users\Administrator\Development\flutter`（3.44.6 / Dart 3.12.2）：
 
-- `test/platform/rust_initialization_contract_test.dart`
-- `test/platform/notification_service_test.dart`
-- `test/platform/external_link_service_test.dart`
-- `test/platform/platform_services_test.dart`
-- `test/platform/ohos_platform_services_test.dart`
-- `test/data/app_database_test.dart`
+- Task 12（2026-08-19 早）：notification / external_link / platform_services / ohos_platform_services / rust_initialization / app_database 全部通过。
+- Task 16（2026-08-19 续）：`ohos_platform_services_test` + `rust_initialization_contract_test` + `app_database_test` 再次全部通过（`+44`）。
 
-全部通过。不要用社区 Flutter 跑官方测试。不要提交社区 lock。
+不要用社区 Flutter 跑官方测试。不要提交社区 lock。`ohos_platform_services_test` 在无插件环境断言 `ohos_not_ready`，不等于宿主未实现相机。
 
 ---
 
@@ -98,7 +103,7 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项
 
 - 不是 Android v1.0.8 能力对等
 - 不是 `flutter build hap --release` / 已签名 AGC 产物
-- 未测相机、定位、相册 ACL、系统 picker / 沙箱回退
+- 未拍成照片；定位未出坐标；相册 ACL、系统 picker / 沙箱回退未走通
 - 未测 `ohos-arm64` 水印布局对等
 - AutoFill 只有 API 24 编译桩
 - 通知 / 分享 / 外链是 no-op，不是系统能力
@@ -108,4 +113,4 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项
 
 ## 下一步
 
-计划 Tasks 10–12 已在模拟器走完。推送只在用户说「推上去」时进行。仍不宣称相机 / ACL / `ohos-arm64`。
+计划 Tasks 13–16 已在模拟器走完探测。文档未推送；用户再说「提交」再 `git push origin ohos`。仍不宣称相机拍成 / ACL / `ohos-arm64`。

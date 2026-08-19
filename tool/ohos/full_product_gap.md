@@ -9,7 +9,9 @@
 | 全量 Dart 入口 | 已进 HAP | 可写「模拟器已跑 `lib/main.dart`」 | `--target lib/main.dart --dart-define=SITEMARK_OHOS=true` |
 | 隐私门 | 已过 | 可 | `FilePrivacyConsentStore` + 桥接 `path_provider` |
 | 首页（工程印记 / 项目 / 全部记录 / 设置） | 已看到 | 可写「空项目首页」 | dump 无审查壳文案 |
-| 新建项目 | 已过 | 可写「模拟器已保存项目并回到首页列表」 | 首页出现 `Task10Demo`；库文件 `filesDir/sitemark.sqlite` |
+| 新建项目 | 已过 | 可写「模拟器已保存项目并回到首页列表」 | 首页出现 `Task10Demo` / `Task13Demo`；库文件 `filesDir/sitemark.sqlite` |
+| 项目详情 | 已过 | 可写「可进项目详情」 | `Task13Demo`：进行中 / 0 张照片 / FAB「拍摄」 |
+| 拍摄表单 | 已过 | 可写「可打开拍摄表单并填写」 | 标题「水印内容」；地点/内容/拍摄人可输入；底部「拍摄」 |
 | Drift / sqlite3 | 已打开 | 不单独宣称持久化对等 | same-isolate + 显式 `sqlite3.open` + musl `libsqlite3.so` + `NativeAssetsManifest.json` |
 | 设置页 | 已打开 | 可写「设置分组可进」 | 外观 / 数据与备份 / 通知 / 诊断 / 关于 |
 | 关于页版本 | 已过 | 可写「关于页显示 `1.0.8+23`」 | `package_info` 桥 `getAll`；设备标记 `SITEMARK_PKG_INFO getAll 1.0.8 23` |
@@ -17,8 +19,8 @@
 | 仓库外链 | 已点 | **否**（不是系统浏览器） | `NoopExternalLinkService`；SnackBar「无法打开浏览器」，应用仍在关于页 |
 | 分享 | 代码 no-op | **否** | `NoopShareFileService`；未走发布页，无 page-level `if (ohos)` |
 | 水印 Rust | 未编 `ohos-arm64` | **否** | 降级管线 |
-| 系统相机 | 未测 | **否** | 模拟器 x86_64；Want 已能编译 |
-| 定位 | 未测 | **否** | |
+| 系统相机 | 已探测，未拍成 | **否** | 权限框已出；hilog `CameraPicker::Pick`；模拟器无相机 UI；`originals` 空；应用回表单未崩 |
+| 定位 | 已探测权限框，未证坐标 | **否** | 「开启定位」弹出系统位置框；允许后定位卡消失；不宣称 GPS 已通 |
 | 相册 ACL `READ/WRITE_IMAGEVIDEO` | 未测 | **否** | 无真机 / 无 AGC |
 | picker / 沙箱托底 | 代码在，未走 | **否** | |
 | WorkManager | ohos 走应用内串行队列 | 写差异，不假装 WorkManager | `InAppSerialBackgroundWorkClient` |
