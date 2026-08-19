@@ -211,4 +211,42 @@ void main() {
     expect(metadata.latitude, isNull);
     expect(metadata.longitude, isNull);
   });
+
+  test('OhosShareFileService maps missing plugin to ohos_not_ready', () async {
+    final service = OhosShareFileService();
+    await expectLater(
+      service.shareFile('/tmp/exports/sitemark-backup-1.zip'),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          'ohos_not_ready',
+        ),
+      ),
+    );
+  });
+
+  test('OhosShareFileService invokes shareFile with path', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    String? method;
+    Object? arguments;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          method = call.method;
+          arguments = call.arguments;
+          return null;
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await OhosShareFileService().shareFile(
+      '/tmp/exports/sitemark-backup-1.zip',
+    );
+    expect(method, 'shareFile');
+    expect(arguments, {
+      'path': '/tmp/exports/sitemark-backup-1.zip',
+    });
+  });
 }

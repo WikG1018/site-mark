@@ -55,9 +55,23 @@
 | 官方测试 | `ohos_platform_services_test` 11 项通过 |
 | 模拟器 dump | **无**。不得写相机已拍成 |
 
+## 2026-08-19 Tasks 33–34
+
+备份/导出分享改走鸿蒙原生 ShareKit。官方通道测试闭环，未重编 HAP，未在模拟器弹出分享面板。
+
+| 项 | 结果 |
+| --- | --- |
+| 通道 | `OhosSystemApi.shareFile` / `OhosShareFileService` |
+| 产品接线 | `shareFileServiceProvider`：鸿蒙走 `OhosShareFileService` |
+| 宿主 | ShareKit `ShareController.show`；zip/jpeg/png 走对应 UTD |
+| 顺带 | 补 ImageKit import（`dcd16b1` 漏写） |
+| 官方测试 | `ohos_platform_services_test` 13 项通过 |
+| 模拟器 dump | **无**。不得写系统分享已通 |
+
 ## 仍禁止写成已完成
 
 - picker 真正写入系统文件
 - 系统文件选择恢复（接线已改原生 picker，无成功 dump）
+- 系统分享面板（接线已改原生 ShareKit，无成功 dump）
 - 相机拍成 / ACL / `ohos-arm64`
 - 签名 release / 真机

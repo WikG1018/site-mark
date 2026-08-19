@@ -123,6 +123,17 @@ class OhosArchivePickService implements ArchivePickService {
   }
 }
 
+class OhosShareFileService implements ShareFileService {
+  OhosShareFileService({OhosSystemApi? api}) : _api = api ?? OhosSystemApi();
+
+  final OhosSystemApi _api;
+
+  @override
+  Future<void> shareFile(String path) {
+    return _api.shareFile(path);
+  }
+}
+
 CameraCaptureResult _decodeCameraCaptureResult(Map<Object?, Object?> raw) {
   final result = _asStringKeyedMap(raw);
   return CameraCaptureResult(

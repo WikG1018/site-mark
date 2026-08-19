@@ -2,9 +2,11 @@ import { common, Want, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { camera, cameraPicker } from '@kit.CameraKit';
 import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
+import { image } from '@kit.ImageKit';
 import { geoLocationManager } from '@kit.LocationKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { preferences } from '@kit.ArkData';
+import { systemShare } from '@kit.ShareKit';
 import UIAbility from '@ohos.app.ability.UIAbility';
 
 interface PermissionAskResult {
@@ -168,6 +170,9 @@ export default class OhosSystemHost {
         );
       case 'pickArchive':
         return await this.pickArchive();
+      case 'shareFile':
+        await this.shareFile(this.requiredString(args, 'path'));
+        return null;
       case 'getAll':
         return this.packageInfo();
       default:
@@ -528,6 +533,46 @@ export default class OhosSystemHost {
       throw new Error('picked archive is empty');
     }
     return destination;
+  }
+
+  private async shareFile(path: string): Promise<void> {
+    if (!this.hasCaptureContent(path)) {
+      throw new Error('share source is empty or missing');
+    }
+    const abilityContext = this.requireAbilityContext('ability context unavailable');
+    const record: systemShare.SharedRecord = {
+      utd: this.shareUtdForPath(path),
+      uri: fileUri.getUriFromPath(path),
+      title: this.fileNameFromPath(path),
+      label: 'SiteMark',
+    };
+    const controller = new systemShare.ShareController(new systemShare.SharedData(record));
+    await controller.show(abilityContext, {
+      previewMode: systemShare.SharePreviewMode.DEFAULT,
+      selectionMode: systemShare.SelectionMode.SINGLE,
+    });
+  }
+
+  private shareUtdForPath(path: string): string {
+    const lower = path.toLowerCase();
+    if (lower.endsWith('.zip')) {
+      return 'general.zip-archive';
+    }
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+      return 'general.jpeg';
+    }
+    if (lower.endsWith('.png')) {
+      return 'general.png';
+    }
+    return 'general.file';
+  }
+
+  private fileNameFromPath(path: string): string {
+    const slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    if (slash < 0 || slash + 1 >= path.length) {
+      return path;
+    }
+    return path.substring(slash + 1);
   }
 
   private async writeSandboxZip(sourcePath: string, fileName: string): Promise<number> {

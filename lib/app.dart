@@ -237,7 +237,7 @@ final bundleRestorePendingStoreProvider = Provider<BundleRestorePendingStore>(
 );
 
 final shareFileServiceProvider = Provider<ShareFileService>(
-  (ref) => isOhosBuild ? const NoopShareFileService() : SystemShareFileService(),
+  (ref) => isOhosBuild ? OhosShareFileService() : SystemShareFileService(),
 );
 
 final archiveSaveServiceProvider = Provider<ArchiveSaveService>(
