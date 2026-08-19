@@ -29,9 +29,23 @@
 | 缺失 zip | `not_found:` |
 | 官方测试 | `degraded_image_pipeline_test` 14 项通过 |
 
+## 2026-08-19 Tasks 29–30
+
+产品恢复选文件改走鸿蒙原生 Document picker。官方通道测试闭环，未重编 HAP，未在模拟器点选 zip。
+
+| 项 | 结果 |
+| --- | --- |
+| 通道 | `OhosSystemApi.pickArchive` / `OhosArchivePickService` |
+| 产品接线 | `archivePickServiceProvider`；`runProjectRestoreFlow` 默认 `pickZip` 读该服务 |
+| 宿主 | `DocumentViewPicker.select` 单选 `.zip`，`copyUriToPath` 到 `files/imports/sitemark-restore-*.zip` |
+| 取消 | 空串 → Dart `null` |
+| 非鸿蒙 | `FilePicker.pickFile` 单选 zip |
+| 官方测试 | `ohos_platform_services_test` 9 项通过 |
+| 模拟器 dump | **无**。不得写系统文件选择恢复已通 |
+
 ## 仍禁止写成已完成
 
 - picker 真正写入系统文件
-- 产品页选系统 zip 恢复
+- 系统文件选择恢复（接线已改原生 picker，无成功 dump）
 - 相机拍成 / ACL / `ohos-arm64`
 - 签名 release / 真机

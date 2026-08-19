@@ -245,6 +245,12 @@ final archiveSaveServiceProvider = Provider<ArchiveSaveService>(
       isOhosBuild ? OhosArchiveSaveService() : PigeonArchiveSaveService(),
 );
 
+final archivePickServiceProvider = Provider<ArchivePickService>(
+  (ref) => isOhosBuild
+      ? OhosArchivePickService()
+      : const FilePickerArchivePickService(),
+);
+
 final diagnosticBundleServiceProvider = FutureProvider<DiagnosticBundleService>((
   ref,
 ) async {

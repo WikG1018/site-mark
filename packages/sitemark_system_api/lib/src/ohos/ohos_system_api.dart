@@ -74,6 +74,8 @@ class OhosSystemApi {
     {'sourcePath': sourcePath, 'suggestedName': suggestedName},
   );
 
+  Future<String> pickArchive() => _invoke('pickArchive');
+
   Future<void> deletePublishedImage(String contentUri) =>
       _invoke('deletePublishedImage', {'contentUri': contentUri});
 

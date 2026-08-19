@@ -114,4 +114,49 @@ void main() {
       ArchiveSaveOutcome.cancelled,
     );
   });
+
+  test('OhosArchivePickService maps missing plugin to ohos_not_ready', () async {
+    final service = OhosArchivePickService();
+    await expectLater(
+      service.pickArchive(),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          'ohos_not_ready',
+        ),
+      ),
+    );
+  });
+
+  test('OhosArchivePickService returns sandbox path from pickArchive', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'pickArchive');
+          expect(call.arguments, isNull);
+          return '/data/storage/el2/base/files/imports/sitemark-restore-1.zip';
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    expect(
+      await OhosArchivePickService().pickArchive(),
+      '/data/storage/el2/base/files/imports/sitemark-restore-1.zip',
+    );
+  });
+
+  test('OhosArchivePickService treats empty path as cancelled', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => '');
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    expect(await OhosArchivePickService().pickArchive(), isNull);
+  });
 }

@@ -23,7 +23,7 @@
 | 未完成 | 签名 release、相机拍成 / ACL / `ohos-arm64` 对等、系统通知与分享、备份恢复导入、真机回归 |
 | 引擎 | `tool/ohos/engine_status.md`：**degraded** |
 
-后续实施计划：[2026-08-19-harmonyos-restore-import.md](docs/superpowers/plans/2026-08-19-harmonyos-restore-import.md)（Tasks 25–28：降级 `readProjectArchive` / `extractArchivePhoto` / bundle 读档；官方测试可自读自恢复，未证系统文件选择）。前序：[2026-08-19-harmonyos-save-archive.md](docs/superpowers/plans/2026-08-19-harmonyos-save-archive.md)（Tasks 21–24：沙箱 schema 5 zip + picker 弹出）。再前：[2026-08-19-harmonyos-records-backup.md](docs/superpowers/plans/2026-08-19-harmonyos-records-backup.md)。再前：[2026-08-19-harmonyos-capture-path.md](docs/superpowers/plans/2026-08-19-harmonyos-capture-path.md)。再前：[2026-08-18-harmonyos-product-runtime.md](docs/superpowers/plans/2026-08-18-harmonyos-product-runtime.md)。全量 HAP 编译记录见 [2026-08-18-harmonyos-full-product-hap.md](docs/superpowers/plans/2026-08-18-harmonyos-full-product-hap.md)。前期 Tasks 0–5 见 [2026-08-17-harmonyos-next-adaptation.md](docs/superpowers/plans/2026-08-17-harmonyos-next-adaptation.md)。规格见 [harmonyos-next-adaptation-design.md](docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md)。
+后续实施计划：[2026-08-19-harmonyos-pick-archive.md](docs/superpowers/plans/2026-08-19-harmonyos-pick-archive.md)（Tasks 29–30：鸿蒙恢复选文件走原生 `DocumentViewPicker` → 沙箱 `files/imports`；通道测试已绿，无模拟器成功 dump，不得写系统文件选择恢复已通）。前序：[2026-08-19-harmonyos-restore-import.md](docs/superpowers/plans/2026-08-19-harmonyos-restore-import.md)（Tasks 25–28：降级读档）。再前：[2026-08-19-harmonyos-save-archive.md](docs/superpowers/plans/2026-08-19-harmonyos-save-archive.md)（Tasks 21–24：沙箱 schema 5 zip + picker 弹出）。再前：[2026-08-19-harmonyos-records-backup.md](docs/superpowers/plans/2026-08-19-harmonyos-records-backup.md)。再前：[2026-08-19-harmonyos-capture-path.md](docs/superpowers/plans/2026-08-19-harmonyos-capture-path.md)。再前：[2026-08-18-harmonyos-product-runtime.md](docs/superpowers/plans/2026-08-18-harmonyos-product-runtime.md)。全量 HAP 编译记录见 [2026-08-18-harmonyos-full-product-hap.md](docs/superpowers/plans/2026-08-18-harmonyos-full-product-hap.md)。前期 Tasks 0–5 见 [2026-08-17-harmonyos-next-adaptation.md](docs/superpowers/plans/2026-08-17-harmonyos-next-adaptation.md)。规格见 [harmonyos-next-adaptation-design.md](docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md)。
 
 ---
 
@@ -39,6 +39,7 @@
 - 首次启动隐私同意（产品路径走 `FilePrivacyConsentStore`）
 - 产品 `ohos/` HAP 树；模拟器已跑全量 `lib/main.dart`（隐私门 → 新建项目 → 设置 / 关于 → 项目详情 → 拍摄表单 → 全部记录 → 备份选项目 → 沙箱 zip）
 - 鸿蒙备份：`OhosArchiveSaveService` + 宿主 `saveArchive`（picker 优先，失败/取消回退沙箱）；降级 `DegradedImagePipeline` 可写出并读回 schema 5 zip / schema 1 bundle
+- 鸿蒙恢复选文件：`OhosArchivePickService` + 宿主 `pickArchive`（`DocumentViewPicker.select` → `copyUriToPath` 到 `files/imports`）；产品页默认走该服务，非鸿蒙走 `FilePicker.pickFile` 单选 zip
 - `path_provider` 由 `SiteMarkSystemPlugin` 桥到应用目录
 - Drift / sqlite3：same-isolate + musl so + `NativeAssetsManifest.json`
 - `package_info_plus` 桥返回 `1.0.8` / `23`；通知 / 分享 / 外链为 no-op

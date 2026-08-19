@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -88,7 +87,7 @@ Future<void> runProjectRestoreFlow(
   } else {
     final service = ref.read(projectBundleServiceProvider);
     deps = ProjectRestoreFlowDependencies(
-      pickZip: _pickRestoreZip,
+      pickZip: () => ref.read(archivePickServiceProvider).pickArchive(),
       prepareRestore: service.prepareRestore,
       restorePrepared: service.restorePrepared,
       discardPrepared: service.discardPrepared,

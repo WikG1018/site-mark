@@ -161,6 +161,8 @@ export default class OhosSystemHost {
           this.requiredString(args, 'sourcePath'),
           this.requiredString(args, 'suggestedName'),
         );
+      case 'pickArchive':
+        return await this.pickArchive();
       case 'getAll':
         return this.packageInfo();
       default:
@@ -488,6 +490,30 @@ export default class OhosSystemHost {
       }
     }
     return await this.writeSandboxZip(source, name);
+  }
+
+  private async pickArchive(): Promise<string> {
+    const abilityContext = this.ability?.context as common.UIAbilityContext | undefined;
+    if (abilityContext === undefined) {
+      throw new Error('ability context unavailable');
+    }
+    const documentPicker = new picker.DocumentViewPicker(abilityContext);
+    const uris = await documentPicker.select({
+      maxSelectNumber: 1,
+      fileSuffixFilters: ['.zip'],
+    });
+    if (uris === undefined || uris.length === 0) {
+      return '';
+    }
+    const uri = this.stringAt(uris, 0);
+    const directory = `${this.context.filesDir}/imports`;
+    await this.ensureDir(directory);
+    const destination = `${directory}/sitemark-restore-${Date.now()}.zip`;
+    await this.copyUriToPath(uri, destination);
+    if (!this.hasCaptureContent(destination)) {
+      throw new Error('picked archive is empty');
+    }
+    return destination;
   }
 
   private async writeSandboxZip(sourcePath: string, fileName: string): Promise<number> {

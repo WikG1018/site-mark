@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -668,6 +669,23 @@ abstract interface class ShareFileService {
 
 abstract interface class ArchiveSaveService {
   Future<ArchiveSaveOutcome> saveArchive(String sourcePath);
+}
+
+abstract interface class ArchivePickService {
+  Future<String?> pickArchive();
+}
+
+class FilePickerArchivePickService implements ArchivePickService {
+  const FilePickerArchivePickService();
+
+  @override
+  Future<String?> pickArchive() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+    );
+    return file?.path;
+  }
 }
 
 class PigeonArchiveSaveService implements ArchiveSaveService {

@@ -110,6 +110,19 @@ class OhosArchiveSaveService implements ArchiveSaveService {
   }
 }
 
+class OhosArchivePickService implements ArchivePickService {
+  OhosArchivePickService({OhosSystemApi? api}) : _api = api ?? OhosSystemApi();
+
+  final OhosSystemApi _api;
+
+  @override
+  Future<String?> pickArchive() async {
+    final path = await _api.pickArchive();
+    if (path.isEmpty) return null;
+    return path;
+  }
+}
+
 CameraCaptureResult _decodeCameraCaptureResult(Map<Object?, Object?> raw) {
   final result = _asStringKeyedMap(raw);
   return CameraCaptureResult(
