@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "工程现场记录水印相机"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "工程印记鸿蒙原生版"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "工程印记"
+    },
+    {
+      "name": "permission_media_reason",
+      "value": "用于将用户确认的水印照片保存到系统相册，并在用户明确删除记录时清理对应照片。"
+    }
+  ]
+}

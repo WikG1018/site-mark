@@ -1,0 +1,13 @@
+.hvigor/
+.idea/
+.test/
+build/
+entry/build/
+oh_modules/
+entry/oh_modules/
+*_probe*.json
+phoneSettingConfig_Phone.json
+local.properties
+*.p12
+*.cer
+*.pem
