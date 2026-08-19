@@ -221,6 +221,10 @@ void main() {
     expect(api.archiveSourcePath, source);
     expect(api.archiveSuggestedName, 'sitemark-backup-123.zip');
   });
+
+  test('noop share service swallows the missing share_plus plugin', () async {
+    await const NoopShareFileService().shareFile('/tmp/export.zip');
+  });
 }
 
 class _FakeSystemApi extends SiteMarkSystemApi {

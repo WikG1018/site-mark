@@ -26,6 +26,29 @@ abstract class CompletionNotificationService {
   Future<void> setEnabled(bool enabled);
 }
 
+/// HarmonyOS has no flutter_local_notifications plugin in the product HAP.
+/// Settings and capture-ready paths must stay no-op instead of crashing.
+final class NoopCompletionNotificationService
+    implements CompletionNotificationService {
+  @override
+  Future<void> initialize(
+    void Function(String deepLinkPath) onTapDeepLink,
+  ) async {}
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) async {}
+
+  @override
+  Future<void> setEnabled(bool enabled) async {}
+}
+
 /// Overridden in `main.dart` with the production implementation.
 final completionNotificationServiceProvider =
     Provider<CompletionNotificationService>((ref) {

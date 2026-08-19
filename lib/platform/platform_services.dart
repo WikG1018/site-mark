@@ -692,6 +692,13 @@ class SystemShareFileService implements ShareFileService {
   }
 }
 
+class NoopShareFileService implements ShareFileService {
+  const NoopShareFileService();
+
+  @override
+  Future<void> shareFile(String path) async {}
+}
+
 abstract interface class PrivateFileStore {
   Future<bool> exists(String path);
 

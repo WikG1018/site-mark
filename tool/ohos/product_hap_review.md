@@ -1,10 +1,10 @@
-# 产品 HAP 树 + 模拟器审查（2026-08-18）
+# 产品 HAP 树 + 模拟器审查（2026-08-19）
 
 Worktree: `.worktrees/ohos`  
-Branch: `ohos`（基线 GitHub `v1.0.8` / `847c74b`；文档提交前远端仍是 `821f3d4`）  
-AVD: `SiteMarkPhone602`（HarmonyOS-6.0.2 phone_all_x86 API 22，hdc **`127.0.0.1:5555`**；`15555` 常 Offline）
+Branch: `ohos`（基线 GitHub `v1.0.8` / `847c74b`；远端验证停在 `8f616b6`，本轮 Task 10–12 尚未推送）  
+AVD: `SiteMarkPhone602`（HarmonyOS-6.0.2 phone_all_x86 API 22，hdc **`127.0.0.1:5555`**）
 
-Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 真实首页）**。  
+Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项目 → 设置 / 通知 / 关于）**。  
 **不是** Android SiteMark v1.0.8 能力对等，**不证明** 相机 / 相册 ACL / `ohos-arm64` 布局。
 
 ---
@@ -22,6 +22,7 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 真实首
 | 平台 | `--target-platform ohos-x64` |
 | Flutter-OH | 仓库外 `C:\Users\Administrator\Development\flutter-ohos-3.44`，本地 tag `3.44.9-ohos`，Dart 3.12.2 |
 | 官方 SDK | `pubspec.yaml` 仍是 `sdk: ^3.12.2`，未降 |
+| kernel 门禁 | `SITEMARK_DB_V3` + `SITEMARK_TASK11` |
 
 `rust_builder` CMake native 仍关掉。引擎状态见 `engine_status.md`：**degraded**。
 
@@ -38,47 +39,58 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 真实首
 5. ArkTS：禁止匿名对象类型、禁止 `arr[i]` / `str[i]`、禁止 index signature。
 6. `Want.parameters` 必须是带**引号键**的 `Record<string, Object>`（`'ability.params.stream'` / `'pushParams'`）。
 7. HAP 构建必须**不走沙箱**（否则写不了 Flutter-OH lockfile）。
+8. 社区 `pub get` 后必须 `restore-official-lock.ps1`，不提交 lock 涎动。
+9. 禁止 `ZipFile.CreateFromDirectory` 重打包 HAP（反斜杠条目会变成桌面）。so / 清单只能 in-place zip。
+10. 禁止删除整个 `intermediates/flutter`。只删 `kernel_blob.bin` + `.dart_tool/flutter_build`。
+11. `shareAcrossIsolates: true` 在 ohos 上会 isolate 重试挂起 → same-isolate `NativeDatabase`。
+12. Flutter-OH native-assets hook 会编出 glibc `libsqlite3.so`（`NEEDED libc.so.6`）→ 事后换成 musl OH so（1533928，`NEEDED libc.so`）。
+13. `OhosAssetBundle` 不拷 `NativeAssetsManifest.json`；引擎 `native_assets.cc` 读的是这份清单，不是 `native_assets.json`。由 `inject-native-assets-manifest.ps1` 注入 HAP。
+14. `NativeDatabase(File)` 构造不 `sqlite3.open` → opener 里显式 `sqlite3.open` + `NativeDatabase.opened`。设备日志：`opened 3.50.2`。
 
 ---
 
-## 模拟器步骤与证据（全量入口）
+## 模拟器步骤与证据
+
+### Task 6–9（仍成立）
 
 1. 非沙箱执行 `tool/ohos/build-product-hap.ps1`。
 2. `hdc -t 127.0.0.1:5555 install` 未签名 HAP → `install bundle successfully`。
-3. `aa start -a EntryAbility -b io.github.wikg1018.sitemark` → FOREGROUND。
-4. 首次 dump（`sitemark_layout_full_before.json`）是**产品隐私门**，不是审查壳：
-   - `使用前说明`
-   - `工程印记离线工作…`
-   - `同意并继续` `[84,2242][1172,2410]`（中心 628,2326）
-   - `退出`
-   - Flutter `XComponent` `oh_flutter_1`
-5. 第一次点同意失败：`MissingPluginException` on `plugins.flutter.io/path_provider` / `getApplicationDocumentsDirectory`。
-6. `SiteMarkSystemPlugin` 同时挂 `sitemark.system.ohos` 与 `plugins.flutter.io/path_provider`；`OhosSystemHost.resolveAppDirectory` 映射：
-   - `getTemporaryDirectory` → `context.tempDir`
-   - `getApplicationCacheDirectory` → `context.cacheDir`
-   - `getApplicationDocumentsDirectory` / `getApplicationSupportDirectory` → `context.filesDir`
-7. 重建安装后再点 628,2326。二次 dump（`sitemark_layout_full_home.json`，41951 字节）文案：
-   - `工程印记`
-   - `项目`
-   - `全部记录`
-   - `设置`
-   - `暂无项目`
-   - `新建项目后即可开始拍摄记录。`
-   - **没有** `鸿蒙审查壳已启动`
-   - **没有** `使用前说明` / `同意并继续`
-8. 截图：`tool/ohos/review/sitemark_full_home.jpeg`。产品 mission `#38` / pid `#3657` FOREGROUND。
+3. `aa start -a EntryAbility -b io.github.wikg1018.sitemark`。
+4. 首次是产品隐私门：`使用前说明` / `同意并继续` 中心约 `628,2326`。
+5. `path_provider` 由 `SiteMarkSystemPlugin` 桥到 `filesDir` / `cacheDir` / `tempDir`。
+6. 同意后首页：`工程印记` / `项目` / `全部记录` / `设置` / `暂无进行中的项目`。不是审查壳。
+
+### Task 10：新建项目（2026-08-19）
+
+1. FAB `Key('new-project-fab')` 点 `1102,2242`。
+2. 创建页填 `Task10Demo`，点保存。
+3. 首页 dump 出现项目名 `Task10Demo`。
+4. `filesDir` 出现 `sitemark.sqlite` 与 `sitemark_db_open.log`（`enter` / `docs_ok` / `before_open` / `opened 3.50.2` / `after_native`）。
+
+### Task 11：设置 / 通知 / 关于（2026-08-19）
+
+1. Dock「设置」`1045,2560` → 外观 / 数据与备份 / 通知 / 诊断 / 关于。
+2. 「通知」页可开，拨开关不崩（no-op，不是系统通知）。
+3. 「关于」显示 SiteMark / `1.0.8+23` / `https://github.com/wikg1018/sitemark`。
+4. 设备 `sitemark_package_info.log`：`SITEMARK_PKG_INFO getAll 1.0.8 23`（桥成功，不是关于页 fallback）。
+5. 点仓库链接：SnackBar「无法打开浏览器」，dump 仍在关于页（`NoopExternalLinkService`）。
+
+卸载会清 userdata，下次会再出隐私门。
 
 ---
 
 ## 官方测试
 
-官方 Flutter `C:\Users\Administrator\Development\flutter`（3.44.6 / Dart 3.12.2）：
+官方 Flutter `C:\Users\Administrator\Development\flutter`（3.44.6 / Dart 3.12.2），2026-08-19：
 
-- 全量 `flutter test` 曾 `+1013 -1`：`rust_initialization_contract_test` 要求源码字面量 `RustLib.init()`，不是 tear-off。
-- 已改回 `startInitialization: () => RustLib.init()`。
-- 复跑该文件：`+1 All tests passed`。
+- `test/platform/rust_initialization_contract_test.dart`
+- `test/platform/notification_service_test.dart`
+- `test/platform/external_link_service_test.dart`
+- `test/platform/platform_services_test.dart`
+- `test/platform/ohos_platform_services_test.dart`
+- `test/data/app_database_test.dart`
 
-不要用社区 Flutter 跑官方测试。不要提交社区 `pub get` 冲过的 lock。
+全部通过。不要用社区 Flutter 跑官方测试。不要提交社区 lock。
 
 ---
 
@@ -89,11 +101,11 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 真实首
 - 未测相机、定位、相册 ACL、系统 picker / 沙箱回退
 - 未测 `ohos-arm64` 水印布局对等
 - AutoFill 只有 API 24 编译桩
-- 通知 / 分享 / `package_info_plus` 等第三方插件未在模拟器走通
+- 通知 / 分享 / 外链是 no-op，不是系统能力
 - GitHub Releases 里的 APK 属于 Android 主线
 
 ---
 
 ## 下一步
 
-见 [2026-08-18-harmonyos-product-runtime.md](../../docs/superpowers/plans/2026-08-18-harmonyos-product-runtime.md)。方向：在已能进首页的全量 HAP 上走通新建项目 / 设置，补缺插件，仍不宣称相机 / ACL / `ohos-arm64`。
+计划 Tasks 10–12 已在模拟器走完。推送只在用户说「推上去」时进行。仍不宣称相机 / ACL / `ohos-arm64`。

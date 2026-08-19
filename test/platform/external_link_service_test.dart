@@ -19,4 +19,11 @@ void main() {
     expect(opened, siteMarkRepositoryUri);
     expect(openedMode, LaunchMode.externalApplication);
   });
+
+  test('noop external link service reports a failed open', () async {
+    expect(
+      await const NoopExternalLinkService().open(siteMarkRepositoryUri),
+      isFalse,
+    );
+  });
 }

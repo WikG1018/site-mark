@@ -156,6 +156,8 @@ export default class OhosSystemHost {
       case 'inspectImage':
       case 'saveArchive':
         throw new Error('ohos_not_ready');
+      case 'getAll':
+        return this.packageInfo();
       default:
         throw new Error(`unimplemented:${method}`);
     }
@@ -879,6 +881,30 @@ export default class OhosSystemHost {
   private async ensureDir(path: string): Promise<void> {
     if (!this.pathExists(path)) {
       fs.mkdirSync(path, true);
+    }
+  }
+
+  private packageInfo(): Record<string, Object | null> {
+    this.markPackageInfoBridge();
+    const info: Record<string, Object | null> = {};
+    info['appName'] = 'SiteMark';
+    info['packageName'] = 'io.github.wikg1018.sitemark';
+    info['version'] = '1.0.8';
+    info['buildNumber'] = '23';
+    info['buildSignature'] = '';
+    info['installerStore'] = null;
+    info['installTime'] = null;
+    info['updateTime'] = null;
+    return info;
+  }
+
+  private markPackageInfoBridge(): void {
+    try {
+      const path = `${this.context.filesDir}/sitemark_package_info.log`;
+      const file = fs.openSync(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      fs.writeSync(file.fd, 'SITEMARK_PKG_INFO getAll 1.0.8 23\n');
+      fs.closeSync(file);
+    } catch (_error) {
     }
   }
 

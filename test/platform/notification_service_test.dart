@@ -46,6 +46,18 @@ void main() {
       expect(service.lastPayload, isNull);
     });
   });
+
+  test('noop completion notifications stay silent and grant permission', () async {
+    final service = NoopCompletionNotificationService();
+    await service.initialize((_) {});
+    await service.setEnabled(true);
+    expect(await service.requestPermission(), isTrue);
+    await service.showCaptureReady(
+      projectId: 'project-1',
+      captureId: 'capture-9',
+      photoNumber: 'IMG-0009',
+    );
+  });
 }
 
 /// Records calls and mirrors the production gate semantics (`setEnabled`

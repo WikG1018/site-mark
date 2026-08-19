@@ -37,8 +37,10 @@
 - `OhosPlatformServices`、应用内串行队列、按 `captureId` 的发布日记
 - ACL 相册 + picker / 沙箱托底（代码在，模拟器未证明 ACL）
 - 首次启动隐私同意（产品路径走 `FilePrivacyConsentStore`）
-- 产品 `ohos/` HAP 树；模拟器已跑全量 `lib/main.dart`（隐私门 → 空项目首页）
+- 产品 `ohos/` HAP 树；模拟器已跑全量 `lib/main.dart`（隐私门 → 新建项目 → 设置 / 关于）
 - `path_provider` 由 `SiteMarkSystemPlugin` 桥到应用目录
+- Drift / sqlite3：same-isolate + musl so + `NativeAssetsManifest.json`
+- `package_info_plus` 桥返回 `1.0.8` / `23`；通知 / 分享 / 外链为 no-op
 
 明确还不是完整鸿蒙版：
 

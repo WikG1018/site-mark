@@ -16,3 +16,10 @@ class UrlLauncherExternalLinkService implements ExternalLinkService {
   Future<bool> open(Uri uri) =>
       _launcher(uri, mode: LaunchMode.externalApplication);
 }
+
+class NoopExternalLinkService implements ExternalLinkService {
+  const NoopExternalLinkService();
+
+  @override
+  Future<bool> open(Uri uri) async => false;
+}

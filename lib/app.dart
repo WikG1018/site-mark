@@ -237,7 +237,7 @@ final bundleRestorePendingStoreProvider = Provider<BundleRestorePendingStore>(
 );
 
 final shareFileServiceProvider = Provider<ShareFileService>(
-  (ref) => SystemShareFileService(),
+  (ref) => isOhosBuild ? const NoopShareFileService() : SystemShareFileService(),
 );
 
 final archiveSaveServiceProvider = Provider<ArchiveSaveService>(
@@ -297,7 +297,9 @@ final storageUsageProvider = FutureProvider((ref) {
 });
 
 final externalLinkServiceProvider = Provider<ExternalLinkService>(
-  (ref) => const UrlLauncherExternalLinkService(),
+  (ref) => isOhosBuild
+      ? const NoopExternalLinkService()
+      : const UrlLauncherExternalLinkService(),
 );
 
 Future<void> processCaptureOnOhos(String captureId, Ref ref) async {

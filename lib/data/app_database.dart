@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/data/conditional_polling_stream.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
@@ -10,7 +13,9 @@ import 'package:sitemark/domain/photo_number.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/domain/project_summary.dart';
+import 'package:sitemark/platform/ohos_capability.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
+import 'package:sqlite3/sqlite3.dart';
 
 part 'app_database.g.dart';
 part 'app_database_migration.dart';
@@ -242,17 +247,86 @@ class AppDatabase extends _$AppDatabase {
   }
 
   AppDatabase({this.externalRefreshInterval = _defaultExternalRefreshInterval})
-    : super(
-        driftDatabase(
-          name: 'sitemark',
-          native: const DriftNativeOptions(shareAcrossIsolates: true),
-        ),
-      );
+    : super(_openProductionExecutor()) {
+    print(
+      'SITEMARK_DB_V3 ctor same=$_useSameIsolateNativeDatabase '
+      'os=${Platform.operatingSystem} '
+      'define=${const bool.fromEnvironment('SITEMARK_OHOS')}',
+    );
+    unawaited(_markOhosDatabaseOpen('constructed'));
+  }
 
   AppDatabase.forTesting(
     super.executor, {
     this.externalRefreshInterval = _defaultExternalRefreshInterval,
   });
+
+  static bool get _useSameIsolateNativeDatabase => isOhosBuild;
+
+  static QueryExecutor _openProductionExecutor() {
+    if (_useSameIsolateNativeDatabase) {
+      return LazyDatabase(_openOhosNativeDatabase);
+    }
+    return driftDatabase(
+      name: 'sitemark',
+      native: const DriftNativeOptions(shareAcrossIsolates: true),
+    );
+  }
+
+  static Future<void> _markQueue = Future<void>.value();
+
+  static Future<void> _markOhosDatabaseOpen(
+    String step, [
+    Object? error,
+  ]) {
+    _markQueue = _markQueue.then((_) => _writeOhosDatabaseOpenMark(step, error));
+    return _markQueue;
+  }
+
+  static Future<void> _writeOhosDatabaseOpenMark(
+    String step, [
+    Object? error,
+  ]) async {
+    final line =
+        '${DateTime.now().toIso8601String()} $step'
+        '${error == null ? '' : ' $error'}';
+    print('SITEMARK_DB $line');
+    try {
+      final documents = await getApplicationDocumentsDirectory();
+      await documents.create(recursive: true);
+      await File(
+        '${documents.path}${Platform.pathSeparator}sitemark_db_open.log',
+      ).writeAsString('$line\n', mode: FileMode.append, flush: true);
+    } catch (markError) {
+      print('SITEMARK_DB mark_failed $step $markError');
+    }
+  }
+
+  static Future<QueryExecutor> _openOhosNativeDatabase() async {
+    await _markOhosDatabaseOpen('enter');
+    try {
+      final documents = await getApplicationDocumentsDirectory();
+      await documents.create(recursive: true);
+      await _markOhosDatabaseOpen('docs_ok ${documents.path}');
+      final file = File(
+        '${documents.path}${Platform.pathSeparator}sitemark.sqlite',
+      );
+      await _markOhosDatabaseOpen('before_open ${file.path}');
+      final raw = sqlite3.open(file.path);
+      await _markOhosDatabaseOpen('opened ${sqlite3.version.libVersion}');
+      final database = NativeDatabase.opened(
+        raw,
+        setup: (_) {
+          print('SITEMARK_DB sqlite_setup');
+        },
+      );
+      await _markOhosDatabaseOpen('after_native');
+      return database;
+    } catch (error, stack) {
+      await _markOhosDatabaseOpen('error', '$error | $stack');
+      rethrow;
+    }
+  }
 
   @override
   int get schemaVersion => 13;

@@ -72,6 +72,10 @@ Thumbs.db
 # Flutter-OH crash reports in worktree root
 /flutter_*.log
 
+# HarmonyOS sqlite amalgamation / compiled musl so cache
+/tool/ohos/.cache/
+/tool/ohos/review/
+
 # Temporary analysis/test output
 /analyze_out.txt
 /dart_ver.txt

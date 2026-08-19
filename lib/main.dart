@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/bootstrap.dart';
+import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/local_notification_service.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
+import 'package:sitemark/platform/notification_service.dart';
+import 'package:sitemark/platform/ohos_capability.dart';
 import 'package:sitemark/platform/platform_services.dart';
 
 export 'package:sitemark/app.dart' show MyApp;
@@ -19,7 +22,12 @@ Future<void> main() async {
   // The production completion-notification service; SiteMarkApp initializes
   // it (deep-link taps) and keeps its send gate in sync with the persisted
   // settings switch.
-  final notificationService = LocalNotificationService();
+  if (isOhosBuild) {
+    print('SITEMARK_TASK11 noop_notify share_link');
+  }
+  final notificationService = isOhosBuild
+      ? NoopCompletionNotificationService()
+      : LocalNotificationService();
   // The production memory-pressure service; bridges ITGSA MEMORY_TRIM /
   // MEMORY_KILL broadcasts (and Flutter's own didHaveMemoryPressure) to the
   // MemoryPressureCoordinator wired in SiteMarkApp.
@@ -29,6 +37,10 @@ Future<void> main() async {
       MyApp(
         completionNotificationService: notificationService,
         memoryPressureService: memoryPressureService,
+        shareService: isOhosBuild ? const NoopShareFileService() : null,
+        externalLinkService: isOhosBuild
+            ? const NoopExternalLinkService()
+            : null,
       ),
     ),
     waitForFirstFrame: () => WidgetsBinding.instance.endOfFrame,

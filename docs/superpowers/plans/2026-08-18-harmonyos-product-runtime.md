@@ -33,7 +33,7 @@
 
 **Steps:**
 
-- [ ] **Step 1: 确认产品仍在前台**
+- [x] **Step 1: 确认产品仍在前台**
 
 ```powershell
 hdc -t 127.0.0.1:5555 shell "aa dump -a"
@@ -41,15 +41,15 @@ hdc -t 127.0.0.1:5555 shell "aa dump -a"
 
 Expected: `io.github.wikg1018.sitemark` / `EntryAbility` FOREGROUND。若 Offline，先 `emulator.exe -start SiteMarkPhone602`。
 
-- [ ] **Step 2: dump 首页，定位「新建项目」坐标**
+- [x] **Step 2: dump 首页，定位「新建项目」坐标**
 
 从 `uitest dumpLayout` 找「新建项目」bounds，点中心。不要用审查壳文案当成功条件。
 
-- [ ] **Step 3: 填最小项目名并保存**
+- [x] **Step 3: 填最小项目名并保存**
 
 若弹出权限/文件选择，记入 `full_product_gap.md`，不要假装成功。
 
-- [ ] **Step 4: dump 必须出现项目名，且仍不是审查壳**
+- [x] **Step 4: dump 必须出现项目名，且仍不是审查壳**
 
 把 dump / 截图写进 `tool/ohos/review/`。hilog 若再出 `MissingPluginException`，记下 channel + method，本任务就修这一处。
 
@@ -65,19 +65,19 @@ Expected: `io.github.wikg1018.sitemark` / `EntryAbility` FOREGROUND。若 Offlin
 
 **Steps:**
 
-- [ ] **Step 1: 点 Dock「设置」，再进「关于」**
+- [x] **Step 1: 点 Dock「设置」，再进「关于」**
 
 记录缺的文案（版本号空白、分享按钮无响应、通知开关抛错）。
 
-- [ ] **Step 2: 缺 `package_info_plus` 时**
+- [x] **Step 2: 缺 `package_info_plus` 时**
 
 在 `SiteMarkSystemPlugin` 增桥 `dev.fluttercommunity.plus/package_info`，返回 `1.0.8` / `23` / `io.github.wikg1018.sitemark`。不要改关于页业务分支。
 
-- [ ] **Step 3: 缺通知插件时**
+- [x] **Step 3: 缺通知插件时**
 
 ohos 上让 `LocalNotificationService` 保持 no-op，设置页不得崩溃。写进差异表。
 
-- [ ] **Step 4: 缺 `share_plus` 时**
+- [x] **Step 4: 缺 `share_plus` 时**
 
 第一期设置页分享可禁用或 no-op，文案友好。不要在页面写 `if (ohos)` 发图。
 
@@ -92,7 +92,7 @@ ohos 上让 `LocalNotificationService` 保持 no-op，设置页不得崩溃。�
 
 **Steps:**
 
-- [ ] **Step 1: 官方 Flutter 跑相关测试**
+- [x] **Step 1: 官方 Flutter 跑相关测试**
 
 ```text
 C:\Users\Administrator\Development\flutter
@@ -101,11 +101,11 @@ flutter test test/platform/rust_initialization_contract_test.dart
 
 有设置/通知改动时补聚焦测试。全量 `flutter test` 尽量跑；失败必须分类：本分支回归 vs 基线。
 
-- [ ] **Step 2: 按实测改 README / gap / review**
+- [x] **Step 2: 按实测改 README / gap / review**
 
 只写量到的路径。引擎仍写 degraded。
 
-- [ ] **Step 3: Commit（用户再说推）**
+- [x] **Step 3: Commit（用户再说推）**
 
 只 add 源码、计划、审查记录。不 add lock 涎动、HAP、`ohos/entry/libs/`、`flutter_*.log`。
 
