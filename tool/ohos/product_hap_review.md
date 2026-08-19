@@ -86,6 +86,25 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项
 5. 底部「拍摄」`628,2578` → 系统框「允许 SiteMark 访问你的相机？」。
 6. 「允许」后 hilog：`CameraPicker::Pick`，`saveUri file://.../originals/<uuid>.jpg`。未见相机 UI；`files/originals` 空；应用回表单仍 FOREGROUND。**未拍成，未改宿主。**
 
+### Task 17：全部记录空列表（2026-08-19）
+
+1. 底部 Tab「全部记录」约 `628,2501`。
+2. dump 标题「全部记录」；空态「暂无记录」/「还没有拍摄记录」。
+3. 应用仍 FOREGROUND。不是审查壳。**未拍成，所以列表为空是预期。**
+
+### Task 18：备份选项目（2026-08-19）
+
+1. 设置 → 备份与恢复 → 备份项目。
+2. 选项目页列表含 `Task13Demo`，可勾选。
+3. **未点恢复**，不宣称 `file_picker` 导入。
+
+### Task 19：`saveArchive` 失败路径（2026-08-19）
+
+1. 勾选 `Task13Demo` 后开始备份；确认框点「不包含原图」。
+2. `files/exports` 被创建且目录内无 zip。
+3. 宿主 `saveArchive` 仍 `throw new Error('ohos_not_ready')`。
+4. 应用回选项目页，未红屏、未回桌面。**未导出备份，未改宿主。**
+
 ---
 
 ## 官方测试
@@ -94,8 +113,9 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项
 
 - Task 12（2026-08-19 早）：notification / external_link / platform_services / ohos_platform_services / rust_initialization / app_database 全部通过。
 - Task 16（2026-08-19 续）：`ohos_platform_services_test` + `rust_initialization_contract_test` + `app_database_test` 再次全部通过（`+44`）。
+- Task 20（2026-08-19 记录/备份后）：`ohos_platform_services_test` + `app_database_test` 全部通过（`+43`）。产品代码未改。
 
-不要用社区 Flutter 跑官方测试。不要提交社区 lock。`ohos_platform_services_test` 在无插件环境断言 `ohos_not_ready`，不等于宿主未实现相机。
+不要用社区 Flutter 跑官方测试。不要提交社区 lock。`ohos_platform_services_test` 在无插件环境断言 `ohos_not_ready`，不等于宿主未实现相机，也不等于备份已导出。
 
 ---
 
@@ -104,6 +124,7 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项
 - 不是 Android v1.0.8 能力对等
 - 不是 `flutter build hap --release` / 已签名 AGC 产物
 - 未拍成照片；定位未出坐标；相册 ACL、系统 picker / 沙箱回退未走通
+- 备份 zip 未导出；`saveArchive` / `inspectImage` 仍 `ohos_not_ready`
 - 未测 `ohos-arm64` 水印布局对等
 - AutoFill 只有 API 24 编译桩
 - 通知 / 分享 / 外链是 no-op，不是系统能力
@@ -113,4 +134,4 @@ Verdict: **PASS（全量 `lib/main.dart` 未签名 HAP：隐私门 → 新建项
 
 ## 下一步
 
-计划 Tasks 13–16 已在模拟器走完探测。文档未推送；用户再说「提交」再 `git push origin ohos`。仍不宣称相机拍成 / ACL / `ohos-arm64`。
+Tasks 17–20 文档随本次提交推到 `origin/ohos`。仍不宣称相机拍成 / 备份已导出 / ACL / `ohos-arm64`。用户再说「继续」再开恢复导入或真 `saveArchive`。

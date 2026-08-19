@@ -19,6 +19,9 @@
 | 仓库外链 | 已点 | **否**（不是系统浏览器） | `NoopExternalLinkService`；SnackBar「无法打开浏览器」，应用仍在关于页 |
 | 分享 | 代码 no-op | **否** | `NoopShareFileService`；未走发布页，无 page-level `if (ohos)` |
 | 水印 Rust | 未编 `ohos-arm64` | **否** | 降级管线 |
+| 全部记录 | 已过 | 可写「空列表可开」 | 标题「全部记录」；「暂无记录」/「还没有拍摄记录」 |
+| 备份与恢复入口 | 已过 | 可写「可打开备份选项目」 | 设置 → 备份与恢复 → 备份项目；列表含 `Task13Demo` |
+| 备份导出 | 已探测，未导出 | **否** | 点「不包含原图」后 `files/exports` 被创建且无 zip；`saveArchive` 仍 `ohos_not_ready`；应用回选项目页未崩 |
 | 系统相机 | 已探测，未拍成 | **否** | 权限框已出；hilog `CameraPicker::Pick`；模拟器无相机 UI；`originals` 空；应用回表单未崩 |
 | 定位 | 已探测权限框，未证坐标 | **否** | 「开启定位」弹出系统位置框；允许后定位卡消失；不宣称 GPS 已通 |
 | 相册 ACL `READ/WRITE_IMAGEVIDEO` | 未测 | **否** | 无真机 / 无 AGC |
