@@ -159,4 +159,56 @@ void main() {
 
     expect(await OhosArchivePickService().pickArchive(), isNull);
   });
+
+  test('OhosPlatformServices inspectImage decodes metadata map', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'inspectImage');
+          expect(call.arguments, {'path': '/tmp/a.jpg'});
+          return <String, Object?>{
+            'width': 4032,
+            'height': 3024,
+            'fileSizeBytes': 2048,
+            'mimeType': 'image/jpeg',
+            'latitude': 31.23,
+            'longitude': 121.47,
+          };
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final metadata = await OhosPlatformServices().inspectImage('/tmp/a.jpg');
+    expect(metadata.width, 4032);
+    expect(metadata.height, 3024);
+    expect(metadata.fileSizeBytes, 2048);
+    expect(metadata.mimeType, 'image/jpeg');
+    expect(metadata.latitude, closeTo(31.23, 0.0001));
+    expect(metadata.longitude, closeTo(121.47, 0.0001));
+  });
+
+  test('OhosPlatformServices inspectImage treats missing GPS as null', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          return <String, Object?>{
+            'width': 100,
+            'height': 80,
+            'fileSizeBytes': 12,
+            'mimeType': 'image/jpeg',
+            'latitude': null,
+            'longitude': null,
+          };
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final metadata = await OhosPlatformServices().inspectImage('/tmp/a.jpg');
+    expect(metadata.latitude, isNull);
+    expect(metadata.longitude, isNull);
+  });
 }

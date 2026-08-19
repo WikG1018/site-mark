@@ -38,6 +38,11 @@ interface PublishJpegResult {
   supersededUris: Array<string>;
 }
 
+interface GpsPair {
+  latitude: number | null;
+  longitude: number | null;
+}
+
 interface PublishJournalSnapshot {
   captureId: string;
   contentUri: string;
@@ -155,7 +160,7 @@ export default class OhosSystemHost {
         await this.deletePublishedImage(this.requiredString(args, 'contentUri'));
         return null;
       case 'inspectImage':
-        throw new Error('ohos_not_ready');
+        return await this.inspectImage(this.requiredString(args, 'path'));
       case 'saveArchive':
         return await this.saveArchive(
           this.requiredString(args, 'sourcePath'),
@@ -213,8 +218,17 @@ export default class OhosSystemHost {
           pickerProfile as cameraPicker.PickerProfile,
         );
         launched = true;
-        if (!this.hasCaptureContent(target) && pickerResult?.resultUri) {
-          await this.copyUriToPath(pickerResult.resultUri, target);
+        if (pickerResult?.resultUri) {
+          const resultPath = this.resolvedCapturePath(pickerResult.resultUri);
+          if (resultPath !== target) {
+            try {
+              await this.copyUriToPath(pickerResult.resultUri, target);
+            } catch (_copyError) {
+              if (!this.hasCaptureContent(target)) {
+                return this.cameraFailed(target);
+              }
+            }
+          }
         }
         if (this.hasCaptureContent(target)) {
           return this.cameraCaptured(target);
@@ -1023,6 +1037,9 @@ export default class OhosSystemHost {
 
   private async copyUriToPath(uri: string, destination: string): Promise<void> {
     const source = uri.startsWith('file://') ? this.pathFromUri(uri) : uri;
+    if (source === destination) {
+      return;
+    }
     if (source.startsWith('/')) {
       this.copyFile(source, destination);
       return;
@@ -1038,6 +1055,172 @@ export default class OhosSystemHost {
       fs.closeSync(file);
       fs.closeSync(output);
     }
+  }
+
+  private resolvedCapturePath(uri: string): string {
+    if (uri.startsWith('file://')) {
+      return this.pathFromUri(uri);
+    }
+    return uri;
+  }
+
+  private async inspectImage(path: string): Promise<Record<string, Object | null>> {
+    if (!this.hasCaptureContent(path)) {
+      throw new Error('image not found');
+    }
+    const source = image.createImageSource(path);
+    try {
+      const info = await source.getImageInfo();
+      const orientationText = await this.readImageProperty(source, image.PropertyKey.ORIENTATION);
+      const latitudeText = await this.readImageProperty(source, image.PropertyKey.GPS_LATITUDE);
+      const longitudeText = await this.readImageProperty(source, image.PropertyKey.GPS_LONGITUDE);
+      const latitudeRef = await this.readImageProperty(source, image.PropertyKey.GPS_LATITUDE_REF);
+      const longitudeRef = await this.readImageProperty(source, image.PropertyKey.GPS_LONGITUDE_REF);
+      const swapped = this.swapsDimensions(orientationText);
+      const gps = this.parseExifGps(latitudeText, longitudeText, latitudeRef, longitudeRef);
+      const result: Record<string, Object | null> = {
+        width: swapped ? info.size.height : info.size.width,
+        height: swapped ? info.size.width : info.size.height,
+        fileSizeBytes: fs.statSync(path).size,
+        mimeType: info.mimeType.length > 0 ? info.mimeType : 'image/jpeg',
+        latitude: gps.latitude,
+        longitude: gps.longitude,
+      };
+      return result;
+    } finally {
+      await source.release();
+    }
+  }
+
+  private async readImageProperty(source: image.ImageSource, key: image.PropertyKey): Promise<string> {
+    try {
+      return await source.getImageProperty(key);
+    } catch (_error) {
+      return '';
+    }
+  }
+
+  private swapsDimensions(orientationText: string): boolean {
+    const value = orientationText.trim().toUpperCase();
+    if (value.length === 0) {
+      return false;
+    }
+    const numeric = Number.parseInt(value, 10);
+    if (!Number.isNaN(numeric)) {
+      return numeric === 5 || numeric === 6 || numeric === 7 || numeric === 8;
+    }
+    return value.indexOf('LEFT') >= 0 || value.indexOf('RIGHT') >= 0;
+  }
+
+  private parseExifGps(
+    latitudeText: string,
+    longitudeText: string,
+    latitudeRef: string,
+    longitudeRef: string,
+  ): GpsPair {
+    const empty: GpsPair = {
+      latitude: null,
+      longitude: null,
+    };
+    const latitude = this.parseCoordinate(latitudeText);
+    const longitude = this.parseCoordinate(longitudeText);
+    if (latitude === null || longitude === null) {
+      return empty;
+    }
+    const signedLatitude = this.applyGpsRef(latitude, latitudeRef, true);
+    const signedLongitude = this.applyGpsRef(longitude, longitudeRef, false);
+    if (signedLatitude === null || signedLongitude === null) {
+      return empty;
+    }
+    if (Math.abs(signedLatitude) > 90 || Math.abs(signedLongitude) > 180) {
+      return empty;
+    }
+    const result: GpsPair = {
+      latitude: signedLatitude,
+      longitude: signedLongitude,
+    };
+    return result;
+  }
+
+  private applyGpsRef(value: number, refText: string, latitude: boolean): number | null {
+    const ref = refText.trim().toUpperCase();
+    if (ref.length === 0) {
+      return value;
+    }
+    if (latitude) {
+      if (ref === 'N' || ref === 'NORTH') {
+        return Math.abs(value);
+      }
+      if (ref === 'S' || ref === 'SOUTH') {
+        return -Math.abs(value);
+      }
+      return null;
+    }
+    if (ref === 'E' || ref === 'EAST') {
+      return Math.abs(value);
+    }
+    if (ref === 'W' || ref === 'WEST') {
+      return -Math.abs(value);
+    }
+    return null;
+  }
+
+  private parseCoordinate(raw: string): number | null {
+    const text = raw.trim();
+    if (text.length === 0) {
+      return null;
+    }
+    const parts: Array<string> = [];
+    let current = '';
+    for (let index = 0; index < text.length; index++) {
+      const ch = text.charAt(index);
+      if (ch === ',' || ch === ' ') {
+        if (current.length > 0) {
+          parts.push(current);
+          current = '';
+        }
+      } else {
+        current += ch;
+      }
+    }
+    if (current.length > 0) {
+      parts.push(current);
+    }
+    if (parts.length === 0) {
+      return null;
+    }
+    if (parts.length === 1) {
+      return this.parseRational(parts[0]);
+    }
+    const degrees = this.parseRational(parts[0]);
+    const minutes = parts.length > 1 ? this.parseRational(parts[1]) : 0;
+    const seconds = parts.length > 2 ? this.parseRational(parts[2]) : 0;
+    if (degrees === null || minutes === null || seconds === null) {
+      return null;
+    }
+    const sign = degrees < 0 ? -1 : 1;
+    return sign * (Math.abs(degrees) + Math.abs(minutes) / 60 + Math.abs(seconds) / 3600);
+  }
+
+  private parseRational(raw: string): number | null {
+    const text = raw.trim();
+    if (text.length === 0) {
+      return null;
+    }
+    const slash = text.indexOf('/');
+    if (slash > 0) {
+      const numerator = Number.parseFloat(text.substring(0, slash));
+      const denominator = Number.parseFloat(text.substring(slash + 1));
+      if (Number.isNaN(numerator) || Number.isNaN(denominator) || denominator === 0) {
+        return null;
+      }
+      return numerator / denominator;
+    }
+    const value = Number.parseFloat(text);
+    if (Number.isNaN(value)) {
+      return null;
+    }
+    return value;
   }
 
   private cameraCaptured(outputPath: string): CameraCaptureResult {

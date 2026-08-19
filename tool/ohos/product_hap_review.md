@@ -43,6 +43,18 @@
 | 官方测试 | `ohos_platform_services_test` 9 项通过 |
 | 模拟器 dump | **无**。不得写系统文件选择恢复已通 |
 
+## 2026-08-19 Tasks 31–32
+
+拍成后读图改走 ImageKit。官方通道测试闭环，未重编 HAP，未在模拟器拍成。
+
+| 项 | 结果 |
+| --- | --- |
+| 通道 | `OhosSystemApi.inspectImage` 解码宽高 / 大小 / MIME / GPS |
+| 宿主 | ImageKit `createImageSource` + `getImageInfo` + EXIF GPS |
+| 相机回写 | `CameraPicker.resultUri` 与沙箱目标不同时 `copyUriToPath` |
+| 官方测试 | `ohos_platform_services_test` 11 项通过 |
+| 模拟器 dump | **无**。不得写相机已拍成 |
+
 ## 仍禁止写成已完成
 
 - picker 真正写入系统文件

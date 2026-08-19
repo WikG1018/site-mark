@@ -10,7 +10,8 @@
 - 降级 `DegradedImagePipeline.export` 写出 schema 5 zip（`manifest.json` + `records.csv`）。0 张照片的 Task13Demo「不包含原图」在沙箱留下 `files/exports/*.zip`，并弹出系统 Document picker。
 - 降级读档：`readProjectArchive` / `extractArchivePhoto` / `readBundle` / `extractBundleEntry` 可自读自恢复 schema 5 单项目 zip 与 schema 1 bundle。多项目 selection zip 按 Rust 契约拒绝。官方 `degraded_image_pipeline_test` 14 项全绿。
 - 官方测试：`degraded_image_pipeline_test` / `ohos_platform_services_test` / `platform_services_test` 绿灯。
-- `OhosArchivePickService` + 宿主 `pickArchive`：恢复选文件走原生 `DocumentViewPicker.select`（单选 `.zip`），`copyUriToPath` 到 `files/imports/sitemark-restore-*.zip`。官方 `ohos_platform_services_test` 9 项全绿。未做模拟器点选 zip dump。
+- `OhosArchivePickService` + 宿主 `pickArchive`：恢复选文件走原生 `DocumentViewPicker.select`（单选 `.zip`），`copyUriToPath` 到 `files/imports/sitemark-restore-*.zip`。未做模拟器点选 zip dump。
+- 宿主 `inspectImage`：ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS；`CameraPicker.resultUri` 与沙箱目标不同时拷进 `files/originals`。官方 `ohos_platform_services_test` 11 项全绿。无拍成 dump。
 
 ## 未接通 / 不得宣称
 
@@ -23,4 +24,4 @@
 
 ## 水平结论
 
-项目能存；备份能在应用沙箱导出 zip 并弹出保存选择器；降级引擎能把该 zip 读回；恢复选文件已接到鸿蒙原生 Document picker。拍 / 水印 / 系统文件落盘 / 系统文件选择恢复仍未对等 Android v1.0.8。
+项目能存；备份能在应用沙箱导出 zip 并弹出保存选择器；降级引擎能把该 zip 读回；恢复选文件已接到鸿蒙原生 Document picker；拍成后读图已接到 ImageKit。拍 / 水印 / 系统文件落盘 / 系统文件选择恢复仍未对等 Android v1.0.8。
