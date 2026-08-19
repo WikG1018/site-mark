@@ -84,6 +84,7 @@ const PERMISSION_APPROXIMATE = 'ohos.permission.APPROXIMATELY_LOCATION';
 const PERMISSION_LOCATION = 'ohos.permission.LOCATION';
 const PERMISSION_READ_MEDIA = 'ohos.permission.READ_IMAGEVIDEO';
 const PERMISSION_WRITE_MEDIA = 'ohos.permission.WRITE_IMAGEVIDEO';
+const ARCHIVE_SAVE_SAVED = 0;
 
 export default class OhosSystemHost {
   private context: common.Context;
@@ -154,8 +155,12 @@ export default class OhosSystemHost {
         await this.deletePublishedImage(this.requiredString(args, 'contentUri'));
         return null;
       case 'inspectImage':
-      case 'saveArchive':
         throw new Error('ohos_not_ready');
+      case 'saveArchive':
+        return await this.saveArchive(
+          this.requiredString(args, 'sourcePath'),
+          this.requiredString(args, 'suggestedName'),
+        );
       case 'getAll':
         return this.packageInfo();
       default:
@@ -457,6 +462,62 @@ export default class OhosSystemHost {
     const destination = `${directory}/${captureId}.jpg`;
     this.copyFile(sourcePath, destination);
     return fileUri.getUriFromPath(destination);
+  }
+
+  private async saveArchive(sourcePath: string, suggestedName: string): Promise<number> {
+    const source = this.validatedArchiveSource(sourcePath);
+    const name = this.normalizedZipName(suggestedName);
+    const abilityContext = this.ability?.context as common.UIAbilityContext | undefined;
+    if (abilityContext !== undefined) {
+      try {
+        const documentPicker = new picker.DocumentViewPicker(abilityContext);
+        const destinations = await documentPicker.save({
+          newFileNames: [name],
+          fileSuffixChoices: ['zip'],
+        });
+        if (destinations !== undefined && destinations.length > 0) {
+          const destination = this.stringAt(destinations, 0);
+          if (destination.startsWith('file://')) {
+            this.copyFile(source, this.pathFromUri(destination));
+          } else {
+            await this.copyFileToUri(source, destination);
+          }
+          return ARCHIVE_SAVE_SAVED;
+        }
+      } catch (_error) {
+      }
+    }
+    return await this.writeSandboxZip(source, name);
+  }
+
+  private async writeSandboxZip(sourcePath: string, fileName: string): Promise<number> {
+    const directory = `${this.context.filesDir}/exports`;
+    await this.ensureDir(directory);
+    const destination = `${directory}/${fileName}`;
+    if (sourcePath !== destination) {
+      this.copyFile(sourcePath, destination);
+    }
+    return ARCHIVE_SAVE_SAVED;
+  }
+
+  private validatedArchiveSource(sourcePath: string): string {
+    if (!sourcePath.startsWith(`${this.context.filesDir}/`) ||
+        !sourcePath.toLowerCase().endsWith('.zip') ||
+        !this.hasCaptureContent(sourcePath)) {
+      throw new Error('Backup source is empty, missing, or outside private storage');
+    }
+    return sourcePath;
+  }
+
+  private normalizedZipName(suggestedName: string): string {
+    const trimmed = suggestedName.trim();
+    if (!trimmed.toLowerCase().endsWith('.zip') || trimmed.length <= 4) {
+      throw new Error('Backup filename must end with .zip');
+    }
+    if (/[\u0000-\u001f\/\\:*?"<>|]/.test(trimmed)) {
+      throw new Error('Invalid backup filename');
+    }
+    return trimmed;
   }
 
   private collectSuperseded(

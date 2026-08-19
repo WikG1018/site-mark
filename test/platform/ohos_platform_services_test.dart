@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/platform/ohos_background_work_client.dart';
 import 'package:sitemark/platform/ohos_platform_services.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -59,6 +60,58 @@ void main() {
           'ohos_queue_not_ready',
         ),
       ),
+    );
+  });
+
+  test('OhosArchiveSaveService maps missing plugin to ohos_not_ready', () async {
+    final service = OhosArchiveSaveService();
+    await expectLater(
+      service.saveArchive('/tmp/exports/sitemark-backup-1.zip'),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.code,
+          'code',
+          'ohos_not_ready',
+        ),
+      ),
+    );
+  });
+
+  test('OhosArchiveSaveService decodes saved and sends the zip basename', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'saveArchive');
+          final args = Map<String, Object?>.from(call.arguments as Map);
+          expect(args['sourcePath'], '/tmp/exports/sitemark-backup-1.zip');
+          expect(args['suggestedName'], 'sitemark-backup-1.zip');
+          return 0;
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final outcome = await OhosArchiveSaveService().saveArchive(
+      '/tmp/exports/sitemark-backup-1.zip',
+    );
+    expect(outcome, ArchiveSaveOutcome.saved);
+  });
+
+  test('OhosArchiveSaveService decodes cancelled', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async => 1);
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    expect(
+      await OhosArchiveSaveService().saveArchive(
+        '/tmp/exports/sitemark-backup-1.zip',
+      ),
+      ArchiveSaveOutcome.cancelled,
     );
   });
 }

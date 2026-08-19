@@ -241,7 +241,8 @@ final shareFileServiceProvider = Provider<ShareFileService>(
 );
 
 final archiveSaveServiceProvider = Provider<ArchiveSaveService>(
-  (ref) => PigeonArchiveSaveService(),
+  (ref) =>
+      isOhosBuild ? OhosArchiveSaveService() : PigeonArchiveSaveService(),
 );
 
 final diagnosticBundleServiceProvider = FutureProvider<DiagnosticBundleService>((

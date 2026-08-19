@@ -97,6 +97,19 @@ class OhosPlatformServices implements PlatformServices {
   }
 }
 
+class OhosArchiveSaveService implements ArchiveSaveService {
+  OhosArchiveSaveService({OhosSystemApi? api}) : _api = api ?? OhosSystemApi();
+
+  final OhosSystemApi _api;
+
+  @override
+  Future<ArchiveSaveOutcome> saveArchive(String sourcePath) async {
+    final suggestedName = Uri.file(sourcePath).pathSegments.last;
+    final outcome = await _api.saveArchive(sourcePath, suggestedName);
+    return ArchiveSaveOutcome.values[outcome];
+  }
+}
+
 CameraCaptureResult _decodeCameraCaptureResult(Map<Object?, Object?> raw) {
   final result = _asStringKeyedMap(raw);
   return CameraCaptureResult(

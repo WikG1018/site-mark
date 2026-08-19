@@ -19,11 +19,11 @@
 | 产品主线 | 仍在 `main`，安装包是 Android APK |
 | 本分支基线 | SiteMark Android **v1.0.8** / `1.0.8+23` |
 | HAP 宿主 | `ohos/`，包名 `io.github.wikg1018.sitemark` |
-| 已验证 | DevEco 模拟器 `SiteMarkPhone602` 上 **全量 `lib/main.dart` 未签名 HAP**：隐私门 → 新建项目 → 项目详情 → 拍摄表单；定位/相机权限框可弹出。hdc 当前为 `127.0.0.1:5555` |
-| 未完成 | 签名 release、相机拍成 / ACL / `ohos-arm64` 对等、系统通知与分享、真机回归 |
+| 已验证 | DevEco 模拟器 `SiteMarkPhone602` 上 **全量 `lib/main.dart` 未签名 HAP**：隐私门 → 新建项目 → 项目详情 → 拍摄表单；定位/相机权限框可弹出；备份「不包含原图」写出沙箱 `files/exports/*.zip` 并弹出系统 Document picker。hdc 当前为 `127.0.0.1:5555` |
+| 未完成 | 签名 release、相机拍成 / ACL / `ohos-arm64` 对等、系统通知与分享、备份恢复导入、真机回归 |
 | 引擎 | `tool/ohos/engine_status.md`：**degraded** |
 
-后续实施计划：[2026-08-19-harmonyos-records-backup.md](docs/superpowers/plans/2026-08-19-harmonyos-records-backup.md)（Tasks 17–20 已在模拟器走完探测：空记录可开，备份未导出）。前序：[2026-08-19-harmonyos-capture-path.md](docs/superpowers/plans/2026-08-19-harmonyos-capture-path.md)（Tasks 13–16，未拍成）。再前：[2026-08-18-harmonyos-product-runtime.md](docs/superpowers/plans/2026-08-18-harmonyos-product-runtime.md)。全量 HAP 编译记录见 [2026-08-18-harmonyos-full-product-hap.md](docs/superpowers/plans/2026-08-18-harmonyos-full-product-hap.md)。前期 Tasks 0–5 见 [2026-08-17-harmonyos-next-adaptation.md](docs/superpowers/plans/2026-08-17-harmonyos-next-adaptation.md)。规格见 [harmonyos-next-adaptation-design.md](docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md)。
+后续实施计划：[2026-08-19-harmonyos-save-archive.md](docs/superpowers/plans/2026-08-19-harmonyos-save-archive.md)（Tasks 21–24：真 `saveArchive` + 降级 zip 导出；模拟器沙箱 zip 已通，未证 picker 写进系统文件）。前序：[2026-08-19-harmonyos-records-backup.md](docs/superpowers/plans/2026-08-19-harmonyos-records-backup.md)（Tasks 17–20 探测：空记录可开，当时备份未导出）。再前：[2026-08-19-harmonyos-capture-path.md](docs/superpowers/plans/2026-08-19-harmonyos-capture-path.md)（Tasks 13–16，未拍成）。再前：[2026-08-18-harmonyos-product-runtime.md](docs/superpowers/plans/2026-08-18-harmonyos-product-runtime.md)。全量 HAP 编译记录见 [2026-08-18-harmonyos-full-product-hap.md](docs/superpowers/plans/2026-08-18-harmonyos-full-product-hap.md)。前期 Tasks 0–5 见 [2026-08-17-harmonyos-next-adaptation.md](docs/superpowers/plans/2026-08-17-harmonyos-next-adaptation.md)。规格见 [harmonyos-next-adaptation-design.md](docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md)。
 
 ---
 
@@ -37,7 +37,8 @@
 - `OhosPlatformServices`、应用内串行队列、按 `captureId` 的发布日记
 - ACL 相册 + picker / 沙箱托底（代码在，模拟器未证明 ACL）
 - 首次启动隐私同意（产品路径走 `FilePrivacyConsentStore`）
-- 产品 `ohos/` HAP 树；模拟器已跑全量 `lib/main.dart`（隐私门 → 新建项目 → 设置 / 关于 → 项目详情 → 拍摄表单 → 全部记录 → 备份选项目）
+- 产品 `ohos/` HAP 树；模拟器已跑全量 `lib/main.dart`（隐私门 → 新建项目 → 设置 / 关于 → 项目详情 → 拍摄表单 → 全部记录 → 备份选项目 → 沙箱 zip）
+- 鸿蒙备份：`OhosArchiveSaveService` + 宿主 `saveArchive`（picker 优先，失败/取消回退沙箱）；降级 `DegradedImagePipeline.export` 写出 schema 5 zip
 - `path_provider` 由 `SiteMarkSystemPlugin` 桥到应用目录
 - Drift / sqlite3：same-isolate + musl so + `NativeAssetsManifest.json`
 - `package_info_plus` 桥返回 `1.0.8` / `23`；通知 / 分享 / 外链为 no-op
@@ -46,7 +47,7 @@
 
 - 模拟器已跑全量 `lib/main.dart` 首页，**不等于** Android v1.0.8 能力对等
 - 水印引擎未编出 `ohos-arm64`，运行时走降级管线
-- 无真机，不能声称相机已拍成、定位出坐标、备份已导出、系统相册替换与 Android 对等；模拟器仅探测到权限框 + `CameraPicker.Pick` 回表单，以及备份 `saveArchive` 未就绪
+- 无真机，不能声称相机已拍成、定位出坐标、备份已进系统文件管理、系统相册替换与 Android 对等；模拟器仅探测到权限框 + `CameraPicker.Pick` 回表单，以及备份沙箱 `files/exports/*.zip` + Document picker 弹出（未完成 picker 保存）
 - 无签名 `flutter build hap --release`，不能当应用市场上架包
 - GitHub Releases 里的 APK 属于 Android 主线，不是本分支产物
 
