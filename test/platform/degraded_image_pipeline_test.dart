@@ -277,41 +277,211 @@ void main() {
     expect(archive.findFile('projects/p1.zip'), isNotNull);
   });
 
-  test('restore ZIP methods still throw invalid_data:', () async {
+  test('readProjectArchive reads a schema 5 zip written by export', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'sitemark-degraded-restore-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final outputZipPath = '${root.path}${Platform.pathSeparator}out.zip';
     const pipeline = DegradedImagePipeline();
-    const extractRequest = rust.ExtractArchivePhotoRequest(
-      zipPath: '/tmp/in.zip',
-      photoNumber: '001',
-      renderedDestination: '/tmp/r.jpg',
-    );
-
-    Future<void> expectInvalidData(Future<void> Function() action) async {
-      try {
-        await action();
-        fail('expected invalid_data:');
-      } catch (error) {
-        expect(error.toString(), startsWith('invalid_data:'));
-        expect(
-          ImagePipelineException.tryParseRustError(error)?.kind,
-          ImagePipelineFailureKind.invalidData,
-        );
-      }
-    }
-
-    await expectInvalidData(() => pipeline.readProjectArchive('/tmp/in.zip'));
-    await expectInvalidData(() => pipeline.extractArchivePhoto(extractRequest));
-    await expectInvalidData(
-      () => const DegradedProjectBundlePipeline().readBundle('/tmp/in.zip'),
-    );
-    await expectInvalidData(
-      () => const DegradedProjectBundlePipeline().extractBundleEntry(
-        rust.ExtractProjectBundleEntryRequest(
-          zipPath: '/tmp/in.zip',
-          archivePath: 'projects/p1.zip',
-          outputPath: '/tmp/out.zip',
-        ),
+    await pipeline.export(
+      rust.ExportProjectRequest(
+        projectId: 'p',
+        projectName: 'n',
+        projectCreatedAt: '2026-01-01T00:00:00Z',
+        snapshotAt: '2026-01-01T00:00:00Z',
+        omittedProcessingCount: 0,
+        omittedFailedCount: 0,
+        outputZipPath: outputZipPath,
+        includeOriginals: false,
+        projectLifecycleStatus: 'active',
+        projectIsPinned: false,
+        watermark: _watermark,
+        photos: const [],
+        templates: const [],
       ),
     );
+
+    final preview = await pipeline.readProjectArchive(outputZipPath);
+    expect(preview.schemaVersion, 5);
+    expect(preview.projectName, 'n');
+    expect(preview.photos, isEmpty);
+    expect(preview.projectLifecycleStatus, 'active');
+    expect(preview.projectIsPinned, isFalse);
+    expect(preview.includesOriginals, isFalse);
+    expect(preview.isPartial, isFalse);
+  });
+
+  test('readProjectArchive rejects a multi-project selection zip', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'sitemark-degraded-restore-sel-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final source = img.Image(width: 8, height: 8);
+    img.fill(source, color: img.ColorRgb8(1, 2, 3));
+    final photoPath = '${root.path}${Platform.pathSeparator}001.jpg';
+    await File(photoPath).writeAsBytes(img.encodeJpg(source));
+    final outputZipPath = '${root.path}${Platform.pathSeparator}sel.zip';
+    await const DegradedImagePipeline().exportSelection(
+      rust.ExportSelectionRequest(
+        outputZipPath: outputZipPath,
+        includeOriginals: false,
+        projects: [
+          rust.ExportSelectionProject(
+            projectId: 'p1',
+            projectName: 'A',
+            photos: [
+              rust.ExportPhotoRecord(
+                photoNumber: '001',
+                watermarkedPath: photoPath,
+                originalSha256: 'abc',
+                capturedAt: '2026-01-01T00:00:00Z',
+                workLocation: 'loc',
+                workContent: 'work',
+                photographer: 'cam',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    try {
+      await const DegradedImagePipeline().readProjectArchive(outputZipPath);
+      fail('expected invalid_data:');
+    } catch (error) {
+      expect(error.toString(), startsWith('invalid_data:'));
+      expect(
+        error.toString(),
+        contains('Only single-project archives are restorable'),
+      );
+    }
+  });
+
+  test('extractArchivePhoto writes the rendered jpeg', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'sitemark-degraded-extract-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final source = img.Image(width: 16, height: 12);
+    img.fill(source, color: img.ColorRgb8(10, 20, 30));
+    final jpegBytes = img.encodeJpg(source);
+    final photoPath = '${root.path}${Platform.pathSeparator}001.jpg';
+    await File(photoPath).writeAsBytes(jpegBytes);
+    final outputZipPath = '${root.path}${Platform.pathSeparator}out.zip';
+    const pipeline = DegradedImagePipeline();
+    await pipeline.export(
+      rust.ExportProjectRequest(
+        projectId: 'p1',
+        projectName: 'Demo',
+        projectCreatedAt: '2026-01-01T00:00:00Z',
+        snapshotAt: '2026-01-02T00:00:00Z',
+        omittedProcessingCount: 0,
+        omittedFailedCount: 0,
+        outputZipPath: outputZipPath,
+        includeOriginals: false,
+        projectLifecycleStatus: 'active',
+        projectIsPinned: false,
+        watermark: _watermark,
+        photos: [
+          rust.ExportPhotoRecord(
+            photoNumber: '001',
+            watermarkedPath: photoPath,
+            originalSha256: 'abc',
+            capturedAt: '2026-01-01T00:00:00Z',
+            workLocation: 'loc',
+            workContent: 'work',
+            photographer: 'cam',
+          ),
+        ],
+        templates: const [],
+      ),
+    );
+
+    final dest = '${root.path}${Platform.pathSeparator}restored.jpg';
+    final extracted = await pipeline.extractArchivePhoto(
+      rust.ExtractArchivePhotoRequest(
+        zipPath: outputZipPath,
+        photoNumber: '001',
+        renderedDestination: dest,
+      ),
+    );
+    expect(extracted.renderedPath, dest);
+    expect(extracted.originalPath, isNull);
+    expect(await File(dest).readAsBytes(), jpegBytes);
+  });
+
+  test('readBundle and extractBundleEntry restore an inner project zip', () async {
+    final root = await Directory.systemTemp.createTemp(
+      'sitemark-degraded-restore-bundle-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    const pipeline = DegradedImagePipeline();
+    final innerZipPath = '${root.path}${Platform.pathSeparator}inner.zip';
+    await pipeline.export(
+      rust.ExportProjectRequest(
+        projectId: 'p1',
+        projectName: 'Demo',
+        projectCreatedAt: '2026-01-01T00:00:00Z',
+        snapshotAt: '2026-01-01T00:00:00Z',
+        omittedProcessingCount: 0,
+        omittedFailedCount: 0,
+        outputZipPath: innerZipPath,
+        includeOriginals: false,
+        projectLifecycleStatus: 'active',
+        projectIsPinned: false,
+        watermark: _watermark,
+        photos: const [],
+        templates: const [],
+      ),
+    );
+    final bundleZipPath = '${root.path}${Platform.pathSeparator}bundle.zip';
+    const bundle = DegradedProjectBundlePipeline();
+    await bundle.exportBundle(
+      rust.ExportProjectBundleRequest(
+        outputZipPath: bundleZipPath,
+        projects: [
+          rust.ProjectBundleSource(
+            projectId: 'p1',
+            projectName: 'Demo',
+            archivePath: innerZipPath,
+          ),
+        ],
+      ),
+    );
+
+    final preview = await bundle.readBundle(bundleZipPath);
+    expect(preview.schemaVersion, 1);
+    expect(preview.projects, hasLength(1));
+    expect(preview.projects.single.projectId, 'p1');
+    expect(preview.projects.single.archivePath, 'projects/p1.zip');
+
+    final extractedPath = '${root.path}${Platform.pathSeparator}extracted.zip';
+    await bundle.extractBundleEntry(
+      rust.ExtractProjectBundleEntryRequest(
+        zipPath: bundleZipPath,
+        archivePath: 'projects/p1.zip',
+        outputPath: extractedPath,
+      ),
+    );
+    final innerPreview = await pipeline.readProjectArchive(extractedPath);
+    expect(innerPreview.projectName, 'Demo');
+    expect(innerPreview.schemaVersion, 5);
+  });
+
+  test('readProjectArchive rejects a missing zip with not_found:', () async {
+    try {
+      await const DegradedImagePipeline().readProjectArchive(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}missing-sitemark.zip',
+      );
+      fail('expected not_found:');
+    } catch (error) {
+      expect(error.toString(), startsWith('not_found:'));
+      expect(
+        ImagePipelineException.tryParseRustError(error)?.kind,
+        ImagePipelineFailureKind.notFound,
+      );
+    }
   });
 
   test('pipeline helpers switch after isOhosBuild && rustInitFailed', () {

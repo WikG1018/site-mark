@@ -16,9 +16,22 @@
 
 根因修复：此前空 `exports` 不是 save 后删文件，而是 `DegradedImagePipeline.export()` 未实现。现已用 `package:archive` + `crypto` 对齐 Rust schema 5。
 
+## 2026-08-19 Tasks 25–27
+
+官方测试闭环，未重编 HAP、未走系统 `FilePicker`。
+
+| 项 | 结果 |
+| --- | --- |
+| `readProjectArchive` | 可读自己写出的 schema 5 空项目 zip |
+| `extractArchivePhoto` | 解出的 JPEG 字节与源文件一致 |
+| `readBundle` / `extractBundleEntry` | 可解出内层项目 zip 再读回 |
+| selection zip | `invalid_data: Only single-project archives are restorable` |
+| 缺失 zip | `not_found:` |
+| 官方测试 | `degraded_image_pipeline_test` 14 项通过 |
+
 ## 仍禁止写成已完成
 
 - picker 真正写入系统文件
-- 恢复导入
+- 产品页选系统 zip 恢复
 - 相机拍成 / ACL / `ohos-arm64`
 - 签名 release / 真机

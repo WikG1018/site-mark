@@ -145,18 +145,65 @@ class DegradedImagePipeline implements ImagePipeline {
   }
 
   @override
-  Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath) {
-    throw _invalidData(
-      'degraded zip readProjectArchive is not implemented',
-    );
+  Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath) async {
+    return _previewFromArchive(_openZip(zipPath));
   }
 
   @override
   Future<rust.ExtractedArchivePhoto> extractArchivePhoto(
     rust.ExtractArchivePhotoRequest request,
-  ) {
-    throw _invalidData(
-      'degraded zip extractArchivePhoto is not implemented',
+  ) async {
+    final archive = _openZip(request.zipPath);
+    final preview = _previewFromArchive(archive);
+    rust.ArchivePhotoPreview? photo;
+    for (final item in preview.photos) {
+      if (item.photoNumber == request.photoNumber) {
+        photo = item;
+        break;
+      }
+    }
+    if (photo == null) {
+      throw _invalidData(
+        'extract archive photo: photo ${request.photoNumber} is missing',
+      );
+    }
+
+    final safeNumber = _safePhotoNumberComponent(request.photoNumber);
+    await _commitTemporary(
+      request.renderedDestination,
+      _requireZipBytes(
+        archive,
+        'photos/$safeNumber.jpg',
+        'extract archive photo',
+      ),
+    );
+
+    String? originalPath;
+    final originalDest = request.originalDestination;
+    if (originalDest != null && originalDest.isNotEmpty) {
+      if (!photo.hasOriginal) {
+        throw _invalidData(
+          'extract archive photo: original for ${request.photoNumber} is missing',
+        );
+      }
+      final originalFile = _findOriginalEntry(archive, safeNumber);
+      if (originalFile == null) {
+        throw _invalidData(
+          'extract archive photo: original for ${request.photoNumber} is missing',
+        );
+      }
+      final originalBytes = _fileBytes(originalFile);
+      if (crypto.sha256.convert(originalBytes).toString() !=
+          photo.originalSha256) {
+        throw _invalidData('extract archive photo: original sha256 mismatch');
+      }
+      await _commitTemporary(originalDest, originalBytes);
+      originalPath = originalDest;
+    }
+
+    return rust.ExtractedArchivePhoto(
+      renderedPath: request.renderedDestination,
+      originalPath: originalPath,
     );
   }
 
@@ -261,15 +308,82 @@ class DegradedProjectBundlePipeline implements ProjectBundlePipeline {
   @override
   Future<void> extractBundleEntry(
     rust.ExtractProjectBundleEntryRequest request,
-  ) {
-    throw _invalidData(
-      'degraded zip extractBundleEntry is not implemented',
+  ) async {
+    final preview = await readBundle(request.zipPath);
+    rust.ProjectBundleEntryPreview? entry;
+    for (final item in preview.projects) {
+      if (item.archivePath == request.archivePath) {
+        entry = item;
+        break;
+      }
+    }
+    if (entry == null) {
+      throw _invalidData(
+        'extract project bundle entry: ${request.archivePath} is missing',
+      );
+    }
+    final bytes = _requireZipBytes(
+      _openZip(request.zipPath),
+      request.archivePath,
+      'extract project bundle entry',
     );
+    if (crypto.sha256.convert(bytes).toString() != entry.archiveSha256) {
+      throw _invalidData('extract project bundle entry: sha256 mismatch');
+    }
+    await _commitTemporary(request.outputPath, bytes);
   }
 
   @override
-  Future<rust.ProjectBundlePreview> readBundle(String zipPath) {
-    throw _invalidData('degraded zip readBundle is not implemented');
+  Future<rust.ProjectBundlePreview> readBundle(String zipPath) async {
+    final bytes = _requireZipBytes(
+      _openZip(zipPath),
+      'bundle.json',
+      'validate project bundle',
+    );
+    final decoded = jsonDecode(utf8.decode(bytes));
+    if (decoded is! Map) {
+      throw _invalidData('validate project bundle: bundle.json is invalid');
+    }
+    final manifest = Map<String, dynamic>.from(decoded);
+    if (manifest['kind'] != _projectBundleKind) {
+      throw _invalidData('validate project bundle: unexpected kind');
+    }
+    final schemaVersion = _asInt(manifest['schema_version'], 'schema_version');
+    if (schemaVersion != 1) {
+      throw _invalidData(
+        'validate project bundle: unsupported schema version $schemaVersion',
+      );
+    }
+    final projectsJson = manifest['projects'];
+    if (projectsJson is! List || projectsJson.isEmpty) {
+      throw _invalidData('validate project bundle: project list is empty');
+    }
+    final projects = <rust.ProjectBundleEntryPreview>[];
+    for (final item in projectsJson) {
+      if (item is! Map) {
+        throw _invalidData('validate project bundle: project entry is invalid');
+      }
+      final map = Map<String, dynamic>.from(item);
+      final projectId = (map['project_id'] as String?) ?? '';
+      final projectName = (map['project_name'] as String?) ?? '';
+      if (projectName.trim().isEmpty) {
+        throw _invalidData('validate project bundle: project name is required');
+      }
+      _safeArchiveComponent(projectId);
+      projects.add(
+        rust.ProjectBundleEntryPreview(
+          projectId: projectId,
+          projectName: projectName,
+          archivePath: (map['archive_path'] as String?) ?? '',
+          archiveSha256: (map['archive_sha256'] as String?) ?? '',
+        ),
+      );
+    }
+    return rust.ProjectBundlePreview(
+      schemaVersion: schemaVersion,
+      createdAt: (manifest['created_at'] as String?) ?? '',
+      projects: projects,
+    );
   }
 }
 
@@ -462,4 +576,245 @@ Never _invalidData(String detail) {
     ImagePipelineFailureKind.invalidData,
     'invalid_data:$detail',
   );
+}
+
+Archive _openZip(String zipPath) {
+  final file = File(zipPath);
+  if (!file.existsSync()) {
+    throw const ImagePipelineException(
+      ImagePipelineFailureKind.notFound,
+      'not_found:open ZIP',
+    );
+  }
+  try {
+    return ZipDecoder().decodeBytes(file.readAsBytesSync());
+  } on FileSystemException catch (error) {
+    throw ImagePipelineException(
+      ImagePipelineFailureKind.transientIo,
+      'io:open ZIP: $error',
+    );
+  } catch (_) {
+    throw _invalidData('open ZIP');
+  }
+}
+
+rust.ProjectArchivePreview _previewFromArchive(Archive archive) {
+  final decoded = jsonDecode(
+    utf8.decode(_requireZipBytes(archive, 'manifest.json', 'validate archive')),
+  );
+  if (decoded is! Map) {
+    throw _invalidData('validate archive: manifest.json is invalid');
+  }
+  final manifest = Map<String, dynamic>.from(decoded);
+  final projectName = (manifest['project_name'] as String?)?.trim() ?? '';
+  if (manifest['projects'] is List && projectName.isEmpty) {
+    throw _invalidData(
+      'validate archive: Only single-project archives are restorable',
+    );
+  }
+  if (projectName.isEmpty) {
+    throw _invalidData('validate archive: project name is required');
+  }
+
+  final schemaVersion = _asInt(manifest['schema_version'], 'schema_version');
+  if (schemaVersion < 1 || schemaVersion > 5) {
+    throw _invalidData(
+      'validate archive: unsupported schema version $schemaVersion',
+    );
+  }
+
+  late final String lifecycle;
+  late final bool pinned;
+  if (schemaVersion <= 4) {
+    lifecycle = 'active';
+    pinned = false;
+  } else {
+    lifecycle = (manifest['project_lifecycle_status'] as String?) ?? '';
+    if (!_isValidLifecycleStatus(lifecycle)) {
+      throw _invalidData(
+        'validate archive: unsupported project lifecycle status $lifecycle',
+      );
+    }
+    pinned = manifest['project_is_pinned'] == true;
+  }
+
+  final omittedProcessing = _asInt(
+    manifest['omitted_processing_count'] ?? 0,
+    'omitted_processing_count',
+  );
+  final omittedFailed = _asInt(
+    manifest['omitted_failed_count'] ?? 0,
+    'omitted_failed_count',
+  );
+  final includesOriginals = manifest['includes_originals'] == true;
+  final photosJson = manifest['photos'];
+  final photos = <rust.ArchivePhotoPreview>[];
+  if (photosJson is List) {
+    for (final item in photosJson) {
+      if (item is! Map) {
+        throw _invalidData('validate archive: photo entry is invalid');
+      }
+      photos.add(
+        _previewPhoto(Map<String, dynamic>.from(item), includesOriginals),
+      );
+    }
+  }
+
+  final templates = <rust.ArchiveCaptureTemplate>[];
+  final templatesJson = manifest['templates'];
+  if (templatesJson is List) {
+    for (final item in templatesJson) {
+      if (item is! Map) {
+        continue;
+      }
+      final map = Map<String, dynamic>.from(item);
+      templates.add(
+        rust.ArchiveCaptureTemplate(
+          name: (map['name'] as String?) ?? '',
+          workLocation: (map['work_location'] as String?) ?? '',
+          workContent: (map['work_content'] as String?) ?? '',
+          photographer: (map['photographer'] as String?) ?? '',
+          createdAt: (map['created_at'] as String?) ?? '',
+          updatedAt: (map['updated_at'] as String?) ?? '',
+        ),
+      );
+    }
+  }
+
+  rust.ArchiveWatermarkSettings? watermark;
+  final watermarkJson = manifest['watermark'];
+  if (watermarkJson is Map) {
+    final map = Map<String, dynamic>.from(watermarkJson);
+    watermark = rust.ArchiveWatermarkSettings(
+      position: (map['position'] as String?) ?? 'bottomLeft',
+      opacity: (map['opacity'] as num?)?.toDouble() ?? 1,
+      accentColorArgb: _asInt(
+        map['accent_color_argb'] ?? 0,
+        'accent_color_argb',
+      ),
+      fontScale: (map['font_scale'] as num?)?.toDouble() ?? 1,
+    );
+  }
+
+  return rust.ProjectArchivePreview(
+    schemaVersion: schemaVersion,
+    projectName: projectName,
+    projectDescription: manifest['project_description'] as String?,
+    projectCreatedAt: manifest['project_created_at'] as String?,
+    snapshotAt: manifest['snapshot_at'] as String?,
+    omittedProcessingCount: omittedProcessing,
+    omittedFailedCount: omittedFailed,
+    isPartial: omittedProcessing + omittedFailed > 0,
+    includesOriginals: includesOriginals,
+    projectLifecycleStatus: lifecycle,
+    projectIsPinned: pinned,
+    watermark: watermark,
+    photos: photos,
+    templates: templates,
+  );
+}
+
+rust.ArchivePhotoPreview _previewPhoto(
+  Map<String, dynamic> map,
+  bool includesOriginals,
+) {
+  final photoNumber = (map['photo_number'] as String?) ?? '';
+  _safePhotoNumberComponent(photoNumber);
+  final originalSha256 = (map['original_sha256'] as String?) ?? '';
+  return rust.ArchivePhotoPreview(
+    photoNumber: photoNumber,
+    hasOriginal: includesOriginals && originalSha256.isNotEmpty,
+    originalSha256: originalSha256,
+    capturedAt: (map['captured_at'] as String?) ?? '',
+    workLocation: (map['work_location'] as String?) ?? '',
+    workContent: (map['work_content'] as String?) ?? '',
+    photographer: (map['photographer'] as String?) ?? '',
+    address: map['address'] as String?,
+    notes: map['notes'] as String?,
+    latitude: (map['latitude'] as num?)?.toDouble(),
+    longitude: (map['longitude'] as num?)?.toDouble(),
+    accuracyMeters: (map['accuracy_meters'] as num?)?.toDouble(),
+    watermarkLocaleCode: map['watermark_locale_code'] as String?,
+  );
+}
+
+int _asInt(Object? value, String field) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  throw _invalidData('validate archive: $field is invalid');
+}
+
+List<int> _requireZipBytes(Archive archive, String name, String context) {
+  final file = _findZipFile(archive, name);
+  if (file == null) {
+    throw _invalidData('$context: $name is missing');
+  }
+  return _fileBytes(file);
+}
+
+ArchiveFile? _findZipFile(Archive archive, String name) {
+  for (final file in archive.files) {
+    if (!file.isFile) {
+      continue;
+    }
+    final normalized = file.name.replaceAll('\\', '/');
+    if (normalized == name || normalized.endsWith('/$name')) {
+      return file;
+    }
+  }
+  return null;
+}
+
+ArchiveFile? _findOriginalEntry(Archive archive, String safeNumber) {
+  final prefix = 'originals/$safeNumber.';
+  for (final file in archive.files) {
+    if (!file.isFile) {
+      continue;
+    }
+    final normalized = file.name.replaceAll('\\', '/');
+    if (normalized.startsWith(prefix) &&
+        normalized.length > prefix.length &&
+        !normalized.substring(prefix.length).contains('/')) {
+      return file;
+    }
+  }
+  return null;
+}
+
+List<int> _fileBytes(ArchiveFile file) {
+  final content = file.content;
+  if (content is List<int>) {
+    return content;
+  }
+  throw _invalidData('open ZIP');
+}
+
+Future<void> _commitTemporary(String destination, List<int> bytes) async {
+  final dest = File(destination);
+  final temporary = File('$destination.tmp');
+  try {
+    await dest.parent.create(recursive: true);
+    await temporary.writeAsBytes(bytes, flush: true);
+    if (await dest.exists()) {
+      throw _invalidData('write extracted file: destination already exists');
+    }
+    await temporary.rename(destination);
+  } on FileSystemException catch (error) {
+    if (await temporary.exists()) {
+      await temporary.delete();
+    }
+    throw ImagePipelineException(
+      ImagePipelineFailureKind.transientIo,
+      'io:write extracted file: $error',
+    );
+  } catch (error) {
+    if (await temporary.exists()) {
+      await temporary.delete();
+    }
+    rethrow;
+  }
 }
