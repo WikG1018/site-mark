@@ -1,5 +1,8 @@
+import 'dart:ui';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/ohos_background_work_client.dart';
 import 'package:sitemark/platform/ohos_platform_services.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -248,5 +251,176 @@ void main() {
     expect(arguments, {
       'path': '/tmp/exports/sitemark-backup-1.zip',
     });
+  });
+
+  test('requestEnableNotification uses the ohos channel', () async {
+    late String method;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('sitemark.system.ohos'),
+      (call) async {
+        method = call.method;
+        return true;
+      },
+    );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('sitemark.system.ohos'),
+        null,
+      );
+    });
+
+    expect(await OhosSystemApi().requestEnableNotification(), isTrue);
+    expect(method, 'requestEnableNotification');
+  });
+
+  test('publishCaptureReady sends title, text, and deepLink', () async {
+    late String method;
+    late Object? arguments;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('sitemark.system.ohos'),
+      (call) async {
+        method = call.method;
+        arguments = call.arguments;
+        return null;
+      },
+    );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('sitemark.system.ohos'),
+        null,
+      );
+    });
+
+    await OhosSystemApi().publishCaptureReady(
+      title: 'Capture ready',
+      text: 'Photo 3 is ready',
+      deepLink: '/projects/p1/captures/c1',
+    );
+    expect(method, 'publishCaptureReady');
+    expect(arguments, {
+      'title': 'Capture ready',
+      'text': 'Photo 3 is ready',
+      'deepLink': '/projects/p1/captures/c1',
+    });
+  });
+
+  test('OhosCompletionNotificationService stays silent until enabled', () async {
+    var published = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('sitemark.system.ohos'),
+      (call) async {
+        if (call.method == 'publishCaptureReady') {
+          published = true;
+        }
+        return null;
+      },
+    );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('sitemark.system.ohos'),
+        null,
+      );
+    });
+
+    final service = OhosCompletionNotificationService();
+    await service.showCaptureReady(
+      projectId: 'p1',
+      captureId: 'c1',
+      photoNumber: '3',
+    );
+    expect(published, isFalse);
+
+    await service.setEnabled(true);
+    await service.showCaptureReady(
+      projectId: 'p1',
+      captureId: 'c1',
+      photoNumber: '3',
+    );
+    expect(published, isTrue);
+  });
+
+  test('enabled capture-ready notice matches locale and deep link', () async {
+    late Object? arguments;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('sitemark.system.ohos'),
+      (call) async {
+        arguments = call.arguments;
+        return null;
+      },
+    );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('sitemark.system.ohos'),
+        null,
+      );
+    });
+
+    final service = OhosCompletionNotificationService();
+    await service.setEnabled(true);
+    await service.showCaptureReady(
+      projectId: 'p1',
+      captureId: 'c1',
+      photoNumber: '3',
+    );
+
+    final zh = PlatformDispatcher.instance.locale.languageCode == 'zh';
+    expect(arguments, {
+      'title': zh ? '照片处理完成' : 'Photo ready',
+      'text': zh
+          ? '照片 3 已完成处理，点击查看'
+          : 'Photo 3 is ready. Tap to view.',
+      'deepLink': captureReadyDeepLink('p1', 'c1'),
+    });
+  });
+
+  test('initialize delivers a pending tap from the host', () async {
+    String? tapped;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('sitemark.system.ohos'),
+      (call) async {
+        expect(call.method, 'takePendingNotificationTap');
+        return '/projects/p1/captures/c1';
+      },
+    );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('sitemark.system.ohos'),
+        null,
+      );
+    });
+
+    await OhosCompletionNotificationService().initialize((deepLink) {
+      tapped = deepLink;
+    });
+    expect(tapped, '/projects/p1/captures/c1');
+  });
+
+  test('notificationTap from the host reaches initialize', () async {
+    String? tapped;
+    final service = OhosCompletionNotificationService();
+    await service.initialize((deepLink) {
+      tapped = deepLink;
+    });
+
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+      'sitemark.system.ohos',
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('notificationTap', '/projects/p1/captures/c1'),
+      ),
+      (_) {},
+    );
+
+    expect(tapped, '/projects/p1/captures/c1');
   });
 }

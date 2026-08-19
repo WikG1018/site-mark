@@ -78,6 +78,44 @@ class OhosSystemApi {
 
   Future<void> shareFile(String path) => _invoke('shareFile', {'path': path});
 
+  Future<bool> requestEnableNotification() async {
+    final result = await _invoke<bool>('requestEnableNotification');
+    return result == true;
+  }
+
+  Future<void> publishCaptureReady({
+    required String title,
+    required String text,
+    required String deepLink,
+  }) {
+    return _invoke('publishCaptureReady', {
+      'title': title,
+      'text': text,
+      'deepLink': deepLink,
+    });
+  }
+
+  Future<void> listenNotificationTap(void Function(String deepLink) onTap) async {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'notificationTap') {
+        final link = call.arguments;
+        if (link is String && link.isNotEmpty) {
+          onTap(link);
+        }
+      }
+    });
+    try {
+      final pending = await _channel.invokeMethod<String>(
+        'takePendingNotificationTap',
+      );
+      if (pending != null && pending.isNotEmpty) {
+        onTap(pending);
+      }
+    } on MissingPluginException {
+      return;
+    }
+  }
+
   Future<void> deletePublishedImage(String contentUri) =>
       _invoke('deletePublishedImage', {'contentUri': contentUri});
 

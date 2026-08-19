@@ -68,10 +68,24 @@
 | 官方测试 | `ohos_platform_services_test` 13 项通过 |
 | 模拟器 dump | **无**。不得写系统分享已通 |
 
+## 2026-08-19 Tasks 35–36
+
+拍成完成通知改走鸿蒙 NotificationKit，并修掉 `main.dart` 把分享覆盖成 no-op。官方通道测试闭环，未重编 HAP，未在模拟器弹出系统通知。
+
+| 项 | 结果 |
+| --- | --- |
+| 通道 | `OhosSystemApi.requestEnableNotification` / `publishCaptureReady` / `listenNotificationTap` |
+| 产品接线 | `OhosCompletionNotificationService`；`main.dart` 鸿蒙分享走 `OhosShareFileService` |
+| 宿主 | NotificationKit `requestEnableNotification` + `addSlot` + `publish` 基础文本；WantAgent 带回 `sitemarkDeepLink` |
+| 冷启动 | `takePendingNotificationTap`：插件 attach 前点通知，等 Dart `initialize` 再投递 |
+| 官方测试 | `ohos_platform_services_test` 19 项通过 |
+| 模拟器 dump | **无**。不得写系统通知已通 |
+
 ## 仍禁止写成已完成
 
 - picker 真正写入系统文件
 - 系统文件选择恢复（接线已改原生 picker，无成功 dump）
 - 系统分享面板（接线已改原生 ShareKit，无成功 dump）
+- 系统通知（接线已改 NotificationKit，无成功 dump）
 - 相机拍成 / ACL / `ohos-arm64`
 - 签名 release / 真机

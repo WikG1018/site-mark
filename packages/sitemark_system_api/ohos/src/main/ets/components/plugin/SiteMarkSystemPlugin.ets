@@ -12,16 +12,32 @@ import common from '@ohos.app.ability.common';
 import OhosSystemHost from './OhosSystemHost';
 
 export default class SiteMarkSystemPlugin implements FlutterPlugin, AbilityAware, MethodCallHandler {
+  private static instance: SiteMarkSystemPlugin | null = null;
+  private static pendingDeepLink: string | null = null;
+  private static dartListening: boolean = false;
   private channel: MethodChannel | null = null;
   private pathChannel: MethodChannel | null = null;
   private packageInfoChannel: MethodChannel | null = null;
   private host: OhosSystemHost | null = null;
+
+  static deliverNotificationTap(deepLink: string): void {
+    if (deepLink.length === 0) {
+      return;
+    }
+    const plugin = SiteMarkSystemPlugin.instance;
+    if (SiteMarkSystemPlugin.dartListening && plugin !== null && plugin.channel !== null) {
+      plugin.channel.invokeMethod('notificationTap', deepLink);
+      return;
+    }
+    SiteMarkSystemPlugin.pendingDeepLink = deepLink;
+  }
 
   getUniqueClassName(): string {
     return 'SiteMarkSystemPlugin';
   }
 
   onAttachedToEngine(binding: FlutterPluginBinding): void {
+    SiteMarkSystemPlugin.instance = this;
     this.host = new OhosSystemHost(binding.getApplicationContext() as common.Context);
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'sitemark.system.ohos');
     this.channel.setMethodCallHandler(this);
@@ -48,6 +64,10 @@ export default class SiteMarkSystemPlugin implements FlutterPlugin, AbilityAware
     this.pathChannel = null;
     this.packageInfoChannel = null;
     this.host = null;
+    if (SiteMarkSystemPlugin.instance === this) {
+      SiteMarkSystemPlugin.instance = null;
+      SiteMarkSystemPlugin.dartListening = false;
+    }
   }
 
   onAttachedToAbility(binding: AbilityPluginBinding): void {
@@ -59,6 +79,13 @@ export default class SiteMarkSystemPlugin implements FlutterPlugin, AbilityAware
   }
 
   onMethodCall(call: MethodCall, result: MethodResult): void {
+    if (call.method === 'takePendingNotificationTap') {
+      SiteMarkSystemPlugin.dartListening = true;
+      const pending = SiteMarkSystemPlugin.pendingDeepLink;
+      SiteMarkSystemPlugin.pendingDeepLink = null;
+      result.success(pending ?? '');
+      return;
+    }
     const host = this.host;
     if (host === null) {
       result.error('ohos_not_ready', call.method, null);

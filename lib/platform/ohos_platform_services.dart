@@ -1,3 +1,6 @@
+import 'dart:ui';
+
+import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -131,6 +134,48 @@ class OhosShareFileService implements ShareFileService {
   @override
   Future<void> shareFile(String path) {
     return _api.shareFile(path);
+  }
+}
+
+class OhosCompletionNotificationService implements CompletionNotificationService {
+  OhosCompletionNotificationService({OhosSystemApi? api})
+    : _api = api ?? OhosSystemApi();
+
+  final OhosSystemApi _api;
+  bool _enabled = false;
+
+  @override
+  Future<void> initialize(void Function(String deepLinkPath) onTapDeepLink) {
+    return _api.listenNotificationTap(onTapDeepLink);
+  }
+
+  @override
+  Future<bool> requestPermission() {
+    return _api.requestEnableNotification();
+  }
+
+  @override
+  Future<void> setEnabled(bool enabled) async {
+    _enabled = enabled;
+  }
+
+  @override
+  Future<void> showCaptureReady({
+    required String projectId,
+    required String captureId,
+    required String photoNumber,
+  }) async {
+    if (!_enabled) {
+      return;
+    }
+    final zh = PlatformDispatcher.instance.locale.languageCode == 'zh';
+    await _api.publishCaptureReady(
+      title: zh ? '照片处理完成' : 'Photo ready',
+      text: zh
+          ? '照片 $photoNumber 已完成处理，点击查看'
+          : 'Photo $photoNumber is ready. Tap to view.',
+      deepLink: captureReadyDeepLink(projectId, captureId),
+    );
   }
 }
 

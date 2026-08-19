@@ -26,8 +26,8 @@ abstract class CompletionNotificationService {
   Future<void> setEnabled(bool enabled);
 }
 
-/// HarmonyOS has no flutter_local_notifications plugin in the product HAP.
-/// Settings and capture-ready paths must stay no-op instead of crashing.
+/// Fallback when the production notification service is not wired.
+/// HarmonyOS product HAP uses OhosCompletionNotificationService instead.
 final class NoopCompletionNotificationService
     implements CompletionNotificationService {
   @override

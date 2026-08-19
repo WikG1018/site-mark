@@ -1,10 +1,11 @@
-import { common, Want, abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
+import { common, Want, abilityAccessCtrl, Permissions, wantAgent } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { camera, cameraPicker } from '@kit.CameraKit';
 import { fileIo as fs, fileUri, picker } from '@kit.CoreFileKit';
 import { image } from '@kit.ImageKit';
 import { geoLocationManager } from '@kit.LocationKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { notificationManager } from '@kit.NotificationKit';
 import { preferences } from '@kit.ArkData';
 import { systemShare } from '@kit.ShareKit';
 import UIAbility from '@ohos.app.ability.UIAbility';
@@ -172,6 +173,15 @@ export default class OhosSystemHost {
         return await this.pickArchive();
       case 'shareFile':
         await this.shareFile(this.requiredString(args, 'path'));
+        return null;
+      case 'requestEnableNotification':
+        return await this.requestEnableNotification();
+      case 'publishCaptureReady':
+        await this.publishCaptureReady(
+          this.requiredString(args, 'title'),
+          this.requiredString(args, 'text'),
+          this.requiredString(args, 'deepLink'),
+        );
         return null;
       case 'getAll':
         return this.packageInfo();
@@ -1373,5 +1383,72 @@ export default class OhosSystemHost {
   ): number {
     const value = args?.[key];
     return typeof value === 'number' ? value : fallback;
+  }
+
+  private abilityContext(): common.UIAbilityContext {
+    const abilityContext = this.ability?.context as common.UIAbilityContext | undefined;
+    if (abilityContext === undefined) {
+      throw new Error('ohos_not_ready');
+    }
+    return abilityContext;
+  }
+
+  private async requestEnableNotification(): Promise<boolean> {
+    if (await notificationManager.isNotificationEnabled()) {
+      return true;
+    }
+    try {
+      await notificationManager.requestEnableNotification(this.abilityContext());
+      return await notificationManager.isNotificationEnabled();
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  private async publishCaptureReady(title: string, text: string, deepLink: string): Promise<void> {
+    const abilityContext = this.abilityContext();
+    try {
+      await notificationManager.addSlot(notificationManager.SlotType.CONTENT_INFORMATION);
+    } catch (_slotError) {
+    }
+    const agentInfo: wantAgent.WantAgentInfo = {
+      wants: [
+        {
+          bundleName: abilityContext.abilityInfo.bundleName,
+          abilityName: 'EntryAbility',
+          parameters: {
+            'sitemarkDeepLink': deepLink,
+          },
+        },
+      ],
+      actionType: wantAgent.OperationType.START_ABILITY,
+      requestCode: this.notificationId(deepLink),
+      actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG],
+    };
+    const agent = await wantAgent.getWantAgent(agentInfo);
+    const request: notificationManager.NotificationRequest = {
+      id: this.notificationId(deepLink),
+      notificationSlotType: notificationManager.SlotType.CONTENT_INFORMATION,
+      content: {
+        notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+        normal: {
+          title: title,
+          text: text,
+        },
+      },
+      wantAgent: agent,
+    };
+    await notificationManager.publish(request);
+  }
+
+  private notificationId(deepLink: string): number {
+    let hash = 0;
+    let index = 0;
+    while (index < deepLink.length) {
+      hash = ((hash << 5) - hash + deepLink.charCodeAt(index)) | 0;
+      index += 1;
+    }
+    const id = Math.abs(hash);
+    return id === 0 ? 1 : id;
   }
 }
