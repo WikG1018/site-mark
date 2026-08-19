@@ -2,7 +2,6 @@ export interface RestoreJournalStorage {
   load(): Promise<string>;
   save(value: string): Promise<void>;
 }
-
 export class RestoreJournalEntry {
   operationId: string;
   paths: string[];
@@ -66,4 +65,3 @@ export class RestoreJournalStore {
     return this.storage.save(JSON.stringify(document));
   }
 }
-

@@ -18,7 +18,6 @@ export class StorageSnapshot {
     return this.originals + this.rendered + this.exports + this.other;
   }
 }
-
 export class StorageInspector {
   static inspect(filesDir: string): StorageSnapshot {
     const result = new StorageSnapshot();
@@ -76,4 +75,3 @@ export class StorageInspector {
     }
   }
 }
-

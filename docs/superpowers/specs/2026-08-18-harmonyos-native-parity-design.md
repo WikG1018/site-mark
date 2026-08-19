@@ -67,36 +67,36 @@
 
 ### 实现路线
 
-1. **原生 ArkTS + 同源 Rust 核心（采用）**  
-   UI / 导航 / 数据 / 系统集成全部用 Stage + ArkTS 重写；图像与归档算法不重写，交叉编译现有 `sitemark_core`。  
-   理由：`ohos` 分支截至 `821f3d4` 已证明社区 Flutter 路线走不通——空壳模拟器能启，但 Rust 引擎长期 `degraded`、社区 Flutter 锁 3.27–3.32 无法追平 `main` 的 3.41.x、相册 / 相机 / 定位契约未闭环。原生路线上架与权限模型最干净，对等性由「契约镜像 + 同源算法 + 黄金向量」锁死，而不是复用 Flutter 页面。
+1. **原生 ArkTS + 同源 Rust 核心（采用）**
+   UI / 导航 / 数据 / 系统集成全部用 Stage + ArkTS 重写；图像与归档算法不重写，交叉编译现有 `sitemark_core`。
+   理由：原生路线能直接遵循 Stage、ArkUI 与系统权限模型；对等性由「契约镜像 + 同源算法 + 黄金向量」约束，而不是依赖另一条 Flutter 适配线的页面实现。
 
-2. 继续社区 Flutter `ohos` 分支  
-   已实测失败。冻结，不再推进。
+2. 在本任务继续修改社区 Flutter `ohos` 分支
+   分支由另一项工作独立负责，本任务不触碰也不评价其最终去留。
 
-3. 现有 APK 跑在兼容安卓的老鸿蒙  
+3. 现有 APK 跑在兼容安卓的老鸿蒙
    快，但不是 NEXT，也上不了纯血应用市场。明确不做。
 
 ### 仓库
 
-1. **长期 `ohos-native` 分支（采用）**  
-   从 `abc0164` 拉出。`ohos-native/`、鸿蒙 CI、签名配置只存在该分支。`main` 的产品修复定期 cherry-pick 进来；禁止反向合入。文档（本规划 + 实施计划）可先合入 `main` 再拉分支，或 cherry-pick 到 `ohos-native`。
+1. **同仓隔离实现分支，完成后 PR 合入 `main`（实际采用）**
+   从 `abc0164` 拉出 `agent/ohos-native`，所有原生代码位于 `ohos-native/`；验收后合入 `main` 共享 Rust 与产品文档。独立 `ohos` 分支不参与本 PR。
 
-2. 同一 `main` 双平台  
-   CI、SDK、依赖冲突最高，否决。
+2. 直接在 `main` 开发
+   难以隔离大规模新增代码，否决；最终合入不等于直接开发。
 
-3. 独立鸿蒙仓  
+3. 独立鸿蒙仓
    隔离最好，双份业务与 Rust FFI 最容易漂，否决。同仓共享 `rust/` 与产品文档。
 
 ### 验收环境
 
-1. **DevEco NEXT 模拟器为唯一验收环境（采用）**  
+1. **DevEco NEXT 模拟器为唯一验收环境（采用）**
    当前无鸿蒙真机。`ohos` 分支 Task 0 已证明本机模拟器（`SiteMarkPhone602`，OpenHarmony 6.0.2.130 / API 22）可用。本规划全部里程碑在模拟器闭环；真机验证挂起。
 
-2. 真机硬闸才算完成  
+2. 真机硬闸才算完成
    与用户环境冲突，否决。
 
-3. 云真机替代本地模拟器  
+3. 云真机替代本地模拟器
    可作为日后抽查，不作为本规划出口。
 
 ### 相册
@@ -104,7 +104,7 @@
 1. **私有成片 + 用户主动系统保存面板（实际采用）**
    后台队列只完成应用私有成片，确保相机返回后可以继续连拍。用户在详情页点击“保存到相册”时调用 `PhotoAccessHelper.showAssetsCreationDialog`，允许后记录系统返回 URI；取消或拒绝不改变成片 `ready` 状态。manifest 不申请广泛媒体读写权限。
 
-2. 第一期强制拿到 ACL 否则不算能发  
+2. 第一期强制拿到 ACL 否则不算能发
    审核与真机授权不在本规划可控范围，会把整期卡死。否决。
 
 3. 申请广泛媒体 ACL 并在后台直写
@@ -112,21 +112,21 @@
 
 ### 图像核心绑定
 
-1. **同一 crate + 新增 C ABI JSON FFI，不动 FRB（采用）**  
+1. **同一 crate + 新增 C ABI JSON FFI，不动 FRB（采用）**
    FRB 是 Dart 绑定，不能用于 ArkTS。在 `rust/src/ffi/` 增加 `extern "C"` JSON-in/JSON-out 薄层，参数 / 返回与 `lib/src/rust/api/image_core.dart` 对齐。NAPI 用 napi-rs ohos 目标或 C++ 薄封装，以 Task 3 实测为准，写入 `probe.md`。
 
-2. 把 FRB 接到鸿蒙  
+2. 把 FRB 接到鸿蒙
    无官方路径，否决。
 
-3. ArkTS / ImageKit 重写水印  
+3. ArkTS / ImageKit 重写水印
    版式与哈希必然分叉，否决。
 
 ### 模拟器相机
 
-1. **系统相机优先 + debug-only JPEG 注入（采用）**  
-   `cameraPicker.pick()` 为产品路径。模拟器虚拟相机不可用或不可控时，debug 构建允许从图库 / 文件选择 JPEG 注入 `originals/`，驱动完整状态机。该通道是测试注入，release 编译剥离，不构成自研相机。
+1. **系统相机优先 + debug-only JPEG 注入（采用）**
+   `cameraPicker.pick()` 为产品路径。模拟器虚拟相机不可用或不可控时，debug 构建允许把内置测试 JPEG 写入 `originals/`，驱动完整状态机。运行时由 `applicationInfo.debug` 保护，release 不进入该通道，也不构成自研相机。
 
-2. 自研相机预览填补模拟器缺口  
+2. 自研相机预览填补模拟器缺口
    违反产品边界，否决。
 
 ## 架构

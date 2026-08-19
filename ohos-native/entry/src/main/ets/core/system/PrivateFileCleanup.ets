@@ -32,4 +32,3 @@ export class PrivateFileCleanup {
     return path.startsWith(this.filesRoot) && !path.includes('/../') && !path.endsWith('/..');
   }
 }
-

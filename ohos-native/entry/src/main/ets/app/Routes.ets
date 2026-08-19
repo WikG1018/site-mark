@@ -12,4 +12,3 @@ export class Routes {
   static readonly APPEARANCE: string = 'appearance';
   static readonly ABOUT: string = 'about';
 }
-

@@ -41,7 +41,6 @@ export class RestoredCaptureInput {
     this.originalMissing = originalMissing;
   }
 }
-
 export class RestoredTemplateInput {
   id: string;
   name: string;
@@ -97,4 +96,3 @@ export class RestoredProjectInput {
     this.templates = templates;
   }
 }
-
