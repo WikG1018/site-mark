@@ -1,171 +1,272 @@
 import { common } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
-import { camera, cameraPicker } from '@kit.CameraKit';
-import { fileIo, fileUri, picker } from '@kit.CoreFileKit';
-import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { AbilityContextHolder } from '../app/AbilityContextHolder';
+import { AppRuntime } from '../app/AppRuntime';
+import { Routes } from '../app/Routes';
+import { PreferencesConsentStorage } from '../data/prefs/PreferencesConsentStorage';
+import { PrivacyConsentStore } from '../data/prefs/PrivacyConsentStore';
+import { CaptureDetailScreen, CaptureEditorScreen, CaptureFormScreen, AllRecordsView,
+  PhotoViewerScreen } from '../feature/records/RecordScreens';
+import { ProjectDetailScreen, ProjectEditorScreen, ProjectListView,
+  ProjectSettingsScreen } from '../feature/projects/ProjectScreens';
+import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, SettingsView,
+  StorageScreen } from '../feature/settings/SettingsScreens';
+import { UiTokens } from '../shared/UiTokens';
+import { AppText, tr } from '../shared/AppText';
 
 @Entry
 @Component
 struct Index {
-  @State private status: string = 'API 22 / x86_64 模拟器技术探测';
-  @State private publishedUri: string = '';
+  @Provide('pathStack') pathStack: NavPathStack = new NavPathStack();
+  @State private consentChecked: boolean = false;
+  @State private consentAccepted: boolean = false;
+  @State private runtimeReady: boolean = false;
+  @State private runtimeError: string = '';
+  @State private activeTab: number = 0;
+  @State private tabDirection: number = 1;
+  @State private selectionMode: boolean = false;
+  @State private appearanceRevision: number = 0;
+  private consentStore: PrivacyConsentStore = new PrivacyConsentStore(
+    new PreferencesConsentStorage(AbilityContextHolder.require()));
+  private readonly runtimeListener: () => void = (): void => {
+    const runtime = AppRuntime.current;
+    this.selectionMode = runtime?.rootSelectionMode ?? false;
+    this.appearanceRevision += 1;
+  };
 
-  private abilityContext(): common.UIAbilityContext {
+  aboutToAppear(): void {
+    AppText.apply('', this.context().resourceManager.getConfigurationSync().locale);
+    this.checkConsent();
+  }
+
+  aboutToDisappear(): void {
+    AppRuntime.current?.unsubscribe(this.runtimeListener);
+  }
+
+  private context(): common.UIAbilityContext {
     return AbilityContextHolder.require();
   }
 
-  private errorText(error: Error | BusinessError): string {
-    const businessError = error as BusinessError;
-    return `${businessError.code ?? 'unknown'} ${businessError.message ?? String(error)}`;
-  }
-
-  private async probeFileUri(): Promise<string> {
-    const context = this.abilityContext();
-    const targetPath = `${context.filesDir}/probe.jpg`;
-    const source = await context.resourceManager.getRawFileContent('probe.jpg');
-    const target = fileIo.openSync(
-      targetPath,
-      fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC
-    );
+  private async checkConsent(): Promise<void> {
     try {
-      fileIo.writeSync(target.fd, source.buffer);
-    } finally {
-      fileIo.closeSync(target);
+      this.consentAccepted = await this.consentStore.isAccepted();
+    } catch (_) {
+      this.consentAccepted = false;
     }
-    return fileUri.getUriFromPath(targetPath);
-  }
-
-  private async runCameraProbe(): Promise<void> {
-    this.status = '正在拉起系统相机…';
-    try {
-      const profile: cameraPicker.PickerProfile = {
-        cameraPosition: camera.CameraPosition.CAMERA_POSITION_BACK
-      };
-      const result = await cameraPicker.pick(
-        this.abilityContext(),
-        [cameraPicker.PickerMediaType.PHOTO],
-        profile
-      );
-      this.status = `相机 resultCode=${result.resultCode}, uri=${result.resultUri || '(空)'}`;
-    } catch (error) {
-      this.status = `相机失败：${this.errorText(error as BusinessError)}`;
+    this.consentChecked = true;
+    if (this.consentAccepted) {
+      await this.initializeRuntime();
     }
   }
 
-  private async runAlbumProbe(): Promise<void> {
-    this.status = '正在拉起相册保存确认…';
+  private async acceptPrivacy(): Promise<void> {
+    await this.consentStore.accept();
+    this.consentAccepted = true;
+    await this.initializeRuntime();
+  }
+
+  private async initializeRuntime(): Promise<void> {
+    this.runtimeError = '';
     try {
-      const sourceUri = await this.probeFileUri();
-      const helper = photoAccessHelper.getPhotoAccessHelper(this.abilityContext());
-      const config: photoAccessHelper.PhotoCreationConfig = {
-        title: `SiteMark-Probe-${Date.now()}`,
-        fileNameExtension: 'jpg',
-        photoType: photoAccessHelper.PhotoType.IMAGE
-      };
-      const uris = await helper.showAssetsCreationDialog([sourceUri], [config]);
-      this.publishedUri = uris.length > 0 ? uris[0] : '';
-      this.status = `相册保存返回 ${uris.length} 项：${this.publishedUri || '(用户取消)'}`;
-    } catch (error) {
-      this.status = `相册保存失败：${this.errorText(error as BusinessError)}`;
+      const runtime = await AppRuntime.initialize(this.context());
+      runtime.subscribe(this.runtimeListener);
+      this.runtimeReady = true;
+      this.runtimeListener();
+    } catch (_) {
+      this.runtimeError = tr('本机数据初始化失败。请释放存储空间后重试；现有数据不会被自动删除。',
+        'Local data could not be initialized. Free some storage and try again; existing data will not be deleted.');
     }
   }
 
-  private async runDeleteProbe(): Promise<void> {
-    if (this.publishedUri.length === 0) {
-      this.status = '请先完成“相册保存”探测。';
+  private switchTab(index: number): void {
+    if (index === this.activeTab) {
       return;
     }
-    this.status = '正在请求删除刚才保存的探测照片…';
-    try {
-      await photoAccessHelper.MediaAssetChangeRequest.deleteAssets(
-        this.abilityContext(),
-        [this.publishedUri]
-      );
-      this.status = '删除请求已完成。';
-      this.publishedUri = '';
-    } catch (error) {
-      this.status = `删除失败/拒绝：${this.errorText(error as BusinessError)}`;
-    }
+    this.tabDirection = index > this.activeTab ? 1 : -1;
+    this.getUIContext().animateTo({ duration: 260, curve: Curve.Friction }, (): void => {
+      this.activeTab = index;
+    });
   }
 
-  private async runSettingsProbe(): Promise<void> {
-    this.status = '正在打开应用详情…';
-    try {
-      const context = this.abilityContext();
-      await context.startAbility({
-        bundleName: 'com.huawei.hmos.settings',
-        abilityName: 'com.huawei.hmos.settings.MainAbility',
-        uri: 'application_info_entry',
-        parameters: {
-          'pushParams': context.applicationInfo.name
-        }
-      });
-      this.status = '应用详情页已打开。';
-    } catch (error) {
-      this.status = `应用详情失败：${this.errorText(error as BusinessError)}`;
-    }
+  private contentTransition(): TransitionEffect {
+    const enterX = this.tabDirection > 0 ? 34 : -34;
+    const exitX = this.tabDirection > 0 ? -22 : 22;
+    return TransitionEffect.asymmetric(
+      TransitionEffect.translate({ x: enterX, y: 0 }).combine(TransitionEffect.opacity(0)),
+      TransitionEffect.translate({ x: exitX, y: 0 }).combine(TransitionEffect.opacity(0))
+    ).animation({ duration: 220, curve: Curve.Friction });
   }
 
-  private async runLinkProbe(): Promise<void> {
-    this.status = '正在打开 GitHub 链接…';
-    try {
-      await this.abilityContext().openLink('https://github.com/WikG1018/site-mark');
-      this.status = 'openLink 调用成功。';
-    } catch (error) {
-      this.status = `openLink 失败：${this.errorText(error as BusinessError)}`;
-    }
-  }
-
-  private async runDocumentSaveProbe(): Promise<void> {
-    this.status = '正在打开备份保存选择器…';
-    try {
-      const documentPicker = new picker.DocumentViewPicker(this.abilityContext());
-      const options = new picker.DocumentSaveOptions();
-      options.newFileNames = ['SiteMark-Probe.zip'];
-      options.fileSuffixChoices = ['ZIP|.zip'];
-      const uris = await documentPicker.save(options);
-      this.status = `文件保存选择器返回 ${uris.length} 项。`;
-    } catch (error) {
-      this.status = `文件保存取消/失败：${this.errorText(error as BusinessError)}`;
+  @Builder
+  private pathMap(routeName: string) {
+    if (routeName === Routes.PROJECT_DETAIL) {
+      ProjectDetailScreen();
+    } else if (routeName === Routes.PROJECT_EDITOR) {
+      ProjectEditorScreen();
+    } else if (routeName === Routes.PROJECT_SETTINGS) {
+      ProjectSettingsScreen();
+    } else if (routeName === Routes.CAPTURE_FORM) {
+      CaptureFormScreen();
+    } else if (routeName === Routes.CAPTURE_DETAIL) {
+      CaptureDetailScreen();
+    } else if (routeName === Routes.CAPTURE_EDITOR) {
+      CaptureEditorScreen();
+    } else if (routeName === Routes.PHOTO_VIEWER) {
+      PhotoViewerScreen();
+    } else if (routeName === Routes.BACKUP) {
+      BackupScreen();
+    } else if (routeName === Routes.STORAGE) {
+      StorageScreen();
+    } else if (routeName === Routes.DIAGNOSTICS) {
+      DiagnosticsScreen();
+    } else if (routeName === Routes.APPEARANCE) {
+      AppearanceScreen();
+    } else if (routeName === Routes.ABOUT) {
+      AboutScreen();
     }
   }
 
   @Builder
-  private probeButton(label: string, action: () => Promise<void>) {
-    Button(label)
-      .width('100%')
-      .height(52)
-      .fontSize(16)
-      .onClick(() => action())
+  private dockItem(index: number, icon: Resource, label: string) {
+    Column({ space: 3 }) {
+      Image(icon).width(24).height(24)
+        .fillColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+      Text(label).fontSize(12).fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Medium)
+        .fontColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+    }
+    .layoutWeight(1)
+    .height(58)
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .onClick((): void => this.switchTab(index))
   }
 
-  build() {
-    Scroll() {
-      Column({ space: 12 }) {
-        Text('SiteMark 原生能力探测')
-          .fontSize(24)
-          .fontWeight(FontWeight.Bold)
-          .width('100%')
-        Text(this.status)
-          .fontSize(14)
-          .fontColor('#385147')
-          .padding(14)
-          .backgroundColor('#EAF8F1')
-          .borderRadius(16)
-          .width('100%')
-        this.probeButton('1. 系统相机 CameraPicker', () => this.runCameraProbe())
-        this.probeButton('2. 相册保存确认', () => this.runAlbumProbe())
-        this.probeButton('3. 删除相册探测照片', () => this.runDeleteProbe())
-        this.probeButton('4. 应用详情设置页', () => this.runSettingsProbe())
-        this.probeButton('5. 浏览器打开 GitHub', () => this.runLinkProbe())
-        this.probeButton('6. DocumentViewPicker 保存 ZIP', () => this.runDocumentSaveProbe())
+  @Builder
+  private floatingDock() {
+    Stack() {
+      Row() {
+        if (this.activeTab > 0) {
+          Blank().layoutWeight(this.activeTab)
+        }
+        Row().height(58).layoutWeight(1)
+          .backgroundColor(UiTokens.DOCK_SELECTED).backdropBlur(16).borderRadius(22)
+        if (this.activeTab < 2) {
+          Blank().layoutWeight(2 - this.activeTab)
+        }
+      }.width('100%').height('100%').padding(6)
+      Row() {
+        this.dockItem(0, $r('app.media.ic_projects'), tr('项目', 'Projects'))
+        this.dockItem(1, $r('app.media.ic_records'), tr('全部记录', 'Records'))
+        this.dockItem(2, $r('app.media.ic_settings'), tr('设置', 'Settings'))
+      }.width('100%').height('100%').padding(6)
+    }
+    .height(70)
+    .margin({ left: 16, right: 16, bottom: 12 })
+    .width('100%')
+    .backgroundColor(UiTokens.DOCK)
+    .backdropBlur(28)
+    .border({ width: 1, color: UiTokens.OUTLINE })
+    .borderRadius(28)
+    .shadow({ radius: 20, color: '#30000000', offsetY: 7 })
+  }
+
+  @Builder
+  private rootContent() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      if (this.activeTab === 0) {
+        ProjectListView().transition(this.contentTransition())
+      } else if (this.activeTab === 1) {
+        AllRecordsView().transition(this.contentTransition())
+      } else {
+        SettingsView().transition(this.contentTransition())
       }
-      .padding({ left: 20, right: 20, top: 28, bottom: 28 })
-      .width('100%')
+      if (!this.selectionMode) {
+        this.floatingDock()
+      }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F7FBF8')
+    .backgroundColor(UiTokens.BACKGROUND)
+  }
+
+  @Builder
+  private privacyGate() {
+    Column() {
+      Scroll() {
+        Column({ space: 18 }) {
+          Text('SiteMark').fontSize(38).fontWeight(FontWeight.Bold).fontColor(UiTokens.PRIMARY)
+          Text(tr('工程印记 · 鸿蒙原生版', 'SiteMark · Native HarmonyOS')).fontSize(22)
+            .fontWeight(FontWeight.Bold).fontColor(UiTokens.TEXT)
+          Text(tr('开始前，请了解本应用如何处理你的数据与权限。',
+            'Before continuing, please review how this app handles your data and permissions.'))
+            .fontSize(15).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
+          Column({ space: 13 }) {
+            Text(tr('本机处理', 'On-device processing')).fontSize(17).fontWeight(FontWeight.Bold)
+              .fontColor(UiTokens.PRIMARY).width('100%')
+            Text(tr('项目、照片、水印和诊断均在本机处理；应用没有广告、账号、云同步或统计上传，也不申请网络权限。',
+              'Projects, photos, watermarks, and diagnostics are processed on this device. There are no ads, accounts, cloud sync, analytics uploads, or network permission.'))
+              .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
+            Text(tr('系统相机', 'System camera')).fontSize(17).fontWeight(FontWeight.Bold)
+              .fontColor(UiTokens.PRIMARY).width('100%')
+            Text(tr('拍照交给系统相机完成，SiteMark 不申请相机权限。返回后在后台串行生成水印。',
+              'Photos are taken by the system camera, so SiteMark does not request camera permission. Watermarks are rendered serially after you return.'))
+              .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
+            Text(tr('可选位置', 'Optional location')).fontSize(17).fontWeight(FontWeight.Bold)
+              .fontColor(UiTokens.PRIMARY).width('100%')
+            Text(tr('仅在你主动拍摄时请求一次前台位置。拒绝定位仍可正常拍照，应用不申请后台定位。',
+              'Foreground location is requested only when you take a photo. You can keep shooting if you decline; background location is never requested.'))
+              .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
+            Text(tr('相册与备份', 'Gallery and backups')).fontSize(17).fontWeight(FontWeight.Bold)
+              .fontColor(UiTokens.PRIMARY).width('100%')
+            Text(tr('保存成片、删除相册照片和选择备份位置时，会使用鸿蒙系统确认界面。卸载前请把重要备份保存到应用目录之外。',
+              'HarmonyOS confirmation panels are used to save or delete gallery photos and choose backup locations. Save important backups outside the app before uninstalling.'))
+              .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
+          }
+          .padding(20).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
+          Button(tr('同意并继续', 'Agree and continue')).height(54).width('100%').fontSize(17)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
+            .onClick((): void => { this.acceptPrivacy(); })
+          Button(tr('退出应用', 'Exit app')).height(44).width('100%').fontColor(UiTokens.TEXT_SECONDARY)
+            .backgroundColor(Color.Transparent).onClick((): void => { this.context().terminateSelf(); })
+        }
+        .padding({ left: 24, right: 24, top: 52, bottom: 34 })
+        .width('100%')
+      }
+      .width('100%').height('100%')
+    }
+    .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
+  }
+
+  build() {
+    if (!this.consentChecked) {
+      Column({ space: 14 }) {
+        LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
+        Text(tr('正在准备工程印记…', 'Preparing SiteMark…')).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
+      }
+      .width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+    } else if (!this.consentAccepted) {
+      this.privacyGate()
+    } else if (this.runtimeError.length > 0) {
+      Column({ space: 16 }) {
+        Text(tr('无法启动', 'Unable to start')).fontSize(26).fontWeight(FontWeight.Bold).fontColor(UiTokens.TEXT)
+        Text(this.runtimeError).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
+          .lineHeight(22).textAlign(TextAlign.Center).padding({ left: 32, right: 32 })
+        Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+          .onClick((): void => { this.initializeRuntime(); })
+      }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+    } else if (!this.runtimeReady) {
+      Column({ space: 14 }) {
+        LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
+        Text(tr('正在恢复本机记录…', 'Recovering local records…')).fontSize(14)
+          .fontColor(UiTokens.TEXT_SECONDARY)
+      }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+    } else {
+      Navigation(this.pathStack) {
+        this.rootContent()
+      }
+      .hideTitleBar(true)
+      .navDestination(this.pathMap)
+      .mode(NavigationMode.Stack)
+    }
   }
 }

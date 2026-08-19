@@ -1,6 +1,6 @@
 {
   "modelVersion": "5.0.0",
-  "description": "Please describe the basic information.",
+  "description": "SiteMark native HarmonyOS engineering watermark camera",
   "dependencies": {
   },
   "devDependencies": {

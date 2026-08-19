@@ -1,0 +1,235 @@
+import { common } from '@kit.AbilityKit';
+import { SerialCaptureQueue } from '../background/SerialCaptureQueue';
+import { ImagePipeline } from '../core/media/ImagePipeline';
+import { NativeImagePipeline } from '../core/media/NativeImagePipeline';
+import { MediaCleanup, MediaCleanupDatabase, MediaDeleteService } from '../core/system/MediaCleanup';
+import { PrivateFileCleanup } from '../core/system/PrivateFileCleanup';
+import { HarmonySystemServices, SystemServices } from '../core/system/SystemServices';
+import { AppDatabase, MediaCleanupTask } from '../data/database/AppDatabase';
+import { CaptureSessionStore } from '../data/prefs/CaptureSessionStore';
+import { PreferencesCaptureSessionStorage,
+  PreferencesPublishJournalStorage, PreferencesRestoreJournalStorage } from '../data/prefs/PreferencesStores';
+import { PublishJournalStore } from '../data/prefs/PublishJournalStore';
+import { RestoreJournalStore } from '../data/prefs/RestoreJournalStore';
+import { CaptureProcessor } from '../feature/capture/CaptureProcessor';
+import { CaptureWorkflow } from '../feature/capture/CaptureWorkflow';
+import { StartupRecovery } from './StartupRecovery';
+import { CaptureStatus } from '../domain/StateMachine';
+import { ConfigurationConstant } from '@kit.AbilityKit';
+import { UiTokens } from '../shared/UiTokens';
+import { CompletionNotifications } from '../core/system/CompletionNotifications';
+import { AppText, tr } from '../shared/AppText';
+import { KeyedOperationGate } from '../core/concurrency/KeyedOperationGate';
+
+export type RuntimeListener = () => void;
+
+class AppDatabaseMediaCleanupAdapter implements MediaCleanupDatabase {
+  private readonly database: AppDatabase;
+
+  constructor(database: AppDatabase) {
+    this.database = database;
+  }
+
+  pendingMediaCleanups(): Promise<MediaCleanupTask[]> {
+    return this.database.pendingMediaCleanups();
+  }
+
+  isPublishedUriReferenced(uri: string): Promise<boolean> {
+    return this.database.isPublishedUriReferenced(uri);
+  }
+
+  completeMediaCleanup(uri: string): Promise<void> {
+    return this.database.completeMediaCleanup(uri);
+  }
+
+  failMediaCleanup(uri: string): Promise<void> {
+    return this.database.failMediaCleanup(uri);
+  }
+}
+
+class SystemMediaDeleteAdapter implements MediaDeleteService {
+  private readonly services: SystemServices;
+
+  constructor(services: SystemServices) {
+    this.services = services;
+  }
+
+  deletePublishedImage(uri: string): Promise<boolean> {
+    return this.services.deletePublishedImage(uri);
+  }
+}
+
+export class AppRuntime {
+  static current: AppRuntime | null = null;
+
+  readonly context: common.UIAbilityContext;
+  readonly database: AppDatabase;
+  readonly pipeline: ImagePipeline;
+  readonly services: SystemServices;
+  readonly queue: SerialCaptureQueue;
+  readonly captureWorkflow: CaptureWorkflow;
+  readonly mediaCleanup: MediaCleanup;
+  readonly privateFileCleanup: PrivateFileCleanup;
+  readonly startupRecovery: StartupRecovery;
+  readonly restoreJournal: RestoreJournalStore;
+  readonly notifications: CompletionNotifications;
+
+  selectedProjectId: string = '';
+  selectedCaptureId: string = '';
+  rootSelectionMode: boolean = false;
+  private listeners: RuntimeListener[] = [];
+  private readonly republishGate: KeyedOperationGate = new KeyedOperationGate();
+
+  private constructor(context: common.UIAbilityContext, database: AppDatabase) {
+    this.context = context;
+    this.database = database;
+    this.pipeline = new NativeImagePipeline();
+    const journals = new PublishJournalStore(new PreferencesPublishJournalStorage(context));
+    this.services = new HarmonySystemServices(context, journals);
+    const sessions = new CaptureSessionStore(new PreferencesCaptureSessionStorage(context));
+    this.notifications = new CompletionNotifications(context);
+    const processor = new CaptureProcessor(database, this.pipeline, this.services, context.filesDir,
+      (_captureId: string, _succeeded: boolean): void => this.notifyDataChanged(), this.notifications);
+    this.queue = new SerialCaptureQueue((captureId: string): Promise<void> => processor.process(captureId));
+    this.captureWorkflow = new CaptureWorkflow(database, this.services, sessions, this.queue);
+    this.mediaCleanup = new MediaCleanup(
+      new AppDatabaseMediaCleanupAdapter(database),
+      new SystemMediaDeleteAdapter(this.services),
+    );
+    this.privateFileCleanup = new PrivateFileCleanup(database, context.filesDir);
+    this.restoreJournal = new RestoreJournalStore(new PreferencesRestoreJournalStorage(context));
+    this.startupRecovery = new StartupRecovery(database, this.services, this.captureWorkflow,
+      this.queue, this.mediaCleanup, this.privateFileCleanup, this.restoreJournal, context.filesDir);
+  }
+
+  static async initialize(context: common.UIAbilityContext): Promise<AppRuntime> {
+    if (AppRuntime.current !== null) {
+      return AppRuntime.current;
+    }
+    const database = await AppDatabase.open(context);
+    const runtime = new AppRuntime(context, database);
+    await runtime.applyAppearance();
+    await runtime.startupRecovery.run();
+    AppRuntime.current = runtime;
+    return runtime;
+  }
+
+  static require(): AppRuntime {
+    if (AppRuntime.current === null) {
+      throw new Error('AppRuntime is not initialized');
+    }
+    return AppRuntime.current;
+  }
+
+  subscribe(listener: RuntimeListener): void {
+    if (this.listeners.indexOf(listener) < 0) {
+      this.listeners.push(listener);
+    }
+  }
+
+  unsubscribe(listener: RuntimeListener): void {
+    const index = this.listeners.indexOf(listener);
+    if (index >= 0) {
+      this.listeners.splice(index, 1);
+    }
+  }
+
+  notifyDataChanged(): void {
+    const snapshot = this.listeners.slice();
+    for (const listener of snapshot) {
+      listener();
+    }
+  }
+
+  async applyAppearance(): Promise<void> {
+    const settings = await this.database.settings();
+    this.context.getApplicationContext().setLanguage(settings.localeCode.length === 0 ? 'default' : settings.localeCode);
+    const systemLocale = this.context.resourceManager.getConfigurationSync().locale;
+    AppText.apply(settings.localeCode, systemLocale);
+    const systemDark = this.context.resourceManager.getConfigurationSync().colorMode === 0;
+    const dark = settings.themeMode === 'dark' || (settings.themeMode === 'system' && systemDark);
+    UiTokens.apply(dark, settings.appSeedColorArgb);
+    const mode = settings.themeMode === 'dark' ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK :
+      (settings.themeMode === 'light' ? ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT :
+        ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+    this.context.getApplicationContext().setColorMode(mode);
+    this.notifyDataChanged();
+  }
+
+  async clearOriginal(captureId: string): Promise<void> {
+    const started = Date.now();
+    try {
+      await this.database.scheduleOriginalCleanup(captureId);
+      await this.privateFileCleanup.reconcile();
+      await this.recordDiagnosticBestEffort('original_cleanup', 'success', Date.now() - started);
+      this.notifyDataChanged();
+    } catch (error) {
+      await this.recordDiagnosticBestEffort('original_cleanup', 'failure', Date.now() - started);
+      throw new Error((error as Error).message);
+    }
+  }
+
+  async deleteCapture(captureId: string): Promise<void> {
+    const started = Date.now();
+    try {
+      await this.database.scheduleCaptureDeletion(captureId);
+      await this.privateFileCleanup.reconcile();
+      await this.mediaCleanup.reconcile();
+      await this.recordDiagnosticBestEffort('capture_delete', 'success', Date.now() - started);
+      this.notifyDataChanged();
+    } catch (error) {
+      await this.recordDiagnosticBestEffort('capture_delete', 'failure', Date.now() - started);
+      throw new Error((error as Error).message);
+    }
+  }
+
+  async deleteProject(projectId: string): Promise<void> {
+    const started = Date.now();
+    try {
+      await this.database.scheduleProjectDeletion(projectId);
+      await this.privateFileCleanup.reconcile();
+      await this.recordDiagnosticBestEffort('project_delete', 'success', Date.now() - started);
+      this.notifyDataChanged();
+    } catch (error) {
+      await this.recordDiagnosticBestEffort('project_delete', 'failure', Date.now() - started);
+      throw new Error((error as Error).message);
+    }
+  }
+
+  async republishCapture(captureId: string): Promise<void> {
+    if (!this.republishGate.tryEnter(captureId)) {
+      throw new Error(tr('正在保存到相册，请稍候', 'Saving to the gallery. Please wait.'));
+    }
+    try {
+      const capture = await this.database.captureById(captureId);
+      if (capture === null || capture.status !== CaptureStatus.READY || capture.renderedPath.length === 0) {
+        throw new Error(tr('仅可再次保存已完成的水印照片',
+          'Only completed watermarked photos can be saved again.'));
+      }
+      const outcome = await this.services.saveJpegToAlbum(capture.renderedPath,
+        `${capture.photoNumber}.jpg`, capture.id, capture.publishedUri);
+      const adopted = await this.database.adoptPublishedUriFromJournal(capture.id,
+        capture.publishedUri, outcome.contentUri, outcome.supersededUris);
+      if (!adopted) {
+        throw new Error(tr('记录已发生变化，请重新打开后再试',
+          'The record changed. Reopen it and try again.'));
+      }
+      try {
+        await this.services.clearPublishJournal(capture.id, outcome.contentUri);
+      } catch (_) {
+      }
+      await this.mediaCleanup.reconcile();
+      await this.recordDiagnosticBestEffort('republish', 'success', 0);
+      this.notifyDataChanged();
+    } finally {
+      this.republishGate.leave(captureId);
+    }
+  }
+
+  async recordDiagnosticBestEffort(category: string, outcome: string, durationMs: number): Promise<void> {
+    try {
+      await this.database.recordDiagnostic(category, outcome, durationMs);
+    } catch (_) {
+    }
+  }
+}

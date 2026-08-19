@@ -34,6 +34,7 @@ Thumbs.db
 # Local planning / worktrees / secrets
 .superpowers/
 .worktrees/
+/.hvigor/
 .env
 *.secret
 

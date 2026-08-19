@@ -2,19 +2,19 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "工程现场记录水印相机"
+      "value": "Watermark camera for engineering site records"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "工程印记鸿蒙原生版"
+      "value": "SiteMark native HarmonyOS edition"
     },
     {
       "name": "EntryAbility_label",
-      "value": "工程印记"
+      "value": "SiteMark"
     },
     {
-      "name": "permission_media_reason",
-      "value": "用于将用户确认的水印照片保存到系统相册，并在用户明确删除记录时清理对应照片。"
+      "name": "permission_location_reason",
+      "value": "Used only during capture to add foreground location to the engineering watermark; capture still works if declined."
     }
   ]
 }
