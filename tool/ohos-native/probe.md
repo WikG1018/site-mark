@@ -1,6 +1,6 @@
 # SiteMark 鸿蒙原生技术探测记录
 
-更新时间：2026-08-19
+更新时间：2026-08-20
 
 ## 工具链与运行环境
 
@@ -21,7 +21,7 @@ Windows 上 DevEco 自带的 `ohpm.bat` 在本机发生批处理递归，构建�
 
 - `assembleHap` 成功，生成 `entry-default-unsigned.hap`。
 - HAP 通过 HDC 安装到 API 22 / x86_64 模拟器，并完成冷启动。
-- Hypium 本地测试链路已安装并通过模板基线测试。
+- Hypium 本地测试链路已安装，当前结果为 `Tests run: 33, Failure: 0, Error: 0, Pass: 33`。
 - 鸿蒙原生包名为 `io.github.wikg1018.sitemark.native`，不会覆盖或干扰社区 Flutter 鸿蒙分支的包。
 
 ## 平台能力探测
@@ -32,7 +32,7 @@ API 22 / x86_64 模拟器中，`cameraPicker.pick()` 返回 `undefined`，未得
 
 ### 2. 相册保存
 
-`PhotoAccessHelper.showAssetsCreationDialog` 可用，会显示系统确认面板“允许‘工程印记’保存 1 张图片？”。允许后返回 `file://media/Photo/...` URI，确认可作为无需私有 ACL 的安全托底路径。产品实现优先尝试平台发布能力；不可用或被拒绝时使用系统确认面板，不把未完成的保存宣称为成功。
+`PhotoAccessHelper.showAssetsCreationDialog` 可用，会显示系统确认面板“允许‘工程印记’保存 1 张图片？”。允许后返回 `file://media/Photo/...` URI。完整页面回归已确认：记录详情的“系统相册”由“未保存”即时更新为“已保存”，按钮更新为“再次保存”。后台处理只写私有成片，不会在连拍时强制弹出需交互的系统面板。
 
 ### 3. 相册删除
 
@@ -58,4 +58,4 @@ API 22 / x86_64 模拟器中，`cameraPicker.pick()` 返回 `undefined`，未得
 
 ## 结论
 
-Task 0 硬闸通过：Stage 空壳可构建、安装、冷启动，五项平台能力均有明确实测结论。相机和相册删除仅能在模拟器确认降级行为，不能据此宣称真机对等；两项会持续登记在 `ohos-native/docs/deltas.md`。
+Stage 原生应用可构建、安装和冷启动，五项平台能力均有明确实测结论。模拟器还已回归项目列表/详情、拍摄表单保留、串行渲染、处理状态即时刷新、全选/取消全选、记录详情、相册保存、中英文和深色模式。相机、相册删除和性能仅能在模拟器确认当前行为，不能据此宣称真机对等；边界持续登记在 `ohos-native/docs/deltas.md`。

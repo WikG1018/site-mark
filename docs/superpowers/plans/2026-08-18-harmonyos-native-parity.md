@@ -1,10 +1,12 @@
 # SiteMark 鸿蒙原生（ArkTS）从零到对齐实施计划
 
+> **实施结果（2026-08-20）：** Task 0–7 的代码主体已在 `agent/ohos-native` 落地；33 项 ArkTS 测试、DevEco debug HAP 构建及 API 22 x86_64 模拟器主流程回归通过。GitHub CI 检查 manifest 最小权限、双 ABI 配置和 `ohos-native` Rust feature；由于公用 runner 无 DevEco/HarmonyOS SDK，HAP 仍以本地 DevEco 构建为准。发布签名、鸿蒙真机回归、跨端备份实机互恢和 AppGallery 上架仍未完成，不得勾选或宣称转正。历史 `ohos` 分支保持不动。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **配套设计规划：** [`docs/superpowers/specs/2026-08-18-harmonyos-native-parity-design.md`](../specs/2026-08-18-harmonyos-native-parity-design.md)。目标、边界、架构、数据流与对等门槛以规划为准；本文件只拆 Task 与验收步骤。
 
-**Goal:** 在 GitHub `origin/main` 的 SiteMark v1.0.8（`abc0164`）功能基线上，**从零**用原生 ArkTS 按 2026-08 最新 HarmonyOS 开发规范开发独立鸿蒙应用，交付在 DevEco Studio NEXT **模拟器**上完整验证的签名 HAP（产物同时保持 arm64 + x86_64 双架构，真机就绪），产品语义与 Android v1.0.8 **对齐到模拟器验证级**；产品代码全部落在从 `abc0164` 拉出的长期分支 `ohos-native`。
+**Goal:** 在 GitHub `origin/main` 的 SiteMark v1.0.8（`abc0164`）功能基线上，**从零**用原生 ArkTS 开发独立鸿蒙应用，交付在 DevEco Studio NEXT **模拟器**上完整验证的可复现 unsigned HAP（同时包含 arm64 + x86_64 双架构），产品语义与 Android v1.0.8 **对齐到模拟器验证级**；实现经隔离分支 PR 合入 `main`，正式签名另行完成。
 
 **规范基线（最新鸿蒙系统开发规范，本计划的技术锚点）：**
 
@@ -20,11 +22,11 @@
 | 代码规范 | ArkTS 严格模式（`arkOptions.strictMode`）、codelinter 零 error；对象字面量必须对应明确 class/interface；状态装饰器显式类型 |
 | 测试 | hypium（`ohosTest` 单元 / UI）+ 模拟器手工回归总表（真机复跑为挂起前置） |
 
-**Architecture:** `main` 继续官方 Flutter 3.41.x / Pigeon+Kotlin / WorkManager / MediaStore 的 Android 发布线，一行不改。`ohos-native` 分支新增 `ohos-native/` 原生工程：单 entry + 多 HSP/HAR 分层（commons / data / core / feature_*），ArkUI `Navigation` + `NavPathStack` + 根部悬浮 Dock 三分支保活；数据层用 `@ohos.data.relationalStore` 镜像 Drift schema v11；图像核心**复用仓库根 `rust/` 的 `sitemark_core` crate**（交叉编译双目标：`x86_64-unknown-linux-ohos` 供 DevEco 模拟器、`aarch64-unknown-linux-ohos` 供真机就绪，经 NAPI 绑定），保证 EXIF、SHA-256、全分辨率水印、CSV/JSON/ZIP 导出与 Android **同源同算法**；相机走系统相机（不自研相机），相册走 PhotoAccessHelper（ACL 直写主路径 + 安全面板托底）；后台处理为应用内存活期串行队列 + 启动 reconcile（与 Android WorkManager 的差异显式声明，见差异表）。
+**Architecture:** `main` 继续维护 Flutter 3.41.x / Pigeon+Kotlin / WorkManager / MediaStore 的 Android 发布线，并新增同仓 `ohos-native/` 原生工程：单 entry 内按 domain / data / core / feature 分层，ArkUI `Navigation` + `NavPathStack` + 根部悬浮 Dock；数据层用 `@ohos.data.relationalStore` 对齐业务 schema；图像核心**复用仓库根 `rust/` 的 `sitemark_core` crate**（双目标交叉编译，经 C ABI + C++ N-API），保证 EXIF、SHA-256、全分辨率水印、CSV/JSON/ZIP 与 Android **同源同算法**。相机走 CameraPicker；后台只生成私有成片，用户主动保存时走 PhotoAccessHelper 系统确认面板；处理使用应用存活期串行队列 + 启动 reconcile。
 
 **Tech Stack:** ArkTS / ArkUI / Stage 模型（UIAbility + EntryAbility）、hvigor + ohpm、`@ohos.data.relationalStore`、`@ohos.data.preferences`、`@kit.CameraKit`（系统相机）、`@kit.LocationKit`、`@kit.MediaLibraryKit`（PhotoAccessHelper）、`@kit.NotificationKit`、`@ohos.file.fs` / `@kit.CoreFileKit`（picker）、Rust `sitemark_core` + NAPI（napi-rs ohos 目标或 C ABI + C++ 薄封装，以 Task 3 实测为准）、hypium。
 
-**与既有 `ohos` 分支（社区 Flutter 适配路线）的关系：** 本计划**取代**该路线。`ohos` 分支截至 `821f3d4` 的实测结论是关键输入：① 空壳 Flutter HAP 已在 DevEco NEXT 模拟器（`SiteMarkPhone602`，OpenHarmony 6.0.2.130 / API 22）冷启动通过——本机模拟器环境可用是直接资产；② Rust `ohos-arm64` 可交叉编译但引擎初始化失败，长期处于 `degraded` 降级水印，且社区 Flutter 锁在 3.27–3.32、插件生态断档，无法追平 `main` 的 Flutter 3.41.x 主线；③ 相册 ACL、相机、定位契约未闭环。`ohos` 分支冻结归档仅作参考（发布日记按 `captureId`、条件清日记、串行队列、隐私弹窗文案等**设计结论直接继承**），不再推进；`ohos-native` 为唯一活跃鸿蒙线。
+**与既有 `ohos` 分支（社区 Flutter 适配路线）的关系：** 两条分支独立推进。本计划只负责 `ohos-native/` 原生工程，不合并、不改写 `ohos` 分支；`ohos` 的既有模拟器探测和媒体生命周期结论可作参考，但不把另一位 Agent 的实现纳入本 PR，也不在本文宣告其停止维护。
 
 ---
 
@@ -38,11 +40,11 @@
 - 发布日记只按 **`captureId`** 记账（备份恢复后同编号可跨项目重复，编号/文件名不可作为相册操作键）；**原生侧不删除相册行**，`publishJpeg` 返回 `PublishJpegOutcome(contentUri, supersededUris)`，删除由业务层做全库引用检查后执行；`clearPublishJournal(captureId, expectedContentUri)` 必须条件清除。
 - 黄金向量强制对齐：编号/命名（`{安全化项目名称}-SM-{yyyyMMdd}-{全应用当日序号}.jpg`）、模板与字段规范化（`trim` + `\s+` 折叠、`name_key` 仅小写 ASCII `A-Z`、长度按 Unicode 标量、拒绝 U+0000）、状态机（`pendingCamera → captured → rendering → ready / failed`）必须移植 Android/Dart 现有单元测试用例为 hypium 测试，逐条对齐。
 - 备份兼容性强制：项目 ZIP 兼容 schema v1/v2/v3/v4/v5，多项目外层 bundle schema v1；恢复的所有权令牌、暂存回滚、提交标记收尾语义照搬 `docs/capture-processing-storage.md`。
-- 「全量对等」宣称门槛拆两级（详见文末）：**模拟器对等验证**（本计划出口）与**真机对等确认**（挂起前置，获得真机后补验）。任何降级（托底相册、降级水印、通知缺失）必须写入 `ohos-native/docs/deltas.md` 差异表并在发布说明标注，不得 silently 假装对等。
+- 「全量对等」宣称门槛拆两级（详见文末）：**模拟器对等验证**（本计划出口）与**真机对等确认**（挂起前置，获得真机后补验）。任何差异（相册需主动确认、通知缺失、性能未知）必须写入 `ohos-native/docs/deltas.md` 并在发布说明标注，不得 silently 假装对等。
 - 不在 UI、记录卡片、SnackBar/Toast、诊断包对外文案里暴露原始异常或平台字符串。
-- 所有行为变更先写失败测试（hypium 先红），再写最小实现验证转绿；纯逻辑必须落在 `commons/*` HAR 以便单测。Task 0 工具链用模拟器冷启动作为验收，不编造单测替代表。
-- 模拟器是唯一验收环境（当前无鸿蒙真机）：Task 0 与所有里程碑验收均在 DevEco NEXT 模拟器执行；**真机验证作为独立前置条件挂起**（见「对等宣称门槛」），模拟器通过不得对外宣称真机全量对等。模拟器无法覆盖的能力（性能/流畅性、传感器实况、厂商相机差异、ACL 真机授权行为、通知通道实况）逐项登记 `ohos-native/docs/deltas.md`。
-- 模拟器相机不可用或不可控时：允许 **debug-only 拍摄注入通道**（从图库/文件选择 JPEG 注入 `originals/` 驱动完整状态机），仅存在于 debug 构建并在 release 编译剥离；该通道是测试注入，不构成自研相机，不违反产品边界。
+- 所有行为变更先写失败测试（hypium 先红），再写最小实现验证转绿；纯逻辑放在单 entry 内可独立导入的 domain/core 模块。Task 0 工具链用模拟器冷启动作为验收，不编造单测替代表。
+- 模拟器是唯一验收环境（当前无鸿蒙真机）：Task 0 与所有里程碑验收均在 DevEco NEXT 模拟器执行；**真机验证作为独立前置条件挂起**（见「对等宣称门槛」），模拟器通过不得对外宣称真机全量对等。模拟器无法覆盖的能力（性能/流畅性、传感器实况、厂商相机差异、系统相册面板真机行为、通知通道实况）逐项登记 `ohos-native/docs/deltas.md`。
+- 模拟器相机不可用或不可控时：允许 **debug-only 拍摄注入通道**（内置测试 JPEG 写入 `originals/` 驱动完整状态机），运行时必须由 `applicationInfo.debug` 保护；release 不进入该通道。该通道是测试注入，不构成自研相机。
 
 ---
 
@@ -54,7 +56,7 @@
 | 2 | 拍摄半截恢复（杀进程后补记） | `@ohos.data.preferences` 持久 `CaptureSessionStore`（键 `capture_id` / `capture_path`，commit 语义） | 12 | 与 Android `CaptureTargetPolicy` 同判定：`exists && length > 0` |
 | 3 | 前台定位（按需、拒权不阻断） | `@kit.LocationKit` `geoLocationManager.getCurrentLocation` + `requestPermissionFromUser`（`LOCATION` + `APPROXIMATELY_LOCATION`） | 12 | 超时/拒权/服务关闭映射 `LocationOutcome` 同枚举语义 |
 | 4 | 跳系统应用设置 | `startAbility` 跳应用详情（action 以 API 24 文档实测为准） | 12 | Task 0 探测项 |
-| 5 | MediaStore 发布到 `Pictures/SiteMark` | `@kit.MediaLibraryKit` `PhotoAccessHelper.MediaAssetChangeRequest` 创建 JPEG 资源（用户目录 SiteMark） | 12 | **主路径**需 AGC ACL（`READ_IMAGEVIDEO`/`WRITE_IMAGEVIDEO`）；**托底**为 SaveButton 安全面板 / `DocumentViewPicker.save`，托底必须标“未进入系统相册” |
+| 5 | MediaStore 发布到 `Pictures/SiteMark` | 后台生成私有水印成片；详情页主动调用 `PhotoAccessHelper.showAssetsCreationDialog` | 12 | 不申请广泛媒体读写权限；允许后记录系统 URI，取消/拒绝不破坏 `ready` 成片 |
 | 6 | 按引用删除已发布相册照片 | `MediaAssetChangeRequest` / `phHelper.deleteAssets`（删除需用户授权确认） | 12 | 授权语义与 Android 略异：删除前弹系统确认；拒绝时保留相册照片并在差异表声明 |
 | 7 | WorkManager 串行后台处理 | 应用内串行队列（ArkTS `taskpool` 派发 Rust 渲染）+ 启动 `reconcilePending`；`workScheduler` 仅用于延迟拉起补跑，不承诺被杀后继续 | 12 | **预声明差异**：应用被杀后处理暂停，下次启动收敛；不使用长时任务伪装后台 |
 | 8 | Drift / SQLite schema v11 | `@ohos.data.relationalStore` 镜像同表同列同索引（`projects` / `captures` / `capture_templates` / `app_settings`，游标索引 `(sortTime, id)`） | 12 | 新装直接建 v11；不迁移 Flutter 数据库文件（数据经备份 ZIP 迁移） |
@@ -115,12 +117,12 @@
 
 - [ ] **Step 2: 生成 Stage 模型空壳并在模拟器跑通冷启动**
 
-DevEco 新建 Empty Ability 工程（Stage 模型，ArkTS，phone），`targetSdkVersion 6.1.1(24)`、`compatibleSdkVersion 5.0.5(17)`；签名后安装到本机 DevEco NEXT 模拟器冷启动。同时确认两项并写入 `probe.md`：① 模拟器实际 API 版本（现有 `SiteMarkPhone602` 为 OpenHarmony 6.0.2.130 / API 22；若 DevEco 6.1.1 提供更高 API 镜像则升级）——决定哪些 API 24 特性需降级验证；② 模拟器 CPU ABI（x86_64 / arm64）——决定 Rust 编译与 .so 加载目标。
+DevEco 新建 Empty Ability 工程（Stage 模型，ArkTS，phone），`targetSdkVersion 6.1.1(24)`、`compatibleSdkVersion 5.0.5(17)`；本地构建 unsigned HAP 并安装到 DevEco NEXT 模拟器冷启动。同时确认两项并写入 `probe.md`：① 模拟器实际 API 版本；② 模拟器 CPU ABI——决定 Rust 编译与 .so 加载目标。正式签名留待发布阶段。
 
-- [ ] **Step 3: 五项技术探测（在模拟器执行，结论写入 probe.md，后续任务按结论走；ACL/相机/删除授权结论标注「模拟器行为，真机待复验」）**
+- [ ] **Step 3: 五项技术探测（在模拟器执行，结论写入 probe.md；相机/相册保存/删除授权结论标注「模拟器行为，真机待复验」）**
 
 1. `cameraPicker.pick()` 拍照返回 URI 行为与权限要求（预期无需 CAMERA 权限）；模拟器虚拟相机不可用时记录替代验证方式（debug 注入通道）；
-2. `MediaAssetChangeRequest` 创建 JPEG：无 ACL 时表现 → 确认 SaveButton 托底链路；
+2. `showAssetsCreationDialog` 保存 JPEG 的允许、取消与返回 URI 行为；
 3. 删除用户相册资产的授权弹窗语义；
 4. 跳转本应用详情页的 Want action 实测值；
 5. `openLink` 打开 https 与 `DocumentViewPicker.save` 保存 ZIP。
@@ -236,7 +238,7 @@ git commit -m "chore(ohos-native): add toolchain probe and empty Stage-model she
 
 **Files:**
 - Create: `data/prefs/PublishJournalStore.ets`（`record/peek/recover/clear`；键布局与 Android 一致且 XML 安全；record 失败 → 整次 publish 失败）
-- Create: `core/system/GalleryPublisher.ets`（ACL 直写主路径）+ `SaveButtonFallbackPublisher.ets`（安全面板托底，`enteredSystemAlbum=false`）+ `ProbingPublisher.ets`（探测一次缓存选路）
+- Create: `core/system/SystemServices.ets`（后台私有成片 + 用户主动系统保存面板）
 - Create: `core/system/MediaCleanup.ets`（`supersededUris` 引用检查删除：全库无引用才删；已不存在当成功；重试上限）
 - Create: `ohosTest` 用例集（日记四例照搬 `ohos` 分支定稿：round-trip / 条件 clear / 同 ID 折叠 / 敌意 ID 键安全；相册适配器三例：不扫文件名、原生不删、托底不宣称对等）
 
@@ -245,8 +247,8 @@ git commit -m "chore(ohos-native): add toolchain probe and empty Stage-model she
 - Produces: 发布 = 落新图 → 同步写日记 → 返回 `(contentUri, supersededUris)`；Dart/ArkTS 业务提交 DB 后 `clearPublishJournal(id, contentUri)`；删除走引用检查
 
 - [ ] **Step 1: 失败测试**（上述七例，先红）。
-- [ ] **Step 2: 实现并转绿**；`module.json5` 补 ACL 权限申请与 reason。
-- [ ] **Step 3: 模拟器手工**：ACL 授权路径直写相册（模拟器授权行为与真机的差异登记 `deltas.md`）；拒绝授权 → SaveButton 托底 + 「未进入系统相册」文案；删除整条记录时相册照片按授权语义处理（差异表登记）；再保存仅对 `ready` 且成片在；清理原图保留成片与记录；删除项目不删相册照片。
+- [ ] **Step 2: 实现并转绿**；`module.json5` 保持最小权限，不申请广泛媒体读写权限。
+- [ ] **Step 3: 模拟器手工**：后台处理不弹面板；详情页允许/取消系统保存；删除整条记录时相册照片按系统授权语义处理；再次保存仅对 `ready` 且成片存在；清理原图保留成片与记录；删除项目不删相册照片。
 - [ ] **Step 4: Commit** — `feat(ohos-native): gallery publish journal and media parity semantics`
 
 ---
@@ -286,15 +288,15 @@ git commit -m "chore(ohos-native): add toolchain probe and empty Stage-model she
 ### Task 8: 发布、CI 与上架
 
 **Files:**
-- Create: `.github/workflows/ohos-native.yml`（仅 `on: push/pull_request branches: [ohos-native]`；ubuntu 安装 command-line-tools → `ohpm install` → `hvigorw assembleHap` + codelinter；不碰 `main` 工作流）
-- Create: `tool/ohos-native/build-hap.ps1`（release 签名构建 + 产物校验）
+- Modify: `.github/workflows/ci.yml`（检查鸿蒙最小权限、双 ABI 和 `ohos-native` Rust feature；公用 runner 不伪装具备 DevEco SDK）
+- Create: `tool/ohos-native/build-hap.ps1`（本地 debug/release unsigned 构建 + 产物校验）
 - Modify: `ohos-native/AppScope/app.json5`（versionName/VersionCode 与发布对齐）
 - Create: `ohos-native/docs/deltas.md` 终版（后台处理/动态取色/相册删除授权/分享通道/真机验证挂起项等全部差异）
-- Create: `tool/ohos-native/appgallery_checklist.md`（软著/名称、隐私政策 URL、ACL 受限权限申请、权限逐条用途、截图 2–5 张、降级声明、签名与包名校验）
+- Create: `tool/ohos-native/appgallery_checklist.md`（软著/名称、隐私政策 URL、最小权限逐条用途、截图 2–5 张、差异声明、签名与包名校验）
 - Modify: `README.md`、`docs/current-product-architecture.md`（增补鸿蒙原生章节：边界、差异表链接、下载入口）
 
-- [ ] **Step 1: CI 绿**：`ohos-native` 分支 push 后 assembleHap + codelinter 通过。
-- [ ] **Step 2: release 构建**：签名 HAP 产出（含 arm64 + x86_64 双架构），模拟器覆盖安装升级保留数据（真机覆盖升级留待真机阶段复验）。
+- [ ] **Step 1: CI 绿**：共享 Python/Flutter/Rust/Android 门禁通过；HAP 由本地 DevEco 证据覆盖。
+- [ ] **Step 2: release 构建**：unsigned HAP 产出并确认含 arm64 + x86_64；正式签名和真机覆盖升级留待发布阶段。
 - [ ] **Step 3: 模拟器手工回归总表全绿**（见下）后，AGC 材料齐备提交审核；材料中注明「功能对等已在模拟器验证，真机验证与云真机抽查待补」。
 - [ ] **Step 4: Commit** — `feat(ohos-native): release build, ci and appgallery materials`
 
@@ -308,7 +310,7 @@ git commit -m "chore(ohos-native): add toolchain probe and empty Stage-model she
 | 取消拍照 | 不占编号，无空记录，表单内容保留 |
 | 连拍 | 编号递增且跨项目递增，同一时间只处理一张；三必填保留、备注清空 |
 | 拒定位 | 仍出片，坐标空 |
-| 拒相册（ACL） | SaveButton/选择器托底 + 「未进入系统相册」；差异表已登记 |
+| 取消/拒绝相册面板 | 拍摄仍为 `ready`，私有成片与原有相册 URI 保留；差异表已登记 |
 | 杀进程四窗 | 相机半截 / 队列未跑完 / 相册已写库未提交 / 日记与 DB 对账 —— 全部收敛到 `ready` 或可解释 `failed`，不丢编号 |
 | 删除整条记录 | 按授权语义删相册照片；无授权时保留并提示（差异已声明） |
 | 删除项目 | 不删相册照片、不删已导出备份 |
@@ -330,14 +332,14 @@ git commit -m "chore(ohos-native): add toolchain probe and empty Stage-model she
 | M0 | Task 0 | 模拟器冷启动 + 五项探测落档（含 ABI / API 版本） |
 | M1 | Task 1–2 | 骨架 + 数据层黄金向量全绿 |
 | M2 | Task 3–4 | 拍摄链路模拟器闭环 + 引擎 `ok/degraded` 定级（模拟器验证级） |
-| M3 | Task 5 | 相册/媒体语义模拟器闭环（ACL 或已声明托底，真机差异登记） |
+| M3 | Task 5 | 私有成片 + 用户主动系统保存面板闭环，真机差异登记 |
 | M4 | Task 6 | UI 逐屏对等模拟器走查通过 |
 | M5 | Task 7 | 备份跨端互恢复通过 |
 | M6 | Task 8 | 回归总表全绿 + AGC 材料齐 |
 
 **模拟器对等验证（本计划出口）** = 模拟器回归总表全绿 ∧ 引擎版式对照 `ok`（模拟器渲染文件级对比）∧ `deltas.md` 覆盖全部模拟器边界差异。达成后可宣称「功能对等（模拟器验证级）」。
 
-**真机对等确认（挂起前置，获得真机后执行）** = 同一回归总表在 NEXT 真机复跑全绿 ∧ ACL 真机授权行为确认（AGC 批复 + 直写生效）∧ 性能走查通过。在此之前**不得对外宣称真机全量对等**；发布说明必须标注「已在模拟器完成功能对等验证，真机验证待补」。任一降级（托底相册/降级水印/通知缺失/性能未知）→ 按差异表降级表述。
+**真机对等确认（挂起前置，获得真机后执行）** = 同一回归总表在 NEXT 真机复跑全绿 ∧ 系统相册确认面板行为确认 ∧ 性能走查通过。在此之前**不得对外宣称真机全量对等**；发布说明必须标注「已在模拟器完成功能对等验证，真机验证待补」。任一差异（相册交互/通知缺失/性能未知）→ 按差异表降级表述。
 
 ---
 

@@ -34,7 +34,7 @@ jobs:
           "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
       - run: flutter pub get
       - run: python -m pip install -r tool/icon-requirements.txt
-      - run: python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources tool.test_verify_release_tag tool.test_release_workflow
+      - run: python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources tool.test_verify_release_tag tool.test_release_workflow tool.test_verify_ohos_native_manifest
       - run: python tool/verify_launcher_icon_resources.py
       - name: Check Dart formatting
         run: dart format --output=none --set-exit-if-changed lib test pigeons packages/sitemark_system_api/lib
@@ -50,6 +50,10 @@ jobs:
       - run: cargo fmt --manifest-path rust/Cargo.toml --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path rust/Cargo.toml
+      - name: Check the HarmonyOS native Rust boundary
+        run: |
+          cargo clippy --manifest-path rust/Cargo.toml --no-default-features --features ohos-native --all-targets -- -D warnings
+          cargo test --manifest-path rust/Cargo.toml --no-default-features --features ohos-native
       - name: Run Android unit tests
         run: |
           for attempt in 1 2 3; do

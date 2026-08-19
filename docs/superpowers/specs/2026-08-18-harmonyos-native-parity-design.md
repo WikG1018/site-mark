@@ -4,11 +4,13 @@
 >
 > **产品语义源（不得另写一套）：** `docs/current-product-architecture.md`、`docs/record-watermark-settings.md`、`docs/capture-processing-storage.md`，均以 GitHub `origin/main` **v1.0.8 / `abc0164`** 为准。
 >
-> **状态：** 规划稿。本文件只定义目标、边界、架构与对等门槛；逐步实现按配套实施计划 Task 0–8 执行。真机验证作为独立前置挂起，不在本规划出口内。
+> **状态：** 已落地鸿蒙原生模拟器验证版（2026-08-20）。Stage + ArkTS/ArkUI、RelationalStore、系统适配、共享 Rust N-API、备份恢复与主要页面已实现；33 项 ArkTS 测试与 debug HAP 构建通过。未配置发布签名，HarmonyOS NEXT 真机相机、相册授权与性能仍是挂起项，不宣称真机全量对等。
+>
+> **分支结论：** 实现在 `agent/ohos-native` 隔离分支完成并通过 PR 合入 `main`；独立的 `ohos` 分支保持不动。本文中“长期 `ohos-native` 分支”的早期设想由该结论取代，原生工程以 `main/ohos-native/` 为维护入口。
 
 ## 目标
 
-在 SiteMark Android v1.0.8（`abc0164`）功能基线上，**从零**用原生 ArkTS / Stage 模型按 2026-08 最新 HarmonyOS 开发规范做一款独立鸿蒙应用，交付在 DevEco Studio NEXT **模拟器**上完整验证的签名 HAP（产物同时保持 arm64 + x86_64 双架构，真机就绪）。
+在 SiteMark Android v1.0.8（`abc0164`）功能基线上，**从零**用原生 ArkTS / Stage 模型做一款独立鸿蒙应用，交付在 DevEco Studio NEXT **模拟器**上完整验证的可复现 HAP 构建（产物同时包含 arm64 + x86_64 双架构）。发布签名及真机转正不伪装为已完成。
 
 产品语义与 Android v1.0.8 **对齐到模拟器验证级**：同一套拍摄状态机、同一套编号与水印字段、同一套按 `captureId` 记账的相册发布 / 引用检查删除 / 杀进程恢复 / 备份恢复。图像核心复用仓库根 `rust/` 的 `sitemark_core`，保证 EXIF、SHA-256、全分辨率水印、CSV/JSON/ZIP 与 Android **同源同算法**。
 
@@ -17,7 +19,7 @@
 **对等宣称拆两级，不得混用：**
 
 1. **模拟器对等验证（本规划出口）** = 模拟器回归总表全绿 ∧ 引擎版式对照 `ok`（文件级对比）∧ `ohos-native/docs/deltas.md` 覆盖全部模拟器边界差异。达成后可宣称「功能对等（模拟器验证级）」。
-2. **真机对等确认（挂起前置）** = 同一回归总表在 NEXT 真机复跑全绿 ∧ ACL 真机授权行为确认 ∧ 性能走查通过。获得真机之前**不得对外宣称真机全量对等**。
+2. **真机对等确认（挂起前置）** = 同一回归总表在 NEXT 真机复跑全绿 ∧ 系统相册确认面板行为确认 ∧ 性能走查通过。获得真机之前**不得对外宣称真机全量对等**。
 
 任一降级（托底相册、降级水印、通知缺失、性能未知）必须写入差异表并在发布说明标注，不得 silently 假装对等。
 
@@ -28,10 +30,10 @@
 | 交付物 | HarmonyOS 原生 HAP（Stage + ArkTS），目标华为应用市场；第一期验收环境是 DevEco NEXT 模拟器 |
 | 对等范围 | 与 Android v1.0.8 对齐到模拟器验证级；真机全量对等挂起 |
 | 基线提交 | `origin/main` v1.0.8 / `abc0164` |
-| 仓库 | 长期实现分支 `ohos-native` 从 `abc0164` 拉出；`main` 继续官方 Flutter 3.41.x / Pigeon+Kotlin |
+| 仓库 | `ohos-native/` 原生工程与 Android 同仓维护；实现分支合入 `main`，历史 `ohos` 分支不动 |
 | 规范锚点 | HarmonyOS 6.1.1（API 24）+ DevEco 6.1.1.300；`targetSdkVersion 6.1.1(24)`；`compatibleSdkVersion` 初值 `5.0.5(17)` |
-| 相册 | ACL 直写主路径（`READ_IMAGEVIDEO` / `WRITE_IMAGEVIDEO`）；未批准或模拟器无 ACL 时 SaveButton / `DocumentViewPicker` 托底，必须标「未进入系统相册」 |
-| Android 主线 | 不改 `lib/`、`android/`、`pigeons/`、`ci.yml`、`release.yml`；产品修复只允许 `main` → `ohos-native` cherry-pick |
+| 相册 | 后台只生成应用私有水印成片；用户在详情页主动保存时调用 `PhotoAccessHelper.showAssetsCreationDialog`，不声明广泛媒体读写权限 |
+| Android 主线 | 不改 `lib/`、`android/`、`pigeons/`、`release.yml`；只扩展共享 Rust feature 与 CI 静态/回归门禁 |
 | 验收环境 | 无鸿蒙真机。Task 0 与全部里程碑在模拟器执行。模拟器相机不可用时允许 **debug-only JPEG 注入**（release 剥离） |
 | 不做 | 账号、联网、推送、自研相机、图库导入、iOS、折叠屏 / 多设备流转、FA 模型、把 picker / 降级水印标成全量对等 |
 
@@ -39,12 +41,12 @@
 
 ### 包含
 
-- 从 `abc0164` 拉出的长期 `ohos-native` 分支与 Stage 空壳（`ohos-native/`、签名占位、`module.json5`）。
-- 单 entry + 多 HSP/HAR 分层：`commons`（纯逻辑 / 实体）、`data`（RDB + preferences）、`core`（系统桥 + 图像管线）、`feature_*`（页面）。
+- 从 `abc0164` 拉出的隔离实现分支与 Stage 工程（`ohos-native/`、签名占位、`module.json5`），验收后通过 PR 合入 `main`。
+- 单 entry 模块化分层：`domain`（纯逻辑 / 实体）、`data`（RDB + preferences）、`core`（系统桥 + 图像管线）、`feature`（页面与工作流）。
 - ArkTS 版 `SystemServices`：方法集与 `lib/platform/platform_services.dart` 的 `PlatformServices` **同名同义**（相机 / 定位 / publishJpeg / 日记 / 删除 / 设置页 / inspectImage）。
 - 应用内存活期串行队列 + 启动 `reconcilePending`；`workScheduler` 仅延迟拉起，不承诺被杀后继续。
 - 同一 `sitemark_core` crate 交叉编译双目标（`x86_64-unknown-linux-ohos` + `aarch64-unknown-linux-ohos`），经 NAPI / C ABI 接入；初始化失败走显式 `DegradedPipeline`。
-- RelationalStore 镜像 Drift schema v11；preferences 镜像设置 / 发布日记 / 相机会话 / 隐私同意 / 恢复所有权令牌。
+- RelationalStore 业务字段对齐 Drift schema v11，鸿蒙内部 schema 14 另含私有文件/媒体清理和恢复所有权状态；preferences 保存设置 / 发布日记 / 相机会话 / 隐私同意 / 恢复日记。
 - 首启隐私同意门（文案继承 `ohos` 分支定稿）、按需权限 reason、无网声明与 AGC 材料。
 - hypium 先红后绿：Dart 黄金向量全量移植；模拟器手工回归总表（真机复跑为挂起前置）。
 - `ohos-native/docs/deltas.md` 作为预声明差异与实测差异的唯一登记处。
@@ -52,7 +54,7 @@
 ### 不包含
 
 - 修改 `main` 以兼容社区 Flutter 或鸿蒙工具链。
-- 继续推进 `ohos` 分支（社区 Flutter 适配线）。该分支冻结归档，只吸收其设计结论。
+- 修改、合并或替另一位 Agent 决定 `ohos` 分支（社区 Flutter 适配线）的去留；本 PR 只维护 `ohos-native/`。
 - 在业务层按平台写第二套状态机、第二套编号规则或按文件名扫相册。
 - 把 SaveButton / picker / 降级水印 / 模拟器通过标成真机全量对等。
 - 申请 `ohos.permission.INTERNET` 或 `CAMERA`（系统相机替拍；debug 注入不是相机）。
@@ -99,14 +101,14 @@
 
 ### 相册
 
-1. **ACL 优先 + SaveButton / picker 托底（采用）**  
-   有受限权限时走 `PhotoAccessHelper.MediaAssetChangeRequest`，尽量做出用户目录 SiteMark、按 URI 引用检查删除。没有权限或模拟器无 ACL 时走 SaveButton 安全面板 / `DocumentViewPicker.save`，UI 必须显示「未进入系统相册」。
+1. **私有成片 + 用户主动系统保存面板（实际采用）**
+   后台队列只完成应用私有成片，确保相机返回后可以继续连拍。用户在详情页点击“保存到相册”时调用 `PhotoAccessHelper.showAssetsCreationDialog`，允许后记录系统返回 URI；取消或拒绝不改变成片 `ready` 状态。manifest 不申请广泛媒体读写权限。
 
 2. 第一期强制拿到 ACL 否则不算能发  
    审核与真机授权不在本规划可控范围，会把整期卡死。否决。
 
-3. 不申请 ACL  
-   做不到 MediaStore 级精确替换，与对等目标冲突。否决。
+3. 申请广泛媒体 ACL 并在后台直写
+   受限权限审核与需要交互的系统语义会阻塞连拍，也扩大隐私权限面；第一版不采用。
 
 ### 图像核心绑定
 
@@ -129,7 +131,7 @@
 
 ## 架构
 
-`main` 继续官方 Flutter 3.41.x，发布 APK，契约仍是现有 Pigeon + Kotlin + WorkManager + MediaStore。一行不改。
+`main` 继续用官方 Flutter 3.41.x 发布 APK，Android 产品代码仍采用 Pigeon + Kotlin + WorkManager + MediaStore；本工作只扩展共享 Rust 核心和 CI 门禁，不改 Android 业务/UI。
 
 `ohos-native` 从 v1.0.8 拉出，用原生 ArkTS 编 HAP。两边共享产品语义与 Rust 算法，不共享 UI SDK，不共享数据库文件（数据经备份 ZIP 迁移）。
 
@@ -177,9 +179,7 @@ ArkTS 对 `PlatformServices` 的镜像。方法集保持稳定，禁止增删改
 | `CameraBridge` | `cameraPicker.pick()`；不能直写沙箱时先落临时 URI 再拷到 `originals/<captureId>.jpg` | 取消 / 失败语义 0 captured / 1 cancelled / 2 failed；无 CAMERA 权限 |
 | `CaptureSessionStore` | preferences 持久 `capture_id` / `capture_path`，commit 语义 | 判定 `exists && length > 0`，对齐 Android `CaptureTargetPolicy` |
 | `LocationBridge` | `geoLocationManager.getCurrentLocation` + `LOCATION` / `APPROXIMATELY_LOCATION` | 超时 / 拒权 / 服务关闭映射 `LocationOutcome` 同枚举；拒权不阻断出片 |
-| `GalleryPublisher` | ACL 直写主路径 | 原生**不删除**相册行 |
-| `SaveButtonFallbackPublisher` | 安全面板 / picker 托底 | `enteredSystemAlbum=false`，UI 必须显示未进相册 |
-| `ProbingPublisher` | 探测一次、缓存选路 | 业务层不写 if |
+| `HarmonySystemServices.saveJpegToAlbum` | 用户主动调用系统保存面板 | 允许后返回系统 URI；取消/拒绝不破坏私有成片 |
 | `PublishJournalStore` | `record` / `peek` / `recover` / `clear` | 键 `journal.<base64url(id)>.exists/newUri/staleCount/stale.<i>`；record 失败 → 整次 publish 失败 |
 | `MediaCleanup` | 对 `supersededUris` 做全库引用检查后再删 | 已不存在当成功；删除需用户授权确认；拒绝则保留并登记差异 |
 | 设置跳转 | `startAbility` 打开应用详情 | Want action 以 Task 0 实测为准 |
@@ -243,9 +243,9 @@ interface ImagePipeline {
 4. `launchCamera` 拉起系统相机。模拟器相机不可用时，debug 构建走注入通道写入同一路径，对外仍是四个相机方法。
 5. 回前台：文件在且非空 → 分配编号 → `captured` → `finishCameraCapture(keep=true)` → `enqueue`。取消或空文件 → 清会话、删占位，**不占编号、不创建可见记录**。
 6. 队列按 `captureId` 串行；同 ID 重试替换未跑完的那条。
-7. 处理器顺序固定：缺记录 → `ready` 短路 → 拒绝 `pendingCamera` → 尝试次数 +1 → 校验原图 / 时间 / 编号 → SHA-256 → `rendering` → 渲到 `renders/<id>.jpg` → `publishJpeg` → `markReady` → 条件清除日记。
-8. `publishJpeg`：落新图 → **同步**写日记 → 返回 `(contentUri, supersededUris)`。有 ACL 时 `contentUri` 为系统相册资源；托底时带 `enteredSystemAlbum=false`。原生不删旧行。
-9. 业务提交 DB 后 `clearPublishJournal(id, contentUri)`。日记已被更新的发布覆盖则不许清。
+7. 处理器顺序固定：缺记录 → `ready` 短路 → 拒绝 `pendingCamera` → 尝试次数 +1 → 校验原图 / 时间 / 编号 → SHA-256 → `rendering` → 渲到 `renders/<id>.jpg` → `markReady`。后台不弹系统相册面板。
+8. 用户主动保存：系统面板落新图 → **同步**写日记 → 返回 `(contentUri, supersededUris)` → DB 以 CAS 提交新 URI并同事务入队旧 URI 清理。
+9. 业务提交 DB 后 `clearPublishJournal(id, contentUri)`。日记已被更新的保存覆盖则不许清。
 10. 删除走 `MediaCleanup`：全库无引用才请求系统删除；用户拒绝授权则保留相册照片并提示。
 
 定位失败不阻断出片，坐标为空。连拍保留三必填、清空备注。通知 best-effort，失败吞掉。
@@ -271,7 +271,7 @@ interface ImagePipeline {
 | --- | --- | --- |
 | 私有原图 | 沙箱 `originals/` | 删除 |
 | 私有水印图 | 沙箱 `renders/` | 删除 |
-| 已发布水印图 | 系统相册 SiteMark（ACL）或用户自选路径（托底） | ACL 通常保留；托底视用户保存位置 |
+| 已发布水印图 | 用户经系统确认面板保存到系统相册 | 通常保留，删除仍受系统确认与授权约束 |
 
 | 操作 | 原图 | 成片 | 相册 | 记录 |
 | --- | --- | --- | --- | --- |
@@ -302,7 +302,7 @@ interface ImagePipeline {
 - **永久失败**：原图丢失、哈希对不上、缺拍摄时间 / 编号、记录或项目没了。标 `failed`，不再自动入队。
 - **可重试**：写盘失败、相册 / picker 临时失败。尝试少于 3 次回队列。
 - **队列登记失败**：返回 `delayed`，下次启动对账，不当用户取消。
-- **ACL 被拒**：自动切托底，不把整次拍摄打成 `failed`。对等状态记在差异表，不记在 capture 失败码。
+- **相册面板取消/拒绝**：保留 `ready` 私有成片和原有相册 URI，不把拍摄打成 `failed`。
 - **Rust 初始化失败**：切 `DegradedPipeline`，UI / 诊断可见；不得标引擎对等。
 - 界面只显示稳定错误类别和下一步。禁止在记录卡片、Toast、诊断包对外文案暴露原始异常或平台字符串。
 
@@ -317,7 +317,7 @@ interface ImagePipeline {
 | M0 | Task 0 | 模拟器冷启动 + 五项探测落档（相机 picker、相册直写、删除授权、应用详情 Want、openLink / DocumentViewPicker）+ ABI / API 版本 | 不堆业务；失败写入 `probe.md` 后向用户汇报 |
 | M1 | Task 1–2 | 骨架 + 隐私门 + 主题 / 语言；schema v11 黄金向量全绿 | 不接相机 |
 | M2 | Task 3–4 | 拍摄链路模拟器闭环；引擎 `ok` / `degraded` 定级（模拟器验证级） | 引擎 `degraded` 可继续开发，但对等未完成 |
-| M3 | Task 5 | 相册 / 媒体语义模拟器闭环（ACL 或已声明托底） | 不宣称相册对等 |
+| M3 | Task 5 | 私有成片 + 用户主动系统保存面板闭环 | 不宣称真机相册对等 |
 | M4 | Task 6 | UI 逐屏对等模拟器走查通过 | 性能结论不在本闸 |
 | M5 | Task 7 | 备份跨端互恢复通过 | 不宣称数据对等 |
 | M6 | Task 8 | 回归总表全绿 + CI assembleHap + AGC 材料齐（注明真机待补） | 过审不是开发完成定义 |
@@ -330,7 +330,7 @@ interface ImagePipeline {
 
 | 项 | Android v1.0.8 | 鸿蒙原生（本规划） | 能否称对等 |
 | --- | --- | --- | --- |
-| 相册写入 | MediaStore `Pictures/SiteMark` | ACL：`PhotoAccessHelper`；否则 SaveButton / picker | 模拟器级：ACL 或已声明托底；真机级：仅 ACL 直写生效 |
+| 相册写入 | MediaStore `Pictures/SiteMark` | 详情页主动调用 `PhotoAccessHelper` 系统确认面板 | 模拟器已验证允许路径；真机需复验允许/拒绝/重复保存 |
 | 精确替换 / 删除 | 原生不删，业务引用检查后删 | 同语义；删除另需系统确认弹窗 | 授权拒绝须声明 |
 | 卸载后对账 | MediaStore + 日记 | 视系统是否保留应用创建的图 | 尽力，做不到写进发布说明 |
 | 后台 | WorkManager 链，被杀后可被拉起 | 应用内队列，被杀后暂停，下次启动收敛 | 用户可感知结果一致即可；机制差异必须声明 |
@@ -347,7 +347,7 @@ interface ImagePipeline {
 ### 完成定义（模拟器验证级）
 
 1. `ohos-native` 从 GitHub v1.0.8（`abc0164`）拉出；`main` 的 Android 发布线不被鸿蒙工程污染。
-2. DevEco NEXT 模拟器 HAP：首启隐私门 → 建项目 → 填表 → 系统相机或 debug 注入 → 串行出片 → 进相册（ACL）或明确降级提示（托底）。
+2. DevEco NEXT 模拟器 HAP：首启隐私门 → 建项目 → 填表 → 系统相机或 debug 注入 → 串行生成私有成片 → 详情页主动保存到系统相册。
 3. 水印字段与 Android 一致：工程部位、工作内容、拍摄人、时间、可选坐标；编号规则不变；版式文件级对照 `ok` 或差异表登记降级。
 4. 杀进程四窗都在：相机半截、队列未跑完、相册已写库未提交、日记与 RDB 对账（按 `captureId`）。
 5. 删除 / 再生成 / 再发布 / 清理原图 / 备份恢复语义与现网一致；不按文件名扫相册。
@@ -375,7 +375,7 @@ interface ImagePipeline {
 获得真机后另开前置，不改写本规划的模拟器完成定义：
 
 - 复跑回归总表。
-- 确认 ACL 真机授权与直写。
+- 确认系统相册保存面板在允许、拒绝、重复保存和删除时的真机行为。
 - 性能 / 流畅性、传感器实况、厂商相机差异、通知通道实况。
 - 覆盖安装升级保留数据。
 
