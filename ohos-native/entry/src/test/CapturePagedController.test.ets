@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import { CapturePage, CapturePageCursor, CaptureFilter, CaptureRecord } from '../main/ets/domain/Models';
 import { CaptureStatus } from '../main/ets/domain/StateMachine';
-import { CAPTURE_PAGE_SIZE, CapturePageLoader,
+import { CAPTURE_PAGE_SIZE, CapturePageLoader, CapturePageRetryPolicy,
   CapturePagedController } from '../main/ets/feature/records/CapturePagedController';
 
 class DeferredPage {
@@ -105,6 +105,12 @@ function capture(id: string, capturedAt: number): CaptureRecord {
 
 export default function capturePagedControllerTest(): void {
   describe('CapturePagedController', () => {
+    it('allows append loading only when no explicit retry is pending', 0, () => {
+      expect(CapturePageRetryPolicy.canLoadNext(false, false)).assertTrue();
+      expect(CapturePageRetryPolicy.canLoadNext(true, false)).assertFalse();
+      expect(CapturePageRetryPolicy.canLoadNext(true, true)).assertTrue();
+    });
+
     it('discards a stale reset result and copies the requested filter', 0, async () => {
       const loader = new ControlledLoader();
       let changes = 0;
@@ -164,6 +170,23 @@ export default function capturePagedControllerTest(): void {
       expect(controller.data.snapshot()[0].id).assertEqual('recovered');
     });
 
+    it('keeps the previous first page visible until a refresh succeeds', 0, async () => {
+      const loader = new ControlledLoader();
+      const controller = new CapturePagedController(loader, (): void => {});
+      const initial = controller.reset(filter('project-1'));
+      loader.pending[0].resolve(new CapturePage([capture('visible', 2)], null));
+      await initial;
+
+      const refresh = controller.reset(filter('project-1', 'new-filter'));
+      expect(controller.loadingInitial).assertTrue();
+      expect(controller.data.snapshot()[0].id).assertEqual('visible');
+      loader.pending[1].reject(new Error('expected refresh failure'));
+      await refresh;
+
+      expect(controller.failed).assertTrue();
+      expect(controller.data.snapshot()[0].id).assertEqual('visible');
+    });
+
     it('keeps prior records after an append failure and retries the same cursor without duplicates', 0, async () => {
       const loader = new ControlledLoader();
       const controller = new CapturePagedController(loader, (): void => {});
@@ -178,6 +201,12 @@ export default function capturePagedControllerTest(): void {
       await failedPage;
       expect(controller.failed).assertTrue();
       expect(controller.data.totalCount()).assertEqual(2);
+
+      const automaticRetry = controller.loadNext();
+      const duplicateAutomaticRetry = controller.loadNext();
+      expect(loader.calls.length).assertEqual(2);
+      await automaticRetry;
+      await duplicateAutomaticRetry;
 
       const retry = controller.retry();
       expect(loader.calls.length).assertEqual(3);

@@ -16,13 +16,16 @@ export class BatchActionItem {
   label: string;
   danger: boolean;
   disabled: boolean;
+  accessibilityLabel: string;
 
-  constructor(id: string, icon: string, label: string, danger: boolean = false, disabled: boolean = false) {
+  constructor(id: string, icon: string, label: string, danger: boolean = false, disabled: boolean = false,
+    accessibilityLabel: string = '') {
     this.id = id;
     this.icon = icon;
     this.label = label;
     this.danger = danger;
     this.disabled = disabled;
+    this.accessibilityLabel = accessibilityLabel;
   }
 }
 
@@ -340,39 +343,45 @@ export struct BatchActionBar {
   onAction: (id: string) => void = (_id: string): void => {};
 
   build() {
-    Column({ space: 7 }) {
+    Column({ space: 4 }) {
       if (this.selectedLabel.length > 0) {
         Text(this.selectedLabel)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor(UiTokens.TEXT_SECONDARY)
+          .height(18)
+          .maxLines(1)
       }
       Row() {
         ForEach(this.actions, (item: BatchActionItem) => {
           Button() {
-            Column({ space: 3 }) {
+            Column({ space: 1 }) {
               Text(item.icon)
-                .fontSize(22)
+                .fontSize(20)
                 .fontColor(item.danger ? UiTokens.DANGER : UiTokens.TEXT)
               Text(item.label)
                 .fontSize(12)
                 .fontColor(item.danger ? UiTokens.DANGER : UiTokens.TEXT)
-                .maxLines(1)
+                .textAlign(TextAlign.Center)
+                .maxLines(2)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
+            .width('100%')
+            .justifyContent(FlexAlign.Center)
           }
           .layoutWeight(1)
-          .height(52)
+          .height(56)
           .enabled(!item.disabled)
           .backgroundColor(Color.Transparent)
           .borderRadius(UiTokens.CONTROL_RADIUS)
-          .accessibilityText(item.label)
+          .accessibilityText(item.accessibilityLabel.length > 0 ? item.accessibilityLabel : item.label)
           .onClick((): void => this.onAction(item.id))
         }, (item: BatchActionItem): string => item.id)
       }
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 10, right: 10, top: 10, bottom: 9 })
+    .padding({ left: 10, right: 10, top: 5, bottom: 5 })
     .backgroundColor(UiTokens.GLASS_STRONG)
     .backdropBlur(18)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })

@@ -4,8 +4,9 @@ import { AppRuntime } from '../app/AppRuntime';
 import { Routes } from '../app/Routes';
 import { PreferencesConsentStorage } from '../data/prefs/PreferencesConsentStorage';
 import { PrivacyConsentStore } from '../data/prefs/PrivacyConsentStore';
-import { CaptureDetailScreen, CaptureEditorScreen, CaptureFormScreen, AllRecordsView,
-  PhotoViewerScreen } from '../feature/records/RecordScreens';
+import { CaptureDetailScreen, CaptureEditorScreen, CaptureFormScreen,
+  AllRecordsView } from '../feature/records/RecordScreens';
+import { PhotoViewerScreen } from '../feature/records/PhotoViewerScreen';
 import { ProjectDetailScreen, ProjectEditorScreen, ProjectListView,
   ProjectSettingsScreen } from '../feature/projects/ProjectScreens';
 import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, SettingsView,

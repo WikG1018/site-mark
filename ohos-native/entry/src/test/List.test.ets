@@ -18,6 +18,7 @@ import photoViewerWindowTest from './PhotoViewerWindow.test';
 import settingsProjectSelectionTest from './SettingsProjectSelection.test';
 import projectFormPolicyTest from './ProjectFormPolicy.test';
 import rootShellPolicyTest from './RootShellPolicy.test';
+import recordUiCoordinatorTest from './RecordUiCoordinator.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -40,4 +41,5 @@ export default function testsuite(): void {
   settingsProjectSelectionTest();
   projectFormPolicyTest();
   rootShellPolicyTest();
+  recordUiCoordinatorTest();
 }

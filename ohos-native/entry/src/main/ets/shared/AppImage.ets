@@ -32,12 +32,14 @@ export class ImageRequestState {
   generation: number;
   loaded: boolean;
   failed: boolean;
+  requestVersion: number;
 
-  constructor(uri: string, generation: number, loaded: boolean, failed: boolean) {
+  constructor(uri: string, generation: number, loaded: boolean, failed: boolean, requestVersion: number = 0) {
     this.uri = uri;
     this.generation = generation;
     this.loaded = loaded;
     this.failed = failed;
+    this.requestVersion = requestVersion;
   }
 
   static initial(): ImageRequestState {
@@ -45,56 +47,81 @@ export class ImageRequestState {
   }
 
   forUri(uri: string): ImageRequestState {
-    if (uri === this.uri) {
+    return this.forRequest(uri, this.requestVersion);
+  }
+
+  forRequest(uri: string, requestVersion: number): ImageRequestState {
+    if (uri === this.uri && requestVersion === this.requestVersion) {
       return this;
     }
-    return new ImageRequestState(uri, this.generation + 1, false, false);
+    return new ImageRequestState(uri, this.generation + 1, false, false, requestVersion);
   }
 
   complete(generation: number): ImageRequestState {
     if (generation !== this.generation) {
       return this;
     }
-    return new ImageRequestState(this.uri, this.generation, true, false);
+    return new ImageRequestState(this.uri, this.generation, true, false, this.requestVersion);
   }
 
   fail(generation: number): ImageRequestState {
     if (generation !== this.generation) {
       return this;
     }
-    return new ImageRequestState(this.uri, this.generation, false, true);
+    return new ImageRequestState(this.uri, this.generation, false, true, this.requestVersion);
   }
 
   retry(): ImageRequestState {
-    return new ImageRequestState(this.uri, this.generation + 1, false, false);
+    return new ImageRequestState(this.uri, this.generation + 1, false, false, this.requestVersion);
+  }
+
+  accepts(generation: number, uri: string): boolean {
+    return generation === this.generation && uri === this.uri;
+  }
+
+  nodeIdentity(): string {
+    return `app-image-${this.generation}-${this.requestVersion}`;
   }
 }
 
 @Component
 export struct AppImage {
-  @Watch('onUriChanged')
+  @Watch('onRequestChanged')
   @Prop uri: string = '';
+  @Watch('onRequestChanged')
+  @Prop requestVersion: number = 0;
   @Prop decodeEdge: number = 512;
   @Prop fit: ImageFit = ImageFit.Cover;
+  @Prop transparentPlaceholder: boolean = false;
   @State private request: ImageRequestState = ImageRequestState.initial();
+  onLoaded: () => void = (): void => {};
+  onFailed: () => void = (): void => {};
 
   aboutToAppear(): void {
-    this.onUriChanged();
+    this.onRequestChanged();
   }
 
-  private onUriChanged(): void {
-    this.request = this.request.forUri(this.uri);
+  private onRequestChanged(): void {
+    this.request = this.request.forRequest(this.uri, this.requestVersion);
   }
 
-  private completeCallback(generation: number): () => void {
+  private completeCallback(generation: number, uri: string): () => void {
     return (): void => {
+      if (!this.request.accepts(generation, uri)) {
+        return;
+      }
       this.request = this.request.complete(generation);
+      this.onLoaded();
     };
   }
 
-  private failCallback(generation: number): () => void {
+  private failCallback(generation: number, uri: string): () => void {
     return (): void => {
+      if (!this.request.accepts(generation, uri)) {
+        return;
+      }
       this.request = this.request.fail(generation);
+      this.onFailed();
     };
   }
 
@@ -103,21 +130,26 @@ export struct AppImage {
       Row()
         .width('100%')
         .height('100%')
-        .backgroundColor(UiTokens.IMAGE_PLACEHOLDER)
+        .backgroundColor(this.transparentPlaceholder ? Color.Transparent : UiTokens.IMAGE_PLACEHOLDER)
       if (this.request.uri.length > 0 && !this.request.failed) {
-        Image(this.request.uri)
-          .key(`app-image-${this.request.generation}`)
-          .width('100%')
-          .height('100%')
-          .objectFit(this.fit)
-          .sourceSize({ width: ImageDecodePolicy.sourceSizeEdge(this.decodeEdge),
-            height: ImageDecodePolicy.sourceSizeEdge(this.decodeEdge) })
-          .opacity(this.request.loaded ? 1 : 0)
-          .animation({ duration: MotionPolicy.duration(90), curve: Curve.EaseOut })
-          .onComplete(this.completeCallback(this.request.generation))
-          .onError(this.failCallback(this.request.generation))
+        Stack() {
+          ForEach([this.request], (request: ImageRequestState) => {
+            Image(request.uri)
+              .width('100%')
+              .height('100%')
+              .objectFit(this.fit)
+              .sourceSize({ width: ImageDecodePolicy.sourceSizeEdge(this.decodeEdge),
+                height: ImageDecodePolicy.sourceSizeEdge(this.decodeEdge) })
+              .onComplete(this.completeCallback(request.generation, request.uri))
+              .onError(this.failCallback(request.generation, request.uri))
+          }, (request: ImageRequestState): string => request.nodeIdentity())
+        }
+        .width('100%')
+        .height('100%')
+        .opacity(this.request.loaded ? 1 : 0)
+        .animation({ duration: MotionPolicy.duration(90), curve: Curve.EaseOut })
       }
-      if (this.request.failed) {
+      if (this.request.failed && !this.transparentPlaceholder) {
         Button('↻')
           .width(44)
           .height(44)

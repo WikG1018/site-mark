@@ -7,6 +7,12 @@ export interface CapturePageLoader {
   load(filter: CaptureFilter, cursor: CapturePageCursor | null, pageSize: number): Promise<CapturePage>;
 }
 
+export class CapturePageRetryPolicy {
+  static canLoadNext(failed: boolean, explicitRetry: boolean): boolean {
+    return !failed || explicitRetry;
+  }
+}
+
 export class CapturePagedController {
   readonly data: LazyListDataSource<CaptureRecord> =
     new LazyListDataSource<CaptureRecord>((row: CaptureRecord): string => row.id);
@@ -40,7 +46,12 @@ export class CapturePagedController {
   }
 
   async loadNext(): Promise<void> {
-    if (this.loadingInitial || this.loadingMore || !this.hasMore || (this.failed && this.failedInitial)) {
+    await this.loadNextInternal(false);
+  }
+
+  private async loadNextInternal(explicitRetry: boolean): Promise<void> {
+    if (this.loadingInitial || this.loadingMore || !this.hasMore ||
+      !CapturePageRetryPolicy.canLoadNext(this.failed, explicitRetry)) {
       return;
     }
     this.loadingMore = true;
@@ -58,7 +69,7 @@ export class CapturePagedController {
       await this.reset(this.filter);
       return;
     }
-    await this.loadNext();
+    await this.loadNextInternal(true);
   }
 
   invalidate(): void {

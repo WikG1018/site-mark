@@ -448,6 +448,20 @@ export default function photoViewerWindowTest(): void {
       expect(controller.totalCount).assertEqual(7);
     });
 
+    it('seeds the current capture synchronously before the bounded query completes', 0, () => {
+      const loader = new ControlledLoader();
+      const controller = new PhotoViewerWindowController(loader);
+
+      controller.seed(capture('seed'));
+
+      expect(controller.rows.length).assertEqual(1);
+      expect(controller.rows[0].id).assertEqual('seed');
+      expect(controller.currentCaptureId()).assertEqual('seed');
+      expect(controller.currentIndex).assertEqual(0);
+      expect(controller.needsRefill).assertTrue();
+      expect(loader.requests.length).assertEqual(0);
+    });
+
     it('allows naturally shorter windows at the first and last rows', 0, async () => {
       const rows = ['e', 'd', 'c', 'b', 'a'].map((id: string): CaptureRecord => capture(id));
       const controller = new PhotoViewerWindowController(new BoundedLoader(rows));
@@ -476,6 +490,47 @@ export default function photoViewerWindowTest(): void {
 
       expect(controller.rows[0].id).assertEqual('new');
       expect(controller.absoluteIndex).assertEqual(8);
+    });
+
+    it('drops a replenishment result when the visible capture changes without a newer query', 0, async () => {
+      const loader = new ControlledLoader();
+      const controller = new PhotoViewerWindowController(loader);
+      const initial = controller.loadAround('c');
+      loader.pending[0].resolve(new CaptureViewerWindow(
+        [capture('e'), capture('d'), capture('c'), capture('b'), capture('a')], 2, 2, 5));
+      await initial;
+
+      const pending = controller.moveTo(3);
+      expect(loader.requests[1]).assertEqual('b');
+      await controller.moveTo(2);
+      expect(controller.currentCaptureId()).assertEqual('c');
+      loader.pending[1].resolve(new CaptureViewerWindow(
+        [capture('d'), capture('c'), capture('b'), capture('a')], 2, 3, 5));
+      await pending;
+
+      expect(controller.currentCaptureId()).assertEqual('c');
+      expect(controller.rows.map((row: CaptureRecord): string => row.id).join(','))
+        .assertEqual('e,d,c,b,a');
+      expect(controller.currentIndex).assertEqual(2);
+    });
+
+    it('does not attach a stale replenishment error to a newer visible capture', 0, async () => {
+      const loader = new ControlledLoader();
+      const controller = new PhotoViewerWindowController(loader);
+      const initial = controller.loadAround('c');
+      loader.pending[0].resolve(new CaptureViewerWindow(
+        [capture('e'), capture('d'), capture('c'), capture('b'), capture('a')], 2, 2, 5));
+      await initial;
+
+      const pending = controller.moveTo(3);
+      await controller.moveTo(2);
+      loader.pending[1].reject(new Error('stale_failure'));
+      await pending;
+
+      expect(controller.currentCaptureId()).assertEqual('c');
+      expect(controller.failed).assertFalse();
+      expect(controller.rows.map((row: CaptureRecord): string => row.id).join(','))
+        .assertEqual('e,d,c,b,a');
     });
 
     it('keeps a successful window after failure and retries around the visible row', 0, async () => {
@@ -507,10 +562,47 @@ export default function photoViewerWindowTest(): void {
       await controller.loadAround('25');
 
       for (let move = 0; move < 20; move += 1) {
-        await controller.moveTo(Math.min(controller.currentIndex + 1, controller.rows.length - 1));
+        const nextIndex = Math.min(controller.currentIndex + 1, controller.rows.length - 1);
+        const expectedId = controller.rows[nextIndex].id;
+        const previousAbsoluteIndex = controller.absoluteIndex;
+        await controller.moveTo(nextIndex);
         expect(controller.rows.length <= 5).assertTrue();
+        expect(controller.currentCaptureId()).assertEqual(expectedId);
+        expect(controller.absoluteIndex).assertEqual(previousAbsoluteIndex + 1);
       }
       expect(controller.absoluteIndex).assertEqual(24);
+    });
+
+    it('shrinks memory to the current row and invalidates an in-flight replenishment', 0, async () => {
+      const loader = new ControlledLoader();
+      const controller = new PhotoViewerWindowController(loader);
+      const initial = controller.loadAround('c');
+      loader.pending[0].resolve(new CaptureViewerWindow(
+        [capture('e'), capture('d'), capture('c'), capture('b'), capture('a')], 2, 12, 30));
+      await initial;
+
+      const pending = controller.moveTo(3);
+      controller.shrinkToCurrent();
+      expect(controller.rows.length).assertEqual(1);
+      expect(controller.rows[0].id).assertEqual('b');
+      expect(controller.currentIndex).assertEqual(0);
+      expect(controller.absoluteIndex).assertEqual(13);
+      expect(controller.needsRefill).assertTrue();
+      loader.pending[1].resolve(new CaptureViewerWindow(
+        [capture('d'), capture('c'), capture('b'), capture('a')], 2, 13, 30));
+      await pending;
+
+      expect(controller.rows.length).assertEqual(1);
+      expect(controller.currentCaptureId()).assertEqual('b');
+
+      const refill = controller.refill();
+      expect(loader.requests[2]).assertEqual('b');
+      loader.pending[2].resolve(new CaptureViewerWindow(
+        [capture('d'), capture('c'), capture('b'), capture('a')], 2, 13, 30));
+      await refill;
+      expect(controller.rows.length).assertEqual(4);
+      expect(controller.currentCaptureId()).assertEqual('b');
+      expect(controller.needsRefill).assertFalse();
     });
   });
 }
