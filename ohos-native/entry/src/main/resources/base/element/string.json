@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Watermark camera for engineering site records"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "SiteMark native HarmonyOS edition"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "SiteMark"
+    },
+    {
+      "name": "permission_location_reason",
+      "value": "Used only during capture to add foreground location to the engineering watermark; capture still works if declined."
+    }
+  ]
+}

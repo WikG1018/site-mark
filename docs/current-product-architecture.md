@@ -1,8 +1,8 @@
 # SiteMark 当前产品边界与总体架构
 
-> 状态：当前设计
-> 适用版本：v1.0.8 当前版本
-> 本文描述当前已经实现的行为；阶段性计划保留在 `docs/superpowers/` 供追溯。
+> 状态：Android v1.0.8 当前设计 + HarmonyOS NEXT 原生模拟器验证版
+> 适用版本：Android v1.0.8；HarmonyOS native 1.0.0 开发版
+> 本文描述已落地的产品边界；阶段性计划保留在 `docs/superpowers/` 供追溯。
 
 ## 1. 产品定位
 
@@ -134,3 +134,19 @@ v1.0.0 必须通过 Flutter 全量测试与静态分析、Rust fmt/Clippy/全量
 ## 根导航状态保活与内存
 
 一级「项目 / 全部记录 / 设置」由 `RootBranchContainer` 保活各自分支的导航与滚动状态；切换时短时绘制来源页与目标页以完成方向滑动。`main` 将 `imageCache` 限制在约 40 张 / 32MB，并在内存压力回调中清空缓存。真机观察项见 `docs/verification-v1.0.0-device.md` 第 7 节。
+
+## 9. HarmonyOS NEXT 原生实现
+
+`ohos-native/` 是与 Android 稳定版并行的原生 Stage 应用，不是 Flutter 页面的鸿蒙适配。它使用独立包名 `io.github.wikg1018.sitemark.native`，不覆盖历史 `ohos` 试验线，也不共享 Android 的 SQLite 数据库文件。
+
+| 层 | HarmonyOS 原生技术 | 边界 |
+| --- | --- | --- |
+| 界面与导航 | ArkTS、ArkUI、Navigation、自定义悬浮 Dock | 项目/记录/设置三分支、中英文、深浅色、表单与批量交互 |
+| 数据 | RelationalStore schema 14、Preferences | 业务字段对齐 Android schema 11；额外表用于鸿蒙私有文件/媒体清理和中断恢复 |
+| 拍摄与系统 | CameraPicker、LocationKit、PhotoAccessHelper、DocumentViewPicker | 系统相机与系统保存面板；只声明前台定位权限 |
+| 处理与恢复 | 应用存活期串行队列、启动对账、Preferences 发布日记 | 进程被系统结束后暂停，下次启动幂等收敛，不伪装 WorkManager |
+| 图像与归档 | 同一 `sitemark_core`，C ABI + C++ N-API，`arm64-v8a`/`x86_64` | 与 Android 复用水印、SHA-256、CSV/JSON/ZIP 算法；全分辨率数据不经 ArkTS 字节数组传递 |
+
+鸿蒙数据安全语义继续使用稳定 `captureId` 而不是照片编号或文件名识别发布记录。新发布 URI 先写耐久日记，RDB 提交时同事务加入旧 URI 清理任务；清理前查询全库引用，日记只能按期望 URI 条件清除。
+
+当前完成的是 DevEco API 22 x86_64 模拟器级功能回归和双 ABI 构建；正式签名、HarmonyOS NEXT 真机 CameraPicker/相册授权和高像素性能尚待复验。实测限制以 [`ohos-native/docs/deltas.md`](../ohos-native/docs/deltas.md) 为准。

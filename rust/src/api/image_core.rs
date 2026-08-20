@@ -179,6 +179,23 @@ pub struct ExportSelectionRequest {
     pub projects: Vec<ExportSelectionProject>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportDiagnosticBundleRequest {
+    pub output_zip_path: String,
+    pub summary: String,
+    pub environment_json: String,
+    pub events_jsonl: String,
+    pub manifest_json: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ExportDiagnosticBundleResult {
+    pub output_zip_path: String,
+    pub archive_sha256: String,
+}
+
+const MAX_DIAGNOSTIC_ENTRY_BYTES: usize = 2 * 1024 * 1024;
+
 #[derive(Serialize)]
 struct ExportManifest<'a> {
     schema_version: u32,
@@ -276,6 +293,16 @@ fn verify_file(path: String, expected_sha256: String) -> Result<bool, String> {
 }
 
 pub fn render_photo(request: RenderPhotoRequest) -> Result<RenderPhotoResult, String> {
+    render_photo_with_before_commit(request, |_, _| Ok(()))
+}
+
+fn render_photo_with_before_commit<F>(
+    request: RenderPhotoRequest,
+    before_commit: F,
+) -> Result<RenderPhotoResult, String>
+where
+    F: FnOnce(&Path, &Path) -> Result<(), String>,
+{
     validate_render_request(&request)?;
     let reader = ImageReader::open(&request.source_path)
         .map_err(|error| io_failure("open source image", error))?
@@ -300,18 +327,162 @@ pub fn render_photo(request: RenderPhotoRequest) -> Result<RenderPhotoResult, St
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| io_failure("create output directory", error))?;
     }
-    let file = File::create(output).map_err(|error| io_failure("create output image", error))?;
-    let writer = BufWriter::new(file);
-    let mut encoder = JpegEncoder::new_with_quality(writer, 92);
-    encoder
-        .encode_image(&DynamicImage::ImageRgba8(canvas))
-        .map_err(|error| image_failure("encode output JPEG", error))?;
+    let temporary = PathBuf::from(format!("{}.tmp", request.output_path));
+    if temporary.exists() {
+        fs::remove_file(&temporary)
+            .map_err(|error| io_failure("remove stale output temporary", error))?;
+    }
+    let render_result = (|| -> Result<String, String> {
+        let file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(|error| io_failure("create output temporary", error))?;
+        let mut writer = BufWriter::new(file);
+        {
+            let mut encoder = JpegEncoder::new_with_quality(&mut writer, 92);
+            encoder
+                .encode_image(&DynamicImage::ImageRgba8(canvas))
+                .map_err(|error| image_failure("encode output JPEG", error))?;
+        }
+        writer
+            .flush()
+            .map_err(|error| io_failure("flush output image", error))?;
+        writer
+            .get_ref()
+            .sync_all()
+            .map_err(|error| io_failure("sync output image", error))?;
+        let output_sha256 = sha256_file(temporary.to_string_lossy().into_owned())?;
+        before_commit(&temporary, output)?;
+        commit_render_temporary(&temporary, output)?;
+        Ok(output_sha256)
+    })();
+    if render_result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    let output_sha256 = render_result?;
 
     Ok(RenderPhotoResult {
         output_path: request.output_path.clone(),
-        output_sha256: sha256_file(request.output_path)?,
+        output_sha256,
         width,
         height,
+    })
+}
+
+#[cfg(not(windows))]
+fn commit_render_temporary(temporary: &Path, output: &Path) -> Result<(), String> {
+    // POSIX rename replaces the destination atomically, so readers observe
+    // either the previous complete JPEG or the new complete JPEG.
+    fs::rename(temporary, output).map_err(|error| io_failure("commit output image", error))
+}
+
+#[cfg(windows)]
+fn commit_render_temporary(temporary: &Path, output: &Path) -> Result<(), String> {
+    // Windows does not replace an existing destination with std::fs::rename.
+    // Keep a rollback copy so development/test builds still preserve the old
+    // output if the final move fails. HarmonyOS uses the atomic POSIX branch.
+    let backup = PathBuf::from(format!("{}.bak", output.to_string_lossy()));
+    if backup.exists() {
+        fs::remove_file(&backup)
+            .map_err(|error| io_failure("remove stale output backup", error))?;
+    }
+    let had_output = output.exists();
+    if had_output {
+        fs::rename(output, &backup).map_err(|error| io_failure("stage previous output", error))?;
+    }
+    if let Err(error) = fs::rename(temporary, output) {
+        if had_output {
+            let _ = fs::rename(&backup, output);
+        }
+        return Err(io_failure("commit output image", error));
+    }
+    if had_output {
+        fs::remove_file(&backup).map_err(|error| io_failure("remove previous output", error))?;
+    }
+    Ok(())
+}
+
+pub fn export_diagnostic_bundle(
+    request: ExportDiagnosticBundleRequest,
+) -> Result<ExportDiagnosticBundleResult, String> {
+    let entries = [
+        ("summary.txt", request.summary.as_bytes()),
+        ("environment.json", request.environment_json.as_bytes()),
+        ("events.jsonl", request.events_jsonl.as_bytes()),
+        ("manifest.json", request.manifest_json.as_bytes()),
+    ];
+    for (name, bytes) in entries {
+        if bytes.len() > MAX_DIAGNOSTIC_ENTRY_BYTES {
+            return Err(invalid_data(
+                "validate diagnostic bundle",
+                format!("{name} exceeds the 2 MiB size limit"),
+            ));
+        }
+    }
+    serde_json::from_str::<serde_json::Value>(&request.environment_json)
+        .map_err(|error| invalid_data("validate diagnostic environment", error))?;
+    serde_json::from_str::<serde_json::Value>(&request.manifest_json)
+        .map_err(|error| invalid_data("validate diagnostic manifest", error))?;
+    for line in request
+        .events_jsonl
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+    {
+        serde_json::from_str::<serde_json::Value>(line)
+            .map_err(|error| invalid_data("validate diagnostic event", error))?;
+    }
+
+    let output = Path::new(&request.output_zip_path);
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| io_failure("create diagnostic directory", error))?;
+    }
+    let temporary = PathBuf::from(format!("{}.tmp", request.output_zip_path));
+    if temporary.exists() {
+        fs::remove_file(&temporary)
+            .map_err(|error| io_failure("remove stale diagnostic temporary", error))?;
+    }
+    let result = (|| -> Result<(), String> {
+        let file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(|error| io_failure("create diagnostic ZIP", error))?;
+        let mut archive = ZipWriter::new(BufWriter::new(file));
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for (name, bytes) in entries {
+            archive
+                .start_file(name, options)
+                .map_err(|error| zip_failure("start diagnostic entry", error))?;
+            archive
+                .write_all(bytes)
+                .map_err(|error| io_failure("write diagnostic entry", error))?;
+        }
+        let mut writer = archive
+            .finish()
+            .map_err(|error| zip_failure("finish diagnostic ZIP", error))?;
+        writer
+            .flush()
+            .map_err(|error| io_failure("flush diagnostic ZIP", error))?;
+        writer
+            .get_ref()
+            .sync_all()
+            .map_err(|error| io_failure("sync diagnostic ZIP", error))?;
+        if output.exists() {
+            fs::remove_file(output).map_err(|error| io_failure("replace diagnostic ZIP", error))?;
+        }
+        fs::rename(&temporary, output)
+            .map_err(|error| io_failure("commit diagnostic ZIP", error))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result?;
+    Ok(ExportDiagnosticBundleResult {
+        output_zip_path: request.output_zip_path.clone(),
+        archive_sha256: sha256_file(request.output_zip_path)?,
     })
 }
 
@@ -1249,6 +1420,54 @@ mod watermark_tests {
             font_scale,
             locale_code: locale.to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod render_commit_tests {
+    use super::*;
+    use image::{ImageBuffer, Rgb};
+    use tempfile::tempdir;
+
+    #[test]
+    fn failed_commit_preserves_the_previous_complete_output() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("source.jpg");
+        let output = directory.path().join("watermarked.jpg");
+        ImageBuffer::from_pixel(640, 480, Rgb([210u8, 215u8, 220u8]))
+            .save(&source)
+            .unwrap();
+        let previous = b"previous-complete-output";
+        fs::write(&output, previous).unwrap();
+        let request = RenderPhotoRequest {
+            source_path: source.to_string_lossy().into_owned(),
+            output_path: output.to_string_lossy().into_owned(),
+            project_name: "东区厂房改造".to_string(),
+            work_location: "A 区三层".to_string(),
+            work_content: "风管安装检查".to_string(),
+            photographer: "张工".to_string(),
+            photo_number: "SM-20260716-001".to_string(),
+            captured_at: "2026-07-16 09:32:18 +08:00".to_string(),
+            address: None,
+            coordinates: None,
+            notes: None,
+            position: WatermarkPosition::BottomLeft,
+            opacity: 0.78,
+            accent_color_argb: 0xff37c58b,
+            font_scale: 1.0,
+            locale_code: "zh".to_string(),
+        };
+
+        let error = render_photo_with_before_commit(request, |temporary, destination| {
+            assert!(temporary.exists());
+            assert_eq!(fs::read(destination).unwrap(), previous);
+            Err("io:simulated interruption before commit".to_string())
+        })
+        .unwrap_err();
+
+        assert!(error.contains("simulated interruption"));
+        assert_eq!(fs::read(&output).unwrap(), previous);
+        assert!(!PathBuf::from(format!("{}.tmp", output.to_string_lossy())).exists());
     }
 }
 

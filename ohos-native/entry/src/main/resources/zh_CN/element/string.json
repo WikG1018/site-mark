@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "工程现场记录水印相机"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "工程印记鸿蒙原生版"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "工程印记"
+    },
+    {
+      "name": "permission_location_reason",
+      "value": "仅在拍摄时获取一次前台位置，用于写入工程记录水印；拒绝后仍可继续拍摄。"
+    }
+  ]
+}

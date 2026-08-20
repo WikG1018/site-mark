@@ -1,12 +1,13 @@
 # SiteMark 工程印记
 
-> 面向工程现场记录的 Android 水印相机：调用手机系统/厂商相机，无广告、无账号、无云端，照片与项目数据均在本机处理。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布，HarmonyOS NEXT 原生 ArkTS 版正在开发验证。
 
-An offline-first engineering watermark camera for Android that keeps the
-manufacturer camera experience.
+An offline-first engineering watermark camera with a stable Android release
+and a native HarmonyOS NEXT implementation under validation.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
+![HarmonyOS native](https://img.shields.io/badge/HarmonyOS-native%20ArkTS-E60012)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
@@ -26,6 +27,16 @@ manufacturer camera experience.
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
+
+## HarmonyOS NEXT 原生版
+
+`ohos-native/` 是独立的 Stage + ArkTS + ArkUI 实现，不使用社区 Flutter 鸿蒙适配层，也不修改历史 `ohos` 分支。它已在 DevEco NEXT 模拟器跑通项目、拍摄处理、记录管理、水印、备份恢复、存储与诊断主流程，图像与 ZIP 规则复用 Android 版的同一 Rust 核心。
+
+当前提供源码和可复现的 unsigned HAP 构建，**尚未提供签名的鸿蒙安装包**，真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成华为应用市场发布。
+
+- [鸿蒙原生版说明与构建](ohos-native/README.md)
+- [平台差异与验证边界](ohos-native/docs/deltas.md)
+- [DevEco 与模拟器技术探测](tool/ohos-native/probe.md)
 
 ## 安装与升级
 
@@ -187,7 +198,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 
 ## 当前限制
 
-- 仅支持 Android 12 及以上系统；
+- 当前可下载稳定版仅支持 Android 12 及以上系统；HarmonyOS NEXT 原生版尚未正式发布；
 - 不提供 iOS 版本、云同步、多人协作或图库图片导入；
 - 水印不是自由拖拽模板；
 - 后台任务执行时机仍受 Android 和厂商系统调度策略影响；
@@ -203,6 +214,8 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 | 后台任务 | Kotlin、WorkManager、Dart 后台 isolate | 持久化处理队列、失败重试、启动和重启恢复 |
 | Android 集成 | Kotlin、Pigeon、Intent、ContentProvider、LocationManager、MediaStore | 系统相机、可选前台定位、图片检查和相册发布 |
 | 图像与归档 | Rust、flutter_rust_bridge | EXIF 方向、全分辨率水印、SHA-256、CSV/JSON/ZIP 和备份校验 |
+
+HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Preferences、CameraPicker 和 PhotoAccessHelper，通过 C ABI + C++ N-API 调用同一 `sitemark_core` Rust crate。两条产品线共享业务语义、图像和归档算法，不共享 UI SDK 或数据库文件。
 
 当前维护的产品与技术说明：
 
@@ -224,6 +237,8 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 - Rust fmt 与 Clippy；
 - Android 插件单元测试，以及 Debug/Release APK 构建；
 - APK 包名、版本号、minSdk、targetSdk 和禁止权限检查。
+
+涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
 正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 已完成真机回归并设为 Latest；下载和校验以对应 GitHub Release 中的实际资源为准。
 

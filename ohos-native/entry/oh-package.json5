@@ -1,0 +1,14 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "Native ArkTS client for SiteMark engineering photo records",
+  "main": "",
+  "author": "WikG1018",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "libsitemark_native.so": "file:./src/main/cpp/types/libsitemark_native"
+  },
+  "devDependencies": {
+    "@ohos/hypium": "1.0.28"
+  }
+}

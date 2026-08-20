@@ -3,16 +3,58 @@ use std::io::{Read, Write};
 
 use image::{ImageBuffer, Rgb};
 use sitemark_core::api::image_core::{
-    export_project, export_project_bundle, export_selection, extract_archive_photo,
-    extract_project_bundle_entry, read_project_archive, read_project_bundle, render_photo,
-    sha256_file, ExportCaptureTemplate, ExportPhotoRecord, ExportProjectBundleRequest,
-    ExportProjectRequest, ExportSelectionProject, ExportSelectionRequest, ExportWatermarkSettings,
-    ExtractArchivePhotoRequest, ExtractProjectBundleEntryRequest, ProjectBundleSource,
-    RenderPhotoRequest, WatermarkPosition, MAX_BUNDLE_ENTRY_BYTES, MAX_BUNDLE_PROJECTS,
-    MAX_BUNDLE_TOTAL_BYTES,
+    export_diagnostic_bundle, export_project, export_project_bundle, export_selection,
+    extract_archive_photo, extract_project_bundle_entry, read_project_archive, read_project_bundle,
+    render_photo, sha256_file, ExportCaptureTemplate, ExportDiagnosticBundleRequest,
+    ExportPhotoRecord, ExportProjectBundleRequest, ExportProjectRequest, ExportSelectionProject,
+    ExportSelectionRequest, ExportWatermarkSettings, ExtractArchivePhotoRequest,
+    ExtractProjectBundleEntryRequest, ProjectBundleSource, RenderPhotoRequest, WatermarkPosition,
+    MAX_BUNDLE_ENTRY_BYTES, MAX_BUNDLE_PROJECTS, MAX_BUNDLE_TOTAL_BYTES,
 };
 use tempfile::tempdir;
 use zip::{ZipArchive, ZipWriter};
+
+#[test]
+fn diagnostic_bundle_contains_only_sanitized_support_entries() {
+    let directory = tempdir().unwrap();
+    let output = directory.path().join("sitemark-diagnostics.zip");
+    let result = export_diagnostic_bundle(ExportDiagnosticBundleRequest {
+        output_zip_path: output.to_string_lossy().into_owned(),
+        summary: "SiteMark diagnostic bundle\nSiteMark 诊断包".to_string(),
+        environment_json: r#"{"app_version":"1.0.0","platform":"HarmonyOS"}"#.to_string(),
+        events_jsonl: r#"{"category":"capture","outcome":"success","count":2}"#.to_string(),
+        manifest_json: r#"{"schema_version":1,"retention_days":7}"#.to_string(),
+    })
+    .unwrap();
+
+    assert_eq!(result.output_zip_path, output.to_string_lossy());
+    let file = fs::File::open(&output).unwrap();
+    let mut archive = ZipArchive::new(file).unwrap();
+    let mut names = Vec::new();
+    for index in 0..archive.len() {
+        names.push(archive.by_index(index).unwrap().name().to_string());
+    }
+    names.sort();
+    assert_eq!(
+        names,
+        vec![
+            "environment.json",
+            "events.jsonl",
+            "manifest.json",
+            "summary.txt"
+        ]
+    );
+    let mut all_text = String::new();
+    for name in names {
+        archive
+            .by_name(&name)
+            .unwrap()
+            .read_to_string(&mut all_text)
+            .unwrap();
+    }
+    assert!(!all_text.contains("东区厂房"));
+    assert!(!all_text.contains("/data/storage"));
+}
 
 fn sample_watermark() -> ExportWatermarkSettings {
     ExportWatermarkSettings {
@@ -598,6 +640,11 @@ fn renders_a_full_resolution_jpeg_with_a_watermark_card() {
     assert_eq!(result.width, 1200);
     assert_eq!(result.height, 900);
     assert_eq!(result.output_sha256.len(), 64);
+    assert_eq!(
+        result.output_sha256,
+        sha256_file(output.to_string_lossy().into_owned()).unwrap(),
+        "the reported evidence hash must describe the fully flushed file"
+    );
     assert_ne!(
         sha256_file(source.to_string_lossy().into_owned()).unwrap(),
         result.output_sha256
