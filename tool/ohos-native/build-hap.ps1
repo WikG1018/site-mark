@@ -13,6 +13,7 @@ $projectRoot = Join-Path $repoRoot 'ohos-native'
 $node = Join-Path $DevEcoRoot 'tools\node\node.exe'
 $hvigor = Join-Path $DevEcoRoot 'tools\hvigor\bin\hvigorw.js'
 $ohpm = Join-Path $DevEcoRoot 'tools\ohpm\bin\pm-cli.js'
+. (Join-Path $PSScriptRoot 'TestResult.ps1')
 foreach ($required in @($node, $hvigor, $ohpm)) {
   if (-not (Test-Path -LiteralPath $required)) {
     throw "DevEco build tool not found: $required"
@@ -29,8 +30,13 @@ try {
   & $node $ohpm install --all
   if ($LASTEXITCODE -ne 0) { throw 'ohpm install failed' }
   if ($RunTests) {
+    $testResult = Join-Path $projectRoot 'entry\.test\default\intermediates\test\coverage_data\test_result.txt'
+    Remove-Item -LiteralPath $testResult -Force -ErrorAction SilentlyContinue
     & $node $hvigor --mode module -p product=default test --no-daemon
     if ($LASTEXITCODE -ne 0) { throw 'ArkTS tests failed' }
+    $testSummary = Assert-ArkTsTestResult -Path $testResult
+    Write-Output ("ArkTS tests verified: {0} run, {1} passed, {2} ignored" -f
+      $testSummary.TestsRun, $testSummary.Pass, $testSummary.Ignore)
   }
   & $node $hvigor --mode module -p product=default -p "buildMode=$BuildMode" assembleHap --no-daemon
   if ($LASTEXITCODE -ne 0) { throw 'HAP build failed' }

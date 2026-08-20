@@ -17,10 +17,13 @@ import { ScreenLifecycleActionCoordinator, ScreenRequestCoordinator } from '../.
 import { StableSelectionList } from './SettingsProjectSelection';
 import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, watermarkAccentAccessibilityText,
   watermarkAccentOptions, WatermarkAccentOption, diagnosticsConfirmAccessibilityText } from './SettingsAccessibility';
+import { DiagnosticsGenerationOutcome, DiagnosticsGenerationOutcomeStore, DiagnosticsGenerationStatus }
+  from './DiagnosticsActionOutcome';
 
 const notificationActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 const appearanceActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 const diagnosticsActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+const diagnosticsOutcomeStore: DiagnosticsGenerationOutcomeStore = new DiagnosticsGenerationOutcomeStore();
 const backupActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 
 @Component
@@ -467,6 +470,7 @@ export struct DiagnosticsScreen {
     this.loadCoordinator.activate();
     this.actionCoordinator.activate();
     this.busy = this.actionCoordinator.isBusy();
+    if (!this.busy) this.consumeDiagnosticsOutcome(false);
     this.refresh();
     if (this.busy) this.reconcileDiagnosticsWhenIdle();
   }
@@ -497,12 +501,40 @@ export struct DiagnosticsScreen {
     if (!this.loadCoordinator.isActive()) return;
     this.busy = false;
     this.confirming = false;
+    this.consumeDiagnosticsOutcome(true);
     await this.refresh();
+  }
+
+  private consumeDiagnosticsOutcome(clearStaleMessage: boolean): void {
+    const outcome: DiagnosticsGenerationOutcome | null = diagnosticsOutcomeStore.consume();
+    if (outcome === null) {
+      if (clearStaleMessage) {
+        this.message = '';
+        this.messageError = false;
+      }
+      return;
+    }
+    if (outcome.status === DiagnosticsGenerationStatus.SAVED) {
+      this.message = tr(`诊断包已保存（${outcome.eventCount} 条事件）`,
+        `Diagnostic bundle saved (${outcome.eventCount} events)`);
+      this.messageError = false;
+      return;
+    }
+    if (outcome.status === DiagnosticsGenerationStatus.CANCELLED) {
+      this.message = tr('诊断包已生成，但你取消了保存；可以再次生成并选择位置',
+        'The bundle was generated, but saving was cancelled. Generate it again to choose a location.');
+      this.messageError = false;
+      return;
+    }
+    this.message = tr('诊断包生成失败，请检查存储空间后重试',
+      'Diagnostic bundle generation failed. Check storage and try again.');
+    this.messageError = true;
   }
 
   private async clear(): Promise<void> {
     const token: number | null = this.actionCoordinator.begin();
     if (token === null) return;
+    diagnosticsOutcomeStore.clear();
     this.busy = true;
     try {
       await AppRuntime.require().database.clearDiagnostics();
@@ -525,6 +557,7 @@ export struct DiagnosticsScreen {
   private async generate(): Promise<void> {
     const token: number | null = this.actionCoordinator.begin();
     if (token === null) return;
+    diagnosticsOutcomeStore.clear();
     this.busy = true;
     this.confirming = false;
     this.message = tr('正在生成诊断包…', 'Generating diagnostic bundle…');
@@ -533,22 +566,16 @@ export struct DiagnosticsScreen {
       const service = new DiagnosticBundleService(AppRuntime.require());
       const result = await service.generate();
       const saved = await service.saveAs(result);
-      if (this.actionCoordinator.isCurrent(token)) {
-        this.message = saved ? tr(`诊断包已保存（${result.eventCount} 条事件）`,
-          `Diagnostic bundle saved (${result.eventCount} events)`) :
-          tr('诊断包已生成，但你取消了保存；可以再次生成并选择位置',
-            'The bundle was generated, but saving was cancelled. Generate it again to choose a location.');
-        this.messageError = false;
-      }
+      diagnosticsOutcomeStore.publish(new DiagnosticsGenerationOutcome(saved ? DiagnosticsGenerationStatus.SAVED :
+        DiagnosticsGenerationStatus.CANCELLED, result.eventCount));
       await this.refresh();
     } catch (_) {
-      if (this.actionCoordinator.isCurrent(token)) {
-        this.message = tr('诊断包生成失败，请检查存储空间后重试',
-          'Diagnostic bundle generation failed. Check storage and try again.');
-        this.messageError = true;
-      }
+      diagnosticsOutcomeStore.publish(new DiagnosticsGenerationOutcome(DiagnosticsGenerationStatus.FAILED, 0));
     } finally {
-      if (this.actionCoordinator.finish(token)) this.busy = false;
+      if (this.actionCoordinator.finish(token)) {
+        this.busy = false;
+        this.consumeDiagnosticsOutcome(false);
+      }
     }
   }
 

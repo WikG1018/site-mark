@@ -1,0 +1,4 @@
+class=Example
+test=errors
+result=Error
+Tests run: 2, Failure: 0, Error: 1, Pass: 1, Ignore: 0

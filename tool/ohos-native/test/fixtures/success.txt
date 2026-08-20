@@ -1,0 +1,4 @@
+class=Example
+test=passes
+result=Success
+Tests run: 149, Failure: 0, Error: 0, Pass: 149, Ignore: 0
