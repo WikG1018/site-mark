@@ -14,6 +14,7 @@ import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, Setting
 import { UiTokens } from '../shared/UiTokens';
 import { AppText, tr } from '../shared/AppText';
 import { MotionPolicy } from '../shared/MotionPolicy';
+import { ScreenActionCoordinator } from '../shared/ScreenActionCoordinator';
 import { RootLifecycleCoordinator, RootMotionRefreshResult, RootMotionSpec, RootShellPolicy,
   RootTabAction, RootTabCoordinator } from '../shared/RootShellPolicy';
 
@@ -23,6 +24,8 @@ struct Index {
   @Provide('pathStack') pathStack: NavPathStack = new NavPathStack();
   @State private consentChecked: boolean = false;
   @State private consentAccepted: boolean = false;
+  @State private consentBusy: boolean = false;
+  @State private consentError: string = '';
   @State private runtimeReady: boolean = false;
   @State private runtimeError: string = '';
   @State private activeTab: number = 0;
@@ -31,6 +34,7 @@ struct Index {
   @State private appearanceRevision: number = 0;
   @State private motionRevision: number = MotionPolicy.reduceMotion ? -1 : 1;
   private readonly rootLifecycle: RootLifecycleCoordinator = new RootLifecycleCoordinator();
+  private readonly consentAction: ScreenActionCoordinator = new ScreenActionCoordinator();
   private readonly tabCoordinator: RootTabCoordinator = new RootTabCoordinator(0);
   private subscribedRuntime: AppRuntime | null = null;
   private consentStore: PrivacyConsentStore = new PrivacyConsentStore(
@@ -110,18 +114,33 @@ struct Index {
   }
 
   private async acceptPrivacy(): Promise<void> {
+    const actionToken = this.consentAction.begin();
+    if (actionToken === null) {
+      return;
+    }
     const generation = this.rootLifecycle.generation();
     if (!this.rootLifecycle.isCurrent(generation)) {
+      this.consentAction.finish(actionToken);
       return;
     }
-    await this.consentStore.accept();
-    if (!this.rootLifecycle.isCurrent(generation)) {
-      return;
-    }
-    this.consentAccepted = true;
-    await this.initializeRuntime(generation);
-    if (!this.rootLifecycle.isCurrent(generation)) {
-      return;
+    this.consentBusy = true;
+    this.consentError = '';
+    try {
+      await this.consentStore.accept();
+      if (!this.rootLifecycle.isCurrent(generation) || !this.consentAction.isCurrent(actionToken)) {
+        return;
+      }
+      this.consentAccepted = true;
+      await this.initializeRuntime(generation);
+    } catch (_) {
+      if (this.rootLifecycle.isCurrent(generation) && this.consentAction.isCurrent(actionToken)) {
+        this.consentError = tr('无法保存你的选择，请检查存储空间后重试。',
+          'Your choice could not be saved. Check available storage and try again.');
+      }
+    } finally {
+      if (this.consentAction.finish(actionToken) && this.rootLifecycle.isCurrent(generation)) {
+        this.consentBusy = false;
+      }
     }
   }
 
@@ -193,6 +212,8 @@ struct Index {
 
   private deactivateRootShell(): void {
     if (this.rootLifecycle.deactivate()) {
+      this.consentAction.invalidate();
+      this.consentBusy = false;
       this.tabCoordinator.deactivate();
     }
     this.unsubscribeRuntime();
@@ -379,12 +400,19 @@ struct Index {
               .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
           }
           .padding(20).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
-          Button(tr('同意并继续', 'Agree and continue')).height(54).width('100%').fontSize(17)
+          if (this.consentError.length > 0) {
+            Text(this.consentError).fontSize(14).fontColor(UiTokens.DANGER).width('100%')
+              .textAlign(TextAlign.Center).accessibilityText(this.consentError)
+          }
+          Button(this.consentBusy ? tr('正在保存…', 'Saving…') : tr('同意并继续', 'Agree and continue'))
+            .height(54).width('100%').fontSize(17)
             .fontWeight(FontWeight.Bold)
             .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
+            .enabled(!this.consentBusy)
             .onClick((): void => { this.acceptPrivacy(); })
           Button(tr('退出应用', 'Exit app')).height(44).width('100%').fontColor(UiTokens.TEXT_SECONDARY)
-            .backgroundColor(Color.Transparent).onClick((): void => { this.context().terminateSelf(); })
+            .backgroundColor(Color.Transparent).enabled(!this.consentBusy)
+            .onClick((): void => { this.context().terminateSelf(); })
         }
         .padding({ left: 24, right: 24, top: 52, bottom: 34 })
         .width('100%')

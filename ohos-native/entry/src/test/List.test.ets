@@ -19,6 +19,7 @@ import settingsProjectSelectionTest from './SettingsProjectSelection.test';
 import projectFormPolicyTest from './ProjectFormPolicy.test';
 import rootShellPolicyTest from './RootShellPolicy.test';
 import recordUiCoordinatorTest from './RecordUiCoordinator.test';
+import screenActionCoordinatorTest from './ScreenActionCoordinator.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -42,4 +43,5 @@ export default function testsuite(): void {
   projectFormPolicyTest();
   rootShellPolicyTest();
   recordUiCoordinatorTest();
+  screenActionCoordinatorTest();
 }
