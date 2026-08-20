@@ -2,11 +2,11 @@
 
 > 交接对象：下一个负责 `ohos` 分支的 Agent（云端环境）。
 > 本文档自包含：只依赖本仓库与 GitHub，不依赖任何上一台机器的本地路径。
-> 事实基准：`ohos` 分支 Task 53（杀进程四窗语义）。提交哈希以本文件落地后的 `git log origin/ohos -1` 为准。
+> 事实基准：`ohos` 分支 `9328d05`（2026-08-20）。
 
 ## 1. 一句话现状
 
-HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私门 → 项目 → 拍摄表单 → 记录 → 备份/恢复 → 设置）在鸿蒙上可跑；水印引擎处于**降级模式**；相机/相册/分享/通知/外链/文件选择等系统通道均已接线，但**没有模拟器成功 dump 的一律不得宣称已通**。CI 已覆盖 UI / 降级引擎 / GPS / 通道测试。
+HarmonyOS NEXT 原生 HAP 适配已推进到 Task 53：产品主链路（隐私门 → 项目 → 拍摄表单 → 记录 → 备份/恢复 → 设置）在鸿蒙上可跑；启动恢复的规格四窗（相机 / 队列 / 日记 / 相册待清理）在 Dart 侧已并行开工、互不跳过；水印引擎处于**降级模式**；相机/相册/分享/通知/外链/文件选择等系统通道均已接线，但**没有模拟器成功 dump 的一律不得宣称已通**。无杀进程 dump，队列仍是应用内内存串行。CI 已覆盖 UI / 降级引擎 / GPS / 通道 / 启动恢复测试。
 
 ## 2. 仓库与分支纪律
 
@@ -43,7 +43,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私�
 
 已验证过、可以写的事实（模拟器 DevEco `SiteMarkPhone602` x86_64）：隐私门 → 新建项目 → 项目详情 → 拍摄表单 → 全部记录 → 设置/关于 → 备份沙箱 `files/exports/*.zip` + Document picker 弹出。逐任务记录见 `tool/ohos/product_hap_review.md`，总账见 `tool/ohos/full_product_gap.md`。
 
-## 4. 已落地里程碑（Tasks 0–50）
+## 4. 已落地里程碑（Tasks 0–53）
 
 完整计划链见 `README.md` 顶部「后续实施计划」段。近期任务：
 
@@ -59,6 +59,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私�
 | 49 | 拍摄页降级水印提示 | `f3f80d2` | `2026-08-20-harmonyos-capture-degraded-watermark-hint.md` |
 | 50 | 动态取色诚实化 | `754afe3` | `2026-08-20-harmonyos-dynamic-color-honesty.md` |
 | 51–52 | CI 扩容 + captureId 删除锁 | `3b76d90` | `2026-08-20-harmonyos-ci-and-captureid-delete.md` |
+| 53 | 杀进程四窗互不阻塞 | `9328d05` | `2026-08-20-harmonyos-kill-process-four-windows.md` |
 
 早期任务（0–38）：系统宿主与通道、隐私同意、串行队列、HAP 工程与全量 `lib/main.dart` 编译、备份导出/读回、原生 Document picker 选档、ImageKit 读图、ShareKit、NotificationKit、startAbility 外链——链路与证据见 `README.md` 与 `tool/ohos/product_hap_review.md`。
 
@@ -92,7 +93,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私�
 - **HAP 构建**：需要 DevEco Studio + 社区 Flutter OH 3.44（gitcode `CPF-Flutter/flutter_flutter`，分支 oh-3.44.9-dev）+ 官方 Flutter 3.44.6 双 SDK。构建流程已固化在已跟踪脚本 `tool/ohos/build-product-hap.ps1`（assemble → 注入 NativeAssetsManifest → 编 sqlite → build hap → 替换 so → 校验 kernel → 安装启动），但脚本内写死了上一台机器的绝对路径，换机需替换为本地安装路径。
 - `libsqlite3.so` **不在 Git 里**也不需要在：`tool/ohos/compile-ohos-sqlite3.ps1` 会从 sqlite.org 下载 amalgamation 3500200，用 DevEco 自带 OHOS NDK clang 按 `x86_64-linux-ohos` / `aarch64-linux-ohos` 重编；`replace-ohos-sqlite3.ps1` 再塞进 HAP。`ohos/entry/libs/` 只是构建中间产物。
 - 社区插件版本覆盖在 `tool/ohos/community-overlay/`（两个 pubspec 覆盖文件）。
-- 已知 HAP 编译风险（下次重编时优先检查）：ETS 侧 `NotificationRequest.wantAgent` 写法、`EntryAbility` 对 `sitemark_system_api` 的 import。**Task 46–52 的 Dart 侧改动尚未重编进任何 HAP**。
+- 已知 HAP 编译风险（下次重编时优先检查）：ETS 侧 `NotificationRequest.wantAgent` 写法、`EntryAbility` 对 `sitemark_system_api` 的 import。**Task 46–53 的 Dart 侧改动尚未重编进任何 HAP**。
 - Rust 水印引擎 `ohos-arm64`：本机无 OHOS NDK clang sysroot，cargo 链接失败，所以走降级管线。编译尝试记录见 `tool/ohos/engine_status.md`。
 
 ## 7. 鸿蒙侧架构速览（改代码前必读）
