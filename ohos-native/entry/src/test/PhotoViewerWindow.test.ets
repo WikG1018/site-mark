@@ -473,22 +473,26 @@ export default function photoViewerWindowTest(): void {
       controller = new PhotoViewerWindowController(loader, (): void => {
         if (controller !== null) {
           const captureId = controller.currentCaptureId();
-          seed.releaseAfterTrustedWindow(captureId, controller.hasTrustedWindow(captureId));
+          seed.acceptTrustedWindow(captureId, 'file://rendered-new', 2,
+            controller.hasTrustedWindow(captureId));
         }
       });
-      seed.seed('seed', 'file://original-seed');
+      seed.seed('seed', 'file://original-seed', 1);
       controller.seed(capture('seed'));
 
       const initial = controller.loadAround('seed');
       loader.pending[0].reject(new Error('temporary_failure'));
       await initial;
-      expect(seed.uriFor('seed', 'file://rendered-new')).assertEqual('file://original-seed');
+      expect(seed.sourceUriFor('seed', 'file://rendered-new')).assertEqual('file://original-seed');
 
       const retry = controller.retry();
       loader.pending[1].resolve(new CaptureViewerWindow([capture('seed')], 0, 0, 1));
       await retry;
       expect(controller.hasTrustedWindow('seed')).assertTrue();
-      expect(seed.uriFor('seed', 'file://rendered-new')).assertEqual('file://rendered-new');
+      expect(seed.sourceUriFor('seed', 'file://ignored')).assertEqual('file://rendered-new');
+      expect(seed.backingUriFor('seed')).assertEqual('file://original-seed');
+      expect(seed.targetLoaded(seed.targetGenerationFor('seed'), 'seed', 'file://rendered-new')).assertTrue();
+      expect(seed.backingUriFor('seed')).assertEqual('');
     });
 
     it('allows naturally shorter windows at the first and last rows', 0, async () => {

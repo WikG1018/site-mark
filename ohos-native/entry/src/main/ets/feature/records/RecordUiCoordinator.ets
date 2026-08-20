@@ -477,24 +477,101 @@ export class ViewerRenderedVersionTracker {
 
 export class ViewerNavigationSeedCoordinator {
   private captureId: string = '';
-  private uri: string = '';
+  private seedUri: string = '';
+  private seedContentVersion: number = 0;
+  private sourceUri: string = '';
+  private sourceContentVersion: number = 0;
+  private backingUri: string = '';
+  private backingContentVersion: number = 0;
+  private generation: number = 0;
+  private trusted: boolean = false;
+  private replacementTarget: boolean = false;
 
-  seed(captureId: string, uri: string): void {
+  seed(captureId: string, uri: string, contentVersion: number = 0): void {
+    this.generation += 1;
     this.captureId = captureId;
-    this.uri = uri;
+    this.seedUri = uri;
+    this.seedContentVersion = contentVersion;
+    this.sourceUri = uri;
+    this.sourceContentVersion = contentVersion;
+    this.backingUri = uri;
+    this.backingContentVersion = contentVersion;
+    this.trusted = false;
+    this.replacementTarget = false;
   }
 
-  uriFor(captureId: string, currentUri: string): string {
-    return this.captureId === captureId && this.uri.length > 0 ? this.uri : currentUri;
-  }
-
-  releaseAfterTrustedWindow(captureId: string, trusted: boolean): boolean {
-    if (!trusted || this.captureId !== captureId) {
+  acceptTrustedWindow(captureId: string, currentUri: string, contentVersion: number,
+    trusted: boolean): boolean {
+    if (!trusted || captureId !== this.captureId) {
       return false;
     }
-    this.captureId = '';
-    this.uri = '';
+    const nextUri = currentUri.length > 0 ? currentUri : this.sourceUri;
+    const changed = !this.trusted || nextUri !== this.sourceUri ||
+      contentVersion !== this.sourceContentVersion;
+    this.trusted = true;
+    if (!changed) {
+      return false;
+    }
+    this.generation += 1;
+    this.sourceUri = nextUri;
+    this.sourceContentVersion = contentVersion;
+    this.replacementTarget = this.backingUri.length > 0 &&
+      (this.sourceUri !== this.seedUri || this.sourceContentVersion !== this.seedContentVersion);
     return true;
+  }
+
+  sourceUriFor(captureId: string, currentUri: string): string {
+    return this.captureId === captureId && this.sourceUri.length > 0 ? this.sourceUri : currentUri;
+  }
+
+  sourceContentVersionFor(captureId: string, currentVersion: number): number {
+    return this.captureId === captureId ? this.sourceContentVersion : currentVersion;
+  }
+
+  backingUriFor(captureId: string): string {
+    return this.captureId === captureId ? this.backingUri : '';
+  }
+
+  backingContentVersionFor(captureId: string): number {
+    return this.captureId === captureId ? this.backingContentVersion : 0;
+  }
+
+  shouldRenderTarget(captureId: string): boolean {
+    return this.captureId !== captureId || this.backingUri.length === 0 || this.replacementTarget;
+  }
+
+  targetGenerationFor(captureId: string): number {
+    return this.captureId === captureId ? this.generation : 0;
+  }
+
+  targetRequestVersionFor(captureId: string, currentVersion: number): number {
+    return this.captureId === captureId ? this.generation : currentVersion;
+  }
+
+  targetLoaded(generation: number, captureId: string, uri: string): boolean {
+    if (!this.acceptsTarget(generation, captureId, uri) || !this.replacementTarget ||
+      this.backingUri.length === 0) {
+      return false;
+    }
+    this.backingUri = '';
+    this.backingContentVersion = 0;
+    this.replacementTarget = false;
+    return true;
+  }
+
+  targetFailed(generation: number, captureId: string, uri: string): boolean {
+    return this.acceptsTarget(generation, captureId, uri) && this.replacementTarget;
+  }
+
+  invalidateCallbacks(): void {
+    if (this.captureId.length > 0) {
+      this.generation += 1;
+    }
+  }
+
+  private acceptsTarget(generation: number, captureId: string, uri: string): boolean {
+    return this.trusted && generation === this.generation && captureId === this.captureId &&
+      uri.length > 0 && uri === this.sourceUri;
   }
 }
 
@@ -569,6 +646,13 @@ export class ViewerFullImageCoordinator {
     this.failed = false;
     this.loaded = false;
     return this.request;
+  }
+
+  invalidate(): void {
+    this.generation += 1;
+    this.request = null;
+    this.failed = false;
+    this.loaded = false;
   }
 
   isFailedFor(captureId: string, uri: string): boolean {
