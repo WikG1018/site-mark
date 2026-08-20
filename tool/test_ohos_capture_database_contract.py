@@ -128,12 +128,26 @@ class HarmonyCaptureDatabaseContractTest(unittest.TestCase):
         self.assertIn("restore_capture_fields_invalid", restore)
         self.assertIn("instr(NEW.notes,char(0))", text)
 
-    def test_restore_preflight_runs_before_photo_extraction_and_database_remains_defensive(self) -> None:
+    def test_single_and_bundle_restore_preflight_before_private_media_extraction(self) -> None:
         restore = (
             ROOT / "ohos-native/entry/src/main/ets/feature/backup/RestoreService.ets"
         ).read_text(encoding="utf-8")
-        self.assertLess(restore.index("this.preflightSources(sources)"), restore.index("extractArchivePhoto"))
+        attempt = restore[
+            restore.index("private async restoreFromLocal") : restore.index("private async expandSources")
+        ]
+        self.assertLess(attempt.index("RestoreAttemptGate"), attempt.index("this.expandSources"))
+        self.assertLess(attempt.index("this.expandSources"), attempt.index("this.preflightSources(sources)"))
+        self.assertLess(attempt.index("this.preflightSources(sources)"), attempt.index("extractArchivePhoto"))
+        self.assertLess(attempt.index("extractArchivePhoto"), attempt.index("finally"))
+        self.assertLess(attempt.index("finally"), attempt.index("this.removeDirectory(staging)"))
+
+        expand = restore[restore.index("private async expandSources") : restore.index("private async uniqueProjectName")]
+        self.assertIn("extractBundleEntry", expand)
+        self.assertIn("`${staging}/project-${index}.zip`", expand)
+        self.assertNotIn("extractArchivePhoto", expand)
+
         preflight = restore[restore.index("private preflightSources") : restore.index("private async rollbackFiles")]
+        self.assertIn("for (const source of sources)", preflight)
         for contract in (
             "inspectCaptureFields",
             "validateTemplateField",
@@ -143,6 +157,30 @@ class HarmonyCaptureDatabaseContractTest(unittest.TestCase):
             "validTimestamp",
         ):
             self.assertIn(contract, preflight)
+
+    def test_restore_cleans_staging_when_bundle_preflight_rejects_before_media_import(self) -> None:
+        restore = (
+            ROOT / "ohos-native/entry/src/main/ets/feature/backup/RestoreService.ets"
+        ).read_text(encoding="utf-8")
+        attempt = restore[
+            restore.index("private async restoreFromLocal") : restore.index("private async expandSources")
+        ]
+        # A thrown bundle preflight cannot reach the later media call, while the
+        # same lexical try/finally always removes the staging tree containing
+        # selected.zip and expanded project-*.zip temporary archives.
+        order = tuple(
+            attempt.index(token)
+            for token in (
+                "try {",
+                "this.expandSources",
+                "this.preflightSources(sources)",
+                "extractArchivePhoto",
+                "finally",
+                "this.removeDirectory(staging)",
+            )
+        )
+        self.assertEqual(order, tuple(sorted(order)))
+        self.assertIn("restore_preview_invalid:", attempt)
 
     def test_templates_insert_without_overwrite_and_database_recomputes_rename_keys(self) -> None:
         save = method_body("saveTemplate")
