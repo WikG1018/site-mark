@@ -111,6 +111,27 @@ def database_snapshot(connection: sqlite3.Connection) -> tuple[object, tuple[tup
     )
 
 
+def non_fixture_snapshot(connection: sqlite3.Connection, fixture_project_id: str) -> tuple[object, tuple[tuple[object, ...], ...], tuple[tuple[object, ...], ...], tuple[tuple[object, ...], ...]]:
+    return (
+        connection.execute("PRAGMA user_version").fetchone()[0],
+        tuple(
+            connection.execute(
+                "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name"
+            ).fetchall()
+        ),
+        tuple(
+            connection.execute(
+                "SELECT * FROM projects WHERE id<>? ORDER BY id", (fixture_project_id,)
+            ).fetchall()
+        ),
+        tuple(
+            connection.execute(
+                "SELECT * FROM captures WHERE project_id<>? ORDER BY id", (fixture_project_id,)
+            ).fetchall()
+        ),
+    )
+
+
 class SeedPerformanceDatabaseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -143,6 +164,20 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
             before = database_snapshot(connection)
         finally:
             connection.close()
+        linked_parent = self.directory / "linked-parent"
+        try:
+            linked_parent.symlink_to(actual_parent, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"symbolic links unavailable: {error}")
+
+        with self.assertRaisesRegex(module.DatabaseSafetyError, "symbolic link|reparse"):
+            module.seed_performance_database(linked_parent / "sitemark_native.db", 1)
+
+        connection = sqlite3.connect(actual_database)
+        try:
+            self.assertEqual(database_snapshot(connection), before)
+        finally:
+            connection.close()
 
     def test_refuses_parent_traversal_before_path_normalization(self) -> None:
         module = load_module()
@@ -169,20 +204,6 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
             self.assertEqual(database_snapshot(connection), before)
         finally:
             connection.close()
-        linked_parent = self.directory / "linked-parent"
-        try:
-            linked_parent.symlink_to(actual_parent, target_is_directory=True)
-        except OSError as error:
-            self.skipTest(f"symbolic links unavailable: {error}")
-
-        with self.assertRaisesRegex(module.DatabaseSafetyError, "symbolic link|reparse"):
-            module.seed_performance_database(linked_parent / "sitemark_native.db", 1)
-
-        connection = sqlite3.connect(actual_database)
-        try:
-            self.assertEqual(database_snapshot(connection), before)
-        finally:
-            connection.close()
 
     @unittest.skipUnless(os.name == "nt", "junctions are Windows-only")
     def test_refuses_a_database_below_a_windows_junction_when_available(self) -> None:
@@ -203,11 +224,16 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
         environment["SEED_TEST_TARGET"] = str(actual_parent)
         result = subprocess.run(
             ["pwsh.exe", "-NoLogo", "-NoProfile", "-Command",
-             "New-Item -ItemType Junction -LiteralPath $env:SEED_TEST_JUNCTION -Target $env:SEED_TEST_TARGET | Out-Null"],
+             "New-Item -ItemType Junction -Path $env:SEED_TEST_JUNCTION -Target $env:SEED_TEST_TARGET | Out-Null"],
             check=False, capture_output=True, text=True, env=environment,
         )
         if result.returncode != 0:
-            self.skipTest(f"junction creation unavailable: {result.stderr.strip()}")
+            detail = (result.stderr + result.stdout).strip()
+            if any(reason in detail.lower() for reason in (
+                "access is denied", "access denied", "privilege", "not permitted", "not supported",
+            )):
+                self.skipTest(f"junction creation unavailable: {detail}")
+            self.fail(f"junction creation failed unexpectedly: {detail}")
         try:
             with self.assertRaisesRegex(module.DatabaseSafetyError, "symbolic link|reparse"):
                 module.seed_performance_database(junction / "sitemark_native.db", 1)
@@ -299,9 +325,12 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
     def test_second_run_replaces_fixture_without_affecting_other_project_rows(self) -> None:
         module = load_module()
         connection = sqlite3.connect(self.database)
-        insert_ready_source(connection)
-        insert_ready_source(connection, "other-project")
-        connection.close()
+        try:
+            insert_ready_source(connection)
+            insert_ready_source(connection, "other-project")
+            before = non_fixture_snapshot(connection, module.FIXTURE_PROJECT_ID)
+        finally:
+            connection.close()
 
         module.seed_performance_database(self.database, 2000)
         module.seed_performance_database(self.database, 2000)
@@ -311,15 +340,10 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
             fixture_count = connection.execute(
                 "SELECT COUNT(*) FROM captures WHERE project_id=?", (module.FIXTURE_PROJECT_ID,)
             ).fetchone()[0]
-            other_project = connection.execute(
-                "SELECT name FROM projects WHERE id='other-project'"
-            ).fetchone()
-            other_count = connection.execute(
-                "SELECT COUNT(*) FROM captures WHERE project_id='other-project'"
-            ).fetchone()[0]
             self.assertEqual(fixture_count, 2000)
-            self.assertEqual(other_project, ("Source project",))
-            self.assertEqual(other_count, 1)
+            self.assertEqual(
+                non_fixture_snapshot(connection, module.FIXTURE_PROJECT_ID), before
+            )
         finally:
             connection.close()
 
