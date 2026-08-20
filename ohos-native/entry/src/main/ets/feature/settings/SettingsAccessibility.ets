@@ -1,4 +1,5 @@
 import { tr } from '../../shared/AppText';
+import { UiTokens } from '../../shared/UiTokens';
 
 export class WatermarkAccentOption {
   color: number;
@@ -24,6 +25,10 @@ export function watermarkAccentOptions(): WatermarkAccentOption[] {
 
 export function settingsBackAccessibilityText(): string {
   return tr('返回', 'Back');
+}
+
+export function settingsConfirmationButtonHeight(): number {
+  return UiTokens.TOUCH_TARGET;
 }
 
 export function watermarkAccentAccessibilityText(option: WatermarkAccentOption, selected: boolean): string {

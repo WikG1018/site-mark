@@ -1,8 +1,9 @@
 import { describe, expect, it } from '@ohos/hypium';
 import { StableSelectionList } from '../main/ets/feature/settings/SettingsProjectSelection';
 import { AppText } from '../main/ets/shared/AppText';
-import { settingsBackAccessibilityText, watermarkAccentAccessibilityText,
+import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, watermarkAccentAccessibilityText,
   watermarkAccentOptions, WatermarkAccentOption } from '../main/ets/feature/settings/SettingsAccessibility';
+import { UiTokens } from '../main/ets/shared/UiTokens';
 
 class RecordingListener implements DataChangeListener {
   reloads: number = 0;
@@ -104,6 +105,11 @@ export default function settingsProjectSelectionTest(): void {
       expect(englishSelectedLabels.every((label: string): boolean => label.length > 0)).assertTrue();
       expect(englishSelectedLabels[0] === englishLabels[0]).assertFalse();
       AppText.apply('', 'zh-CN');
+    });
+
+    it('keeps diagnostics confirmation actions at the shared touch target height', 0, () => {
+      expect(settingsConfirmationButtonHeight()).assertEqual(UiTokens.TOUCH_TARGET);
+      expect(settingsConfirmationButtonHeight() >= 44).assertTrue();
     });
   });
 }
