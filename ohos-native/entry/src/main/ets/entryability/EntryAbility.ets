@@ -4,6 +4,7 @@ import { window } from '@kit.ArkUI';
 import { AbilityContextHolder } from '../app/AbilityContextHolder';
 import { AppRuntime } from '../app/AppRuntime';
 import { forwardUiMemoryLevel } from '../shared/UiMemoryCoordinator';
+import { RootBackDispatcher } from '../shared/ScreenUiStabilityCoordinator';
 
 const DOMAIN = 0x0000;
 const TAG = 'SiteMarkAbility';
@@ -47,5 +48,9 @@ export default class EntryAbility extends UIAbility {
   onMemoryLevel(level: AbilityConstant.MemoryLevel): void {
     const runtime = AppRuntime.current;
     forwardUiMemoryLevel(level, runtime === null ? null : runtime.uiMemory);
+  }
+
+  onBackPressed(): boolean {
+    return RootBackDispatcher.handle();
   }
 }

@@ -38,6 +38,8 @@ import {
   watermarkPositionChoices,
   WatermarkPreviewStyle,
 } from './ProjectFormPolicy';
+import { ScreenLifecycleActionCoordinator } from '../../shared/ScreenActionCoordinator';
+import { BackAction, BackCoordinator, ScreenLoadCoordinator } from '../../shared/ScreenUiStabilityCoordinator';
 
 class RuntimeCapturePageLoader implements CapturePageLoader {
   load(filter: CaptureFilter, cursor: CapturePageCursor | null, pageSize: number): Promise<CapturePage> {
@@ -306,32 +308,61 @@ export struct ProjectEditorScreen {
   @State private message: string = '';
   @State private nameError: string = '';
   @State private editing: boolean = false;
+  @State private loading: boolean = false;
+  @State private loadError: string = '';
+  private readonly loadCoordinator: ScreenLoadCoordinator<ProjectRecord> = new ScreenLoadCoordinator<ProjectRecord>();
+  private readonly saveAction: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 
   private copy(): ProjectFormCopy {
     return projectFormCopy(AppText.isEnglish());
   }
 
   aboutToAppear(): void {
+    this.loadCoordinator.activate();
+    this.saveAction.activate();
     const id = AppRuntime.require().selectedProjectId;
     this.editing = id.length > 0;
     if (this.editing) {
-      AppRuntime.require().database.projectById(id).then((project: ProjectRecord | null): void => {
-        if (project !== null) {
-          this.name = project.name;
-          this.description = project.description;
-        }
-      });
+      this.loadProject();
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.loadCoordinator.deactivate();
+    this.saveAction.invalidate();
+  }
+
+  private async loadProject(): Promise<void> {
+    const token = this.loadCoordinator.begin();
+    if (token < 0) return;
+    this.loading = true;
+    this.loadError = '';
+    try {
+      const project = await AppRuntime.require().database.projectById(AppRuntime.require().selectedProjectId);
+      if (!this.loadCoordinator.resolve(token, project)) return;
+      if (project === null) {
+        this.loadError = tr('项目不存在，可能已被删除', 'The project no longer exists');
+      } else {
+        this.name = project.name;
+        this.description = project.description;
+      }
+    } catch (_) {
+      if (this.loadCoordinator.reject(token)) {
+        this.loadError = tr('项目资料加载失败，请重试', 'Project details could not be loaded. Try again.');
+      }
+    } finally {
+      if (this.loadCoordinator.isCurrent(token)) this.loading = false;
     }
   }
 
   private async save(): Promise<void> {
-    if (this.saving) {
-      return;
-    }
+    const actionToken = this.saveAction.begin();
+    if (actionToken === null) return;
     const validationError = projectNameValidationError(this.name, AppText.isEnglish());
     if (validationError.length > 0) {
       this.nameError = validationError;
       this.message = '';
+      this.saveAction.finish(actionToken);
       return;
     }
     this.saving = true;
@@ -349,14 +380,19 @@ export struct ProjectEditorScreen {
         runtime.selectedProjectId = created.id;
       }
       runtime.notifyDataChanged();
-      this.pathStack.pop();
+      if (this.saveAction.isCurrent(actionToken)) {
+        this.pathStack.pop();
+      }
     } catch (error) {
-      const text = (error as Error).message;
-      const feedback: ProjectSaveFeedback = projectSaveFeedback(text, AppText.isEnglish());
-      this.nameError = feedback.nameError;
-      this.message = feedback.pageMessage;
+      if (this.saveAction.isCurrent(actionToken)) {
+        const text = (error as Error).message;
+        const feedback: ProjectSaveFeedback = projectSaveFeedback(text, AppText.isEnglish());
+        this.nameError = feedback.nameError;
+        this.message = feedback.pageMessage;
+      }
     } finally {
-      this.saving = false;
+      this.saveAction.finish(actionToken);
+      if (this.saveAction.isActive() && !this.saveAction.isBusy()) this.saving = false;
     }
   }
 
@@ -364,11 +400,27 @@ export struct ProjectEditorScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: this.editing ? tr('编辑项目', 'Edit project') : tr('新建项目', 'New project'),
-          showBack: true, backAccessibilityText: tr('返回', 'Back'), onBack: (): void => { this.pathStack.pop(); },
-          actionLabel: this.saving ? tr('保存中', 'Saving') : tr('保存', 'Save'),
+          showBack: true, backAccessibilityText: this.editing ?
+            tr('取消编辑并返回项目详情', 'Cancel editing and return to project details') :
+            tr('取消新建并返回项目列表', 'Cancel creation and return to projects'),
+          onBack: (): void => { this.pathStack.pop(); },
+          actionLabel: this.saving ? tr('保存中', 'Saving') : tr('保存', 'Save'), actionEnabled: !this.loading &&
+            this.loadError.length === 0 && !this.saving,
           actionAccessibilityText: this.saving ? tr('正在保存项目', 'Saving project') :
             tr('保存项目', 'Save project'),
           onAction: (): void => { this.save(); } })
+        if (this.loading) {
+          Column({ space: 12 }) {
+            LoadingProgress().width(36).height(36).color(UiTokens.PRIMARY)
+            Text(tr('正在加载项目资料…', 'Loading project details…')).fontSize(14)
+              .fontColor(UiTokens.TEXT_SECONDARY)
+          }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+        } else if (this.loadError.length > 0) {
+          Column() {
+            InlineErrorPanel({ message: this.loadError, retryLabel: tr('重试', 'Retry'),
+              onRetry: (): void => { this.loadProject(); } })
+          }.layoutWeight(1).padding(UiTokens.PAGE_PADDING).width('100%').justifyContent(FlexAlign.Center)
+        } else {
         Scroll() {
           Column({ space: 16 }) {
             FormField({
@@ -412,6 +464,7 @@ export struct ProjectEditorScreen {
           .justifyContent(FlexAlign.Start)
         }
         .layoutWeight(1)
+        }
       }
       .width('100%')
       .height('100%')
@@ -426,6 +479,7 @@ export struct ProjectDetailScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @State private project: ProjectRecord | null = null;
   @State private projectLoading: boolean = true;
+  @State private projectLoadError: string = '';
   @State private controllerRevision: number = 0;
   @State private confirmDelete: boolean = false;
   @State private message: string = '';
@@ -445,7 +499,8 @@ export struct ProjectDetailScreen {
   private readonly detailScroller: Scroller = new Scroller();
   private searchTimer: number = -1;
   private restoreTimer: number = -1;
-  private projectGeneration: number = 0;
+  private readonly projectLoad: ScreenLoadCoordinator<ProjectRecord> = new ScreenLoadCoordinator<ProjectRecord>();
+  private readonly batchAction: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
   private contentGeneration: number = 0;
   private savedFirstVisibleIndex: number = 0;
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
@@ -472,6 +527,8 @@ export struct ProjectDetailScreen {
     if (!this.pageState.activate()) {
       return;
     }
+    this.projectLoad.activate();
+    this.batchAction.activate();
     const runtime = AppRuntime.require();
     this.pageState.beginRestore();
     this.pageState.consumeSafeReloadRequest();
@@ -490,10 +547,10 @@ export struct ProjectDetailScreen {
     }
     this.saveDetailState();
     this.cancelTimers();
-    this.projectGeneration += 1;
+    this.projectLoad.deactivate();
+    this.batchAction.invalidate();
     this.contentGeneration += 1;
     this.selection.invalidatePending();
-    this.batchBusy = false;
     this.controller.invalidate();
     AppRuntime.current?.unsubscribe(this.refreshListener);
     AppRuntime.current?.uiMemory.unregister(this.memoryListener);
@@ -522,6 +579,7 @@ export struct ProjectDetailScreen {
     let count = 5;
     if (this.confirmDelete) count += 1;
     if (this.message.length > 0) count += 1;
+    if (this.projectLoadError.length > 0) count += 1;
     if (this.filterOpen) count += 1;
     const captures = this.captureCount();
     count += captures > 0 ? captures : 1;
@@ -585,13 +643,15 @@ export struct ProjectDetailScreen {
     if (!this.pageState.isActive()) {
       return;
     }
-    const generation = ++this.projectGeneration;
+    const generation = this.projectLoad.begin();
+    if (generation < 0) return;
+    this.projectLoadError = '';
     if (this.project === null) {
       this.projectLoading = true;
     }
     try {
       const project = await AppRuntime.require().database.projectById(this.projectId);
-      if (!this.pageState.isActive() || generation !== this.projectGeneration) {
+      if (!this.pageState.isActive() || !this.projectLoad.resolve(generation, project)) {
         return;
       }
       this.project = project;
@@ -599,8 +659,11 @@ export struct ProjectDetailScreen {
         this.scheduleDetailRestore(this.contentGeneration);
       }
     } catch (_) {
+      if (this.pageState.isActive() && this.projectLoad.reject(generation)) {
+        this.projectLoadError = tr('项目资料加载失败，请重试', 'Project details could not be loaded. Try again.');
+      }
     } finally {
-      if (this.pageState.isActive() && generation === this.projectGeneration) {
+      if (this.pageState.isActive() && this.projectLoad.isCurrent(generation)) {
         this.projectLoading = false;
       }
     }
@@ -660,8 +723,14 @@ export struct ProjectDetailScreen {
   }
 
   private setSelectionMode(enabled: boolean): void {
+    if (this.batchBusy) return;
     if (enabled) this.selection.enter();
     else this.selection.exit();
+    this.syncSelection();
+  }
+
+  private exitSelectionAfterBatch(): void {
+    this.selection.exit();
     this.syncSelection();
   }
 
@@ -677,6 +746,7 @@ export struct ProjectDetailScreen {
   }
 
   private toggleCapture(captureId: string): void {
+    if (this.batchBusy) return;
     this.selection.toggle(captureId);
     this.syncSelection();
   }
@@ -688,23 +758,26 @@ export struct ProjectDetailScreen {
       this.syncSelection();
       return;
     }
+    const actionToken = this.batchAction.begin();
+    if (actionToken === null) return;
     const requestedFilter = this.currentFilter();
     const token = this.selection.beginSelectAll(requestedFilter);
     this.batchBusy = true;
     try {
       const ids = await AppRuntime.require().database.captureIds(requestedFilter);
-      if (!this.pageState.isActive() || !this.selection.commitSelectAll(token, this.currentFilter(), ids)) {
+      if (!this.pageState.isActive() || !this.batchAction.isCurrent(actionToken) ||
+        !this.selection.commitSelectAll(token, this.currentFilter(), ids)) {
         return;
       }
       this.syncSelection();
     } catch (_) {
-      if (this.pageState.isActive() && this.selection.isSelectAllCurrent(token, this.currentFilter())) {
+      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken) &&
+        this.selection.isSelectAllCurrent(token, this.currentFilter())) {
         this.message = tr('无法全选项目记录，请重试', 'Could not select every project record. Try again.');
       }
     } finally {
-      if (this.pageState.isActive()) {
-        this.batchBusy = false;
-      }
+      this.batchAction.finish(actionToken);
+      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
     }
   }
 
@@ -713,26 +786,38 @@ export struct ProjectDetailScreen {
       this.message = tr('请先选择照片', 'Select photos first');
       return;
     }
+    const actionToken = this.batchAction.begin();
+    if (actionToken === null) return;
+    const ids = this.selectedIds.slice();
+    this.batchBusy = true;
     try {
       const service = new ProjectBackupService(AppRuntime.require());
-      const result = await service.exportSelection(this.selectedIds, false);
+      const result = await service.exportSelection(ids, false);
       const saved = await service.saveAs(result);
-      this.message = saved ? tr('所选照片已导出到你选择的位置',
-        'Selected photos were exported to your chosen location') :
-        tr('已取消保存导出文件', 'Export save was cancelled');
+      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+        this.message = saved ? tr('所选照片已导出到你选择的位置',
+          'Selected photos were exported to your chosen location') :
+          tr('已取消保存导出文件', 'Export save was cancelled');
+      }
     } catch (_) {
-      this.message = tr('所选照片暂时无法导出，请检查记录状态和存储空间',
-        'Selected photos could not be exported. Check their status and available storage.');
+      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+        this.message = tr('所选照片暂时无法导出，请检查记录状态和存储空间',
+          'Selected photos could not be exported. Check their status and available storage.');
+      }
+    } finally {
+      this.batchAction.finish(actionToken);
+      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
     }
   }
 
   private async runBatch(action: (id: string) => Promise<void>, success: string): Promise<void> {
-    if (this.batchBusy) return;
     const ids = this.selectedIds.slice();
     if (ids.length === 0) {
       this.message = tr('请先选择照片', 'Select photos first');
       return;
     }
+    const actionToken = this.batchAction.begin();
+    if (actionToken === null) return;
     this.batchBusy = true;
     try {
       let succeeded = 0;
@@ -743,13 +828,67 @@ export struct ProjectDetailScreen {
         } catch (_) {
         }
       }
-      this.message = succeeded === ids.length ? success :
-      tr(`已完成 ${succeeded}/${ids.length} 项`, `Completed ${succeeded}/${ids.length}`);
-      this.setSelectionMode(false);
-      await this.resetCaptures();
+      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+        this.message = succeeded === ids.length ? success :
+        tr(`已完成 ${succeeded}/${ids.length} 项`, `Completed ${succeeded}/${ids.length}`);
+        this.exitSelectionAfterBatch();
+        await this.resetCaptures();
+      }
     } finally {
-      this.batchBusy = false;
+      this.batchAction.finish(actionToken);
+      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
     }
+  }
+
+  private consumeBack(): boolean {
+    const action = BackCoordinator.next({
+      busy: this.batchBusy,
+      selection: this.selectionMode,
+      confirmation: this.confirmDelete,
+      filter: this.filterOpen,
+      search: this.searchText.length > 0,
+    });
+    if (action === BackAction.CONSUME) return true;
+    if (action === BackAction.EXIT_SELECTION) {
+      this.setSelectionMode(false);
+      return true;
+    }
+    if (action === BackAction.CLOSE_CONFIRMATION) {
+      this.confirmDelete = false;
+      return true;
+    }
+    if (action === BackAction.CLOSE_FILTER) {
+      this.filterOpen = false;
+      this.saveDetailState();
+      return true;
+    }
+    if (action === BackAction.CLEAR_SEARCH) {
+      this.searchText = '';
+      this.markFilterChanged();
+      this.resetCaptures();
+      return true;
+    }
+    return false;
+  }
+
+  private navigateBack(): void {
+    if (!this.consumeBack()) this.pathStack.pop();
+  }
+
+  private backAccessibilityText(): string {
+    const action = BackCoordinator.next({
+      busy: this.batchBusy,
+      selection: this.selectionMode,
+      confirmation: this.confirmDelete,
+      filter: this.filterOpen,
+      search: this.searchText.length > 0,
+    });
+    if (action === BackAction.CONSUME) return tr('批量操作进行中', 'Batch operation in progress');
+    if (action === BackAction.EXIT_SELECTION) return tr('取消照片选择', 'Cancel photo selection');
+    if (action === BackAction.CLOSE_CONFIRMATION) return tr('关闭删除确认', 'Close delete confirmation');
+    if (action === BackAction.CLOSE_FILTER) return tr('收起筛选', 'Hide filters');
+    if (action === BackAction.CLEAR_SEARCH) return tr('清除搜索', 'Clear search');
+    return tr('返回项目列表', 'Back to projects');
   }
 
   private async batchDelete(): Promise<void> {
@@ -806,20 +945,24 @@ export struct ProjectDetailScreen {
       Row({ space: 8 }) {
         TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1)
           .height(RecordBatchLayoutPolicy.filterControlHeight())
+          .enabled(!this.batchBusy)
           .type(InputType.Number)
           .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
         TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
           .height(RecordBatchLayoutPolicy.filterControlHeight())
+          .enabled(!this.batchBusy)
           .type(InputType.Number)
           .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
         TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
           .height(RecordBatchLayoutPolicy.filterControlHeight())
+          .enabled(!this.batchBusy)
           .type(InputType.Number)
           .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
       }.width('100%')
       Row({ space: 8 }) {
           Button(tr('清除日期', 'Clear date')).layoutWeight(1)
             .height(RecordBatchLayoutPolicy.filterControlHeight())
+            .enabled(!this.batchBusy)
             .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
           .onClick((): void => {
             this.yearText = ''; this.monthText = ''; this.dayText = '';
@@ -828,6 +971,7 @@ export struct ProjectDetailScreen {
           })
           Button(tr('应用筛选', 'Apply filters')).layoutWeight(1)
             .height(RecordBatchLayoutPolicy.filterControlHeight())
+            .enabled(!this.batchBusy)
             .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
           .onClick((): void => { this.filterOpen = false; this.markFilterChanged(); this.resetCaptures(); })
       }.width('100%')
@@ -917,13 +1061,22 @@ export struct ProjectDetailScreen {
         Column() {
           AppTopBar({ title: this.selectionMode ? tr(`已选 ${this.selectedIds.length} 张`,
             `${this.selectedIds.length} selected`) : (this.project?.name ?? tr('项目', 'Project')), showBack: true,
-            onBack: (): void => { if (this.selectionMode) this.setSelectionMode(false); else this.pathStack.pop(); },
+            backAccessibilityText: this.backAccessibilityText(), onBack: (): void => { this.navigateBack(); },
             actionLabel: this.selectionMode ? tr('完成', 'Done') : tr('编辑', 'Edit'),
+            actionEnabled: this.project !== null && !this.batchBusy,
             onAction: (): void => { if (this.selectionMode) this.setSelectionMode(false);
               else this.pathStack.pushPathByName(Routes.PROJECT_EDITOR, null); } })
           if (this.project !== null) {
             List({ space: 10, scroller: this.detailScroller }) {
               ListItem() { this.projectSummary() }
+              if (this.projectLoadError.length > 0) {
+                ListItem() {
+                  Column() {
+                    InlineErrorPanel({ message: this.projectLoadError, retryLabel: tr('重试', 'Retry'),
+                      onRetry: (): void => { this.loadProject(); } })
+                  }.padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING }).width('100%')
+                }
+              }
               ListItem() { SectionHeader({ title: tr('项目操作', 'Project actions') }) }
               ListItem() {
                 Row({ space: 8 }) {
@@ -983,11 +1136,13 @@ export struct ProjectDetailScreen {
                   TextInput({ text: this.searchText, placeholder: tr('搜索部位、内容、拍摄人或编号',
                     'Search location, work, photographer, or number') })
                     .height(44).fontSize(14).backgroundColor(UiTokens.GLASS_STRONG).borderRadius(22)
+                    .enabled(!this.batchBusy)
                     .onChange((value: string): void => { this.searchText = value; this.scheduleSearch(); })
                   Row({ space: 8 }) {
                     Button(this.filterOpen ? tr('收起筛选', 'Hide filters') : tr('筛选', 'Filter'))
                       .height(RecordBatchLayoutPolicy.filterControlHeight()).fontSize(13).fontColor(UiTokens.PRIMARY)
                       .backgroundColor(UiTokens.ACCENT_SURFACE)
+                      .enabled(!this.batchBusy)
                       .onClick((): void => { this.filterOpen = !this.filterOpen; })
                     Blank()
                     if (this.captureCount() > 0) {
@@ -1080,6 +1235,11 @@ export struct ProjectDetailScreen {
               this.saveDetailState();
             })
             .onReachEnd((): void => { this.controller.loadNext(); })
+          } else if (this.projectLoadError.length > 0) {
+            Column() {
+              InlineErrorPanel({ message: this.projectLoadError, retryLabel: tr('重试', 'Retry'),
+                onRetry: (): void => { this.loadProject(); } })
+            }.layoutWeight(1).padding(UiTokens.PAGE_PADDING).width('100%').justifyContent(FlexAlign.Center)
           } else if (!this.projectLoading) {
             EmptyPanel({ icon: '!', title: tr('项目不存在', 'Project not found'),
               message: tr('项目可能已被删除，请返回后重试。', 'The project may have been deleted. Go back and try again.'),
@@ -1103,6 +1263,7 @@ export struct ProjectDetailScreen {
     .hideTitleBar(true)
     .onShown((): void => { this.activatePage(); })
     .onHidden((): void => { this.deactivatePage(); })
+    .onBackPressed((): boolean => this.consumeBack())
   }
 }
 
@@ -1115,6 +1276,12 @@ export struct ProjectSettingsScreen {
   @State private watermarkPosition: string = 'bottomLeft';
   @State private accent: number = 0xFF2E7D61;
   @State private message: string = '';
+  @State private loading: boolean = true;
+  @State private loadError: string = '';
+  @State private saving: boolean = false;
+  @State private saveError: string = '';
+  private readonly loadCoordinator: ScreenLoadCoordinator<ProjectRecord> = new ScreenLoadCoordinator<ProjectRecord>();
+  private readonly saveAction: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 
   private copy(): ProjectFormCopy {
     return projectFormCopy(AppText.isEnglish());
@@ -1129,27 +1296,68 @@ export struct ProjectSettingsScreen {
   }
 
   aboutToAppear(): void {
-    AppRuntime.require().database.projectById(AppRuntime.require().selectedProjectId)
-      .then((project: ProjectRecord | null): void => {
-        this.project = project;
-        if (project !== null) {
-          this.watermarkOpacity = project.watermarkOpacity;
-          this.fontScale = project.watermarkFontScale;
-          this.watermarkPosition = project.watermarkPosition;
-          this.accent = project.watermarkAccentColorArgb;
-        }
-      });
+    this.loadCoordinator.activate();
+    this.saveAction.activate();
+    this.loadProject();
+  }
+
+  aboutToDisappear(): void {
+    this.loadCoordinator.deactivate();
+    this.saveAction.invalidate();
+  }
+
+  private async loadProject(): Promise<void> {
+    const token = this.loadCoordinator.begin();
+    if (token < 0) return;
+    this.loading = true;
+    this.loadError = '';
+    try {
+      const project = await AppRuntime.require().database.projectById(AppRuntime.require().selectedProjectId);
+      if (!this.loadCoordinator.resolve(token, project)) return;
+      this.project = project;
+      if (project === null) {
+        this.loadError = tr('项目不存在，可能已被删除', 'The project no longer exists');
+      } else {
+        this.watermarkOpacity = project.watermarkOpacity;
+        this.fontScale = project.watermarkFontScale;
+        this.watermarkPosition = project.watermarkPosition;
+        this.accent = project.watermarkAccentColorArgb;
+      }
+    } catch (_) {
+      if (this.loadCoordinator.reject(token)) {
+        this.loadError = tr('水印设置加载失败，请重试', 'Watermark settings could not be loaded. Try again.');
+      }
+    } finally {
+      if (this.loadCoordinator.isCurrent(token)) this.loading = false;
+    }
   }
 
   private async save(): Promise<void> {
     if (this.project === null) {
       return;
     }
-    await AppRuntime.require().database.updateProject(this.project.id, this.project.description,
-      this.watermarkPosition, this.watermarkOpacity, this.accent, this.fontScale);
-    AppRuntime.require().notifyDataChanged();
-    this.message = tr('已保存；新拍照片和重新生成的成片会使用这些设置',
-      'Saved. New photos and regenerated images will use these settings.');
+    const actionToken = this.saveAction.begin();
+    if (actionToken === null) return;
+    this.saving = true;
+    this.saveError = '';
+    this.message = '';
+    try {
+      await AppRuntime.require().database.updateProject(this.project.id, this.project.description,
+        this.watermarkPosition, this.watermarkOpacity, this.accent, this.fontScale);
+      AppRuntime.require().notifyDataChanged();
+      if (this.saveAction.isCurrent(actionToken)) {
+        this.message = tr('已保存；新拍照片和重新生成的成片会使用这些设置',
+          'Saved. New photos and regenerated images will use these settings.');
+      }
+    } catch (_) {
+      if (this.saveAction.isCurrent(actionToken)) {
+        this.saveError = tr('水印设置保存失败，请检查后重试',
+          'Watermark settings could not be saved. Check the values and try again.');
+      }
+    } finally {
+      this.saveAction.finish(actionToken);
+      if (this.saveAction.isActive() && !this.saveAction.isBusy()) this.saving = false;
+    }
   }
 
   @Builder
@@ -1189,10 +1397,26 @@ export struct ProjectSettingsScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('此项目水印设置', 'Project watermark settings'), showBack: true,
-          backAccessibilityText: tr('返回', 'Back'), onBack: (): void => { this.pathStack.pop(); },
-          actionLabel: tr('保存', 'Save'), actionAccessibilityText: tr('保存项目水印设置',
+          backAccessibilityText: tr('返回项目详情', 'Back to project details'),
+          onBack: (): void => { this.pathStack.pop(); },
+          actionLabel: this.saving ? tr('保存中', 'Saving') : tr('保存', 'Save'),
+          actionEnabled: !this.loading && this.loadError.length === 0 && !this.saving && this.project !== null,
+          actionAccessibilityText: this.saving ? tr('正在保存项目水印设置', 'Saving project watermark settings') :
+            tr('保存项目水印设置',
             'Save project watermark settings'),
           onAction: (): void => { this.save(); } })
+        if (this.loading) {
+          Column({ space: 12 }) {
+            LoadingProgress().width(36).height(36).color(UiTokens.PRIMARY)
+            Text(tr('正在加载水印设置…', 'Loading watermark settings…')).fontSize(14)
+              .fontColor(UiTokens.TEXT_SECONDARY)
+          }.layoutWeight(1).width('100%').justifyContent(FlexAlign.Center)
+        } else if (this.loadError.length > 0) {
+          Column() {
+            InlineErrorPanel({ message: this.loadError, retryLabel: tr('重试', 'Retry'),
+              onRetry: (): void => { this.loadProject(); } })
+          }.layoutWeight(1).padding(UiTokens.PAGE_PADDING).width('100%').justifyContent(FlexAlign.Center)
+        } else {
         Scroll() {
           Column({ space: 16 }) {
             Column({ space: 10 }) {
@@ -1321,10 +1545,15 @@ export struct ProjectSettingsScreen {
                 .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
                 .borderRadius(UiTokens.CONTROL_RADIUS)
             }
+            if (this.saveError.length > 0) {
+              InlineErrorPanel({ message: this.saveError, retryLabel: tr('重试保存', 'Retry save'),
+                onRetry: (): void => { this.save(); } })
+            }
           }
           .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })
           .width('100%')
         }.layoutWeight(1)
+        }
       }
       .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }

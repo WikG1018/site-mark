@@ -27,6 +27,8 @@ import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, Cap
 import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolicy, RecordSearchCoordinator,
   RecordNavigationSeedStore, RecordRefreshGate, RecordSelectionCoordinator, RenderedRefreshTracker,
   SystemRecordTimerScheduler } from './RecordUiCoordinator';
+import { ScreenLifecycleActionCoordinator } from '../../shared/ScreenActionCoordinator';
+import { BackAction, BackCoordinator, RootBackDispatcher } from '../../shared/ScreenUiStabilityCoordinator';
 
 class RuntimeRecordPageLoader implements CapturePageLoader {
   load(filter: CaptureFilter, cursor: CapturePageCursor | null, pageSize: number): Promise<CapturePage> {
@@ -59,6 +61,8 @@ export struct AllRecordsView {
   private restoreTimer: number = -1;
   private contentGeneration: number = 0;
   private projectsGeneration: number = 0;
+  private readonly batchAction: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+  private rootBackToken: number = -1;
   private readonly refreshListener: () => void = (): void => {
     if (this.refreshGate.shouldRefresh()) {
       this.refreshContent();
@@ -90,6 +94,8 @@ export struct AllRecordsView {
       return;
     }
     this.searchCoordinator.activate();
+    this.batchAction.activate();
+    this.rootBackToken = RootBackDispatcher.register((): boolean => this.handleRootBack());
     this.pageState.consumeSafeReloadRequest();
     const runtime = AppRuntime.require();
     runtime.subscribe(this.refreshListener);
@@ -103,6 +109,9 @@ export struct AllRecordsView {
     }
     this.saveCaptureState();
     this.searchCoordinator.deactivate();
+    RootBackDispatcher.unregister(this.rootBackToken);
+    this.rootBackToken = -1;
+    this.batchAction.invalidate();
     this.cancelRestoreTimer();
     this.contentGeneration += 1;
     this.projectsGeneration += 1;
@@ -274,6 +283,7 @@ export struct AllRecordsView {
   }
 
   private setSelectionMode(enabled: boolean): void {
+    if (this.batchBusy) return;
     if (enabled) this.selection.enter();
     else this.selection.exit();
     this.touchSelection();
@@ -284,7 +294,18 @@ export struct AllRecordsView {
     });
   }
 
+  private exitSelectionAfterBatch(): void {
+    this.selection.exit();
+    this.touchSelection();
+    this.refreshGate.runSuppressed((): void => {
+      const runtime = AppRuntime.require();
+      runtime.rootSelectionMode = false;
+      runtime.notifyDataChanged();
+    });
+  }
+
   private toggle(captureId: string): void {
+    if (this.batchBusy) return;
     this.selection.toggle(captureId);
     this.touchSelection();
   }
@@ -296,19 +317,24 @@ export struct AllRecordsView {
       this.touchSelection();
       return;
     }
+    const actionToken = this.batchAction.begin();
+    if (actionToken === null) return;
     const requestedFilter = this.currentFilter();
     const token = this.selection.beginSelectAll(requestedFilter);
     this.batchBusy = true;
     try {
       const ids = await AppRuntime.require().database.captureIds(requestedFilter);
-      if (!this.pageState.isActive() || !this.selection.commitSelectAll(token, this.currentFilter(), ids)) return;
+      if (!this.pageState.isActive() || !this.batchAction.isCurrent(actionToken) ||
+        !this.selection.commitSelectAll(token, this.currentFilter(), ids)) return;
       this.touchSelection();
     } catch (_) {
-      if (this.pageState.isActive() && this.selection.isSelectAllCurrent(token, this.currentFilter())) {
+      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken) &&
+        this.selection.isSelectAllCurrent(token, this.currentFilter())) {
         this.message = tr('无法全选当前筛选结果，请重试', 'Could not select all filtered results. Try again.');
       }
     } finally {
-      this.batchBusy = false;
+      this.batchAction.finish(actionToken);
+      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
     }
   }
 
@@ -331,15 +357,26 @@ export struct AllRecordsView {
       this.message = tr('请先选择照片', 'Select photos first');
       return;
     }
+    const actionToken = this.batchAction.begin();
+    if (actionToken === null) return;
+    const ids = this.selection.selectedIds.slice();
+    this.batchBusy = true;
     try {
       const service = new ProjectBackupService(AppRuntime.require());
-      const result = await service.exportSelection(this.selection.selectedIds, false);
+      const result = await service.exportSelection(ids, false);
       const saved = await service.saveAs(result);
-      this.message = saved ? tr('所选照片已导出到你选择的位置',
-        'Selected photos were exported to your chosen location') :
-        tr('已取消保存导出文件', 'Export save was cancelled');
+      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+        this.message = saved ? tr('所选照片已导出到你选择的位置',
+          'Selected photos were exported to your chosen location') :
+          tr('已取消保存导出文件', 'Export save was cancelled');
+      }
     } catch (error) {
-      this.message = (error as Error).message;
+      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+        this.message = (error as Error).message;
+      }
+    } finally {
+      this.batchAction.finish(actionToken);
+      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
     }
   }
 
@@ -364,12 +401,13 @@ export struct AllRecordsView {
   }
 
   private async runBatch(action: (id: string) => Promise<void>, success: string): Promise<void> {
-    if (this.batchBusy) return;
     const ids = this.selection.selectedIds.slice();
     if (ids.length === 0) {
       this.message = tr('请先选择照片', 'Select photos first');
       return;
     }
+    const actionToken = this.batchAction.begin();
+    if (actionToken === null) return;
     this.batchBusy = true;
     try {
       let succeeded = 0;
@@ -380,14 +418,50 @@ export struct AllRecordsView {
         } catch (_) {
         }
       }
-      this.message = succeeded === ids.length ? success :
-      tr(`已完成 ${succeeded}/${ids.length} 项，其余记录当前不可操作`,
-        `Completed ${succeeded}/${ids.length}; the remaining records are not currently available`);
-      this.setSelectionMode(false);
-      await this.resetCaptures();
+      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+        this.message = succeeded === ids.length ? success :
+        tr(`已完成 ${succeeded}/${ids.length} 项，其余记录当前不可操作`,
+          `Completed ${succeeded}/${ids.length}; the remaining records are not currently available`);
+        this.exitSelectionAfterBatch();
+        await this.resetCaptures();
+      }
     } finally {
-      this.batchBusy = false;
+      this.batchAction.finish(actionToken);
+      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
     }
+  }
+
+  private handleRootBack(): boolean {
+    if (this.pathStack.size() > 0) return false;
+    const action = BackCoordinator.next({
+      busy: this.batchBusy,
+      selection: this.isSelectionMode(),
+      confirmation: this.selection.confirmDelete,
+      filter: this.filterOpen,
+      search: this.searchText.length > 0,
+    });
+    if (action === BackAction.CONSUME) return true;
+    if (action === BackAction.EXIT_SELECTION) {
+      this.setSelectionMode(false);
+      return true;
+    }
+    if (action === BackAction.CLOSE_CONFIRMATION) {
+      this.selection.confirmDelete = false;
+      this.touchSelection();
+      return true;
+    }
+    if (action === BackAction.CLOSE_FILTER) {
+      this.filterOpen = false;
+      this.saveCaptureState();
+      return true;
+    }
+    if (action === BackAction.CLEAR_SEARCH) {
+      this.searchText = '';
+      this.markFilterChanged();
+      this.resetCaptures();
+      return true;
+    }
+    return false;
   }
 
   @Builder
@@ -429,11 +503,13 @@ export struct AllRecordsView {
           Scroll() {
             Row({ space: 7 }) {
         Button(tr('全部项目', 'All projects')).height(UiTokens.TOUCH_TARGET).fontSize(12)
+                .enabled(!this.batchBusy)
                 .fontColor(this.selectedProjectId.length === 0 ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
                 .backgroundColor(this.selectedProjectId.length === 0 ? UiTokens.PRIMARY_CONTAINER : UiTokens.CONTROL)
                 .onClick((): void => { this.selectedProjectId = ''; this.markFilterChanged(); })
               ForEach(this.projects, (project: ProjectRecord) => {
                 Button(project.name).height(UiTokens.TOUCH_TARGET).fontSize(12)
+                  .enabled(!this.batchBusy)
                   .fontColor(this.selectedProjectId === project.id ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
                   .backgroundColor(this.selectedProjectId === project.id ?
                     UiTokens.PRIMARY_CONTAINER : UiTokens.CONTROL)
@@ -446,25 +522,30 @@ export struct AllRecordsView {
       Row({ space: 8 }) {
         TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
+          .enabled(!this.batchBusy)
           .type(InputType.Number)
           .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
         TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
+          .enabled(!this.batchBusy)
           .type(InputType.Number)
           .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
         TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
+          .enabled(!this.batchBusy)
           .type(InputType.Number)
           .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
       }.width('100%')
       Row({ space: 8 }) {
         Button(tr('清除日期', 'Clear date')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+          .enabled(!this.batchBusy)
           .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
           .onClick((): void => {
             this.yearText = ''; this.monthText = ''; this.dayText = '';
             this.markFilterChanged(); this.resetCaptures();
           })
         Button(tr('应用筛选', 'Apply filters')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+          .enabled(!this.batchBusy)
           .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
           .onClick((): void => {
             this.filterOpen = false; this.markFilterChanged(); this.resetCaptures();
@@ -483,6 +564,7 @@ export struct AllRecordsView {
       AppTopBar({ title: tr('全部记录', 'All records'), subtitle: tr('跨项目搜索与筛选',
         'Search and filter across projects'), actionLabel: this.isSelectionMode() ? tr('完成', 'Done') :
         tr('选择', 'Select'),
+          actionEnabled: !this.batchBusy,
           actionAccessibilityText: this.isSelectionMode() ? tr('结束照片选择', 'Finish selecting photos') :
             tr('选择照片', 'Select photos'),
           onAction: (): void => this.setSelectionMode(!this.isSelectionMode()) })
@@ -491,6 +573,7 @@ export struct AllRecordsView {
             'Search project, location, work, photographer, or number'),
             accessibilityLabel: tr('搜索全部拍摄记录', 'Search all capture records'),
             onChange: (value: string): void => { this.searchText = value; this.scheduleSearch(); } })
+            .enabled(!this.batchBusy)
           Row({ space: 8 }) {
             Column() {
               FilterToolbar({ label: this.filterOpen ? tr('收起筛选', 'Hide filters') : tr('筛选', 'Filter'),
@@ -499,6 +582,7 @@ export struct AllRecordsView {
                   this.filterOpen = !this.filterOpen;
                   this.saveCaptureState();
                 } })
+                .enabled(!this.batchBusy)
             }.layoutWeight(1)
             if (this.isSelectionMode()) {
               Button(this.selection.allSelected ? tr('取消全选', 'Deselect all') :

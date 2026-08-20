@@ -23,6 +23,7 @@ import screenActionCoordinatorTest from './ScreenActionCoordinator.test';
 import diagnosticsActionOutcomeTest from './DiagnosticsActionOutcome.test';
 import captureFormPolicyTest from './CaptureFormPolicy.test';
 import captureWorkflowValidationTest from './CaptureWorkflowValidation.test';
+import screenUiStabilityTest from './ScreenUiStability.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -50,4 +51,5 @@ export default function testsuite(): void {
   diagnosticsActionOutcomeTest();
   captureFormPolicyTest();
   captureWorkflowValidationTest();
+  screenUiStabilityTest();
 }
