@@ -5,6 +5,7 @@ import { BatchActionItem } from '../main/ets/shared/AppComponents';
 import { DetailMediaSwapCoordinator, PhotoViewerGestureState, RecordBatchLayoutPolicy,
   RecordNavigationSeedStore, RecordRefreshGate, RecordRestorePolicy, RecordSearchCoordinator,
   RecordSelectionCoordinator, RecordTimerScheduler, RenderedRefreshTracker, ViewerRenderedVersionTracker,
+  ViewerFullImageCoordinator, ViewerNavigationSeedCoordinator,
   ViewerNodePolicy } from '../main/ets/feature/records/RecordUiCoordinator';
 import { ListPageCoordinator } from '../main/ets/shared/ListPageCoordinator';
 
@@ -249,11 +250,25 @@ export default function recordUiCoordinatorTest(): void {
       expect(RecordNavigationSeedStore.take('capture-a') === null).assertTrue();
     });
 
+    it('uses an original navigation seed only until a trusted ready window supplies a rendered path', 0, () => {
+      const seed = new ViewerNavigationSeedCoordinator();
+      seed.seed('capture-a', 'file://original-a');
+
+      expect(seed.uriFor('capture-a', 'file://rendered-new')).assertEqual('file://original-a');
+      expect(seed.releaseAfterTrustedWindow('capture-a', false)).assertFalse();
+      expect(seed.uriFor('capture-a', 'file://rendered-new')).assertEqual('file://original-a');
+      expect(seed.releaseAfterTrustedWindow('capture-a', true)).assertTrue();
+      expect(seed.uriFor('capture-a', 'file://rendered-new')).assertEqual('file://rendered-new');
+    });
+
     it('derives selected list padding from the exact batch bar height', 0, () => {
       expect(RecordBatchLayoutPolicy.listBottomPadding(true))
         .assertEqual(RecordBatchLayoutPolicy.barHeight() + RecordBatchLayoutPolicy.bottomMargin() +
           RecordBatchLayoutPolicy.contentGap());
-      expect(RecordBatchLayoutPolicy.listBottomPadding(true)).assertEqual(120);
+      expect(RecordBatchLayoutPolicy.barHeight()).assertEqual(104);
+      expect(RecordBatchLayoutPolicy.actionHeight()).assertEqual(68);
+      expect(RecordBatchLayoutPolicy.actionLabelMaxLines()).assertEqual(2);
+      expect(RecordBatchLayoutPolicy.listBottomPadding(true)).assertEqual(132);
       expect(RecordBatchLayoutPolicy.listBottomPadding(false) <
         RecordBatchLayoutPolicy.listBottomPadding(true)).assertTrue();
     });
@@ -274,21 +289,27 @@ export default function recordUiCoordinatorTest(): void {
       expect(RecordRestorePolicy.needsMoreRows(75, 50, true, true)).assertFalse();
     });
 
-    it('keeps the displayed detail image until the current target is ready', 0, () => {
+    it('promotes the decoded pending detail slot without decoding it again as a base image', 0, () => {
       const media = new DetailMediaSwapCoordinator();
       media.initialize('file://watermarked');
       const originalGeneration = media.begin('file://original');
 
       expect(media.displayedUri).assertEqual('file://watermarked');
       expect(media.pendingUri).assertEqual('file://original');
+      expect(media.frontSlot()).assertEqual('a');
+      expect(media.pendingSlot()).assertEqual('b');
+      expect(media.slotUri('a')).assertEqual('file://watermarked');
+      expect(media.slotUri('b')).assertEqual('file://original');
       expect(media.completePending(originalGeneration - 1, 'file://original')).assertFalse();
       expect(media.displayedUri).assertEqual('file://watermarked');
 
       expect(media.completePending(originalGeneration, 'file://original')).assertTrue();
       expect(media.displayedUri).assertEqual('file://original');
-      expect(media.pendingUri).assertEqual('file://original');
-      expect(media.completeDisplayed('file://original')).assertTrue();
       expect(media.pendingUri).assertEqual('');
+      expect(media.frontSlot()).assertEqual('b');
+      expect(media.slotUri('b')).assertEqual('file://original');
+      expect(media.slotVersion('b')).assertEqual(originalGeneration);
+      expect(media.slotUri('a')).assertEqual('');
     });
 
     it('keeps the current detail image after failure and retries with a new generation', 0, () => {
@@ -302,8 +323,11 @@ export default function recordUiCoordinatorTest(): void {
       const retryGeneration = media.retry();
       expect(retryGeneration > failedGeneration).assertTrue();
       expect(media.failed).assertFalse();
+      expect(media.failPending(failedGeneration, 'file://original')).assertFalse();
       expect(media.completePending(failedGeneration, 'file://original')).assertFalse();
       expect(media.completePending(retryGeneration, 'file://original')).assertTrue();
+      expect(media.frontSlot()).assertEqual('b');
+      expect(media.slotUri('a')).assertEqual('');
     });
 
     it('cancels an in-flight detail swap when the user selects the displayed source again', 0, () => {
@@ -317,6 +341,7 @@ export default function recordUiCoordinatorTest(): void {
       expect(media.pendingUri).assertEqual('');
       expect(media.failed).assertFalse();
       expect(media.completePending(originalGeneration, 'file://original')).assertFalse();
+      expect(media.slotUri('b')).assertEqual('');
     });
 
     it('double-buffers a forced reload when the rendered file keeps the same uri', 0, () => {
@@ -330,7 +355,23 @@ export default function recordUiCoordinatorTest(): void {
       expect(media.displayedRequestVersion()).assertEqual(previousVersion);
       expect(media.completePending(generation, 'file://rendered')).assertTrue();
       expect(media.displayedRequestVersion()).assertEqual(generation);
-      expect(media.completeDisplayed('file://rendered')).assertTrue();
+      expect(media.pendingUri).assertEqual('');
+    });
+
+    it('retries a failed full-resolution viewer layer with a new request version over its preview', 0, () => {
+      const full = new ViewerFullImageCoordinator();
+      const initial = full.prepare('capture-a', 'file://rendered-new', 4);
+      expect(initial.requestVersion > 0).assertTrue();
+      expect(full.fail(initial.generation, initial.captureId, initial.uri)).assertTrue();
+      expect(full.failed).assertTrue();
+
+      const retry = full.retry();
+      expect(retry === null).assertFalse();
+      expect(retry!.requestVersion > initial.requestVersion).assertTrue();
+      expect(full.complete(initial.generation, initial.captureId, initial.uri)).assertFalse();
+      expect(full.complete(retry!.generation, retry!.captureId, retry!.uri)).assertTrue();
+      expect(full.failed).assertFalse();
+      expect(full.loaded).assertTrue();
     });
 
     it('refreshes a rewritten same-uri render only after the next processing attempt is ready', 0, () => {

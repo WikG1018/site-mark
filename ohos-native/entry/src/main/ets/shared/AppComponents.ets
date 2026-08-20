@@ -340,37 +340,39 @@ export struct FilterToolbar {
 export struct BatchActionBar {
   @Prop selectedLabel: string = '';
   @Prop actions: BatchActionItem[] = [];
+  @Prop actionHeight: number = 68;
+  @Prop actionLabelMaxLines: number = 2;
   onAction: (id: string) => void = (_id: string): void => {};
 
   build() {
-    Column({ space: 4 }) {
+    Column({ space: 3 }) {
       if (this.selectedLabel.length > 0) {
         Text(this.selectedLabel)
-          .fontSize(13)
+          .fontSize(12)
           .fontWeight(FontWeight.Medium)
           .fontColor(UiTokens.TEXT_SECONDARY)
-          .height(18)
           .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       Row() {
         ForEach(this.actions, (item: BatchActionItem) => {
           Button() {
             Column({ space: 1 }) {
               Text(item.icon)
-                .fontSize(20)
+                .fontSize(19)
                 .fontColor(item.danger ? UiTokens.DANGER : UiTokens.TEXT)
               Text(item.label)
-                .fontSize(12)
+                .fontSize(11)
                 .fontColor(item.danger ? UiTokens.DANGER : UiTokens.TEXT)
                 .textAlign(TextAlign.Center)
-                .maxLines(2)
+                .maxLines(this.actionLabelMaxLines)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
             .width('100%')
             .justifyContent(FlexAlign.Center)
           }
           .layoutWeight(1)
-          .height(56)
+          .height(this.actionHeight)
           .enabled(!item.disabled)
           .backgroundColor(Color.Transparent)
           .borderRadius(UiTokens.CONTROL_RADIUS)
@@ -381,7 +383,7 @@ export struct BatchActionBar {
       .width('100%')
     }
     .width('100%')
-    .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+    .padding({ left: 10, right: 10, top: 4, bottom: 4 })
     .backgroundColor(UiTokens.GLASS_STRONG)
     .backdropBlur(18)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })

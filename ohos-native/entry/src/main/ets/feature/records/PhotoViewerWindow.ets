@@ -19,6 +19,7 @@ export class PhotoViewerWindowController {
   private readonly changed: () => void;
   private generation: number = 0;
   private visibleCaptureId: string = '';
+  private trustedCaptureId: string = '';
 
   constructor(loader: PhotoViewerWindowLoader, changed: () => void = (): void => {}) {
     this.loader = loader;
@@ -32,6 +33,7 @@ export class PhotoViewerWindowController {
     this.absoluteIndex = 0;
     this.totalCount = 1;
     this.visibleCaptureId = capture.id;
+    this.trustedCaptureId = '';
     this.loading = false;
     this.failed = false;
     this.needsRefill = true;
@@ -63,6 +65,7 @@ export class PhotoViewerWindowController {
       this.totalCount = window.totalCount;
       this.failed = false;
       this.needsRefill = false;
+      this.trustedCaptureId = requestedCaptureId;
       this.changed();
     } catch (_) {
       if (generation === this.generation && requestedCaptureId === this.visibleCaptureId) {
@@ -120,6 +123,10 @@ export class PhotoViewerWindowController {
 
   currentCaptureId(): string {
     return this.visibleCaptureId;
+  }
+
+  hasTrustedWindow(captureId: string): boolean {
+    return captureId.length > 0 && this.trustedCaptureId === captureId && this.visibleCaptureId === captureId;
   }
 
   shrinkToCurrent(): void {

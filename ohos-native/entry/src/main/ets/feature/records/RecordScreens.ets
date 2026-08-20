@@ -385,7 +385,9 @@ export struct AllRecordsView {
   private batchBar() {
     Column() {
       BatchActionBar({ selectedLabel: tr(`已选 ${this.selection.selectedIds.length} 张`,
-        `${this.selection.selectedIds.length} selected`), actions: [
+        `${this.selection.selectedIds.length} selected`),
+        actionHeight: RecordBatchLayoutPolicy.actionHeight(),
+        actionLabelMaxLines: RecordBatchLayoutPolicy.actionLabelMaxLines(), actions: [
           new BatchActionItem('export', '⇩', tr('导出', 'Export'), false, this.batchBusy,
             tr('导出所选照片', 'Export selected photos')),
           new BatchActionItem('save', '▣', tr('再次保存', 'Save again'), false, this.batchBusy,
@@ -1073,12 +1075,6 @@ export struct CaptureDetailScreen {
     this.inspectSelectedPath(path);
   }
 
-  private mediaBaseLoaded(uri: string): void {
-    if (this.media.completeDisplayed(uri)) {
-      this.mediaRevision += 1;
-    }
-  }
-
   private mediaPendingLoaded(generation: number, uri: string): void {
     if (this.media.completePending(generation, uri)) {
       this.mediaRevision += 1;
@@ -1091,15 +1087,11 @@ export struct CaptureDetailScreen {
     }
   }
 
-  private mediaBaseLoadedCallback(uri: string): () => void {
-    return (): void => { this.mediaBaseLoaded(uri); };
-  }
-
-  private mediaPendingLoadedCallback(generation: number, uri: string): () => void {
+  private mediaSlotLoadedCallback(generation: number, uri: string): () => void {
     return (): void => { this.mediaPendingLoaded(generation, uri); };
   }
 
-  private mediaPendingFailedCallback(generation: number, uri: string): () => void {
+  private mediaSlotFailedCallback(generation: number, uri: string): () => void {
     return (): void => { this.mediaPendingFailed(generation, uri); };
   }
 
@@ -1173,17 +1165,20 @@ export struct CaptureDetailScreen {
           .width('100%')
           .height(330)
           .backgroundColor(UiTokens.IMAGE_PLACEHOLDER)
-        if (this.mediaRevision >= 0 && this.media.displayedUri.length > 0) {
-          AppImage({ uri: this.media.displayedUri, requestVersion: this.media.displayedRequestVersion(),
+        if (this.mediaRevision >= 0 && this.media.slotUri('a').length > 0) {
+          AppImage({ uri: this.media.slotUri('a'), requestVersion: this.media.slotVersion('a'),
             decodeEdge: ImageDecodePolicy.detail(), fit: ImageFit.Contain,
-            onLoaded: this.mediaBaseLoadedCallback(this.media.displayedUri) })
+            transparentPlaceholder: this.media.isPendingSlot('a'),
+            onLoaded: this.mediaSlotLoadedCallback(this.media.slotVersion('a'), this.media.slotUri('a')),
+            onFailed: this.mediaSlotFailedCallback(this.media.slotVersion('a'), this.media.slotUri('a')) })
             .width('100%').height(330)
         }
-        if (this.media.pendingUri.length > 0 && !this.media.failed) {
-          AppImage({ uri: this.media.pendingUri, requestVersion: this.media.currentGeneration(),
-            decodeEdge: ImageDecodePolicy.detail(), fit: ImageFit.Contain, transparentPlaceholder: true,
-            onLoaded: this.mediaPendingLoadedCallback(this.media.currentGeneration(), this.media.pendingUri),
-            onFailed: this.mediaPendingFailedCallback(this.media.currentGeneration(), this.media.pendingUri) })
+        if (this.media.slotUri('b').length > 0) {
+          AppImage({ uri: this.media.slotUri('b'), requestVersion: this.media.slotVersion('b'),
+            decodeEdge: ImageDecodePolicy.detail(), fit: ImageFit.Contain,
+            transparentPlaceholder: this.media.isPendingSlot('b'),
+            onLoaded: this.mediaSlotLoadedCallback(this.media.slotVersion('b'), this.media.slotUri('b')),
+            onFailed: this.mediaSlotFailedCallback(this.media.slotVersion('b'), this.media.slotUri('b')) })
             .width('100%').height(330)
         }
       }
