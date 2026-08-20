@@ -2,6 +2,7 @@ import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.Ab
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { AbilityContextHolder } from '../app/AbilityContextHolder';
+import { AppRuntime } from '../app/AppRuntime';
 
 const DOMAIN = 0x0000;
 const TAG = 'SiteMarkAbility';
@@ -40,5 +41,12 @@ export default class EntryAbility extends UIAbility {
 
   onBackground(): void {
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onBackground');
+  }
+
+  onMemoryLevel(level: AbilityConstant.MemoryLevel): void {
+    const runtime = AppRuntime.current;
+    if (runtime !== null) {
+      runtime.uiMemory.broadcast(level);
+    }
   }
 }

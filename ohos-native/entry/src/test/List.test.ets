@@ -10,6 +10,7 @@ import albumPublishPolicyTest from './AlbumPublishPolicy.test';
 import mediaCleanupTest from './MediaCleanup.test';
 import appTextTest from './AppText.test';
 import keyedOperationGateTest from './KeyedOperationGate.test';
+import uiPolicyTest from './UiPolicy.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -24,4 +25,5 @@ export default function testsuite(): void {
   mediaCleanupTest();
   appTextTest();
   keyedOperationGateTest();
+  uiPolicyTest();
 }
