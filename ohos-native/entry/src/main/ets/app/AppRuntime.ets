@@ -20,6 +20,7 @@ import { UiTokens } from '../shared/UiTokens';
 import { CompletionNotifications } from '../core/system/CompletionNotifications';
 import { AppText, tr } from '../shared/AppText';
 import { KeyedOperationGate } from '../core/concurrency/KeyedOperationGate';
+import { AsyncOnce } from '../core/concurrency/AsyncOnce';
 import { ScreenStateStore } from '../shared/ScreenStateStore';
 import { UiMemoryCoordinator } from '../shared/UiMemoryCoordinator';
 
@@ -63,6 +64,7 @@ class SystemMediaDeleteAdapter implements MediaDeleteService {
 
 export class AppRuntime {
   static current: AppRuntime | null = null;
+  private static readonly initializationOnce: AsyncOnce<AppRuntime> = new AsyncOnce<AppRuntime>();
 
   readonly context: common.UIAbilityContext;
   readonly database: AppDatabase;
@@ -108,7 +110,14 @@ export class AppRuntime {
       this.queue, this.mediaCleanup, this.privateFileCleanup, this.restoreJournal, context.filesDir);
   }
 
-  static async initialize(context: common.UIAbilityContext): Promise<AppRuntime> {
+  static initialize(context: common.UIAbilityContext): Promise<AppRuntime> {
+    if (AppRuntime.current !== null) {
+      return Promise.resolve(AppRuntime.current);
+    }
+    return AppRuntime.initializationOnce.run((): Promise<AppRuntime> => AppRuntime.initializeFresh(context));
+  }
+
+  private static async initializeFresh(context: common.UIAbilityContext): Promise<AppRuntime> {
     if (AppRuntime.current !== null) {
       return AppRuntime.current;
     }
@@ -116,8 +125,10 @@ export class AppRuntime {
     const runtime = new AppRuntime(context, database);
     await runtime.applyAppearance();
     await runtime.startupRecovery.run();
-    AppRuntime.current = runtime;
-    return runtime;
+    if (AppRuntime.current === null) {
+      AppRuntime.current = runtime;
+    }
+    return AppRuntime.current;
   }
 
   static require(): AppRuntime {

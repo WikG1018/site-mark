@@ -10,6 +10,7 @@ import albumPublishPolicyTest from './AlbumPublishPolicy.test';
 import mediaCleanupTest from './MediaCleanup.test';
 import appTextTest from './AppText.test';
 import keyedOperationGateTest from './KeyedOperationGate.test';
+import asyncOnceTest from './AsyncOnce.test';
 import uiPolicyTest from './UiPolicy.test';
 import lazyListDataSourceTest from './LazyListDataSource.test';
 import capturePagedControllerTest from './CapturePagedController.test';
@@ -31,6 +32,7 @@ export default function testsuite(): void {
   mediaCleanupTest();
   appTextTest();
   keyedOperationGateTest();
+  asyncOnceTest();
   uiPolicyTest();
   lazyListDataSourceTest();
   capturePagedControllerTest();
