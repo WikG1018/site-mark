@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/services.dart';
@@ -7,6 +8,8 @@ import 'package:sitemark/platform/ohos_background_work_client.dart';
 import 'package:sitemark/platform/ohos_platform_services.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
+
+import 'jpeg_gps_support.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -214,6 +217,72 @@ void main() {
     expect(metadata.latitude, isNull);
     expect(metadata.longitude, isNull);
   });
+
+  test(
+    'OhosPlatformServices inspectImage fills GPS from JPEG EXIF when host omits it',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('sitemark-inspect-gps-');
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/shot.jpg');
+      await file.writeAsBytes(
+        jpegWithDmsGps(latitude: 31.23, longitude: 121.47),
+      );
+      const channel = MethodChannel('sitemark.system.ohos');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            return <String, Object?>{
+              'width': 16,
+              'height': 16,
+              'fileSizeBytes': await file.length(),
+              'mimeType': 'image/jpeg',
+              'latitude': null,
+              'longitude': null,
+            };
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      final metadata = await OhosPlatformServices().inspectImage(file.path);
+      expect(metadata.latitude, closeTo(31.23, 0.0001));
+      expect(metadata.longitude, closeTo(121.47, 0.0001));
+    },
+  );
+
+  test(
+    'OhosPlatformServices inspectImage keeps host GPS over JPEG EXIF',
+    () async {
+      final dir = await Directory.systemTemp.createTemp(
+        'sitemark-inspect-host-gps-',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}/shot.jpg');
+      await file.writeAsBytes(
+        jpegWithDecimalGps(latitude: 31.23, longitude: 121.47),
+      );
+      const channel = MethodChannel('sitemark.system.ohos');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            return <String, Object?>{
+              'width': 16,
+              'height': 16,
+              'fileSizeBytes': await file.length(),
+              'mimeType': 'image/jpeg',
+              'latitude': 1.0,
+              'longitude': 2.0,
+            };
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      final metadata = await OhosPlatformServices().inspectImage(file.path);
+      expect(metadata.latitude, closeTo(1.0, 0.0001));
+      expect(metadata.longitude, closeTo(2.0, 0.0001));
+    },
+  );
 
   test('OhosShareFileService maps missing plugin to ohos_not_ready', () async {
     final service = OhosShareFileService();

@@ -94,6 +94,17 @@
 | 官方测试 | `ohos_platform_services_test` 22 项通过 |
 | 模拟器 dump | **无**。不得写系统外链已通 |
 
+## 2026-08-20 Task 47
+
+宿主 `inspectImage` GPS 空时 Dart 解析 JPEG EXIF（度分秒 3 个 rational 或单值十进制度）。官方测试闭环，未重编 HAP，无拍成 dump、无坐标 dump。
+
+| 项 | 结果 |
+| --- | --- |
+| 解析 | `readJpegGpsCoordinates`：DMS → 十进制度；S/W 取负；单值 double 也认 |
+| 回退 | 宿主 lat/lon 皆空才读盘；宿主已有 GPS 不覆盖 |
+| 官方测试 | `jpeg_gps_test` **6 项全绿**；`ohos_platform_services_test` **28 项全绿** |
+| 模拟器 dump | **无**。不得写定位已出坐标 |
+
 ## 2026-08-20 Task 46
 
 应用内串行队列对 `CaptureProcessResult.retry` / runner 抛错做 30s 起指数退避。官方队列测试闭环，未重编 HAP，无拍成 dump。

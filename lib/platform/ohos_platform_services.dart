@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:sitemark/platform/external_link_service.dart';
+import 'package:sitemark/platform/jpeg_gps.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -97,7 +98,20 @@ class OhosPlatformServices implements PlatformServices {
 
   @override
   Future<ImageMetadataResult> inspectImage(String path) async {
-    return _decodeImageMetadataResult(await _api.inspectImage(path));
+    final metadata = _decodeImageMetadataResult(await _api.inspectImage(path));
+    if (metadata.latitude != null && metadata.longitude != null) {
+      return metadata;
+    }
+    final gps = await readJpegGpsFromPath(path);
+    if (gps == null) return metadata;
+    return ImageMetadataResult(
+      width: metadata.width,
+      height: metadata.height,
+      fileSizeBytes: metadata.fileSizeBytes,
+      mimeType: metadata.mimeType,
+      latitude: gps.latitude,
+      longitude: gps.longitude,
+    );
   }
 }
 

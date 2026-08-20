@@ -40,7 +40,7 @@
 - 产品 `ohos/` HAP 树；模拟器已跑全量 `lib/main.dart`（隐私门 → 新建项目 → 设置 / 关于 → 项目详情 → 拍摄表单 → 全部记录 → 备份选项目 → 沙箱 zip）
 - 鸿蒙备份：`OhosArchiveSaveService` + 宿主 `saveArchive`（picker 优先，失败/取消回退沙箱）；降级 `DegradedImagePipeline` 可写出并读回 schema 5 zip / schema 1 bundle
 - 鸿蒙恢复选文件：`OhosArchivePickService` + 宿主 `pickArchive`（`DocumentViewPicker.select` → `copyUriToPath` 到 `files/imports`）；产品页默认走该服务，非鸿蒙走 `FilePicker.pickFile` 单选 zip
-- 鸿蒙读图：宿主 `inspectImage` 用 ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS
+- 鸿蒙读图：宿主 `inspectImage` 用 ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS；宿主 GPS 空时 Dart 解析 JPEG EXIF 度分秒或单值十进制度回填，对齐 Android `getLatLong`；无坐标 dump
 - 鸿蒙拍成落盘：`CameraPicker` 不再把沙箱路径当 `saveUri`；`file://media/` 等媒体 URI 用 `fs.openSync(uri)` 拷进 `files/originals/{captureId}.jpg`；无拍成 dump
 - 鸿蒙降级水印：`DegradedImagePipeline.render` 用 `dart:ui` 半透明卡片叠现场记录 / 位置 / 内容 / 拍摄人 / 时间及非空地址、坐标、备注；叠图前 `bakeOrientation`；照片编号不画；无拍成 dump，不是 `ohos-arm64` 像素对等
 - 鸿蒙发布相册：无 ACL 时 `publishJpeg` 走 `showAssetsCreationDialog`，不再落到文档选择器；无相册 dump
