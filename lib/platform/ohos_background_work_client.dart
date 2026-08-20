@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:sitemark/background/capture_background_scheduler.dart';
+import 'package:sitemark/workflow/capture_processor.dart';
 
 class UnimplementedOhosBackgroundWorkClient implements BackgroundWorkClient {
   @override
@@ -18,11 +19,19 @@ class UnimplementedOhosBackgroundWorkClient implements BackgroundWorkClient {
 }
 
 class InAppSerialBackgroundWorkClient implements BackgroundWorkClient {
-  InAppSerialBackgroundWorkClient({required this.runner});
+  InAppSerialBackgroundWorkClient({
+    required this.runner,
+    Future<void> Function(Duration duration)? wait,
+  }) : wait = wait ?? ((duration) => Future<void>.delayed(duration));
 
-  final Future<void> Function(String captureId) runner;
+  final Future<CaptureProcessResult> Function(String captureId) runner;
+  final Future<void> Function(Duration duration) wait;
+
+  static const Duration initialBackoff = Duration(seconds: 30);
+  static const int maxScheduledRetries = 3;
 
   final List<String> _pending = <String>[];
+  final Map<String, int> _retryAttempts = <String, int>{};
   bool _draining = false;
 
   @override
@@ -46,7 +55,17 @@ class InAppSerialBackgroundWorkClient implements BackgroundWorkClient {
     try {
       while (_pending.isNotEmpty) {
         final captureId = _pending.removeAt(0);
-        await runner(captureId);
+        CaptureProcessResult result;
+        try {
+          result = await runner(captureId);
+        } catch (_) {
+          result = CaptureProcessResult.retry;
+        }
+        if (result == CaptureProcessResult.retry) {
+          unawaited(_scheduleRetry(captureId));
+        } else {
+          _retryAttempts.remove(captureId);
+        }
       }
     } finally {
       _draining = false;
@@ -54,5 +73,22 @@ class InAppSerialBackgroundWorkClient implements BackgroundWorkClient {
         unawaited(_drain());
       }
     }
+  }
+
+  Future<void> _scheduleRetry(String captureId) async {
+    final attempt = (_retryAttempts[captureId] ?? 0) + 1;
+    if (attempt > maxScheduledRetries) {
+      _retryAttempts.remove(captureId);
+      return;
+    }
+    _retryAttempts[captureId] = attempt;
+    final delay = initialBackoff * (1 << (attempt - 1));
+    await wait(delay);
+    await appendCapture(
+      queueName: captureProcessingQueue,
+      taskName: captureProcessingTask,
+      captureId: captureId,
+      tag: 'capture:$captureId',
+    );
   }
 }

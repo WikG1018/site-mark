@@ -309,7 +309,10 @@ final externalLinkServiceProvider = Provider<ExternalLinkService>(
       : const UrlLauncherExternalLinkService(),
 );
 
-Future<void> processCaptureOnOhos(String captureId, Ref ref) async {
+Future<CaptureProcessResult> processCaptureOnOhos(
+  String captureId,
+  Ref ref,
+) async {
   final processor = CaptureProcessor(
     database: ref.read(databaseProvider),
     platform: ref.read(platformServicesProvider),
@@ -317,13 +320,15 @@ Future<void> processCaptureOnOhos(String captureId, Ref ref) async {
     outputPaths: ref.read(captureOutputPathsProvider),
   );
   final result = await processor.process(captureId);
-  if (result != CaptureProcessResult.succeeded) return;
+  if (result != CaptureProcessResult.succeeded) return result;
   try {
     final database = ref.read(databaseProvider);
     final settings = await database.getAppSettings();
     final record = await database.captureById(captureId);
     final photoNumber = record?.photoNumber;
-    if (record == null || photoNumber == null || photoNumber.isEmpty) return;
+    if (record == null || photoNumber == null || photoNumber.isEmpty) {
+      return result;
+    }
     await sendCaptureReadyNotificationIfEnabled(
       enabled: settings.completionNotificationsEnabled,
       service: ref.read(completionNotificationServiceProvider),
@@ -332,6 +337,7 @@ Future<void> processCaptureOnOhos(String captureId, Ref ref) async {
       photoNumber: photoNumber,
     );
   } catch (_) {}
+  return result;
 }
 
 final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {

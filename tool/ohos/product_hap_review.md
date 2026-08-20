@@ -94,6 +94,18 @@
 | 官方测试 | `ohos_platform_services_test` 22 项通过 |
 | 模拟器 dump | **无**。不得写系统外链已通 |
 
+## 2026-08-20 Task 46
+
+应用内串行队列对 `CaptureProcessResult.retry` / runner 抛错做 30s 起指数退避。官方队列测试闭环，未重编 HAP，无拍成 dump。
+
+| 项 | 结果 |
+| --- | --- |
+| 退避 | 30s × 2^(n-1)，最多 3 次调度重试；`failed` 不重排 |
+| 不挡队 | c1 retry 等待期间仍跑 c2 |
+| 接线 | `processCaptureOnOhos` 返回 `CaptureProcessResult` |
+| 官方测试 | `ohos_background_work_client_test` **6 项全绿** |
+| 模拟器 dump | **无**。不是 WorkScheduler 进程保活，不得写后台渲染已对等 |
+
 ## 2026-08-20 Task 45
 
 降级 `render` 叠水印前烘焙 EXIF orientation（orientation 6：48×32 → 32×48）。删除恢复页未使用的 `FilePicker` 路径。官方管线测试闭环，未重编 HAP，无拍成 dump。
