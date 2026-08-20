@@ -1,5 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import { RestoreJournalStorage, RestoreJournalStore } from '../main/ets/data/prefs/RestoreJournalStore';
+import { RestoreFileAccess, RestoreFileCleanup, RestorePathReferenceLookup } from
+  '../main/ets/feature/backup/RestoreFileCleanup';
 
 class MemoryRestoreJournalStorage implements RestoreJournalStorage {
   value: string = '';
@@ -11,6 +13,27 @@ class MemoryRestoreJournalStorage implements RestoreJournalStorage {
   save(value: string): Promise<void> {
     this.value = value;
     return Promise.resolve();
+  }
+}
+
+class ControlledRestoreFiles implements RestoreFileAccess {
+  paths: string[] = [];
+  failedPath: string = '';
+  deleted: string[] = [];
+
+  exists(path: string): boolean { return this.paths.indexOf(path) >= 0; }
+  delete(path: string): void {
+    if (path === this.failedPath) throw new Error('controlled_delete_failure');
+    this.deleted.push(path);
+    const index = this.paths.indexOf(path);
+    if (index >= 0) this.paths.splice(index, 1);
+  }
+}
+
+class ControlledRestoreReferences implements RestorePathReferenceLookup {
+  referenced: string[] = [];
+  privatePathReferenced(path: string): Promise<boolean> {
+    return Promise.resolve(this.referenced.indexOf(path) >= 0);
   }
 }
 
@@ -45,6 +68,25 @@ export default function restoreJournalTest(): void {
       storage.value = '{not-json';
       const store = new RestoreJournalStore(storage);
       expect(await store.recover()).assertNull();
+    });
+
+    it('retains failed cleanup journal and safely converges on the next startup', 0, async () => {
+      const store = new RestoreJournalStore(new MemoryRestoreJournalStorage());
+      await store.begin('restore-2');
+      await store.addPaths('restore-2', ['/private/a.jpg', '/private/b.jpg', '/private/committed.jpg']);
+      const files = new ControlledRestoreFiles();
+      files.paths = ['/private/a.jpg', '/private/b.jpg', '/private/committed.jpg'];
+      files.failedPath = '/private/b.jpg';
+      const references = new ControlledRestoreReferences();
+      references.referenced = ['/private/committed.jpg'];
+      const cleanup = new RestoreFileCleanup(store, references, files, '/private/');
+      expect(await cleanup.run('restore-2')).assertFalse();
+      expect((await store.recover())?.operationId).assertEqual('restore-2');
+      expect(files.deleted.join(',')).assertEqual('/private/a.jpg');
+      files.failedPath = '';
+      expect(await cleanup.run('restore-2')).assertTrue();
+      expect(await store.recover()).assertNull();
+      expect(files.deleted.indexOf('/private/committed.jpg')).assertEqual(-1);
     });
   });
 }
