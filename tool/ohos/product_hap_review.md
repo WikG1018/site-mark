@@ -117,6 +117,18 @@
 | 官方测试 | `ohos_background_work_client_test` **6 项全绿** |
 | 模拟器 dump | **无**。不是 WorkScheduler 进程保活，不得写后台渲染已对等 |
 
+## 2026-08-20 Task 50
+
+外观页动态取色诚实化。鸿蒙不假装 Material You「跟随系统取色」可用。官方 UI 测试闭环，未重编 HAP。
+
+| 项 | 结果 |
+| --- | --- |
+| 能力 | `supportsDynamicColorProvider` 默认 `!isOhosBuild` |
+| UI | 不支持时隐藏 `dynamic-color-switch`，显示「鸿蒙暂不支持壁纸动态取色」，始终露出 9 个主题色芯片 |
+| 主题 | `SiteMarkApp` 在不支持时忽略已持久化的 `useDynamicColor` |
+| 官方测试 | `appearance_section_screen_test` **9 绿** |
+| 模拟器 dump | **无**。不得写动态取色已对等 Android Material You |
+
 ## 2026-08-20 Task 49
 
 拍摄页补上与存储页/拍摄详情相同的降级水印引擎提示。官方 UI 测试闭环，未重编 HAP，无拍成 dump。

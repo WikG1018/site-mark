@@ -110,6 +110,7 @@ class _DatabasePollingControl implements BackgroundWorkControl {
 
 final initialLocaleProvider = Provider<Locale?>((ref) => null);
 final startupRecoveryEnabledProvider = Provider<bool>((ref) => true);
+final supportsDynamicColorProvider = Provider<bool>((ref) => !isOhosBuild);
 
 final privacyConsentStoreProvider = Provider<PrivacyConsentStore>((ref) {
   return isOhosBuild
@@ -912,12 +913,14 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
     // tests to force a locale; when set it takes precedence over persisted
     // settings so existing tests keep driving the locale explicitly.
     final forcedLocale = ref.watch(initialLocaleProvider);
+    final supportsDynamicColor = ref.watch(supportsDynamicColorProvider);
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         // Dynamic color applies only when the persisted opt-in is on AND the
         // platform supplied both palettes; any gap falls back to the brand
         // seed colors so the app never loses its identity.
         final useDynamicColor =
+            supportsDynamicColor &&
             (settings?.useDynamicColor ?? false) &&
             lightDynamic != null &&
             darkDynamic != null;

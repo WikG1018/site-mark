@@ -1,4 +1,3 @@
-// test/features/settings/sections/appearance_section_screen_test.dart
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -20,11 +19,17 @@ void main() {
     await database.close();
   });
 
-  Future<void> pumpScreen(WidgetTester tester) async {
+  Future<void> pumpScreen(
+    WidgetTester tester, {
+    bool supportsDynamicColor = true,
+  }) async {
     await database.getAppSettings();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [databaseProvider.overrideWithValue(database)],
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          supportsDynamicColorProvider.overrideWithValue(supportsDynamicColor),
+        ],
         child: MaterialApp(
           locale: const Locale('zh'),
           supportedLocales: AppStrings.supportedLocales,
@@ -105,6 +110,29 @@ void main() {
     // Spot-check one English color label.
     expect(find.text('Blue'), findsOneWidget);
   });
+
+  testWidgets(
+    'hides dynamic color switch and shows honesty hint when unsupported',
+    (tester) async {
+      await pumpScreen(tester, supportsDynamicColor: false);
+      expect(find.byKey(const Key('dynamic-color-switch')), findsNothing);
+      expect(find.byKey(const Key('dynamic-color-unavailable')), findsOneWidget);
+      expect(find.text('鸿蒙暂不支持壁纸动态取色'), findsOneWidget);
+      expect(find.text('应用主题色'), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNWidgets(9));
+    },
+  );
+
+  testWidgets(
+    'still shows theme chips when unsupported even if useDynamicColor is on',
+    (tester) async {
+      await database.updateAppSettings(useDynamicColor: true);
+      await pumpScreen(tester, supportsDynamicColor: false);
+      expect(find.byKey(const Key('dynamic-color-switch')), findsNothing);
+      expect(find.text('应用主题色'), findsOneWidget);
+      expect(find.byType(ChoiceChip), findsNWidgets(9));
+    },
+  );
 
   testWidgets(
     'reopening the picker after toggling dynamic color keeps the last selection',

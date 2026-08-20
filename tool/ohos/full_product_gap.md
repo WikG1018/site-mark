@@ -15,6 +15,7 @@
 - `OhosArchivePickService` + 宿主 `pickArchive`：恢复选文件走原生 `DocumentViewPicker.select`（单选 `.zip`），`copyUriToPath` 到 `files/imports/sitemark-restore-*.zip`。未做模拟器点选 zip dump。
 - 宿主 `inspectImage`：ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS；宿主 GPS 空时 Dart 解析 JPEG EXIF 度分秒或单值十进制度回填。官方 `jpeg_gps_test` **6 项全绿**，`ohos_platform_services_test` **30 项全绿**。无拍成 dump、无坐标 dump。
 - 相册探测诚实化：`detectGalleryAccess` 无 ACL 证明返回 `pickerFallback`，不再把 READ+WRITE 媒体权限当成 ACL。存储页和拍摄页显示「未进入系统相册」。发布路径在有媒体写权限时仍先尝试 `createAsset`。官方 `storage_section_screen_test` **5 绿**。无相册 dump。
+- 动态取色诚实化：鸿蒙 `supportsDynamicColorProvider` 为 false；外观页隐藏「跟随系统取色」开关，始终露出应用主题色，并显示「鸿蒙暂不支持壁纸动态取色」。官方 `appearance_section_screen_test` **9 绿**。不得写 Material You 已对等。
 - 宿主 `launchCamera`：`CameraPicker` 省略沙箱 `saveUri`；`file://media/` 用 `fs.openSync(uri)` 拷进 `files/originals`。无拍成 dump。
 - `OhosShareFileService` + 宿主 `shareFile`：ShareKit `ShareController.show`，zip/jpeg/png 走对应 UTD。`main.dart` 鸿蒙入口不再覆盖成 `NoopShareFileService`。官方通道测试绿灯。无分享面板 dump。
 - `OhosCompletionNotificationService` + 宿主 NotificationKit：`requestEnableNotification` / `publishCaptureReady`；点击经 WantAgent 参数 `sitemarkDeepLink` 回 Dart。官方通道测试绿灯。无通知 dump。

@@ -625,6 +625,9 @@ class AppStrings {
   String get dynamicColorSubtitle => _english
       ? 'Use wallpaper-based Material You colors on supported devices'
       : '在支持的设备上使用壁纸动态取色（Material You）';
+  String get dynamicColorUnavailable => _english
+      ? 'HarmonyOS does not support wallpaper dynamic color'
+      : '鸿蒙暂不支持壁纸动态取色';
   String get completionNotificationTitle =>
       _english ? 'Completion notifications' : '完成通知';
   String get completionNotificationSubtitle => _english
