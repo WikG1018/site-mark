@@ -1,6 +1,16 @@
 export type UiMemoryListener = (level: number) => void;
 
-export class UiMemoryCoordinator {
+export interface UiMemoryBroadcaster {
+  broadcast(level: number): void;
+}
+
+export function forwardUiMemoryLevel(level: number, uiMemory: UiMemoryBroadcaster | null): void {
+  if (uiMemory !== null) {
+    uiMemory.broadcast(level);
+  }
+}
+
+export class UiMemoryCoordinator implements UiMemoryBroadcaster {
   private listeners: UiMemoryListener[] = [];
 
   register(listener: UiMemoryListener): void {

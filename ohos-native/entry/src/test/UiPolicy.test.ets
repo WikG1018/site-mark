@@ -1,11 +1,10 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { SerialCaptureQueue } from '../main/ets/background/SerialCaptureQueue';
 import { CaptureFilter } from '../main/ets/domain/Models';
 import { ProjectLifecycleStatus } from '../main/ets/domain/StateMachine';
-import { ImageDecodePolicy } from '../main/ets/shared/AppImage';
-import { MotionPolicy } from '../main/ets/shared/MotionPolicy';
+import { ImageDecodePolicy, ImageRequestState } from '../main/ets/shared/AppImage';
+import { MotionPolicy, ReduceMotionQueryPolicy } from '../main/ets/shared/MotionPolicy';
 import { ScreenStateStore } from '../main/ets/shared/ScreenStateStore';
-import { UiMemoryCoordinator } from '../main/ets/shared/UiMemoryCoordinator';
+import { forwardUiMemoryLevel, UiMemoryBroadcaster, UiMemoryCoordinator } from '../main/ets/shared/UiMemoryCoordinator';
 
 function filter(projectId: string, searchText: string): CaptureFilter {
   return {
@@ -17,6 +16,14 @@ function filter(projectId: string, searchText: string): CaptureFilter {
   };
 }
 
+class RecordingUiMemory implements UiMemoryBroadcaster {
+  levels: number[] = [];
+
+  broadcast(level: number): void {
+    this.levels.push(level);
+  }
+}
+
 export default function uiPolicyTest(): void {
   describe('Ui policies', () => {
     it('bounds image decoding for thumbnails detail and viewer neighbors', 0, () => {
@@ -24,9 +31,62 @@ export default function uiPolicyTest(): void {
       expect(ImageDecodePolicy.thumbnail(56, 2.5)).assertEqual(256);
       expect(ImageDecodePolicy.thumbnail(500, 1.5)).assertEqual(750);
       expect(ImageDecodePolicy.thumbnail(10000, 3)).assertEqual(1024);
+      expect(ImageDecodePolicy.thumbnail(Number.NaN, 1)).assertEqual(256);
+      expect(ImageDecodePolicy.thumbnail(100, Number.POSITIVE_INFINITY)).assertEqual(256);
       expect(ImageDecodePolicy.detail()).assertEqual(2048);
       expect(ImageDecodePolicy.viewer(true)).assertEqual(2048);
       expect(ImageDecodePolicy.viewer(false)).assertEqual(1024);
+    });
+
+    it('normalizes every component decode edge to a finite positive integer no greater than 2048', 0, () => {
+      expect(ImageDecodePolicy.sourceSizeEdge(511.01)).assertEqual(512);
+      expect(ImageDecodePolicy.sourceSizeEdge(2048.01)).assertEqual(2048);
+      expect(ImageDecodePolicy.sourceSizeEdge(0)).assertEqual(256);
+      expect(ImageDecodePolicy.sourceSizeEdge(-1)).assertEqual(256);
+      expect(ImageDecodePolicy.sourceSizeEdge(Number.NaN)).assertEqual(256);
+      expect(ImageDecodePolicy.sourceSizeEdge(Number.POSITIVE_INFINITY)).assertEqual(256);
+    });
+
+    it('resets an image request from loaded A to an unloaded B', 0, () => {
+      let state = ImageRequestState.initial().forUri('file://A');
+      const generationA = state.generation;
+      state = state.complete(generationA);
+      expect(state.loaded).assertTrue();
+
+      state = state.forUri('file://B');
+      expect(state.uri).assertEqual('file://B');
+      expect(state.loaded).assertFalse();
+      expect(state.failed).assertFalse();
+    });
+
+    it('resets an image request from failed A to an unloaded B', 0, () => {
+      let state = ImageRequestState.initial().forUri('file://A');
+      const generationA = state.generation;
+      state = state.fail(generationA);
+      expect(state.failed).assertTrue();
+
+      state = state.forUri('file://B');
+      expect(state.uri).assertEqual('file://B');
+      expect(state.loaded).assertFalse();
+      expect(state.failed).assertFalse();
+    });
+
+    it('ignores late callbacks from A after B starts and gives retry a fresh generation', 0, () => {
+      let state = ImageRequestState.initial().forUri('file://A');
+      const generationA = state.generation;
+      state = state.forUri('file://B');
+      const generationB = state.generation;
+
+      state = state.complete(generationA);
+      expect(state.loaded).assertFalse();
+      state = state.fail(generationA);
+      expect(state.failed).assertFalse();
+      state = state.complete(generationB);
+      expect(state.loaded).assertTrue();
+      const retry = state.retry();
+      expect(retry.generation).assertEqual(generationB + 1);
+      expect(retry.loaded).assertFalse();
+      expect(retry.failed).assertFalse();
     });
 
     it('removes motion duration and blur only when reduce motion is enabled', 0, () => {
@@ -38,6 +98,33 @@ export default function uiPolicyTest(): void {
       expect(MotionPolicy.duration(180)).assertEqual(0);
       expect(MotionPolicy.blur(20)).assertEqual(0);
       MotionPolicy.reduceMotion = false;
+    });
+
+    it('does not query reduce motion below API 23', 0, async () => {
+      let calls: number = 0;
+      await MotionPolicy.refreshFor(22, async (): Promise<boolean> => {
+        calls += 1;
+        return true;
+      });
+
+      expect(calls).assertEqual(0);
+      expect(MotionPolicy.reduceMotion).assertFalse();
+    });
+
+    it('uses true and false reduce motion values at API 23', 0, async () => {
+      const trueValue = await ReduceMotionQueryPolicy.read(23, async (): Promise<boolean> => true);
+      const falseValue = await ReduceMotionQueryPolicy.read(23, async (): Promise<boolean> => false);
+
+      expect(trueValue).assertTrue();
+      expect(falseValue).assertFalse();
+    });
+
+    it('falls back to false when the reduce motion query throws', 0, async () => {
+      const value = await ReduceMotionQueryPolicy.read(23, async (): Promise<boolean> => {
+        throw new Error('expected_reduce_motion_failure');
+      });
+
+      expect(value).assertFalse();
     });
 
     it('copies root and capture state so callers cannot mutate cached state', 0, () => {
@@ -77,15 +164,17 @@ export default function uiPolicyTest(): void {
       expect(store.hasProjectDetail('project-9')).assertTrue();
     });
 
-    it('continues memory broadcasts after listener failure without touching capture processing', 0, async () => {
+    it('forwards memory levels only to the UI memory broadcaster', 0, () => {
+      const memory = new RecordingUiMemory();
+      forwardUiMemoryLevel(7, memory);
+      forwardUiMemoryLevel(8, null);
+
+      expect(memory.levels.join(',')).assertEqual('7');
+    });
+
+    it('continues UI memory broadcasts after listener failure', 0, () => {
       const coordinator = new UiMemoryCoordinator();
       let receivedLevel: number = 0;
-      const releases: Array<() => void> = [];
-      const queue = new SerialCaptureQueue(async (_captureId: string): Promise<void> => {
-        await new Promise<void>((resolve: () => void): void => {
-          releases.push(resolve);
-        });
-      });
       coordinator.register((_level: number): void => {
         throw new Error('listener_failure');
       });
@@ -94,21 +183,12 @@ export default function uiPolicyTest(): void {
       };
       coordinator.register(listener);
       coordinator.register(listener);
-      queue.enqueue('capture-a');
-      await Promise.resolve();
 
       coordinator.broadcast(7);
       expect(receivedLevel).assertEqual(7);
-      expect(queue.isBusy()).assertTrue();
       coordinator.unregister(listener);
       coordinator.broadcast(8);
       expect(receivedLevel).assertEqual(7);
-
-      if (releases.length !== 1) {
-        throw new Error('queue_processor_not_started');
-      }
-      releases[0]();
-      await queue.drain();
     });
   });
 }
