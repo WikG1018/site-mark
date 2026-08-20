@@ -9,15 +9,12 @@ import { AppSettingsRecord, CaptureDraft, CaptureFilter, CapturePage, CapturePag
 import { canCaptureTransition, canProjectTransition, CaptureStatus,
   ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { RestoredProjectInput } from '../../domain/RestoreModels';
+import { CaptureViewerQueryExecutor, CaptureViewerQueryResultSet, CaptureViewerWindowQuery } from
+  './CaptureViewerWindowQuery';
 
 const DATABASE_NAME: string = 'sitemark_native.db';
 const DATABASE_SCHEMA_VERSION: number = 14;
 const DEFAULT_PAGE_SIZE: number = 50;
-
-export const CAPTURE_VIEWER_SORT_DESC: string =
-  'COALESCE(c.captured_at,c.created_at) DESC, c.id DESC';
-export const CAPTURE_VIEWER_SORT_ASC: string =
-  'COALESCE(c.captured_at,c.created_at) ASC, c.id ASC';
 
 const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS projects (
@@ -212,6 +209,37 @@ function captureFromRow(rows: relationalStore.ResultSet): CaptureRecord {
     locationResolution: rows.getString(rows.getColumnIndex('location_resolution')),
     originalDeletedAt: nullableLong(rows, 'original_deleted_at')
   });
+}
+
+class RdbCaptureViewerQueryResultSet implements CaptureViewerQueryResultSet {
+  private readonly rows: relationalStore.ResultSet;
+
+  constructor(rows: relationalStore.ResultSet) {
+    this.rows = rows;
+  }
+
+  goToFirstRow(): boolean { return this.rows.goToFirstRow(); }
+  goToNextRow(): boolean { return this.rows.goToNextRow(); }
+  getColumnIndex(column: string): number { return this.rows.getColumnIndex(column); }
+  isColumnNull(columnIndex: number): boolean { return this.rows.isColumnNull(columnIndex); }
+  getString(columnIndex: number): string { return this.rows.getString(columnIndex); }
+  getLong(columnIndex: number): number { return this.rows.getLong(columnIndex); }
+  getDouble(columnIndex: number): number { return this.rows.getDouble(columnIndex); }
+  close(): void { this.rows.close(); }
+}
+
+class RdbCaptureViewerQueryExecutor implements CaptureViewerQueryExecutor {
+  private readonly transaction: relationalStore.Transaction;
+
+  constructor(transaction: relationalStore.Transaction) {
+    this.transaction = transaction;
+  }
+
+  async querySql(sql: string,
+    args: relationalStore.ValueType[] = []): Promise<CaptureViewerQueryResultSet> {
+    const rows = await this.transaction.querySql(sql, args);
+    return new RdbCaptureViewerQueryResultSet(rows);
+  }
 }
 
 export class AppDatabase {
@@ -555,76 +583,17 @@ export class AppDatabase {
   }
 
   async captureViewerWindow(captureId: string, radius: number = 2): Promise<CaptureViewerWindow> {
-    const current = await this.captureById(captureId);
-    if (current === null) {
-      return new CaptureViewerWindow([], 0, 0, 0);
-    }
-    if (current.status !== CaptureStatus.READY) {
-      return new CaptureViewerWindow([current], 0, 0, 1);
-    }
-
-    const boundedRadius = Math.max(0, Math.floor(radius));
-    const sortTime = current.capturedAt;
-    const counts = await this.store.querySql(
-      `SELECT COUNT(*) AS total_count,
-       COALESCE(SUM(CASE WHEN (COALESCE(c.captured_at,c.created_at)>?
-         OR (COALESCE(c.captured_at,c.created_at)=? AND c.id>?)) THEN 1 ELSE 0 END),0) AS newer_count,
-       COALESCE(SUM(CASE WHEN c.id=? THEN 1 ELSE 0 END),0) AS current_count
-       FROM captures c WHERE c.project_id=? AND c.status='ready'`,
-      [sortTime, sortTime, current.id, current.id, current.projectId]);
-    let totalCount = 0;
-    let absoluteIndex = 0;
-    let currentCount = 0;
+    const transaction = await this.store.createTransaction({
+      transactionType: relationalStore.TransactionType.DEFERRED
+    });
     try {
-      if (counts.goToFirstRow()) {
-        totalCount = counts.getLong(counts.getColumnIndex('total_count'));
-        absoluteIndex = counts.getLong(counts.getColumnIndex('newer_count'));
-        currentCount = counts.getLong(counts.getColumnIndex('current_count'));
-      }
-    } finally {
-      counts.close();
-    }
-    if (currentCount !== 1) {
-      return new CaptureViewerWindow([current], 0, 0, 1);
-    }
-
-    const newer = await this.captureViewerRows(
-      `SELECT c.*, p.name AS project_name FROM captures c
-       JOIN projects p ON p.id=c.project_id
-       WHERE c.project_id=? AND c.status='ready'
-         AND (COALESCE(c.captured_at,c.created_at)>?
-           OR (COALESCE(c.captured_at,c.created_at)=? AND c.id>?))
-       ORDER BY ${CAPTURE_VIEWER_SORT_ASC} LIMIT ?`,
-      [current.projectId, sortTime, sortTime, current.id, boundedRadius]);
-    newer.reverse();
-    const older = await this.captureViewerRows(
-      `SELECT c.*, p.name AS project_name FROM captures c
-       JOIN projects p ON p.id=c.project_id
-       WHERE c.project_id=? AND c.status='ready'
-         AND (COALESCE(c.captured_at,c.created_at)<?
-           OR (COALESCE(c.captured_at,c.created_at)=? AND c.id<?))
-       ORDER BY ${CAPTURE_VIEWER_SORT_DESC} LIMIT ?`,
-      [current.projectId, sortTime, sortTime, current.id, boundedRadius]);
-    const result: CaptureRecord[] = [];
-    result.push(...newer);
-    result.push(current);
-    result.push(...older);
-    return new CaptureViewerWindow(result, newer.length, absoluteIndex, totalCount);
-  }
-
-  private async captureViewerRows(sql: string,
-    args: relationalStore.ValueType[]): Promise<CaptureRecord[]> {
-    const rows = await this.store.querySql(sql, args);
-    const captures: CaptureRecord[] = [];
-    try {
-      if (rows.goToFirstRow()) {
-        do {
-          captures.push(captureFromRow(rows));
-        } while (rows.goToNextRow());
-      }
-      return captures;
-    } finally {
-      rows.close();
+      const executor = new RdbCaptureViewerQueryExecutor(transaction);
+      const window = await new CaptureViewerWindowQuery().load(executor, captureId, radius);
+      await transaction.commit();
+      return window;
+    } catch (error) {
+      await transaction.rollback();
+      throw new Error((error as Error).message);
     }
   }
 
