@@ -13,7 +13,8 @@ import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, Setting
 import { UiTokens } from '../shared/UiTokens';
 import { AppText, tr } from '../shared/AppText';
 import { MotionPolicy } from '../shared/MotionPolicy';
-import { RootMotionSpec, RootShellPolicy, RootTabTransition } from '../shared/RootShellPolicy';
+import { RootLifecycleCoordinator, RootMotionRefreshResult, RootMotionSpec, RootShellPolicy,
+  RootTabAction, RootTabCoordinator } from '../shared/RootShellPolicy';
 
 @Entry
 @Component
@@ -27,42 +28,32 @@ struct Index {
   @State private tabDirection: number = 1;
   @State private selectionMode: boolean = false;
   @State private appearanceRevision: number = 0;
-  @State private motionRevision: number = 0;
-  private lifecycleGeneration: number = 0;
-  private tabMotionGeneration: number = 0;
-  private pendingTabMotion: number = 0;
-  private queuedTabIndex: number = -1;
-  private rootVisible: boolean = false;
+  @State private motionRevision: number = MotionPolicy.reduceMotion ? -1 : 1;
+  private readonly rootLifecycle: RootLifecycleCoordinator = new RootLifecycleCoordinator();
+  private readonly tabCoordinator: RootTabCoordinator = new RootTabCoordinator(0);
+  private subscribedRuntime: AppRuntime | null = null;
   private consentStore: PrivacyConsentStore = new PrivacyConsentStore(
     new PreferencesConsentStorage(AbilityContextHolder.require()));
   private readonly runtimeListener: () => void = (): void => {
+    if (!this.rootLifecycle.isActive()) {
+      return;
+    }
     const runtime = AppRuntime.current;
     this.selectionMode = runtime?.rootSelectionMode ?? false;
     this.appearanceRevision += 1;
   };
 
   aboutToAppear(): void {
-    this.rootVisible = true;
-    this.lifecycleGeneration += 1;
     AppText.apply('', this.context().resourceManager.getConfigurationSync().locale);
-    this.refreshMotionPolicy();
-    this.checkConsent();
+    this.activateRootShell();
   }
 
   aboutToDisappear(): void {
     this.deactivateRootShell();
-    AppRuntime.current?.unsubscribe(this.runtimeListener);
-  }
-
-  aboutToBeDeleted(): void {
-    this.deactivateRootShell();
-    AppRuntime.current?.unsubscribe(this.runtimeListener);
   }
 
   onPageShow(): void {
-    this.rootVisible = true;
-    this.lifecycleGeneration += 1;
-    this.refreshMotionPolicy();
+    this.activateRootShell();
   }
 
   onPageHide(): void {
@@ -73,101 +64,166 @@ struct Index {
     return AbilityContextHolder.require();
   }
 
-  private async checkConsent(): Promise<void> {
-    try {
-      this.consentAccepted = await this.consentStore.isAccepted();
-    } catch (_) {
-      this.consentAccepted = false;
+  private activateRootShell(): void {
+    const wasActive = this.rootLifecycle.isActive();
+    const generation = this.rootLifecycle.activate();
+    this.requestMotionPolicyRefresh(generation);
+    if (!wasActive) {
+      this.resumeStartup(generation);
     }
+  }
+
+  private resumeStartup(generation: number): void {
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
+    if (this.runtimeReady && AppRuntime.current !== null) {
+      this.subscribeRuntime(AppRuntime.current);
+      this.runtimeListener();
+      return;
+    }
+    if (!this.consentChecked || !this.consentAccepted) {
+      this.checkConsent(generation);
+    } else if (!this.runtimeReady && this.runtimeError.length === 0) {
+      this.initializeRuntime(generation);
+    }
+  }
+
+  private async checkConsent(generation: number): Promise<void> {
+    let accepted = false;
+    try {
+      accepted = await this.consentStore.isAccepted();
+    } catch (_) {
+    }
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
+    this.consentAccepted = accepted;
     this.consentChecked = true;
-    if (this.consentAccepted) {
-      await this.initializeRuntime();
+    if (accepted) {
+      await this.initializeRuntime(generation);
+      if (!this.rootLifecycle.isCurrent(generation)) {
+        return;
+      }
     }
   }
 
   private async acceptPrivacy(): Promise<void> {
+    const generation = this.rootLifecycle.generation();
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
     await this.consentStore.accept();
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
     this.consentAccepted = true;
-    await this.initializeRuntime();
+    await this.initializeRuntime(generation);
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
   }
 
-  private async initializeRuntime(): Promise<void> {
+  private async initializeRuntime(generation: number): Promise<void> {
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
     this.runtimeError = '';
     try {
       const runtime = await AppRuntime.initialize(this.context());
-      runtime.subscribe(this.runtimeListener);
-      await this.refreshMotionPolicy();
+      if (!this.rootLifecycle.isCurrent(generation)) {
+        return;
+      }
+      this.subscribeRuntime(runtime);
       this.runtimeReady = true;
       this.runtimeListener();
+      this.requestMotionPolicyRefresh(generation);
     } catch (_) {
+      if (!this.rootLifecycle.isCurrent(generation)) {
+        return;
+      }
       this.runtimeError = tr('本机数据初始化失败。请释放存储空间后重试；现有数据不会被自动删除。',
         'Local data could not be initialized. Free some storage and try again; existing data will not be deleted.');
     }
   }
 
-  private async refreshMotionPolicy(): Promise<void> {
-    const generation = this.lifecycleGeneration;
-    try {
-      await MotionPolicy.refresh();
-    } catch (_) {
-    }
-    if (!this.rootVisible || generation !== this.lifecycleGeneration) {
+  private subscribeRuntime(runtime: AppRuntime): void {
+    if (this.subscribedRuntime === runtime) {
       return;
     }
+    this.subscribedRuntime?.unsubscribe(this.runtimeListener);
+    runtime.subscribe(this.runtimeListener);
+    this.subscribedRuntime = runtime;
+  }
+
+  private unsubscribeRuntime(): void {
+    this.subscribedRuntime?.unsubscribe(this.runtimeListener);
+    this.subscribedRuntime = null;
+  }
+
+  private requestMotionPolicyRefresh(generation: number): void {
+    if (!this.rootLifecycle.beginMotionRefresh(generation)) {
+      return;
+    }
+    this.readMotionPolicy(generation);
+  }
+
+  private async readMotionPolicy(generation: number): Promise<void> {
+    let reduceMotion = false;
     try {
-      this.pathStack.disableAnimation(MotionPolicy.reduceMotion);
+      reduceMotion = await MotionPolicy.read();
     } catch (_) {
     }
-    this.motionRevision += 1;
+    const current = this.rootLifecycle.isCurrent(generation);
+    const completion: RootMotionRefreshResult = this.rootLifecycle.finishMotionRefresh(generation);
+    if (current && completion.commit) {
+      MotionPolicy.commit(reduceMotion);
+      try {
+        this.pathStack.disableAnimation(reduceMotion);
+      } catch (_) {
+      }
+      const nextRevision = Math.abs(this.motionRevision) + 1;
+      this.motionRevision = reduceMotion ? -nextRevision : nextRevision;
+    }
+    if (completion.restartGeneration !== 0) {
+      this.requestMotionPolicyRefresh(completion.restartGeneration);
+    }
   }
 
   private deactivateRootShell(): void {
-    this.rootVisible = false;
-    this.lifecycleGeneration += 1;
-    this.tabMotionGeneration += 1;
-    this.pendingTabMotion = 0;
-    this.queuedTabIndex = -1;
+    if (this.rootLifecycle.deactivate()) {
+      this.tabCoordinator.deactivate();
+    }
+    this.unsubscribeRuntime();
   }
 
   private switchTab(index: number): void {
-    const transition: RootTabTransition = RootShellPolicy.transition(
-      this.activeTab, index, this.pendingTabMotion !== 0);
-    if (!transition.changed) {
-      if (this.pendingTabMotion !== 0) {
-        this.queuedTabIndex = -1;
-      }
+    this.runTabAction(this.tabCoordinator.request(index));
+  }
+
+  private runTabAction(action: RootTabAction): void {
+    if (!action.started) {
       return;
     }
-    if (transition.deferUntilSettled) {
-      this.queuedTabIndex = transition.targetIndex;
-      return;
-    }
-    const motion: RootMotionSpec = RootShellPolicy.motion(transition.direction);
+    const motion: RootMotionSpec = RootShellPolicy.motion(action.direction);
     if (motion.dockDuration === 0) {
-      this.tabDirection = transition.direction;
-      this.activeTab = transition.targetIndex;
-      this.queuedTabIndex = -1;
+      this.tabDirection = action.direction;
+      this.activeTab = action.targetIndex;
+      this.runTabAction(this.tabCoordinator.finish(action.generation));
       return;
     }
-    const generation = this.tabMotionGeneration + 1;
-    this.tabMotionGeneration = generation;
-    this.pendingTabMotion = generation;
     this.getUIContext().animateTo({
       duration: motion.dockDuration,
       curve: Curve.EaseOut,
       onFinish: (): void => {
-        if (this.rootVisible && this.pendingTabMotion === generation) {
-          this.pendingTabMotion = 0;
-          const queuedTab = this.queuedTabIndex;
-          this.queuedTabIndex = -1;
-          if (queuedTab >= 0) {
-            this.switchTab(queuedTab);
-          }
+        const next = this.tabCoordinator.finish(action.generation);
+        if (this.rootLifecycle.isActive()) {
+          this.runTabAction(next);
         }
       },
     }, (): void => {
-      this.tabDirection = transition.direction;
-      this.activeTab = transition.targetIndex;
+      this.tabDirection = action.direction;
+      this.activeTab = action.targetIndex;
     });
   }
 
@@ -245,8 +301,8 @@ struct Index {
         .width(`${RootShellPolicy.dockSelectedOffset(100, 1)}%`)
         .height(RootShellPolicy.dockHeight() - 8)
         .position({ x: `${RootShellPolicy.dockSelectedOffset(100, this.activeTab)}%`, y: 4 })
-        .backgroundColor(MotionPolicy.reduceMotion ? UiTokens.PRIMARY_CONTAINER : UiTokens.DOCK_SELECTED)
-        .backdropBlur(RootShellPolicy.motion(this.tabDirection).selectionBlur)
+        .backgroundColor(this.motionRevision < 0 ? UiTokens.PRIMARY_CONTAINER : UiTokens.DOCK_SELECTED)
+        .backdropBlur(this.motionRevision < 0 ? 0 : RootShellPolicy.motion(this.tabDirection).selectionBlur)
         .borderRadius(UiTokens.CARD_RADIUS + 4)
         .hitTestBehavior(HitTestMode.None)
         .accessibilityLevel('no')
@@ -262,8 +318,8 @@ struct Index {
     .height(RootShellPolicy.dockHeight())
     .margin({ bottom: RootShellPolicy.dockBottomMargin() })
     .width(`calc(100% - ${RootShellPolicy.dockHorizontalMargin() * 2}vp)`)
-    .backgroundColor(MotionPolicy.reduceMotion ? UiTokens.SURFACE : UiTokens.DOCK)
-    .backdropBlur(RootShellPolicy.motion(this.tabDirection).dockBlur)
+    .backgroundColor(this.motionRevision < 0 ? UiTokens.SURFACE : UiTokens.DOCK)
+    .backdropBlur(this.motionRevision < 0 ? 0 : RootShellPolicy.motion(this.tabDirection).dockBlur)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS + 8)
     .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
@@ -352,7 +408,7 @@ struct Index {
         Text(this.runtimeError).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
           .lineHeight(22).textAlign(TextAlign.Center).padding({ left: 32, right: 32 })
         Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
-          .onClick((): void => { this.initializeRuntime(); })
+          .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
       }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
     } else if (!this.runtimeReady) {
       Column({ space: 14 }) {

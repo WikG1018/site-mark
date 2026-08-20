@@ -20,7 +20,6 @@ import { UiTokens } from '../shared/UiTokens';
 import { CompletionNotifications } from '../core/system/CompletionNotifications';
 import { AppText, tr } from '../shared/AppText';
 import { KeyedOperationGate } from '../core/concurrency/KeyedOperationGate';
-import { MotionPolicy } from '../shared/MotionPolicy';
 import { ScreenStateStore } from '../shared/ScreenStateStore';
 import { UiMemoryCoordinator } from '../shared/UiMemoryCoordinator';
 
@@ -117,10 +116,6 @@ export class AppRuntime {
     const runtime = new AppRuntime(context, database);
     await runtime.applyAppearance();
     await runtime.startupRecovery.run();
-    try {
-      await MotionPolicy.refresh();
-    } catch (_) {
-    }
     AppRuntime.current = runtime;
     return runtime;
   }

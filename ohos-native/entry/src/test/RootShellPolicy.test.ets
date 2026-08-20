@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import { MotionPolicy } from '../main/ets/shared/MotionPolicy';
-import { RootShellPolicy } from '../main/ets/shared/RootShellPolicy';
+import { RootLifecycleCoordinator, RootShellPolicy, RootTabCoordinator } from
+  '../main/ets/shared/RootShellPolicy';
 import { UiTokens } from '../main/ets/shared/UiTokens';
 
 export default function rootShellPolicyTest(): void {
@@ -73,6 +74,111 @@ export default function rootShellPolicyTest(): void {
       expect(RootShellPolicy.dockHorizontalMargin()).assertEqual(14);
       expect(RootShellPolicy.dockBottomMargin()).assertEqual(12);
       expect(RootShellPolicy.contentBottomInset()).assertEqual(UiTokens.DOCK_HEIGHT + 28);
+    });
+
+    it('serializes rapid 0 to 1 to 2 requests and settles on the latest tab', 0, () => {
+      const coordinator = new RootTabCoordinator(0);
+      const first = coordinator.request(1);
+      const queued = coordinator.request(2);
+
+      expect(first.started).assertTrue();
+      expect(first.targetIndex).assertEqual(1);
+      expect(queued.started).assertFalse();
+
+      const second = coordinator.finish(first.generation);
+      expect(second.started).assertTrue();
+      expect(second.targetIndex).assertEqual(2);
+      expect(coordinator.finish(second.generation).started).assertFalse();
+      expect(coordinator.currentIndex()).assertEqual(2);
+    });
+
+    it('keeps only the latest target while a tab transition is running', 0, () => {
+      const coordinator = new RootTabCoordinator(0);
+      const first = coordinator.request(1);
+      coordinator.request(2);
+      coordinator.request(0);
+      coordinator.request(2);
+
+      const latest = coordinator.finish(first.generation);
+      expect(latest.started).assertTrue();
+      expect(latest.targetIndex).assertEqual(2);
+    });
+
+    it('ignores repeated current tabs and cancels a queued target when current is requested again', 0, () => {
+      const coordinator = new RootTabCoordinator(0);
+      expect(coordinator.request(0).started).assertFalse();
+
+      const first = coordinator.request(1);
+      coordinator.request(2);
+      expect(coordinator.request(1).started).assertFalse();
+      expect(coordinator.finish(first.generation).started).assertFalse();
+      expect(coordinator.currentIndex()).assertEqual(1);
+    });
+
+    it('ignores an animation finish callback after tab coordination is deactivated', 0, () => {
+      const coordinator = new RootTabCoordinator(0);
+      const first = coordinator.request(1);
+      coordinator.deactivate();
+      const replacement = coordinator.request(2);
+
+      expect(coordinator.finish(first.generation).started).assertFalse();
+      expect(replacement.started).assertTrue();
+      expect(coordinator.finish(replacement.generation).started).assertFalse();
+      expect(coordinator.currentIndex()).assertEqual(2);
+    });
+
+    it('uses idempotent lifecycle generations and rejects stale async completions', 0, () => {
+      const lifecycle = new RootLifecycleCoordinator();
+      const first = lifecycle.activate();
+      expect(lifecycle.activate()).assertEqual(first);
+      expect(lifecycle.isCurrent(first)).assertTrue();
+
+      lifecycle.deactivate();
+      const inactiveGeneration = lifecycle.generation();
+      lifecycle.deactivate();
+      expect(lifecycle.generation()).assertEqual(inactiveGeneration);
+      expect(lifecycle.isCurrent(first)).assertFalse();
+
+      const second = lifecycle.activate();
+      expect(second).assertEqual(inactiveGeneration + 1);
+      expect(lifecycle.isCurrent(second)).assertTrue();
+    });
+
+    it('single-flights motion reads and restarts after a stale generation completes', 0, () => {
+      const lifecycle = new RootLifecycleCoordinator();
+      const first = lifecycle.activate();
+      expect(lifecycle.beginMotionRefresh(first)).assertTrue();
+      expect(lifecycle.beginMotionRefresh(first)).assertFalse();
+
+      lifecycle.deactivate();
+      const second = lifecycle.activate();
+      expect(lifecycle.beginMotionRefresh(second)).assertFalse();
+
+      const stale = lifecycle.finishMotionRefresh(first);
+      expect(stale.commit).assertFalse();
+      expect(stale.restartGeneration).assertEqual(second);
+      expect(lifecycle.beginMotionRefresh(second)).assertTrue();
+
+      const current = lifecycle.finishMotionRefresh(second);
+      expect(current.commit).assertTrue();
+      expect(current.restartGeneration).assertEqual(0);
+    });
+
+    it('retains only the newest foreground generation across repeated motion refresh requests', 0, () => {
+      const lifecycle = new RootLifecycleCoordinator();
+      const first = lifecycle.activate();
+      expect(lifecycle.beginMotionRefresh(first)).assertTrue();
+
+      lifecycle.deactivate();
+      const second = lifecycle.activate();
+      expect(lifecycle.beginMotionRefresh(second)).assertFalse();
+      lifecycle.deactivate();
+      const latest = lifecycle.activate();
+      expect(lifecycle.beginMotionRefresh(latest)).assertFalse();
+
+      const stale = lifecycle.finishMotionRefresh(first);
+      expect(stale.commit).assertFalse();
+      expect(stale.restartGeneration).assertEqual(latest);
     });
   });
 }

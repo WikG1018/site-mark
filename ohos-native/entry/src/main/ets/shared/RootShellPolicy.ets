@@ -15,6 +15,148 @@ export class RootTabTransition {
   }
 }
 
+export class RootTabAction {
+  readonly started: boolean;
+  readonly generation: number;
+  readonly targetIndex: number;
+  readonly direction: number;
+
+  constructor(started: boolean, generation: number, targetIndex: number, direction: number) {
+    this.started = started;
+    this.generation = generation;
+    this.targetIndex = targetIndex;
+    this.direction = direction;
+  }
+}
+
+export class RootTabCoordinator {
+  private selectedIndex: number;
+  private generationValue: number = 0;
+  private pendingGeneration: number = 0;
+  private queuedTarget: number = -1;
+
+  constructor(initialIndex: number) {
+    this.selectedIndex = RootShellPolicy.clampTab(initialIndex);
+  }
+
+  currentIndex(): number {
+    return this.selectedIndex;
+  }
+
+  request(requestedIndex: number): RootTabAction {
+    const target = RootShellPolicy.clampTab(requestedIndex);
+    if (this.pendingGeneration !== 0) {
+      this.queuedTarget = target === this.selectedIndex ? -1 : target;
+      return this.idle();
+    }
+    return this.start(target);
+  }
+
+  finish(generation: number): RootTabAction {
+    if (generation === 0 || generation !== this.pendingGeneration) {
+      return this.idle();
+    }
+    this.pendingGeneration = 0;
+    const target = this.queuedTarget;
+    this.queuedTarget = -1;
+    return target < 0 ? this.idle() : this.start(target);
+  }
+
+  deactivate(): void {
+    this.generationValue += 1;
+    this.pendingGeneration = 0;
+    this.queuedTarget = -1;
+  }
+
+  private start(target: number): RootTabAction {
+    const transition = RootShellPolicy.transition(this.selectedIndex, target);
+    if (!transition.changed) {
+      return this.idle();
+    }
+    this.selectedIndex = transition.targetIndex;
+    this.generationValue += 1;
+    this.pendingGeneration = this.generationValue;
+    return new RootTabAction(true, this.pendingGeneration, transition.targetIndex, transition.direction);
+  }
+
+  private idle(): RootTabAction {
+    return new RootTabAction(false, 0, this.selectedIndex, 0);
+  }
+}
+
+export class RootMotionRefreshResult {
+  readonly commit: boolean;
+  readonly restartGeneration: number;
+
+  constructor(commit: boolean, restartGeneration: number) {
+    this.commit = commit;
+    this.restartGeneration = restartGeneration;
+  }
+}
+
+export class RootLifecycleCoordinator {
+  private active: boolean = false;
+  private generationValue: number = 0;
+  private motionInFlightGeneration: number = 0;
+  private queuedMotionGeneration: number = 0;
+
+  activate(): number {
+    if (!this.active) {
+      this.active = true;
+      this.generationValue += 1;
+    }
+    return this.generationValue;
+  }
+
+  deactivate(): boolean {
+    if (!this.active) {
+      return false;
+    }
+    this.active = false;
+    this.generationValue += 1;
+    this.queuedMotionGeneration = 0;
+    return true;
+  }
+
+  generation(): number {
+    return this.generationValue;
+  }
+
+  isActive(): boolean {
+    return this.active;
+  }
+
+  isCurrent(generation: number): boolean {
+    return this.active && generation === this.generationValue;
+  }
+
+  beginMotionRefresh(generation: number): boolean {
+    if (!this.isCurrent(generation)) {
+      return false;
+    }
+    if (this.motionInFlightGeneration !== 0) {
+      if (this.motionInFlightGeneration !== generation) {
+        this.queuedMotionGeneration = generation;
+      }
+      return false;
+    }
+    this.motionInFlightGeneration = generation;
+    return true;
+  }
+
+  finishMotionRefresh(generation: number): RootMotionRefreshResult {
+    if (generation === 0 || generation !== this.motionInFlightGeneration) {
+      return new RootMotionRefreshResult(false, 0);
+    }
+    this.motionInFlightGeneration = 0;
+    const commit = this.isCurrent(generation);
+    const queuedGeneration = this.queuedMotionGeneration;
+    this.queuedMotionGeneration = 0;
+    const restartGeneration = this.isCurrent(queuedGeneration) ? queuedGeneration : 0;
+    return new RootMotionRefreshResult(commit, restartGeneration);
+  }
+}
+
 export class RootMotionSpec {
   readonly pageDuration: number;
   readonly fadeDuration: number;
