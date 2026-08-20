@@ -6,8 +6,9 @@ import { MediaCleanup } from '../core/system/MediaCleanup';
 import { SystemServices } from '../core/system/SystemServices';
 import { PrivateFileCleanup } from '../core/system/PrivateFileCleanup';
 import { RestoreJournalStore } from '../data/prefs/RestoreJournalStore';
-import { fileIo } from '@kit.CoreFileKit';
 import { PublishJournalEntry } from '../data/prefs/PublishJournalStore';
+import { DatabaseRestorePathReferenceLookup, HarmonyRestoreFileAccess,
+  RestoreFileCleanup } from '../feature/backup/RestoreFileCleanup';
 
 export class StartupRecovery {
   private readonly database: AppDatabase;
@@ -58,18 +59,9 @@ export class StartupRecovery {
 
   private async recoverRestoreFiles(): Promise<void> {
     try {
-      const pending = await this.restoreJournal.recover();
-      if (pending === null) return;
-      for (const path of pending.paths) {
-        try {
-          if (path.startsWith(this.filesDir) && !await this.database.privatePathReferenced(path) &&
-            fileIo.accessSync(path)) {
-            fileIo.unlinkSync(path);
-          }
-        } catch (_) {
-        }
-      }
-      await this.restoreJournal.clear(pending.operationId);
+      await new RestoreFileCleanup(this.restoreJournal,
+        new DatabaseRestorePathReferenceLookup(this.database),
+        new HarmonyRestoreFileAccess(), this.filesDir).run();
     } catch (_) {
       // A later startup will retry; never block capture recovery.
     }

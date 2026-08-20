@@ -24,6 +24,15 @@ if (-not $SkipRust) {
   & (Join-Path $PSScriptRoot 'build-rust.ps1') `
     -NativeSdkRoot (Join-Path $env:DEVECO_SDK_HOME 'default\openharmony\native')
 }
+if ($RunTests) {
+  Push-Location $repoRoot
+  try {
+    & python -m unittest tool.test_ohos_capture_database_contract
+    if ($LASTEXITCODE -ne 0) { throw 'HarmonyOS SQLite contract tests failed' }
+  } finally {
+    Pop-Location
+  }
+}
 Push-Location $projectRoot
 try {
   & $node $ohpm install --all

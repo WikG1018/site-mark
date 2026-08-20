@@ -1098,8 +1098,8 @@ export class AppDatabase implements CaptureWorkflowDatabase {
   }
 
   async saveTemplate(template: CaptureTemplateRecord): Promise<void> {
-    const name = template.name.trim();
-    const nameKey = template.nameKey.trim();
+    const name = normalizeCaptureTemplateName(template.name);
+    const nameKey = captureTemplateNameKey(name);
     const location = template.workLocation.trim();
     const content = template.workContent.trim();
     const photographer = template.photographer.trim();

@@ -1090,7 +1090,7 @@ export struct CaptureFormScreen {
         Button() {
           Text(this.renamingTemplateId.length > 0 ? tr('保存名称', 'Save name') :
             tr('保存当前', 'Save current')).maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES)
-            .textAlign(TextAlign.Center).fontSize(12)
+            .textAlign(TextAlign.Center).fontSize(12).fontColor(Color.White)
         }
           .width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
           .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
@@ -1100,7 +1100,7 @@ export struct CaptureFormScreen {
       if (this.renamingTemplateId.length > 0) {
           Button() {
             Text(tr('取消重命名', 'Cancel rename')).maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES)
-              .textAlign(TextAlign.Center).fontSize(12)
+              .textAlign(TextAlign.Center).fontSize(12).fontColor(UiTokens.TEXT)
           }.width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
             .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
           .onClick((): void => {
@@ -1123,13 +1123,14 @@ export struct CaptureFormScreen {
               .alignItems(HorizontalAlign.Start).onClick((): void => this.applyTemplate(template))
             Button() {
               Text(tr('改名', 'Rename')).maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES)
-                .textAlign(TextAlign.Center).fontSize(11)
+                .textAlign(TextAlign.Center).fontSize(11).fontColor(UiTokens.PRIMARY)
             }.width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
               .backgroundColor(UiTokens.ACCENT_SURFACE).fontColor(UiTokens.PRIMARY)
               .onClick((): void => this.beginRename(template))
             Button() {
               Text(this.deleteTemplateId === template.id ? tr('确认删除', 'Confirm delete') : tr('删除', 'Delete'))
                 .maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES).textAlign(TextAlign.Center).fontSize(11)
+                .fontColor(UiTokens.DANGER)
             }.width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
               .backgroundColor(UiTokens.DANGER_CONTAINER).fontColor(UiTokens.DANGER)
               .onClick((): void => { this.deleteTemplate(template); })
