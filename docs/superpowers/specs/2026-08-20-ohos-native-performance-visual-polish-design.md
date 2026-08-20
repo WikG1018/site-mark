@@ -1,6 +1,6 @@
 # SiteMark 鸿蒙原生版流畅度与视觉完善设计
 
-> 状态：设计已确认，待实施计划。
+> 状态：设计已确认；详细实施步骤见 [`2026-08-20-ohos-native-performance-visual-polish.md`](../plans/2026-08-20-ohos-native-performance-visual-polish.md)。
 >
 > 目标分支：`ohos-native`。实现分支和 PR 均不得以 `main` 或 `ohos` 为目标。
 >
