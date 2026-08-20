@@ -6,7 +6,7 @@
 
 ## 1. 一句话现状
 
-HarmonyOS NEXT 原生 HAP 适配已推进到 Task 50：产品主链路（隐私门 → 项目 → 拍摄表单 → 记录 → 备份/恢复 → 设置）在鸿蒙上可跑；水印引擎处于**降级模式**；相机/相册/分享/通知/外链/文件选择等系统通道均已接线，但**没有模拟器成功 dump 的一律不得宣称已通**。
+HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私门 → 项目 → 拍摄表单 → 记录 → 备份/恢复 → 设置）在鸿蒙上可跑；水印引擎处于**降级模式**；相机/相册/分享/通知/外链/文件选择等系统通道均已接线，但**没有模拟器成功 dump 的一律不得宣称已通**。CI 已覆盖 UI / 降级引擎 / GPS / 通道测试。
 
 ## 2. 仓库与分支纪律
 
@@ -58,6 +58,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 50：产品主链路（隐私�
 | 48 | 相册探测诚实化 | `9956843` | `2026-08-20-harmonyos-gallery-access-honesty.md` |
 | 49 | 拍摄页降级水印提示 | `f3f80d2` | `2026-08-20-harmonyos-capture-degraded-watermark-hint.md` |
 | 50 | 动态取色诚实化 | `754afe3` | `2026-08-20-harmonyos-dynamic-color-honesty.md` |
+| 51–52 | CI 扩容 + captureId 删除锁 | 本轮 | `2026-08-20-harmonyos-ci-and-captureid-delete.md` |
 
 早期任务（0–38）：系统宿主与通道、隐私同意、串行队列、HAP 工程与全量 `lib/main.dart` 编译、备份导出/读回、原生 Document picker 选档、ImageKit 读图、ShareKit、NotificationKit、startAbility 外链——链路与证据见 `README.md` 与 `tool/ohos/product_hap_review.md`。
 
@@ -65,7 +66,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 50：产品主链路（隐私�
 
 - CI：`.github/workflows/ohos.yml`，push 到 `ohos` 即触发；ubuntu-latest + 官方 Flutter **3.44.6**，`flutter pub get` + 指定测试子集。
 - 云端跑测试就是标准命令：`flutter test <文件或目录>`。无需任何本机技巧（此前 Windows 本机的沙箱终端问题属机器特例，云端不复现）。
-- 官方 Flutter 3.44.6 全绿的测试文件（截至 `754afe3`）：
+- 官方 Flutter 3.44.6 全绿的测试文件（Tasks 51–52 起已全部进 `ohos.yml`）：
 
 | 测试文件 | 计数 |
 | --- | --- |
@@ -73,12 +74,15 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 50：产品主链路（隐私�
 | `test/platform/ohos_background_work_client_test.dart` | 6 绿 |
 | `test/platform/jpeg_gps_test.dart` | 6 绿 |
 | `test/platform/ohos_platform_services_test.dart` | 30 绿 |
-| `packages/sitemark_system_api/test/`（6 个文件） | CI 覆盖 |
+| `packages/sitemark_system_api/test/`（6 个文件） | CI 覆盖；`gallery_store_test` 8 绿 |
 | `test/features/settings/sections/storage_section_screen_test.dart` | 5 绿 |
 | `test/features/settings/sections/appearance_section_screen_test.dart` | 9 绿 |
 | `test/features/capture/capture_form_screen_test.dart` | 19 绿 |
+| `test/workflow/capture_processor_test.dart` | CI 覆盖 |
+| `test/workflow/capture_media_service_test.dart` | CI 覆盖；含恢复同编号删除锁 |
+| `test/background/capture_background_scheduler_test.dart` | CI 覆盖 |
+| `test/features/onboarding/privacy_consent_gate_test.dart` | CI 覆盖 |
 
-- **CI 当前只跑子集**（队列、sitemark_system_api、隐私门、capture 处理器/媒体/调度）。上表 UI 与降级引擎/GPS 测试尚未进 `ohos.yml`；接手后建议第一件事就是把它们补进清单（允许改 `ohos.yml`）。
 - dart_style 版本随 Flutter 走，CI 固定 3.44.6；用别的 Flutter 版本 format 后直接提交会有格式差异风险。
 
 ## 6. 云端做不了什么（需要本地 Windows 环境）
@@ -87,7 +91,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 50：产品主链路（隐私�
 - **HAP 构建**：需要 DevEco Studio + 社区 Flutter OH 3.44（gitcode `CPF-Flutter/flutter_flutter`，分支 oh-3.44.9-dev）+ 官方 Flutter 3.44.6 双 SDK。构建流程已固化在已跟踪脚本 `tool/ohos/build-product-hap.ps1`（assemble → 注入 NativeAssetsManifest → 编 sqlite → build hap → 替换 so → 校验 kernel → 安装启动），但脚本内写死了上一台机器的绝对路径，换机需替换为本地安装路径。
 - `libsqlite3.so` **不在 Git 里**也不需要在：`tool/ohos/compile-ohos-sqlite3.ps1` 会从 sqlite.org 下载 amalgamation 3500200，用 DevEco 自带 OHOS NDK clang 按 `x86_64-linux-ohos` / `aarch64-linux-ohos` 重编；`replace-ohos-sqlite3.ps1` 再塞进 HAP。`ohos/entry/libs/` 只是构建中间产物。
 - 社区插件版本覆盖在 `tool/ohos/community-overlay/`（两个 pubspec 覆盖文件）。
-- 已知 HAP 编译风险（下次重编时优先检查）：ETS 侧 `NotificationRequest.wantAgent` 写法、`EntryAbility` 对 `sitemark_system_api` 的 import。**Task 46–50 的 Dart 侧改动尚未重编进任何 HAP**。
+- 已知 HAP 编译风险（下次重编时优先检查）：ETS 侧 `NotificationRequest.wantAgent` 写法、`EntryAbility` 对 `sitemark_system_api` 的 import。**Task 46–52 的 Dart 侧改动尚未重编进任何 HAP**。
 - Rust 水印引擎 `ohos-arm64`：本机无 OHOS NDK clang sysroot，cargo 链接失败，所以走降级管线。编译尝试记录见 `tool/ohos/engine_status.md`。
 
 ## 7. 鸿蒙侧架构速览（改代码前必读）
@@ -103,6 +107,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 50：产品主链路（隐私�
 | GPS 回退 | `lib/platform/jpeg_gps.dart` | 宿主 GPS 皆空时解析 JPEG EXIF（度分秒 3 rational 或单值十进制度；S/W 取负） |
 | UI 诚实提示 | 三个语义 Key | `watermark-engine-degraded`（存储页/拍摄详情/拍摄表单）、`gallery-picker-fallback`（存储页/拍摄表单）、`dynamic-color-unavailable`（外观页） |
 | 相册诚实化 | `OhosSystemHost.ets` 的 `detectGalleryAccess` | 无 ACL 证明固定返回 `pickerFallback`；READ+WRITE 媒体权限不算 ACL；发布路径 `hasMediaWritePermission()` 才尝试 `createAsset` |
+| 相册删除 | `ProbingGalleryStore.delete` / 宿主 `deletePublishedImage` | 按 URI 身份：沙箱 `file://` 走 picker/unlink，其余走 ACL `deleteAssets`。备份恢复同编号不得串 URI |
 | 入口接线 | `lib/main.dart` | 鸿蒙下分享/通知/外链/选档/存档均接 `Ohos*Service`，不再覆盖成 no-op |
 | HAP 工程 | `ohos/` | DevEco/hvigor 工程；包名 `io.github.wikg1018.sitemark`；`path_provider` / `package_info_plus` 由 `SiteMarkSystemPlugin` 桥接（返回 1.0.8 / 23） |
 
@@ -117,13 +122,14 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 50：产品主链路（隐私�
 - 不提交：HAP、`ohos/entry/libs/`、构建缓存、一次性模拟器脚本、社区 pubspec lock、测试日志、审查 dump 临时文件。
 - 用户没有真机；此前的模拟器验证全部在上一台本地 Windows 环境完成。云端 Agent 若要 dump 类证据，需要用户提供本地环境配合。
 
-## 9. 下一步建议（Task 51 起）
+## 9. 下一步建议（Task 53 起）
 
 优先做**不依赖 dump** 的体验/诚实缺口（云端可闭环）：
 
-1. 对照规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 剩余「必须/不得」项逐条核对，找下一个可 TDD 的缺口（候选方向：备份恢复后同编号不得串 URI、删除/再发布按 `captureId` 的语义测试补强）。
-2. 扩充 `.github/workflows/ohos.yml` 测试清单，把第 5 节的 UI/降级引擎/GPS 测试纳入 CI。
-3. 若用户能提供本地环境：按第 6 节重编 HAP（注意 wantAgent / EntryAbility import 风险），做拍成 / 坐标 / 相册 / 分享 / 通知 / 外链 dump 走查，逐项解除第 3 节的门控。
+1. 对照规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 剩余「必须/不得」项，继续找可 TDD 的缺口（杀进程四窗在鸿蒙队列上的语义补强仍可做；相册 ACL 精确替换仍无 dump）。
+2. 若用户能提供本地环境：按第 6 节重编 HAP（注意 wantAgent / EntryAbility import 风险；**Task 46–52 的 Dart 侧改动尚未重编进任何 HAP**），做拍成 / 坐标 / 相册 / 分享 / 通知 / 外链 dump 走查，逐项解除第 3 节的门控。
+
+**已完成、不要重做：** Task 51 CI 扩容；Task 52 备份恢复同编号不得串 URI、删除按 URI/`captureId`。
 
 **明确放弃的假缺口（不要重做）**：last-known 定位（Android 也没有）、逆地理（Android `address` 也是 null）、叠水印后 JPEG 写回 GPS（Rust 也不写）、通知点击接线（`deliverNotificationTap` 已有）、照片编号入水印（Rust `labels()` 也不画）、WorkScheduler / `startBackgroundRunning` 当 WorkManager 对等。
 

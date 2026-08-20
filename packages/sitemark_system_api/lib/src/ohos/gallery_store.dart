@@ -47,7 +47,10 @@ class MemoryPhotoAccess {
   String write({required String sourcePath, required String displayName}) {
     _nextId += 1;
     final uri = 'ph://published-$_nextId';
-    _photos[uri] = _PhotoRecord(bytes: const <int>[0], displayName: displayName);
+    _photos[uri] = _PhotoRecord(
+      bytes: const <int>[0],
+      displayName: displayName,
+    );
     return uri;
   }
 
@@ -139,7 +142,7 @@ class PickerFallbackStore implements GalleryStore {
 
   @override
   Future<void> delete(String contentUri) async {
-    if (contentUri.startsWith('file://')) {
+    if (isSandboxPublishedUri(contentUri)) {
       _sandbox.delete(contentUri);
     }
   }
@@ -185,9 +188,26 @@ class ProbingGalleryStore implements GalleryStore {
 
   @override
   Future<void> delete(String contentUri) async {
-    final store = await _resolve();
-    await store.delete(contentUri);
+    if (contentUri.isEmpty) return;
+    // Match OhosSystemHost.deletePublishedImage: route by URI identity, not
+    // the current gallery probe. A restored duplicate may have been written
+    // under ACL and later deleted after the probe fell back to picker.
+    if (isSandboxPublishedUri(contentUri)) {
+      await _picker.delete(contentUri);
+      return;
+    }
+    await _acl.delete(contentUri);
   }
+}
+
+/// Sandbox publishes live at `file://` paths the app owns. Media-library
+/// `file://media/` / `datashare://` URIs must go through ACL deleteAssets.
+bool isSandboxPublishedUri(String uri) {
+  if (!uri.startsWith('file://')) return false;
+  if (uri.startsWith('file://media/')) return false;
+  if (uri.startsWith('datashare://')) return false;
+  if (uri.contains('/media/')) return false;
+  return true;
 }
 
 List<String> _superseded({

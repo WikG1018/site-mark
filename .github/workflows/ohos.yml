@@ -17,4 +17,17 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Run HarmonyOS Dart tests (no ohos SDK)
-        run: flutter test test/platform/ohos_background_work_client_test.dart packages/sitemark_system_api/test test/features/onboarding/privacy_consent_gate_test.dart test/workflow/capture_processor_test.dart test/workflow/capture_media_service_test.dart test/background/capture_background_scheduler_test.dart
+        run: |
+          flutter test \
+            test/platform/ohos_background_work_client_test.dart \
+            test/platform/degraded_image_pipeline_test.dart \
+            test/platform/jpeg_gps_test.dart \
+            test/platform/ohos_platform_services_test.dart \
+            packages/sitemark_system_api/test \
+            test/features/onboarding/privacy_consent_gate_test.dart \
+            test/features/settings/sections/storage_section_screen_test.dart \
+            test/features/settings/sections/appearance_section_screen_test.dart \
+            test/features/capture/capture_form_screen_test.dart \
+            test/workflow/capture_processor_test.dart \
+            test/workflow/capture_media_service_test.dart \
+            test/background/capture_background_scheduler_test.dart

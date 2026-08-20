@@ -936,6 +936,54 @@ void main() {
     },
   );
 
+  // Regression: deleting the restored copy (still unpublished, so
+  // publishedUri is null) must not enqueue or delete the original
+  // project's gallery row, even though the photo numbers match.
+  test(
+    'delete of unpublished restored duplicate never touches original URI',
+    () async {
+      await insertRestoredDuplicate();
+
+      final result = await service.deleteAll(['capture-2']);
+
+      expect(result.succeededIds, ['capture-2']);
+      expect(result.failures, isEmpty);
+      expect(await database.captureById('capture-2'), isNull);
+      expect(
+        (await database.captureById('capture-1'))?.publishedUri,
+        'content://media/site-mark/1',
+      );
+      expect(platform.deletedUris, isEmpty);
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+    },
+  );
+
+  // Regression: after the restored copy is re-published to its OWN URI,
+  // deleting it removes only that URI. The original project's same-numbered
+  // gallery row stays.
+  test(
+    'delete of republished restored duplicate deletes only its own URI',
+    () async {
+      await insertRestoredDuplicate();
+      files.existing.add('/rendered/capture-2.jpg');
+      platform.nextPublishedUri = 'content://media/site-mark/restored';
+      expect((await service.republish(['capture-2'])).succeededIds, [
+        'capture-2',
+      ]);
+
+      final result = await service.deleteAll(['capture-2']);
+
+      expect(result.succeededIds, ['capture-2']);
+      expect(await database.captureById('capture-2'), isNull);
+      expect(platform.deletedUris, ['content://media/site-mark/restored']);
+      expect(
+        (await database.captureById('capture-1'))?.publishedUri,
+        'content://media/site-mark/1',
+      );
+      expect(await database.pendingSupersededCleanups(), isEmpty);
+    },
+  );
+
   // Regression: the journal clear after a committed republish is
   // best-effort — its failure must never turn the completed user action
   // into a failure, and the leftover journal converges on the next launch.

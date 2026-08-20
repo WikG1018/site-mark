@@ -2,6 +2,18 @@
 
 包名 `io.github.wikg1018.sitemark`，版本 `1.0.8+23`。设备：DevEco 模拟器 `SiteMarkPhone602`，hdc `127.0.0.1:5555`。入口：全量 `lib/main.dart` 未签名 HAP。
 
+## 2026-08-20 Tasks 51–52
+
+云端闭环：扩充 `ohos.yml`；相册删除按 URI 身份；备份恢复同编号不得串 URI。官方测试闭环，未重编 HAP，无相册 dump。
+
+| 项 | 结果 |
+| --- | --- |
+| CI | `.github/workflows/ohos.yml` 纳入 `degraded_image_pipeline_test` / `jpeg_gps_test` / `ohos_platform_services_test` / `storage_section_screen_test` / `appearance_section_screen_test` / `capture_form_screen_test` |
+| 删除路由 | `ProbingGalleryStore.delete` 按 URI 方案（沙箱 `file://` → picker，其余 → ACL），对齐 `OhosSystemHost.deletePublishedImage` |
+| 同编号 | 删未发布恢复副本不碰原项目 URI；再发布后再删只删副本自己的 URI |
+| 官方测试 | `gallery_store_test` **8 绿**；`publish_journal_store_test` **5 绿**；`capture_media_service_test` 含新 2 项全绿 |
+| 模拟器 dump | **无**。不得写系统相册 / 拍成 / 备份进系统文件管理已通 |
+
 ## 2026-08-19 Tasks 21–24
 
 走查：隐私门 → 新建 Task13Demo → 设置 → 备份与恢复 → 备份项目 → 勾选 Task13Demo → 继续 → 不包含原图。

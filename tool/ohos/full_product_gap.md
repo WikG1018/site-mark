@@ -11,7 +11,9 @@
 - 降级读档：`readProjectArchive` / `extractArchivePhoto` / `readBundle` / `extractBundleEntry` 可自读自恢复 schema 5 单项目 zip 与 schema 1 bundle。多项目 selection zip 按 Rust 契约拒绝。官方 `degraded_image_pipeline_test` 19 项全绿。
 - 降级水印：`degradedWatermarkLines` 对齐 Rust `labels()`；`render` 用 `dart:ui` 半透明卡片叠 JPEG；叠图前 `bakeOrientation`。官方 `degraded_image_pipeline_test` **19 项全绿**。无拍成 dump，不是 `ohos-arm64` 像素对等。
 - 应用内串行队列：`InAppSerialBackgroundWorkClient` 对 `CaptureProcessResult.retry` / runner 抛错做 30s × 2^(n-1) 退避，不挡后续 capture；`failed` 不重排。官方 `ohos_background_work_client_test` **6 项全绿**。不是 WorkScheduler 进程保活。
-- 官方测试：`degraded_image_pipeline_test` / `ohos_background_work_client_test` / `jpeg_gps_test` / `ohos_platform_services_test` / `platform_services_test` 绿灯。
+- 相册适配器删除按 URI 身份：`ProbingGalleryStore.delete` 对沙箱 `file://` 走 picker，其余走 ACL，不再按当前探测模式转发。官方 `gallery_store_test` **8 绿**。无相册 dump。
+- 备份恢复同编号：删刚恢复 / 再发布后的副本只动本行 `captureId` 与 `publishedUri`，不得串原项目 gallery URI。官方 `capture_media_service_test` 已锁。
+- `.github/workflows/ohos.yml` 已纳入降级引擎 / GPS / 鸿蒙通道 / 存储页 / 外观页 / 拍摄表单测试。push `ohos` 即跑。
 - `OhosArchivePickService` + 宿主 `pickArchive`：恢复选文件走原生 `DocumentViewPicker.select`（单选 `.zip`），`copyUriToPath` 到 `files/imports/sitemark-restore-*.zip`。未做模拟器点选 zip dump。
 - 宿主 `inspectImage`：ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS；宿主 GPS 空时 Dart 解析 JPEG EXIF 度分秒或单值十进制度回填。官方 `jpeg_gps_test` **6 项全绿**，`ohos_platform_services_test` **30 项全绿**。无拍成 dump、无坐标 dump。
 - 相册探测诚实化：`detectGalleryAccess` 无 ACL 证明返回 `pickerFallback`，不再把 READ+WRITE 媒体权限当成 ACL。存储页和拍摄页显示「未进入系统相册」。发布路径在有媒体写权限时仍先尝试 `createAsset`。官方 `storage_section_screen_test` **5 绿**。无相册 dump。
