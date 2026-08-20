@@ -1,53 +1,119 @@
 import { AppRuntime } from '../../app/AppRuntime';
 import { Routes } from '../../app/Routes';
-import { CaptureFilter, CapturePageCursor, CaptureRecord, ProjectRecord, ProjectSummary } from '../../domain/Models';
+import { CaptureFilter, CapturePage, CapturePageCursor, CaptureRecord, ProjectRecord,
+  ProjectSummary } from '../../domain/Models';
 import { ProjectLifecycleStatus } from '../../domain/StateMachine';
-import { CaptureCard, captureCardKey } from '../records/RecordComponents';
-import { AppTopBar, EmptyPanel, ListSkeleton, SectionHeader } from '../../shared/AppComponents';
-import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
+import { CaptureCard } from '../records/RecordComponents';
+import { AppTopBar, EmptyPanel, InlineErrorPanel, ListSkeleton, SectionHeader } from '../../shared/AppComponents';
+import { formatDateTime, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { ProjectBackupService } from '../backup/BackupService';
 import { tr } from '../../shared/AppText';
+import { LazyListDataSource } from '../../shared/LazyListDataSource';
+import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
+import { ProjectCard } from './ProjectComponents';
+import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
 
-class AppTextForProject {
-  static summary(captureCount: number, pendingCount: number, latestCaptureAt: number): string {
-    const records = tr(`${captureCount} 条记录`, `${captureCount} record${captureCount === 1 ? '' : 's'}`);
-    if (pendingCount > 0) {
-      return `${records} · ${tr(`${pendingCount} 条处理中`, `${pendingCount} processing`)}`;
-    }
-    return `${records} · ${latestCaptureAt > 0 ?
-      tr(`最近 ${formatDateTime(latestCaptureAt)}`, `Latest ${formatDateTime(latestCaptureAt)}`) :
-      tr('尚未拍摄', 'No captures yet')}`;
+class RuntimeCapturePageLoader implements CapturePageLoader {
+  load(filter: CaptureFilter, cursor: CapturePageCursor | null, pageSize: number): Promise<CapturePage> {
+    return AppRuntime.require().database.listCaptures(filter, cursor, pageSize);
   }
 }
 
 @Component
 export struct ProjectListView {
   @Consume('pathStack') pathStack: NavPathStack;
-  @State private projects: ProjectSummary[] = [];
   @State private lifecycle: ProjectLifecycleStatus = ProjectLifecycleStatus.ACTIVE;
   @State private searchText: string = '';
   @State private loading: boolean = true;
   @State private message: string = '';
+  @State private projectCount: number = 0;
+  private readonly projectSource: LazyListDataSource<ProjectSummary> =
+    new LazyListDataSource<ProjectSummary>((item: ProjectSummary): string => item.project.id);
+  private readonly projectScroller: Scroller = new Scroller();
   private searchTimer: number = -1;
+  private restoreTimer: number = -1;
   private loadGeneration: number = 0;
+  private savedFirstVisibleIndex: number = 0;
+  private restorePending: boolean = true;
+  private visible: boolean = false;
   private readonly refreshListener: () => void = (): void => { this.load(); };
+  private readonly memoryListener: (level: number) => void = (_level: number): void => {
+    this.cancelRestoreTimer();
+  };
 
   aboutToAppear(): void {
-    AppRuntime.require().subscribe(this.refreshListener);
+    const runtime = AppRuntime.require();
+    this.visible = true;
+    const restored = runtime.screenState.project(this.lifecycle);
+    this.searchText = restored.searchText;
+    this.savedFirstVisibleIndex = restored.firstVisibleIndex;
+    this.restorePending = true;
+    runtime.subscribe(this.refreshListener);
+    runtime.uiMemory.register(this.memoryListener);
     this.load();
   }
 
   aboutToDisappear(): void {
+    this.visible = false;
+    this.saveProjectState();
+    this.cancelTimers();
+    this.loadGeneration += 1;
+    AppRuntime.current?.unsubscribe(this.refreshListener);
+    AppRuntime.current?.uiMemory.unregister(this.memoryListener);
+  }
+
+  aboutToBeDeleted(): void {
+    this.visible = false;
+    this.saveProjectState();
+    this.cancelTimers();
+    this.loadGeneration += 1;
+    AppRuntime.current?.unsubscribe(this.refreshListener);
+    AppRuntime.current?.uiMemory.unregister(this.memoryListener);
+  }
+
+  private cancelRestoreTimer(): void {
+    if (this.restoreTimer >= 0) {
+      clearTimeout(this.restoreTimer);
+      this.restoreTimer = -1;
+    }
+  }
+
+  private cancelTimers(): void {
     if (this.searchTimer >= 0) {
       clearTimeout(this.searchTimer);
       this.searchTimer = -1;
     }
-    this.loadGeneration += 1;
+    this.cancelRestoreTimer();
   }
 
-  aboutToBeDeleted(): void {
-    AppRuntime.current?.unsubscribe(this.refreshListener);
+  private saveProjectState(): void {
+    const runtime = AppRuntime.current;
+    if (runtime === null) {
+      return;
+    }
+    runtime.screenState.saveProject(this.lifecycle, {
+      searchText: this.searchText,
+      firstVisibleIndex: this.savedFirstVisibleIndex,
+    });
+  }
+
+  private scheduleRestore(generation: number): void {
+    if (!this.restorePending || this.projectCount === 0) {
+      return;
+    }
+    this.cancelRestoreTimer();
+    this.restoreTimer = setTimeout((): void => {
+      this.restoreTimer = -1;
+      if (!this.visible || generation !== this.loadGeneration || !this.restorePending || this.projectCount === 0) {
+        return;
+      }
+      const index = clampFirstVisibleIndex(this.savedFirstVisibleIndex, this.projectCount);
+      this.savedFirstVisibleIndex = index;
+      this.saveProjectState();
+      this.projectScroller.scrollToIndex(index, false, ScrollAlign.START);
+      this.restorePending = false;
+    }, 0);
   }
 
   private async load(): Promise<void> {
@@ -55,15 +121,17 @@ export struct ProjectListView {
     this.loading = true;
     try {
       const projects = await AppRuntime.require().database.listProjectSummaries(this.lifecycle, this.searchText);
-      if (generation !== this.loadGeneration) return;
-      this.projects = projects;
+      if (!this.visible || generation !== this.loadGeneration) return;
+      this.projectSource.replace(projects);
+      this.projectCount = projects.length;
       this.message = '';
+      this.scheduleRestore(generation);
     } catch (_) {
-      if (generation === this.loadGeneration) {
+      if (this.visible && generation === this.loadGeneration) {
         this.message = tr('项目加载失败，请稍后重试', 'Projects could not be loaded. Try again.');
       }
     } finally {
-      if (generation === this.loadGeneration) {
+      if (this.visible && generation === this.loadGeneration) {
         this.loading = false;
       }
     }
@@ -71,6 +139,9 @@ export struct ProjectListView {
 
   private scheduleSearch(): void {
     if (this.searchTimer >= 0) clearTimeout(this.searchTimer);
+    this.savedFirstVisibleIndex = 0;
+    this.restorePending = true;
+    this.saveProjectState();
     this.searchTimer = setTimeout((): void => {
       this.searchTimer = -1;
       this.load();
@@ -87,10 +158,17 @@ export struct ProjectListView {
     this.pathStack.pushPathByName(Routes.PROJECT_EDITOR, null);
   }
 
-  private projectCardKey(item: ProjectSummary): string {
-    return `${item.project.id}\u001F${item.project.updatedAt}\u001F${item.captureCount}` +
-      `\u001F${item.readyCount}\u001F${item.pendingCount}\u001F${item.latestCaptureAt}` +
-      `\u001F${item.recentRenderedPaths.join('\u001F')}`;
+  private switchLifecycle(value: ProjectLifecycleStatus): void {
+    if (value === this.lifecycle) {
+      return;
+    }
+    this.saveProjectState();
+    this.lifecycle = value;
+    const restored = AppRuntime.require().screenState.project(value);
+    this.searchText = restored.searchText;
+    this.savedFirstVisibleIndex = restored.firstVisibleIndex;
+    this.restorePending = true;
+    this.load();
   }
 
   @Builder
@@ -104,78 +182,8 @@ export struct ProjectListView {
       .backgroundColor(this.lifecycle === value ? UiTokens.PRIMARY_CONTAINER : Color.Transparent)
       .borderRadius(19)
       .onClick((): void => {
-        this.lifecycle = value;
-        this.load();
+        this.switchLifecycle(value);
       })
-  }
-
-  @Builder
-  private projectCard(item: ProjectSummary) {
-    Column({ space: 12 }) {
-      Row({ space: 12 }) {
-        Column({ space: 5 }) {
-          Row({ space: 7 }) {
-            Text(item.project.isPinned ? '◆' : '▦')
-              .fontSize(18)
-              .fontColor(UiTokens.PRIMARY)
-            Text(item.project.name)
-              .fontSize(19)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(UiTokens.TEXT)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-            Text(lifecycleLabel(item.project.lifecycleStatus))
-              .fontSize(12)
-              .fontColor(UiTokens.PRIMARY)
-              .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-              .backgroundColor(UiTokens.PRIMARY_CONTAINER)
-              .borderRadius(12)
-          }
-          .width('100%')
-          if (item.project.description.length > 0) {
-            Text(item.project.description)
-              .fontSize(13)
-              .fontColor(UiTokens.TEXT_SECONDARY)
-              .maxLines(2)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-          }
-          Text(AppTextForProject.summary(item.captureCount, item.pendingCount, item.latestCaptureAt))
-            .fontSize(12)
-            .fontColor(UiTokens.TEXT_SECONDARY)
-            .width('100%')
-        }
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Start)
-        Text('›')
-          .fontSize(28)
-          .fontColor(UiTokens.TEXT_SECONDARY)
-      }
-      .width('100%')
-      if (item.recentRenderedPaths.length > 0) {
-        Row({ space: 7 }) {
-          ForEach(item.recentRenderedPaths, (path: string) => {
-            Image(imageUri(path))
-              .width(62)
-              .height(62)
-              .sourceSize({ width: 124, height: 124 })
-              .objectFit(ImageFit.Cover)
-              .borderRadius(14)
-          }, (path: string) => path)
-          Blank()
-        }
-        .width('100%')
-      }
-    }
-    .width('100%')
-    .padding(17)
-    .backgroundColor(UiTokens.GLASS)
-    .backdropBlur(18)
-    .borderRadius(UiTokens.CARD_RADIUS)
-    .border({ width: 1, color: '#DDEAE2' })
-    .shadow({ radius: 14, color: '#16000000', offsetY: 5 })
-    .onClick((): void => this.openProject(item))
   }
 
   build() {
@@ -205,12 +213,24 @@ export struct ProjectListView {
       }
       .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 8 })
       .width('100%')
-      if (this.loading && this.projects.length === 0) {
+      if (this.message.length > 0 && this.projectCount > 0) {
+        Column() {
+          InlineErrorPanel({ message: this.message, retryLabel: tr('重试', 'Retry'),
+            onRetry: (): void => { this.load(); } })
+        }
+        .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 6 })
+        .width('100%')
+      }
+      if (this.loading && this.projectCount === 0) {
         ListSkeleton({ rows: 3 })
-      } else if (this.message.length > 0) {
-          EmptyPanel({ icon: '!', title: tr('无法读取项目', 'Unable to load projects'), message: this.message,
-            actionLabel: tr('重试', 'Retry'), onAction: (): void => { this.load(); } })
-      } else if (!this.loading && this.projects.length === 0) {
+      } else if (this.message.length > 0 && this.projectCount === 0) {
+        Column() {
+          InlineErrorPanel({ message: this.message, retryLabel: tr('重试', 'Retry'),
+            onRetry: (): void => { this.load(); } })
+        }
+        .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12 })
+        .width('100%')
+      } else if (!this.loading && this.projectCount === 0) {
         EmptyPanel({ icon: '▦',
             title: this.searchText.length > 0 ? tr('没有匹配的项目', 'No matching projects') :
               tr('还没有项目', 'No projects yet'),
@@ -221,15 +241,25 @@ export struct ProjectListView {
             actionLabel: this.lifecycle === ProjectLifecycleStatus.ACTIVE ? tr('创建项目', 'Create project') : '',
           onAction: (): void => this.createProject() })
       } else {
-        List({ space: 12 }) {
-          ForEach(this.projects, (item: ProjectSummary) => {
-            ListItem() { this.projectCard(item) }
-          }, (item: ProjectSummary) => this.projectCardKey(item))
+        List({ space: 12, scroller: this.projectScroller }) {
+          LazyForEach(this.projectSource, (item: ProjectSummary) => {
+            ListItem() {
+              ProjectCard({ summary: item, onOpen: (): void => this.openProject(item) })
+            }
+          }, (item: ProjectSummary): string => item.project.id)
         }
         .layoutWeight(1)
         .width('100%')
         .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6, bottom: 112 })
+        .cachedCount(4)
         .edgeEffect(EdgeEffect.Spring)
+        .onScrollIndex((start: number, _end: number): void => {
+          if (this.restorePending) {
+            return;
+          }
+          this.savedFirstVisibleIndex = Math.max(0, start);
+          this.saveProjectState();
+        })
       }
     }
     .width('100%')
@@ -354,12 +384,10 @@ export struct ProjectEditorScreen {
 export struct ProjectDetailScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @State private project: ProjectRecord | null = null;
-  @State private captures: CaptureRecord[] = [];
-  @State private loading: boolean = true;
+  @State private projectLoading: boolean = true;
+  @State private controllerRevision: number = 0;
   @State private confirmDelete: boolean = false;
   @State private message: string = '';
-  @State private cursor: CapturePageCursor | null = null;
-  @State private loadingMore: boolean = false;
   @State private selectionMode: boolean = false;
   @State private selectedIds: string[] = [];
   @State private allSelected: boolean = false;
@@ -370,73 +398,195 @@ export struct ProjectDetailScreen {
   @State private yearText: string = '';
   @State private monthText: string = '';
   @State private dayText: string = '';
+  private readonly controller: CapturePagedController = new CapturePagedController(new RuntimeCapturePageLoader(),
+    (): void => { this.controllerRevision += 1; });
+  private readonly detailScroller: Scroller = new Scroller();
   private searchTimer: number = -1;
-  private loadGeneration: number = 0;
-  private readonly refreshListener: () => void = (): void => { this.load(true); };
+  private restoreTimer: number = -1;
+  private projectGeneration: number = 0;
+  private contentGeneration: number = 0;
+  private savedFirstVisibleIndex: number = 0;
+  private restorePending: boolean = true;
+  private visible: boolean = false;
+  private projectId: string = '';
+  private readonly refreshListener: () => void = (): void => { this.refreshContent(); };
+  private readonly memoryListener: (level: number) => void = (_level: number): void => {
+    this.cancelRestoreTimer();
+    this.restorePending = true;
+  };
 
   aboutToAppear(): void {
-    AppRuntime.require().subscribe(this.refreshListener);
-    this.load(true);
+    const runtime = AppRuntime.require();
+    this.visible = true;
+    this.projectId = runtime.selectedProjectId;
+    const restored = runtime.screenState.projectDetail(this.projectId);
+    this.searchText = restored.filter.searchText;
+    this.yearText = restored.filter.year > 0 ? restored.filter.year.toString() : '';
+    this.monthText = restored.filter.month > 0 ? restored.filter.month.toString() : '';
+    this.dayText = restored.filter.day > 0 ? restored.filter.day.toString() : '';
+    this.savedFirstVisibleIndex = restored.firstVisibleIndex;
+    this.restorePending = true;
+    runtime.subscribe(this.refreshListener);
+    runtime.uiMemory.register(this.memoryListener);
+    this.refreshContent();
   }
 
   aboutToDisappear(): void {
-    if (this.searchTimer >= 0) {
-      clearTimeout(this.searchTimer);
-      this.searchTimer = -1;
-    }
-    this.loadGeneration += 1;
+    this.visible = false;
+    this.saveDetailState();
+    this.cancelTimers();
+    this.projectGeneration += 1;
+    this.contentGeneration += 1;
+    this.controller.invalidate();
+    AppRuntime.current?.unsubscribe(this.refreshListener);
+    AppRuntime.current?.uiMemory.unregister(this.memoryListener);
   }
 
   aboutToBeDeleted(): void {
+    this.visible = false;
+    this.saveDetailState();
+    this.cancelTimers();
+    this.projectGeneration += 1;
+    this.contentGeneration += 1;
+    this.controller.invalidate();
     AppRuntime.current?.unsubscribe(this.refreshListener);
+    AppRuntime.current?.uiMemory.unregister(this.memoryListener);
   }
 
   private currentFilter(): CaptureFilter {
-    return { projectId: AppRuntime.require().selectedProjectId,
+    return { projectId: this.projectId,
       year: Number.parseInt(this.yearText) || 0,
       month: Number.parseInt(this.monthText) || 0,
       day: Number.parseInt(this.dayText) || 0,
       searchText: this.searchText };
   }
 
+  private captureCount(): number {
+    return this.controllerRevision >= 0 ? this.controller.data.totalCount() : 0;
+  }
+
+  private firstCaptureDate(): string {
+    if (this.captureCount() === 0) {
+      return '';
+    }
+    return formatDateTime(this.controller.data.getData(0).capturedAt).substring(0, 10);
+  }
+
+  private detailItemCount(): number {
+    let count = 5;
+    if (this.confirmDelete) count += 1;
+    if (this.message.length > 0) count += 1;
+    if (this.filterOpen) count += 1;
+    const captures = this.captureCount();
+    count += captures > 0 ? captures : 1;
+    if (captures > 0 && (this.controller.loadingInitial || this.controller.loadingMore)) count += 1;
+    if (captures > 0 && this.controller.failed) count += 1;
+    return count;
+  }
+
+  private cancelRestoreTimer(): void {
+    if (this.restoreTimer >= 0) {
+      clearTimeout(this.restoreTimer);
+      this.restoreTimer = -1;
+    }
+  }
+
+  private cancelTimers(): void {
+    if (this.searchTimer >= 0) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = -1;
+    }
+    this.cancelRestoreTimer();
+  }
+
+  private saveDetailState(): void {
+    const runtime = AppRuntime.current;
+    if (runtime === null || this.projectId.length === 0) {
+      return;
+    }
+    runtime.screenState.saveProjectDetail(this.projectId, {
+      filter: this.currentFilter(),
+      firstVisibleIndex: this.savedFirstVisibleIndex,
+    });
+  }
+
+  private markFilterChanged(): void {
+    this.savedFirstVisibleIndex = 0;
+    this.restorePending = true;
+    this.saveDetailState();
+  }
+
   private scheduleSearch(): void {
     if (this.searchTimer >= 0) clearTimeout(this.searchTimer);
+    this.markFilterChanged();
     this.searchTimer = setTimeout((): void => {
       this.searchTimer = -1;
-      this.load(true);
+      this.resetCaptures();
     }, 250);
   }
 
-  private async load(reset: boolean): Promise<void> {
-    const runtime = AppRuntime.require();
-    if (reset) {
-      this.loading = true;
-      this.cursor = null;
-    } else if (this.cursor === null || this.loadingMore) {
-      return;
-    } else {
-      this.loadingMore = true;
+  private refreshContent(): void {
+    this.loadProject();
+    this.resetCaptures();
+  }
+
+  private async loadProject(): Promise<void> {
+    const generation = ++this.projectGeneration;
+    if (this.project === null) {
+      this.projectLoading = true;
     }
-    const generation = ++this.loadGeneration;
     try {
-      if (reset) {
-        this.project = await runtime.database.projectById(runtime.selectedProjectId);
+      const project = await AppRuntime.require().database.projectById(this.projectId);
+      if (!this.visible || generation !== this.projectGeneration) {
+        return;
       }
-      const page = await runtime.database.listCaptures(this.currentFilter(), reset ? null : this.cursor, 50);
-      if (generation !== this.loadGeneration) return;
-      this.captures = reset ? page.rows : this.captures.concat(page.rows);
-      this.cursor = page.nextCursor;
-      this.message = '';
+      this.project = project;
+      if (project !== null && !this.controller.loadingInitial && !this.controller.failed) {
+        this.scheduleDetailRestore(this.contentGeneration);
+      }
     } catch (_) {
-      if (generation === this.loadGeneration) {
-        this.message = tr('项目加载失败，请返回后重试', 'The project could not be loaded. Go back and try again.');
-      }
     } finally {
-      if (generation === this.loadGeneration) {
-        this.loading = false;
-        this.loadingMore = false;
+      if (this.visible && generation === this.projectGeneration) {
+        this.projectLoading = false;
       }
     }
+  }
+
+  private async resetCaptures(): Promise<void> {
+    const generation = ++this.contentGeneration;
+    await this.controller.reset(this.currentFilter());
+    if (!this.visible || generation !== this.contentGeneration || this.controller.failed || this.project === null) {
+      return;
+    }
+    this.scheduleDetailRestore(generation);
+  }
+
+  private async retryCaptures(): Promise<void> {
+    const generation = ++this.contentGeneration;
+    await this.controller.retry();
+    if (!this.visible || generation !== this.contentGeneration || this.controller.failed || this.project === null) {
+      return;
+    }
+    this.scheduleDetailRestore(generation);
+  }
+
+  private scheduleDetailRestore(generation: number): void {
+    if (!this.restorePending || this.captureCount() === 0) {
+      return;
+    }
+    this.cancelRestoreTimer();
+    this.restoreTimer = setTimeout((): void => {
+      this.restoreTimer = -1;
+      if (!this.visible || generation !== this.contentGeneration || !this.restorePending ||
+        this.captureCount() === 0) {
+        return;
+      }
+      const index = clampFirstVisibleIndex(this.savedFirstVisibleIndex, this.detailItemCount());
+      this.savedFirstVisibleIndex = index;
+      this.saveDetailState();
+      this.detailScroller.scrollToIndex(index, false, ScrollAlign.START);
+      this.restorePending = false;
+    }, 0);
   }
 
   private openCapture(capture: CaptureRecord): void {
@@ -519,10 +669,10 @@ export struct ProjectDetailScreen {
         } catch (_) {
         }
       }
-    this.message = succeeded === ids.length ? success :
+      this.message = succeeded === ids.length ? success :
       tr(`已完成 ${succeeded}/${ids.length} 项`, `Completed ${succeeded}/${ids.length}`);
       this.setSelectionMode(false);
-      await this.load(true);
+      await this.resetCaptures();
     } finally {
       this.batchBusy = false;
     }
@@ -575,23 +725,25 @@ export struct ProjectDetailScreen {
       Row({ space: 8 }) {
         TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1).height(42)
           .type(InputType.Number)
-          .onChange((value: string): void => { this.yearText = value; })
+          .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
         TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1).height(42)
           .type(InputType.Number)
-          .onChange((value: string): void => { this.monthText = value; })
+          .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
         TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1).height(42)
           .type(InputType.Number)
-          .onChange((value: string): void => { this.dayText = value; })
+          .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
       }.width('100%')
       Row({ space: 8 }) {
           Button(tr('清除日期', 'Clear date')).layoutWeight(1).height(38)
             .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
           .onClick((): void => {
-            this.yearText = ''; this.monthText = ''; this.dayText = ''; this.load(true);
+            this.yearText = ''; this.monthText = ''; this.dayText = '';
+            this.markFilterChanged();
+            this.resetCaptures();
           })
           Button(tr('应用筛选', 'Apply filters')).layoutWeight(1).height(38)
             .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
-          .onClick((): void => { this.filterOpen = false; this.load(true); })
+          .onClick((): void => { this.filterOpen = false; this.markFilterChanged(); this.resetCaptures(); })
       }.width('100%')
     }
     .padding(14).margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
@@ -605,7 +757,8 @@ export struct ProjectDetailScreen {
     try {
       await AppRuntime.require().database.setProjectLifecycle(this.project.id, target, true);
       AppRuntime.require().notifyDataChanged();
-      await this.load(true);
+      await this.loadProject();
+      await this.resetCaptures();
     } catch (_) {
       this.message = tr('有照片仍在处理中，暂时不能更改项目状态',
         'Project status cannot change while photos are processing');
@@ -618,7 +771,8 @@ export struct ProjectDetailScreen {
     }
     await AppRuntime.require().database.setProjectPinned(this.project.id, !this.project.isPinned);
     AppRuntime.require().notifyDataChanged();
-    await this.load(true);
+    await this.loadProject();
+    await this.resetCaptures();
   }
 
   private async deleteProject(): Promise<void> {
@@ -678,7 +832,7 @@ export struct ProjectDetailScreen {
             onAction: (): void => { if (this.selectionMode) this.setSelectionMode(false);
               else this.pathStack.pushPathByName(Routes.PROJECT_EDITOR, null); } })
           if (this.project !== null) {
-            List({ space: 10 }) {
+            List({ space: 10, scroller: this.detailScroller }) {
               ListItem() { this.projectSummary() }
               ListItem() { SectionHeader({ title: tr('项目操作', 'Project actions') }) }
               ListItem() {
@@ -741,8 +895,8 @@ export struct ProjectDetailScreen {
                       .backgroundColor(UiTokens.ACCENT_SURFACE)
                       .onClick((): void => { this.filterOpen = !this.filterOpen; })
                     Blank()
-                    if (this.captures.length > 0) {
-                      Text(formatDateTime(this.captures[0].capturedAt).substring(0, 10))
+                    if (this.captureCount() > 0) {
+                      Text(this.firstCaptureDate())
                         .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY)
                     }
                   }.width('100%')
@@ -756,10 +910,10 @@ export struct ProjectDetailScreen {
               ListItem() {
                 Row({ space: 8 }) {
                   Text(tr('拍摄记录', 'Capture records')).fontSize(19).fontWeight(FontWeight.Bold).layoutWeight(1)
-                  Text(tr(`${this.captures.length}${this.cursor !== null ? '+' : ''} 条`,
-                    `${this.captures.length}${this.cursor !== null ? '+' : ''}`))
+                  Text(tr(`${this.captureCount()}${this.controller.hasMore ? '+' : ''} 条`,
+                    `${this.captureCount()}${this.controller.hasMore ? '+' : ''}`))
                     .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY)
-                  if (this.captures.length > 0) {
+                  if (this.captureCount() > 0) {
                     Button(this.selectionMode ? (this.allSelected ? tr('取消全选', 'Deselect all') :
                       tr('全选', 'Select all')) : tr('选择', 'Select'))
                       .height(36).fontSize(12)
@@ -772,9 +926,20 @@ export struct ProjectDetailScreen {
                 .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6 })
                 .width('100%')
               }
-              if (this.loading && this.captures.length === 0) {
+              if (this.controller.loadingInitial && this.captureCount() === 0) {
                 ListItem() { ListSkeleton({ rows: 2 }) }
-              } else if (!this.loading && this.captures.length === 0) {
+              } else if (this.controller.failed && this.captureCount() === 0) {
+                ListItem() {
+                  Column() {
+                    InlineErrorPanel({
+                      message: tr('项目记录加载失败，请重试', 'Project records could not be loaded. Try again.'),
+                      retryLabel: tr('重试', 'Retry'), onRetry: (): void => { this.retryCaptures(); },
+                    })
+                  }
+                  .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
+                  .width('100%')
+                }
+              } else if (!this.controller.loadingInitial && this.captureCount() === 0) {
                 ListItem() {
                   EmptyPanel({ icon: '▣', title: tr('暂无拍摄记录', 'No capture records'),
                     message: this.project!.lifecycleStatus === ProjectLifecycleStatus.ACTIVE ?
@@ -783,24 +948,43 @@ export struct ProjectDetailScreen {
                       tr('该项目当前没有记录。', 'This project has no records.') })
                 }
               } else {
-                ForEach(this.captures, (capture: CaptureRecord) => {
+                LazyForEach(this.controller.data, (capture: CaptureRecord) => {
                   ListItem() {
                     CaptureCard({ capture: capture, selectionMode: this.selectionMode,
                       selected: this.selectedIds.indexOf(capture.id) >= 0,
                       onOpen: (): void => this.openCapture(capture),
                       onToggle: (): void => this.toggleCapture(capture.id) })
                   }
-                }, (capture: CaptureRecord) => captureCardKey(capture))
+                }, (capture: CaptureRecord): string => capture.id)
               }
-              if (this.loadingMore) {
+              if (this.captureCount() > 0 && (this.controller.loadingInitial || this.controller.loadingMore)) {
                 ListItem() { LoadingProgress().width(30).height(30).color(UiTokens.PRIMARY) }
+              }
+              if (this.captureCount() > 0 && this.controller.failed) {
+                ListItem() {
+                  Column() {
+                    InlineErrorPanel({ message: tr('记录加载失败，已保留现有内容',
+                      'Records could not be loaded. Existing records were kept.'),
+                      retryLabel: tr('重试', 'Retry'), onRetry: (): void => { this.retryCaptures(); } })
+                  }
+                  .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
+                  .width('100%')
+                }
               }
             }
             .layoutWeight(1).width('100%')
             .padding({ bottom: this.selectionMode ? 132 : 96 })
+            .cachedCount(4)
             .edgeEffect(EdgeEffect.Spring)
-            .onReachEnd((): void => { this.load(false); })
-          } else if (!this.loading) {
+            .onScrollIndex((start: number, _end: number): void => {
+              if (this.restorePending) {
+                return;
+              }
+              this.savedFirstVisibleIndex = Math.max(0, start);
+              this.saveDetailState();
+            })
+            .onReachEnd((): void => { this.controller.loadNext(); })
+          } else if (!this.projectLoading) {
             EmptyPanel({ icon: '!', title: tr('项目不存在', 'Project not found'),
               message: tr('项目可能已被删除，请返回后重试。', 'The project may have been deleted. Go back and try again.'),
               actionLabel: tr('返回', 'Back'), onAction: (): void => { this.pathStack.pop(); } })
@@ -821,7 +1005,6 @@ export struct ProjectDetailScreen {
       }.width('100%').height('100%')
     }
     .hideTitleBar(true)
-    .onShown((): void => { this.load(true); })
   }
 }
 

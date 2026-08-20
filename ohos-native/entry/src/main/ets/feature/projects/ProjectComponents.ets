@@ -3,6 +3,7 @@ import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { tr } from '../../shared/AppText';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
+import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 
 function emptyProjectSummary(): ProjectSummary {
   return new ProjectSummary(new ProjectRecord({
@@ -10,12 +11,6 @@ function emptyProjectSummary(): ProjectSummary {
     isPinned: false, watermarkPosition: 'bottomLeft', watermarkOpacity: 0.82,
     watermarkAccentColorArgb: 0xFF176B55, watermarkFontScale: 1, createdAt: 0, updatedAt: 0
   }), 0, 0, 0, 0, []);
-}
-
-export function projectCardKey(item: ProjectSummary): string {
-  return `${item.project.id}\u001F${item.project.updatedAt}\u001F${item.captureCount}` +
-    `\u001F${item.readyCount}\u001F${item.pendingCount}\u001F${item.latestCaptureAt}` +
-    `\u001F${item.recentRenderedPaths.join('\u001F')}`;
 }
 
 function projectSummaryText(item: ProjectSummary): string {
@@ -101,20 +96,16 @@ export struct ProjectCard {
           ForEach(projectPreviewItems(this.summary.project.id, this.summary.recentRenderedPaths),
             (preview: ProjectPreviewItem) => {
               Stack() {
-                Row()
+                AppImage({ uri: imageUri(preview.path),
+                  decodeEdge: ImageDecodePolicy.thumbnail(56, this.getUIContext().vp2px(1)) })
                   .width(56)
                   .height(56)
-                  .backgroundColor(UiTokens.IMAGE_PLACEHOLDER)
-                Image(imageUri(preview.path))
-                  .width(56)
-                  .height(56)
-                  .sourceSize({ width: 112, height: 112 })
-                  .objectFit(ImageFit.Cover)
               }
               .width(56)
               .height(56)
               .clip(true)
               .borderRadius(UiTokens.CONTROL_RADIUS)
+              .accessibilityText(tr('项目最近照片', 'Recent project photo'))
             }, (preview: ProjectPreviewItem): string => preview.key)
           Blank()
         }

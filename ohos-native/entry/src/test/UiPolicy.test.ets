@@ -3,7 +3,7 @@ import { CaptureFilter } from '../main/ets/domain/Models';
 import { ProjectLifecycleStatus } from '../main/ets/domain/StateMachine';
 import { ImageDecodePolicy, ImageRequestState } from '../main/ets/shared/AppImage';
 import { MotionPolicy, ReduceMotionQueryPolicy } from '../main/ets/shared/MotionPolicy';
-import { ScreenStateStore } from '../main/ets/shared/ScreenStateStore';
+import { clampFirstVisibleIndex, ScreenStateStore } from '../main/ets/shared/ScreenStateStore';
 import { forwardUiMemoryLevel, UiMemoryBroadcaster, UiMemoryCoordinator } from '../main/ets/shared/UiMemoryCoordinator';
 
 function filter(projectId: string, searchText: string): CaptureFilter {
@@ -147,6 +147,29 @@ export default function uiPolicyTest(): void {
       expect(store.project(ProjectLifecycleStatus.ACTIVE).searchText).assertEqual('project-before');
       expect(store.captures().filter.searchText).assertEqual('before');
       expect(store.projectDetail('project-a').filter.searchText).assertEqual('capture-before');
+    });
+
+    it('forces a restored project detail filter to the current project', 0, () => {
+      const store = new ScreenStateStore();
+      store.saveProjectDetail('project-a', {
+        filter: filter('stale-project', 'restored search'),
+        firstVisibleIndex: 6,
+      });
+
+      const restored = store.projectDetail('project-a');
+
+      expect(restored.filter.projectId).assertEqual('project-a');
+      expect(restored.filter.searchText).assertEqual('restored search');
+      expect(restored.firstVisibleIndex).assertEqual(6);
+    });
+
+    it('clamps restored list positions to a valid integer index', 0, () => {
+      expect(clampFirstVisibleIndex(7, 10)).assertEqual(7);
+      expect(clampFirstVisibleIndex(99, 10)).assertEqual(9);
+      expect(clampFirstVisibleIndex(-2, 10)).assertEqual(0);
+      expect(clampFirstVisibleIndex(3.9, 10)).assertEqual(3);
+      expect(clampFirstVisibleIndex(Number.NaN, 10)).assertEqual(0);
+      expect(clampFirstVisibleIndex(4, 0)).assertEqual(0);
     });
 
     it('keeps at most eight project detail states and refreshes LRU access', 0, () => {
