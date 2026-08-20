@@ -139,6 +139,35 @@ export function validateTemplateField(value: string, maxScalars: number): boolea
     unicodeScalarLength(value) <= maxScalars;
 }
 
+export class CaptureFieldInspection {
+  location: string;
+  work: string;
+  photographer: string;
+  notes: string;
+  locationValid: boolean;
+  workValid: boolean;
+  photographerValid: boolean;
+  notesValid: boolean;
+  valid: boolean;
+
+  constructor(location: string, work: string, photographer: string, notes: string) {
+    this.location = location;
+    this.work = work;
+    this.photographer = photographer;
+    this.notes = notes;
+    this.locationValid = validateTemplateField(location, CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH);
+    this.workValid = validateTemplateField(work, CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH);
+    this.photographerValid = validateTemplateField(photographer, CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH);
+    this.notesValid = notes.indexOf('\u0000') < 0;
+    this.valid = this.locationValid && this.workValid && this.photographerValid && this.notesValid;
+  }
+}
+
+export function inspectCaptureFields(location: string, work: string, photographer: string,
+  notes: string): CaptureFieldInspection {
+  return new CaptureFieldInspection(location.trim(), work.trim(), photographer.trim(), notes.trim());
+}
+
 export function resolveWatermarkLocale(preferredLocale: string, systemLocale: string): string {
   const effective = preferredLocale.trim().length > 0 ? preferredLocale : systemLocale;
   return effective.toLowerCase().startsWith('en') ? 'en' : 'zh';

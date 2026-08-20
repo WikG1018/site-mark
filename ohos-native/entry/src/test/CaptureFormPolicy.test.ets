@@ -4,7 +4,10 @@ import {
   CaptureDraftSnapshot,
   CaptureFormLifecycle,
   CaptureFormMetrics,
+  CaptureUndoCoordinator,
+  SingleFlightRequestCoordinator,
   applyDraftSuggestion,
+  applyCaptureOutcome,
   canEditCapture,
   captureFormCopy,
   filterSuggestions,
@@ -63,6 +66,43 @@ export default function captureFormPolicyTest(): void {
       expect(restored.notes).assertEqual('新备注');
     });
 
+    it('invalidates application undo after any manual required-field edit', 0, () => {
+      const undo = new CaptureUndoCoordinator();
+      undo.arm(new CaptureDraftSnapshot('A', '巡检', '王工', '备注'));
+      expect(undo.available()).assertTrue();
+      undo.requiredFieldEdited();
+      expect(undo.available()).assertFalse();
+      expect(undo.consume(new CaptureDraftSnapshot('B', '复检', '李工', '新备注')) === null).assertTrue();
+    });
+
+    it('preserves every field on camera cancellation and clears only notes after success', 0, () => {
+      const draft = new CaptureDraftSnapshot('A区', '巡检', '王工', '本次备注');
+      const cancelled = applyCaptureOutcome(draft, false);
+      expect(cancelled.location).assertEqual('A区');
+      expect(cancelled.work).assertEqual('巡检');
+      expect(cancelled.photographer).assertEqual('王工');
+      expect(cancelled.notes).assertEqual('本次备注');
+      const captured = applyCaptureOutcome(draft, true);
+      expect(captured.location).assertEqual('A区');
+      expect(captured.work).assertEqual('巡检');
+      expect(captured.photographer).assertEqual('王工');
+      expect(captured.notes).assertEqual('');
+    });
+
+    it('serializes reloads and rejects results from invalidated request generations', 0, () => {
+      const requests = new SingleFlightRequestCoordinator();
+      const first = requests.begin();
+      expect(first > 0).assertTrue();
+      expect(requests.begin()).assertEqual(0);
+      requests.invalidate();
+      expect(requests.accept(first)).assertFalse();
+      const second = requests.begin();
+      expect(second > first).assertTrue();
+      expect(requests.accept(second)).assertTrue();
+      requests.finish(second);
+      expect(requests.begin() > second).assertTrue();
+    });
+
     it('closes transient panels before allowing navigation and rejects stale async writes', 0, () => {
       const lifecycle = new CaptureFormLifecycle();
       const first = lifecycle.activate();
@@ -93,6 +133,8 @@ export default function captureFormPolicyTest(): void {
       expect(CaptureFormMetrics.WORK_MAX_LENGTH).assertEqual(240);
       expect(CaptureFormMetrics.PHOTOGRAPHER_MAX_LENGTH).assertEqual(80);
       expect(CaptureFormMetrics.NOTES_MAX_LENGTH).assertEqual(0);
+      expect(CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT >= 44).assertTrue();
+      expect(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES >= 2).assertTrue();
       expect(captureFormCopy(false).captureBackAccessibility).assertEqual('返回项目详情');
       expect(captureFormCopy(true).editorBackAccessibility).assertEqual('Cancel editing and return to record details');
     });

@@ -2,6 +2,7 @@ import { describe, expect, it } from '@ohos/hypium';
 import {
   captureTemplateNameKey,
   formatPhotoNumber,
+  inspectCaptureFields,
   normalizeCaptureSearchTerms,
   normalizeCaptureTemplateName,
   normalizedProjectNameKey,
@@ -63,6 +64,19 @@ export default function domainRulesTest(): void {
       expect(captureTemplateNameKey('模板A')).assertEqual('模板a');
       expect(normalizeCaptureTemplateName('\u200BA\u200BB\u200B'))
         .assertEqual('\u200BA\u200BB\u200B');
+    });
+
+    it('normalizes capture fields once for camera, database, and restore boundaries', 0, () => {
+      const fields = inspectCaptureFields('  😀  ', '  巡检  ', '  王工  ', '  备注  ');
+      expect(fields.valid).assertTrue();
+      expect(fields.location).assertEqual('😀');
+      expect(fields.work).assertEqual('巡检');
+      expect(fields.photographer).assertEqual('王工');
+      expect(fields.notes).assertEqual('备注');
+      expect(inspectCaptureFields('', '巡检', '王工', '').valid).assertFalse();
+      expect(inspectCaptureFields('A', '巡检', `王\u0000工`, '').valid).assertFalse();
+      expect(inspectCaptureFields('😀'.repeat(161), '巡检', '王工', '').valid).assertFalse();
+      expect(inspectCaptureFields('A', '巡检', '王工', `备\u0000注`).valid).assertFalse();
     });
 
     it('counts Unicode scalars instead of UTF-16 code units', 0, () => {

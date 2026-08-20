@@ -195,6 +195,16 @@ export class ProjectRestoreService {
         throw new Error(tr('备份已损坏、校验不一致或不是有效的 SiteMark 项目备份',
           'The backup is damaged, failed validation, or is not a valid SiteMark project backup'));
       }
+      if (message.includes('restore_capture_fields_invalid:')) {
+        const record = message.substring(message.indexOf(':') + 1);
+        throw new Error(tr(`备份中的记录“${record}”含空白、超长或不支持的字段，请使用新版应用修正后重新备份`,
+          `Record “${record}” in the backup contains blank, overlong, or unsupported fields. Fix it in a current app and back up again.`));
+      }
+      if (message.includes('restore_template_fields_invalid:')) {
+        const template = message.substring(message.indexOf(':') + 1);
+        throw new Error(tr(`备份中的模板“${template}”含空白、超长或不支持的字段，请修正后重新备份`,
+          `Template “${template}” in the backup contains blank, overlong, or unsupported fields. Fix it and back up again.`));
+      }
       throw new Error(message.length > 0 ? message : tr('恢复失败，请重新选择备份',
         'Restore failed. Choose the backup again.'));
     } finally {
