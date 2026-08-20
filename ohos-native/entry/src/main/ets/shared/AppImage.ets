@@ -147,7 +147,7 @@ export struct AppImage {
         .width('100%')
         .height('100%')
         .opacity(this.request.loaded ? 1 : 0)
-        .animation({ duration: MotionPolicy.duration(90), curve: Curve.EaseOut })
+        .animation({ duration: MotionPolicy.duration(this.transparentPlaceholder ? 0 : 90), curve: Curve.EaseOut })
       }
       if (this.request.failed && !this.transparentPlaceholder) {
         Button('↻')

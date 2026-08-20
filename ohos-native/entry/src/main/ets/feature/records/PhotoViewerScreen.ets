@@ -8,7 +8,8 @@ import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { MotionPolicy } from '../../shared/MotionPolicy';
 import { UiTokens } from '../../shared/UiTokens';
 import { PhotoViewerWindowController, PhotoViewerWindowLoader } from './PhotoViewerWindow';
-import { PhotoViewerGestureState, RecordNavigationSeedStore, ViewerNodePolicy,
+import { PhotoViewerGestureState, RecordNavigationSeedStore, ViewerFullImageCoordinator,
+  ViewerFullImageRequest, ViewerNavigationSeedCoordinator, ViewerNodePolicy,
   ViewerRenderedVersionTracker } from './RecordUiCoordinator';
 
 class RuntimePhotoViewerWindowLoader implements PhotoViewerWindowLoader {
@@ -22,14 +23,15 @@ export struct PhotoViewerScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @State private viewerRevision: number = 0;
   @State private gestureRevision: number = 0;
+  @State private fullImageRevision: number = 0;
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
   private readonly gestureState: PhotoViewerGestureState = new PhotoViewerGestureState();
   private readonly renderedVersion: ViewerRenderedVersionTracker = new ViewerRenderedVersionTracker();
+  private readonly navigationSeed: ViewerNavigationSeedCoordinator = new ViewerNavigationSeedCoordinator();
+  private readonly fullImage: ViewerFullImageCoordinator = new ViewerFullImageCoordinator();
   private readonly controller: PhotoViewerWindowController = new PhotoViewerWindowController(
-    new RuntimePhotoViewerWindowLoader(), (): void => { this.viewerRevision += 1; });
+    new RuntimePhotoViewerWindowLoader(), (): void => { this.controllerChanged(); });
   private readonly refreshListener: () => void = (): void => { this.reloadCurrent(); };
-  private seededCaptureId: string = '';
-  private seededUri: string = '';
   private readonly memoryListener: (level: number) => void = (_level: number): void => {
     this.controller.shrinkToCurrent();
   };
@@ -67,19 +69,18 @@ export struct PhotoViewerScreen {
     if (seed === null) {
       return;
     }
-    this.seededCaptureId = seed.capture.id;
-    this.seededUri = seed.uri;
+    this.navigationSeed.seed(seed.capture.id, seed.uri);
     this.controller.seed(seed.capture);
   }
 
-  private reloadCurrent(): void {
+  private async reloadCurrent(): Promise<void> {
     if (!this.pageState.isActive()) {
       return;
     }
     const captureId = this.controller.currentCaptureId().length > 0 ?
       this.controller.currentCaptureId() : AppRuntime.require().selectedCaptureId;
     if (captureId.length > 0) {
-      this.controller.loadAround(captureId);
+      await this.controller.loadAround(captureId);
     }
   }
 
@@ -94,15 +95,59 @@ export struct PhotoViewerScreen {
   }
 
   private photoUri(capture: CaptureRecord): string {
-    if (capture.id === this.seededCaptureId && this.seededUri.length > 0) {
-      return this.seededUri;
-    }
     const path = capture.renderedPath.length > 0 ? capture.renderedPath : capture.originalPath;
-    return path.length > 0 ? imageUri(path) : '';
+    const currentUri = path.length > 0 ? imageUri(path) : '';
+    return this.navigationSeed.uriFor(capture.id, currentUri);
   }
 
   private photoRequestVersion(capture: CaptureRecord): number {
     return this.renderedVersion.versionFor(capture.id, capture.status === 'ready', capture.processingAttempts);
+  }
+
+  private controllerChanged(): void {
+    const captureId = this.controller.currentCaptureId();
+    this.navigationSeed.releaseAfterTrustedWindow(captureId, this.controller.hasTrustedWindow(captureId));
+    this.prepareCurrentFullImage();
+    this.viewerRevision += 1;
+  }
+
+  private prepareCurrentFullImage(): void {
+    if (this.controller.currentIndex < 0 || this.controller.currentIndex >= this.controller.rows.length) {
+      return;
+    }
+    const capture = this.controller.rows[this.controller.currentIndex];
+    this.fullImage.prepare(capture.id, this.photoUri(capture), this.photoRequestVersion(capture));
+  }
+
+  private fullRequest(capture: CaptureRecord): ViewerFullImageRequest {
+    const uri = this.photoUri(capture);
+    const request = this.fullImage.current();
+    if (request !== null && request.captureId === capture.id && request.uri === uri) {
+      return request;
+    }
+    return this.fullImage.prepare(capture.id, uri, this.photoRequestVersion(capture));
+  }
+
+  private fullLoadedCallback(generation: number, captureId: string, uri: string): () => void {
+    return (): void => {
+      if (this.fullImage.complete(generation, captureId, uri)) {
+        this.fullImageRevision += 1;
+      }
+    };
+  }
+
+  private fullFailedCallback(generation: number, captureId: string, uri: string): () => void {
+    return (): void => {
+      if (this.fullImage.fail(generation, captureId, uri)) {
+        this.fullImageRevision += 1;
+      }
+    };
+  }
+
+  private retryFullImage(): void {
+    if (this.fullImage.retry() !== null) {
+      this.fullImageRevision += 1;
+    }
   }
 
   private beginPinch(): void {
@@ -137,9 +182,26 @@ export struct PhotoViewerScreen {
       AppImage({ uri: this.photoUri(capture), decodeEdge: ViewerNodePolicy.decodeEdge(false),
         fit: ImageFit.Contain })
         .width('100%').height('100%')
-      AppImage({ uri: this.photoUri(capture), requestVersion: this.photoRequestVersion(capture),
-        decodeEdge: ViewerNodePolicy.decodeEdge(true), fit: ImageFit.Contain, transparentPlaceholder: true })
+      AppImage({ uri: this.fullRequest(capture).uri,
+        requestVersion: this.fullImageRevision >= 0 ? this.fullRequest(capture).requestVersion : 0,
+        decodeEdge: ViewerNodePolicy.decodeEdge(true), fit: ImageFit.Contain, transparentPlaceholder: true,
+        onLoaded: this.fullLoadedCallback(this.fullRequest(capture).generation, capture.id,
+          this.fullRequest(capture).uri),
+        onFailed: this.fullFailedCallback(this.fullRequest(capture).generation, capture.id,
+          this.fullRequest(capture).uri) })
         .width('100%').height('100%')
+      if (this.fullImageRevision >= 0 && this.fullImage.isFailedFor(capture.id, this.photoUri(capture))) {
+        Button(`↻  ${tr('重试高清图', 'Retry full image')}`)
+          .height(UiTokens.TOUCH_TARGET)
+          .fontSize(13)
+          .fontColor(Color.White)
+          .backgroundColor('#66000000')
+          .borderRadius(UiTokens.CONTROL_RADIUS)
+          .margin({ right: 16, top: 18 })
+          .align(Alignment.TopEnd)
+          .accessibilityText(tr('重新加载当前高清照片', 'Reload the current full-resolution photo'))
+          .onClick((): void => { this.retryFullImage(); })
+      }
     }
     .width('100%')
     .height('100%')

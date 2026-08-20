@@ -238,7 +238,7 @@ export class RecordSelectionCoordinator {
 
 export class RecordBatchLayoutPolicy {
   static barHeight(): number {
-    return 92;
+    return 104;
   }
 
   static bottomMargin(): number {
@@ -247,6 +247,14 @@ export class RecordBatchLayoutPolicy {
 
   static contentGap(): number {
     return 16;
+  }
+
+  static actionHeight(): number {
+    return 68;
+  }
+
+  static actionLabelMaxLines(): number {
+    return 2;
   }
 
   static listBottomPadding(selectionMode: boolean): number {
@@ -268,7 +276,12 @@ export class DetailMediaSwapCoordinator {
   failed: boolean = false;
   private generation: number = 0;
   private displayedVersion: number = 0;
-  private awaitingDisplayedReady: boolean = false;
+  private frontSlotId: string = 'a';
+  private pendingSlotId: string = '';
+  private slotAUri: string = '';
+  private slotBUri: string = '';
+  private slotAVersion: number = 0;
+  private slotBVersion: number = 0;
 
   initialize(uri: string): void {
     this.generation += 1;
@@ -276,28 +289,38 @@ export class DetailMediaSwapCoordinator {
     this.displayedVersion = this.generation;
     this.pendingUri = '';
     this.failed = false;
-    this.awaitingDisplayedReady = false;
+    this.frontSlotId = 'a';
+    this.pendingSlotId = '';
+    this.slotAUri = uri;
+    this.slotAVersion = this.generation;
+    this.slotBUri = '';
+    this.slotBVersion = 0;
   }
 
   begin(uri: string, forceReload: boolean = false): number {
     if (uri === this.displayedUri && !forceReload) {
       this.generation += 1;
-      this.pendingUri = '';
-      this.failed = false;
-      this.awaitingDisplayedReady = false;
+      this.clearPending();
       return this.generation;
     }
     this.generation += 1;
     if (this.displayedUri.length === 0) {
       this.displayedUri = uri;
+      this.displayedVersion = this.generation;
       this.pendingUri = '';
-      this.awaitingDisplayedReady = false;
       this.failed = false;
+      this.frontSlotId = 'a';
+      this.pendingSlotId = '';
+      this.slotAUri = uri;
+      this.slotAVersion = this.generation;
+      this.slotBUri = '';
+      this.slotBVersion = 0;
       return this.generation;
     }
+    this.pendingSlotId = this.frontSlotId === 'a' ? 'b' : 'a';
+    this.setSlot(this.pendingSlotId, uri, this.generation);
     this.pendingUri = uri;
     this.failed = false;
-    this.awaitingDisplayedReady = false;
     return this.generation;
   }
 
@@ -309,14 +332,38 @@ export class DetailMediaSwapCoordinator {
     return this.displayedVersion;
   }
 
+  frontSlot(): string {
+    return this.frontSlotId;
+  }
+
+  pendingSlot(): string {
+    return this.pendingSlotId;
+  }
+
+  slotUri(slot: string): string {
+    return slot === 'a' ? this.slotAUri : this.slotBUri;
+  }
+
+  slotVersion(slot: string): number {
+    return slot === 'a' ? this.slotAVersion : this.slotBVersion;
+  }
+
+  isPendingSlot(slot: string): boolean {
+    return this.pendingSlotId === slot;
+  }
+
   completePending(generation: number, uri: string): boolean {
     if (!this.acceptsPending(generation, uri)) {
       return false;
     }
+    const previousFront = this.frontSlotId;
+    this.frontSlotId = this.pendingSlotId;
     this.displayedUri = uri;
-    this.displayedVersion = generation;
+    this.displayedVersion = this.slotVersion(this.frontSlotId);
+    this.pendingSlotId = '';
+    this.pendingUri = '';
     this.failed = false;
-    this.awaitingDisplayedReady = true;
+    this.setSlot(previousFront, '', 0);
     return true;
   }
 
@@ -325,16 +372,6 @@ export class DetailMediaSwapCoordinator {
       return false;
     }
     this.failed = true;
-    this.awaitingDisplayedReady = false;
-    return true;
-  }
-
-  completeDisplayed(uri: string): boolean {
-    if (!this.awaitingDisplayedReady || uri !== this.displayedUri || uri !== this.pendingUri) {
-      return false;
-    }
-    this.pendingUri = '';
-    this.awaitingDisplayedReady = false;
     return true;
   }
 
@@ -343,20 +380,38 @@ export class DetailMediaSwapCoordinator {
       return this.generation;
     }
     this.generation += 1;
+    this.setSlot(this.pendingSlotId, this.pendingUri, this.generation);
     this.failed = false;
-    this.awaitingDisplayedReady = false;
     return this.generation;
   }
 
   invalidate(): void {
     this.generation += 1;
-    this.pendingUri = '';
-    this.failed = false;
-    this.awaitingDisplayedReady = false;
+    this.clearPending();
   }
 
   private acceptsPending(generation: number, uri: string): boolean {
-    return generation === this.generation && uri.length > 0 && uri === this.pendingUri;
+    return generation === this.generation && this.pendingSlotId.length > 0 && uri.length > 0 &&
+      uri === this.pendingUri && this.slotVersion(this.pendingSlotId) === generation;
+  }
+
+  private setSlot(slot: string, uri: string, version: number): void {
+    if (slot === 'a') {
+      this.slotAUri = uri;
+      this.slotAVersion = version;
+    } else {
+      this.slotBUri = uri;
+      this.slotBVersion = version;
+    }
+  }
+
+  private clearPending(): void {
+    if (this.pendingSlotId.length > 0) {
+      this.setSlot(this.pendingSlotId, '', 0);
+    }
+    this.pendingSlotId = '';
+    this.pendingUri = '';
+    this.failed = false;
   }
 }
 
@@ -417,6 +472,113 @@ export class ViewerRenderedVersionTracker {
       this.version = normalized;
     }
     return this.version;
+  }
+}
+
+export class ViewerNavigationSeedCoordinator {
+  private captureId: string = '';
+  private uri: string = '';
+
+  seed(captureId: string, uri: string): void {
+    this.captureId = captureId;
+    this.uri = uri;
+  }
+
+  uriFor(captureId: string, currentUri: string): string {
+    return this.captureId === captureId && this.uri.length > 0 ? this.uri : currentUri;
+  }
+
+  releaseAfterTrustedWindow(captureId: string, trusted: boolean): boolean {
+    if (!trusted || this.captureId !== captureId) {
+      return false;
+    }
+    this.captureId = '';
+    this.uri = '';
+    return true;
+  }
+}
+
+export class ViewerFullImageRequest {
+  readonly captureId: string;
+  readonly uri: string;
+  readonly contentVersion: number;
+  readonly generation: number;
+  readonly requestVersion: number;
+
+  constructor(captureId: string, uri: string, contentVersion: number, generation: number,
+    requestVersion: number) {
+    this.captureId = captureId;
+    this.uri = uri;
+    this.contentVersion = contentVersion;
+    this.generation = generation;
+    this.requestVersion = requestVersion;
+  }
+}
+
+export class ViewerFullImageCoordinator {
+  failed: boolean = false;
+  loaded: boolean = false;
+  private generation: number = 0;
+  private requestVersion: number = 0;
+  private request: ViewerFullImageRequest | null = null;
+
+  prepare(captureId: string, uri: string, contentVersion: number): ViewerFullImageRequest {
+    if (this.request !== null && this.request.captureId === captureId && this.request.uri === uri &&
+      this.request.contentVersion === contentVersion) {
+      return this.request;
+    }
+    this.generation += 1;
+    this.requestVersion += 1;
+    this.request = new ViewerFullImageRequest(captureId, uri, contentVersion, this.generation,
+      this.requestVersion);
+    this.failed = false;
+    this.loaded = false;
+    return this.request;
+  }
+
+  current(): ViewerFullImageRequest | null {
+    return this.request;
+  }
+
+  fail(generation: number, captureId: string, uri: string): boolean {
+    if (!this.accepts(generation, captureId, uri)) {
+      return false;
+    }
+    this.failed = true;
+    this.loaded = false;
+    return true;
+  }
+
+  complete(generation: number, captureId: string, uri: string): boolean {
+    if (!this.accepts(generation, captureId, uri)) {
+      return false;
+    }
+    this.failed = false;
+    this.loaded = true;
+    return true;
+  }
+
+  retry(): ViewerFullImageRequest | null {
+    if (this.request === null || !this.failed) {
+      return null;
+    }
+    this.generation += 1;
+    this.requestVersion += 1;
+    this.request = new ViewerFullImageRequest(this.request.captureId, this.request.uri,
+      this.request.contentVersion, this.generation, this.requestVersion);
+    this.failed = false;
+    this.loaded = false;
+    return this.request;
+  }
+
+  isFailedFor(captureId: string, uri: string): boolean {
+    return this.failed && this.request !== null && this.request.captureId === captureId &&
+      this.request.uri === uri;
+  }
+
+  private accepts(generation: number, captureId: string, uri: string): boolean {
+    return this.request !== null && this.request.generation === generation &&
+      this.request.captureId === captureId && this.request.uri === uri;
   }
 }
 
