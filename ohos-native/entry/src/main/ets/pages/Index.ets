@@ -12,6 +12,8 @@ import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, Setting
   StorageScreen } from '../feature/settings/SettingsScreens';
 import { UiTokens } from '../shared/UiTokens';
 import { AppText, tr } from '../shared/AppText';
+import { MotionPolicy } from '../shared/MotionPolicy';
+import { RootMotionSpec, RootShellPolicy, RootTabTransition } from '../shared/RootShellPolicy';
 
 @Entry
 @Component
@@ -25,6 +27,12 @@ struct Index {
   @State private tabDirection: number = 1;
   @State private selectionMode: boolean = false;
   @State private appearanceRevision: number = 0;
+  @State private motionRevision: number = 0;
+  private lifecycleGeneration: number = 0;
+  private tabMotionGeneration: number = 0;
+  private pendingTabMotion: number = 0;
+  private queuedTabIndex: number = -1;
+  private rootVisible: boolean = false;
   private consentStore: PrivacyConsentStore = new PrivacyConsentStore(
     new PreferencesConsentStorage(AbilityContextHolder.require()));
   private readonly runtimeListener: () => void = (): void => {
@@ -34,12 +42,31 @@ struct Index {
   };
 
   aboutToAppear(): void {
+    this.rootVisible = true;
+    this.lifecycleGeneration += 1;
     AppText.apply('', this.context().resourceManager.getConfigurationSync().locale);
+    this.refreshMotionPolicy();
     this.checkConsent();
   }
 
   aboutToDisappear(): void {
+    this.deactivateRootShell();
     AppRuntime.current?.unsubscribe(this.runtimeListener);
+  }
+
+  aboutToBeDeleted(): void {
+    this.deactivateRootShell();
+    AppRuntime.current?.unsubscribe(this.runtimeListener);
+  }
+
+  onPageShow(): void {
+    this.rootVisible = true;
+    this.lifecycleGeneration += 1;
+    this.refreshMotionPolicy();
+  }
+
+  onPageHide(): void {
+    this.deactivateRootShell();
   }
 
   private context(): common.UIAbilityContext {
@@ -69,6 +96,7 @@ struct Index {
     try {
       const runtime = await AppRuntime.initialize(this.context());
       runtime.subscribe(this.runtimeListener);
+      await this.refreshMotionPolicy();
       this.runtimeReady = true;
       this.runtimeListener();
     } catch (_) {
@@ -77,23 +105,84 @@ struct Index {
     }
   }
 
-  private switchTab(index: number): void {
-    if (index === this.activeTab) {
+  private async refreshMotionPolicy(): Promise<void> {
+    const generation = this.lifecycleGeneration;
+    try {
+      await MotionPolicy.refresh();
+    } catch (_) {
+    }
+    if (!this.rootVisible || generation !== this.lifecycleGeneration) {
       return;
     }
-    this.tabDirection = index > this.activeTab ? 1 : -1;
-    this.getUIContext().animateTo({ duration: 260, curve: Curve.Friction }, (): void => {
-      this.activeTab = index;
+    try {
+      this.pathStack.disableAnimation(MotionPolicy.reduceMotion);
+    } catch (_) {
+    }
+    this.motionRevision += 1;
+  }
+
+  private deactivateRootShell(): void {
+    this.rootVisible = false;
+    this.lifecycleGeneration += 1;
+    this.tabMotionGeneration += 1;
+    this.pendingTabMotion = 0;
+    this.queuedTabIndex = -1;
+  }
+
+  private switchTab(index: number): void {
+    const transition: RootTabTransition = RootShellPolicy.transition(
+      this.activeTab, index, this.pendingTabMotion !== 0);
+    if (!transition.changed) {
+      if (this.pendingTabMotion !== 0) {
+        this.queuedTabIndex = -1;
+      }
+      return;
+    }
+    if (transition.deferUntilSettled) {
+      this.queuedTabIndex = transition.targetIndex;
+      return;
+    }
+    const motion: RootMotionSpec = RootShellPolicy.motion(transition.direction);
+    if (motion.dockDuration === 0) {
+      this.tabDirection = transition.direction;
+      this.activeTab = transition.targetIndex;
+      this.queuedTabIndex = -1;
+      return;
+    }
+    const generation = this.tabMotionGeneration + 1;
+    this.tabMotionGeneration = generation;
+    this.pendingTabMotion = generation;
+    this.getUIContext().animateTo({
+      duration: motion.dockDuration,
+      curve: Curve.EaseOut,
+      onFinish: (): void => {
+        if (this.rootVisible && this.pendingTabMotion === generation) {
+          this.pendingTabMotion = 0;
+          const queuedTab = this.queuedTabIndex;
+          this.queuedTabIndex = -1;
+          if (queuedTab >= 0) {
+            this.switchTab(queuedTab);
+          }
+        }
+      },
+    }, (): void => {
+      this.tabDirection = transition.direction;
+      this.activeTab = transition.targetIndex;
     });
   }
 
   private contentTransition(): TransitionEffect {
-    const enterX = this.tabDirection > 0 ? 34 : -34;
-    const exitX = this.tabDirection > 0 ? -22 : 22;
+    const motion: RootMotionSpec = RootShellPolicy.motion(this.tabDirection);
     return TransitionEffect.asymmetric(
-      TransitionEffect.translate({ x: enterX, y: 0 }).combine(TransitionEffect.opacity(0)),
-      TransitionEffect.translate({ x: exitX, y: 0 }).combine(TransitionEffect.opacity(0))
-    ).animation({ duration: 220, curve: Curve.Friction });
+      TransitionEffect.translate({ x: motion.enterX, y: 0 })
+        .animation({ duration: motion.pageDuration, curve: Curve.EaseOut })
+        .combine(TransitionEffect.opacity(0)
+          .animation({ duration: motion.fadeDuration, curve: Curve.EaseOut })),
+      TransitionEffect.translate({ x: motion.exitX, y: 0 })
+        .animation({ duration: motion.pageDuration, curve: Curve.EaseOut })
+        .combine(TransitionEffect.opacity(0)
+          .animation({ duration: motion.fadeDuration, curve: Curve.EaseOut }))
+    );
   }
 
   @Builder
@@ -126,47 +215,58 @@ struct Index {
   }
 
   @Builder
-  private dockItem(index: number, icon: Resource, label: string) {
-    Column({ space: 3 }) {
-      Image(icon).width(24).height(24)
-        .fillColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
-      Text(label).fontSize(12).fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+  private dockItem(index: number, icon: Resource, label: string, selectedLabel: string) {
+    Button() {
+      Column({ space: 3 }) {
+        Image(icon).width(23).height(23)
+          .fillColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+          .accessibilityLevel('no')
+        Text(label).fontSize(12).fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+          .accessibilityLevel('no')
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
     }
     .layoutWeight(1)
-    .height(58)
-    .justifyContent(FlexAlign.Center)
+    .height(RootShellPolicy.dockHeight())
     .backgroundColor(Color.Transparent)
+    .borderRadius(UiTokens.CONTROL_RADIUS)
+    .accessibilityGroup(true)
+    .accessibilityText(this.activeTab === index ? selectedLabel : label)
     .onClick((): void => this.switchTab(index))
   }
 
   @Builder
   private floatingDock() {
-    Stack() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Row()
+        .width(`${RootShellPolicy.dockSelectedOffset(100, 1)}%`)
+        .height(RootShellPolicy.dockHeight() - 8)
+        .position({ x: `${RootShellPolicy.dockSelectedOffset(100, this.activeTab)}%`, y: 4 })
+        .backgroundColor(MotionPolicy.reduceMotion ? UiTokens.PRIMARY_CONTAINER : UiTokens.DOCK_SELECTED)
+        .backdropBlur(RootShellPolicy.motion(this.tabDirection).selectionBlur)
+        .borderRadius(UiTokens.CARD_RADIUS + 4)
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
       Row() {
-        if (this.activeTab > 0) {
-          Blank().layoutWeight(this.activeTab)
-        }
-        Row().height(58).layoutWeight(1)
-          .backgroundColor(UiTokens.DOCK_SELECTED).backdropBlur(16).borderRadius(22)
-        if (this.activeTab < 2) {
-          Blank().layoutWeight(2 - this.activeTab)
-        }
-      }.width('100%').height('100%').padding(6)
-      Row() {
-        this.dockItem(0, $r('app.media.ic_projects'), tr('项目', 'Projects'))
-        this.dockItem(1, $r('app.media.ic_records'), tr('全部记录', 'Records'))
-        this.dockItem(2, $r('app.media.ic_settings'), tr('设置', 'Settings'))
-      }.width('100%').height('100%').padding(6)
+        this.dockItem(0, $r('app.media.ic_projects'), tr('项目', 'Projects'),
+          tr('项目，已选择', 'Projects, selected'))
+        this.dockItem(1, $r('app.media.ic_records'), tr('全部记录', 'Records'),
+          tr('全部记录，已选择', 'Records, selected'))
+        this.dockItem(2, $r('app.media.ic_settings'), tr('设置', 'Settings'),
+          tr('设置，已选择', 'Settings, selected'))
+      }.width('100%').height('100%')
     }
-    .height(70)
-    .margin({ left: 16, right: 16, bottom: 12 })
-    .width('100%')
-    .backgroundColor(UiTokens.DOCK)
-    .backdropBlur(28)
-    .border({ width: 1, color: UiTokens.OUTLINE })
-    .borderRadius(28)
-    .shadow({ radius: 20, color: '#30000000', offsetY: 7 })
+    .height(RootShellPolicy.dockHeight())
+    .margin({ bottom: RootShellPolicy.dockBottomMargin() })
+    .width(`calc(100% - ${RootShellPolicy.dockHorizontalMargin() * 2}vp)`)
+    .backgroundColor(MotionPolicy.reduceMotion ? UiTokens.SURFACE : UiTokens.DOCK)
+    .backdropBlur(RootShellPolicy.motion(this.tabDirection).dockBlur)
+    .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+    .borderRadius(UiTokens.CARD_RADIUS + 8)
+    .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
   }
 
   @Builder

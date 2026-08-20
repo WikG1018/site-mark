@@ -16,6 +16,7 @@ import capturePagedControllerTest from './CapturePagedController.test';
 import photoViewerWindowTest from './PhotoViewerWindow.test';
 import settingsProjectSelectionTest from './SettingsProjectSelection.test';
 import projectFormPolicyTest from './ProjectFormPolicy.test';
+import rootShellPolicyTest from './RootShellPolicy.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -36,4 +37,5 @@ export default function testsuite(): void {
   photoViewerWindowTest();
   settingsProjectSelectionTest();
   projectFormPolicyTest();
+  rootShellPolicyTest();
 }
