@@ -28,6 +28,7 @@ jobs:
             test/features/settings/sections/storage_section_screen_test.dart \
             test/features/settings/sections/appearance_section_screen_test.dart \
             test/features/capture/capture_form_screen_test.dart \
+            test/features/capture/capture_failure_guidance_test.dart \
             test/workflow/capture_processor_test.dart \
             test/workflow/capture_workflow_test.dart \
             test/workflow/capture_media_service_test.dart \

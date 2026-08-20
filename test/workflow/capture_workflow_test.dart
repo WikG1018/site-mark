@@ -243,6 +243,51 @@ void main() {
   );
 
   test(
+    'cancelled camera does not consume the next photo number',
+    () async {
+      platform.cameraOutcome = CameraOutcome.cancelled;
+      await workflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+        ),
+      );
+
+      platform.cameraOutcome = CameraOutcome.captured;
+      workflow = CaptureWorkflow(
+        database: database,
+        platform: platform,
+        images: images,
+        outputPaths: _FakeOutputPaths(),
+        fileStore: fileStore,
+        scheduler: scheduler,
+        locationCoordinator: coordinator,
+        idFactory: () => 'capture-2',
+        now: () => DateTime(2026, 7, 16, 9, 32, 18),
+      );
+      final result = await workflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+        ),
+      );
+      await drainCoordinator();
+
+      expect(result.outcome, CaptureWorkflowOutcome.queued);
+      final record = await database.captureById('capture-2');
+      expect(record?.photoNumber, '东区厂房改造-SM-20260716-001');
+    },
+  );
+
+  test(
     'camera failure persists a stable code instead of platform text',
     () async {
       platform.cameraOutcome = CameraOutcome.failed;
