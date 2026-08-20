@@ -52,7 +52,10 @@ class HarmonyBackWiringContractTest(unittest.TestCase):
         )[0]
         settings = projects.split("export struct ProjectSettingsScreen", 1)[1]
         self.assertGreaterEqual(detail.count(".enabled(this.canMutateProject())"), 8)
-        self.assertIn("if (this.batchBusy) return;", detail)
+        self.assertIn("if (this.pageBusy()) return;", detail)
+        self.assertIn("this.batchBusy || this.mutationBusy", detail)
+        self.assertIn("ProjectOperationKind.BATCH", detail)
+        self.assertIn("ProjectOperationKind.MUTATION", detail)
         self.assertEqual(editor.count("fieldEnabled: !this.saving"), 2)
         self.assertGreaterEqual(settings.count(".enabled(!this.saving)"), 4)
 
