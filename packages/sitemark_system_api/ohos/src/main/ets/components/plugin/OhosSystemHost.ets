@@ -221,62 +221,26 @@ export default class OhosSystemHost {
     this.cameraBusy = true;
     try {
       this.ensureWritableFile(target);
-      const saveUri = fileUri.getUriFromPath(target);
-      let launched = false;
-      let userCancelled = false;
       try {
-        const pickerProfile: CameraPickerSaveProfile = {
+        const pickerProfile: CameraPickerPositionProfile = {
           cameraPosition: camera.CameraPosition.CAMERA_POSITION_BACK,
-          saveUri: saveUri,
         };
         const pickerResult = await cameraPicker.pick(
           abilityContext,
           [cameraPicker.PickerMediaType.PHOTO],
           pickerProfile as cameraPicker.PickerProfile,
         );
-        launched = true;
-        if (pickerResult?.resultUri) {
-          const resultPath = this.resolvedCapturePath(pickerResult.resultUri);
-          if (resultPath !== target) {
-            try {
-              await this.copyUriToPath(pickerResult.resultUri, target);
-            } catch (_copyError) {
-              if (!this.hasCaptureContent(target)) {
-                return this.cameraFailed(target);
-              }
-            }
-          }
+        if (pickerResult === undefined || pickerResult.resultCode !== 0) {
+          return this.cameraCancelled(target);
         }
-        if (this.hasCaptureContent(target)) {
-          return this.cameraCaptured(target);
-        }
-        userCancelled = pickerResult === undefined || pickerResult.resultCode !== 0;
-      } catch (_pickerError) {
-        try {
-          const captureParams: Record<string, Object> = {
-            'ability.params.stream': saveUri,
-          };
-          const want: Want = {
-            action: 'ohos.want.action.imageCapture',
-            parameters: captureParams,
-          };
-          const result = await abilityContext.startAbilityForResult(want);
-          launched = true;
-          if (this.hasCaptureContent(target)) {
-            return this.cameraCaptured(target);
-          }
-          userCancelled = result.resultCode !== 0;
-        } catch (_abilityError) {
+        const resultUri = pickerResult.resultUri ?? '';
+        if (resultUri.length === 0) {
           return this.cameraFailed(target);
         }
-      }
-      if (!launched) {
+        return await this.materializeCapture(resultUri, target);
+      } catch (_pickerError) {
         return this.cameraFailed(target);
       }
-      if (userCancelled || !this.hasCaptureContent(target)) {
-        return this.cameraCancelled(target);
-      }
-      return this.cameraFailed(target);
     } catch (_error) {
       return this.cameraFailed(target);
     } finally {
@@ -1113,15 +1077,57 @@ export default class OhosSystemHost {
     }
   }
 
+  private async materializeCapture(resultUri: string, target: string): Promise<CameraCaptureResult> {
+    if (this.isSandboxCapturePath(resultUri, target) && this.hasCaptureContent(target)) {
+      return this.cameraCaptured(target);
+    }
+    try {
+      await this.copyUriToPath(resultUri, target);
+    } catch (_copyError) {
+      return this.cameraFailed(target);
+    }
+    if (this.hasCaptureContent(target)) {
+      return this.cameraCaptured(target);
+    }
+    return this.cameraFailed(target);
+  }
+
+  private isSandboxCapturePath(uri: string, target: string): boolean {
+    if (uri === target) {
+      return true;
+    }
+    if (!uri.startsWith('file://') || this.isMediaLibraryUri(uri)) {
+      return false;
+    }
+    return this.pathFromUri(uri) === target;
+  }
+
+  private isMediaLibraryUri(uri: string): boolean {
+    return uri.startsWith('file://media/') ||
+      uri.startsWith('datashare://') ||
+      uri.indexOf('/media/') >= 0;
+  }
+
   private async copyUriToPath(uri: string, destination: string): Promise<void> {
-    const source = uri.startsWith('file://') ? this.pathFromUri(uri) : uri;
+    if (uri === destination) {
+      return;
+    }
+    if (this.isMediaLibraryUri(uri) || !uri.startsWith('file://')) {
+      this.copyOpenedUri(uri, destination);
+      return;
+    }
+    const source = this.pathFromUri(uri);
     if (source === destination) {
       return;
     }
-    if (source.startsWith('/')) {
+    if (source.startsWith('/') && this.pathExists(source)) {
       this.copyFile(source, destination);
       return;
     }
+    this.copyOpenedUri(uri, destination);
+  }
+
+  private copyOpenedUri(uri: string, destination: string): void {
     const file = fs.openSync(uri, fs.OpenMode.READ_ONLY);
     const output = fs.openSync(destination, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
     try {
@@ -1133,13 +1139,6 @@ export default class OhosSystemHost {
       fs.closeSync(file);
       fs.closeSync(output);
     }
-  }
-
-  private resolvedCapturePath(uri: string): string {
-    if (uri.startsWith('file://')) {
-      return this.pathFromUri(uri);
-    }
-    return uri;
   }
 
   private async inspectImage(path: string): Promise<Record<string, Object | null>> {

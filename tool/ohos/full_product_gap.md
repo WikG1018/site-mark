@@ -11,7 +11,8 @@
 - 降级读档：`readProjectArchive` / `extractArchivePhoto` / `readBundle` / `extractBundleEntry` 可自读自恢复 schema 5 单项目 zip 与 schema 1 bundle。多项目 selection zip 按 Rust 契约拒绝。官方 `degraded_image_pipeline_test` 14 项全绿。
 - 官方测试：`degraded_image_pipeline_test` / `ohos_platform_services_test` / `platform_services_test` 绿灯。
 - `OhosArchivePickService` + 宿主 `pickArchive`：恢复选文件走原生 `DocumentViewPicker.select`（单选 `.zip`），`copyUriToPath` 到 `files/imports/sitemark-restore-*.zip`。未做模拟器点选 zip dump。
-- 宿主 `inspectImage`：ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS；`CameraPicker.resultUri` 与沙箱目标不同时拷进 `files/originals`。无拍成 dump。
+- 宿主 `inspectImage`：ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS。无拍成 dump。
+- 宿主 `launchCamera`：`CameraPicker` 省略沙箱 `saveUri`；`file://media/` 用 `fs.openSync(uri)` 拷进 `files/originals`。无拍成 dump。
 - `OhosShareFileService` + 宿主 `shareFile`：ShareKit `ShareController.show`，zip/jpeg/png 走对应 UTD。`main.dart` 鸿蒙入口不再覆盖成 `NoopShareFileService`。官方通道测试绿灯。无分享面板 dump。
 - `OhosCompletionNotificationService` + 宿主 NotificationKit：`requestEnableNotification` / `publishCaptureReady`；点击经 WantAgent 参数 `sitemarkDeepLink` 回 Dart。官方通道测试绿灯。无通知 dump。
 
@@ -21,9 +22,10 @@
 - 系统文件选择恢复 **未证明**。产品页已改走原生 Document picker → 沙箱 `files/imports`，再进现有 `prepareRestore`；无 picker 成功 dump，不等于系统文件选择恢复已通。
 - 相机未拍成；定位未出坐标；ACL 未证明。
 - 水印引擎仍 degraded，无 `ohos-arm64`。
-- 系统通知 / 系统分享 **未证明**（通道已接，无 dump）。外链仍 no-op。
+- 系统通知 / 系统分享 / 系统外链 **未证明**（通道已接，无 dump）。
+- 相机拍成 **未证明**（媒体 URI 拷沙箱已接，无 dump）。
 - 无签名 release，无真机回归。
 
 ## 水平结论
 
-项目能存；备份能在应用沙箱导出 zip 并弹出保存选择器；降级引擎能把该 zip 读回；恢复选文件已接到鸿蒙原生 Document picker；拍成后读图已接到 ImageKit；分享通道已接 ShareKit；拍成通知通道已接 NotificationKit；外链通道已接 `startAbility`。拍 / 水印 / 系统文件落盘 / 系统文件选择恢复 / 系统分享面板 / 系统通知 / 系统浏览器仍未对等 Android v1.0.8。
+项目能存；备份能在应用沙箱导出 zip 并弹出保存选择器；降级引擎能把该 zip 读回；恢复选文件已接到鸿蒙原生 Document picker；拍成后读图已接到 ImageKit；相机媒体 URI 拷沙箱已接；分享通道已接 ShareKit；拍成通知通道已接 NotificationKit；外链通道已接 `startAbility`。拍成 dump / 水印 / 系统文件落盘 / 系统文件选择恢复 / 系统分享面板 / 系统通知 / 系统浏览器仍未对等 Android v1.0.8。

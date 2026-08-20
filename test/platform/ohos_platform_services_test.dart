@@ -487,4 +487,49 @@ void main() {
       expect(invoked, isFalse);
     },
   );
+
+  test('OhosPlatformServices launchCamera decodes captured sandbox path', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'launchCamera');
+          expect(call.arguments, {'captureId': 'capture-1'});
+          return <String, Object?>{
+            'outcome': 0,
+            'outputPath': '/data/storage/el2/base/files/originals/capture-1.jpg',
+            'errorMessage': null,
+          };
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final result = await OhosPlatformServices().launchCamera('capture-1');
+    expect(result.outcome, CameraOutcome.captured);
+    expect(
+      result.outputPath,
+      '/data/storage/el2/base/files/originals/capture-1.jpg',
+    );
+    expect(result.errorMessage, isNull);
+  });
+
+  test('OhosPlatformServices launchCamera decodes cancelled', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          return <String, Object?>{
+            'outcome': 1,
+            'outputPath': '/data/storage/el2/base/files/originals/capture-1.jpg',
+            'errorMessage': null,
+          };
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final result = await OhosPlatformServices().launchCamera('capture-1');
+    expect(result.outcome, CameraOutcome.cancelled);
+  });
 }

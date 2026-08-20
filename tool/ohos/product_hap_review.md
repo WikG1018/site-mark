@@ -94,6 +94,18 @@
 | 官方测试 | `ohos_platform_services_test` 22 项通过 |
 | 模拟器 dump | **无**。不得写系统外链已通 |
 
+## 2026-08-20 Tasks 39–40
+
+系统相机 `resultUri` 拷进沙箱 `files/originals`。官方通道测试闭环，未重编 HAP，未在模拟器拍成。
+
+| 项 | 结果 |
+| --- | --- |
+| 通道 | `OhosPlatformServices.launchCamera` 解码 `CAMERA_CAPTURED` / `CAMERA_CANCELLED` |
+| 宿主 | `CameraPicker` 省略沙箱 `saveUri`；`file://media/` 用 `fs.openSync(uri)` 写入 `files/originals/{id}.jpg` |
+| 失败语义 | picker 成功但空文件 / 拷失败 → `CAMERA_FAILED`，不再把空文件当取消 |
+| 官方测试 | `ohos_platform_services_test` **24 项全绿** |
+| 模拟器 dump | **无**。不得写相机已拍成 |
+
 ## 仍禁止写成已完成
 
 - picker 真正写入系统文件
