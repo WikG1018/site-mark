@@ -239,7 +239,8 @@ export struct AllRecordsView {
   }
 
   private markFilterChanged(): void {
-    this.selection.invalidatePending();
+    this.selection.resetForFilterChange();
+    this.touchSelection();
     this.savedFirstVisibleIndex = 0;
     this.pageState.beginRestore();
     this.saveCaptureState();
@@ -262,6 +263,10 @@ export struct AllRecordsView {
 
   private touchSelection(): void {
     this.selectionRevision += 1;
+  }
+
+  private batchFontScale(): number {
+    return AppRuntime.require().context.config.fontSizeScale ?? 1;
   }
 
   private setSelectionMode(enabled: boolean): void {
@@ -386,7 +391,7 @@ export struct AllRecordsView {
     Column() {
       BatchActionBar({ selectedLabel: tr(`已选 ${this.selection.selectedIds.length} 张`,
         `${this.selection.selectedIds.length} selected`),
-        actionHeight: RecordBatchLayoutPolicy.actionHeight(),
+        actionHeight: RecordBatchLayoutPolicy.actionHeight(this.batchFontScale()),
         actionLabelMaxLines: RecordBatchLayoutPolicy.actionLabelMaxLines(), actions: [
           new BatchActionItem('export', '⇩', tr('导出', 'Export'), false, this.batchBusy,
             tr('导出所选照片', 'Export selected photos')),
@@ -403,7 +408,7 @@ export struct AllRecordsView {
           else if (id === 'clear') this.batchClearOriginals();
           else if (id === 'delete') this.batchDelete();
         } })
-        .height(RecordBatchLayoutPolicy.barHeight())
+        .height(RecordBatchLayoutPolicy.barHeight(this.batchFontScale()))
     }
     .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
     .width('100%')
@@ -422,13 +427,13 @@ export struct AllRecordsView {
         Button(tr('全部项目', 'All projects')).height(UiTokens.TOUCH_TARGET).fontSize(12)
                 .fontColor(this.selectedProjectId.length === 0 ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
                 .backgroundColor(this.selectedProjectId.length === 0 ? UiTokens.PRIMARY_CONTAINER : UiTokens.CONTROL)
-                .onClick((): void => { this.selectedProjectId = ''; this.selection.invalidatePending(); })
+                .onClick((): void => { this.selectedProjectId = ''; this.markFilterChanged(); })
               ForEach(this.projects, (project: ProjectRecord) => {
                 Button(project.name).height(UiTokens.TOUCH_TARGET).fontSize(12)
                   .fontColor(this.selectedProjectId === project.id ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
                   .backgroundColor(this.selectedProjectId === project.id ?
                     UiTokens.PRIMARY_CONTAINER : UiTokens.CONTROL)
-                  .onClick((): void => { this.selectedProjectId = project.id; this.selection.invalidatePending(); })
+                  .onClick((): void => { this.selectedProjectId = project.id; this.markFilterChanged(); })
               }, (project: ProjectRecord) => project.id)
             }
           }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
@@ -438,15 +443,15 @@ export struct AllRecordsView {
         TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
           .type(InputType.Number)
-          .onChange((value: string): void => { this.yearText = value; this.selection.invalidatePending(); })
+          .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
         TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
           .type(InputType.Number)
-          .onChange((value: string): void => { this.monthText = value; this.selection.invalidatePending(); })
+          .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
         TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
           .type(InputType.Number)
-          .onChange((value: string): void => { this.dayText = value; this.selection.invalidatePending(); })
+          .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
       }.width('100%')
       Row({ space: 8 }) {
         Button(tr('清除日期', 'Clear date')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
@@ -546,7 +551,8 @@ export struct AllRecordsView {
           .layoutWeight(1)
           .width('100%')
           .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING,
-            top: 4, bottom: RecordBatchLayoutPolicy.listBottomPadding(this.isSelectionMode()) })
+            top: 4, bottom: RecordBatchLayoutPolicy.listBottomPadding(this.isSelectionMode(),
+              this.batchFontScale()) })
           .cachedCount(4)
           .edgeEffect(EdgeEffect.Spring)
           .onScrollIndex((start: number, _end: number): void => {

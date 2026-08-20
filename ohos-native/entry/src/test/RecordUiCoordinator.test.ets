@@ -217,6 +217,20 @@ export default function recordUiCoordinatorTest(): void {
       expect(selection.selectedIds.join(',')).assertEqual('current');
     });
 
+    it('clears hidden selections and permanent-delete confirmation when filters change', 0, () => {
+      const selection = new RecordSelectionCoordinator();
+      selection.enter();
+      selection.selectAll(['visible', 'soon-hidden']);
+      expect(selection.requestPermanentDelete()).assertFalse();
+
+      selection.resetForFilterChange();
+
+      expect(selection.selectionMode).assertTrue();
+      expect(selection.selectedIds.length).assertEqual(0);
+      expect(selection.allSelected).assertFalse();
+      expect(selection.confirmDelete).assertFalse();
+    });
+
     it('suppresses local root notifications without triggering record reloads', 0, async () => {
       const gate = new RecordRefreshGate();
       let loaderCalls = 0;
@@ -313,6 +327,16 @@ export default function recordUiCoordinatorTest(): void {
       expect(RecordBatchLayoutPolicy.listBottomPadding(false)).assertEqual(RootShellPolicy.contentBottomInset());
       expect(RecordBatchLayoutPolicy.filterControlHeight()).assertEqual(UiTokens.TOUCH_TARGET);
       expect(RecordBatchLayoutPolicy.filterControlHeight() >= 44).assertTrue();
+    });
+
+    it('grows the shared batch bar and its exact list clearance for 160 percent fonts', 0, () => {
+      expect(RecordBatchLayoutPolicy.actionHeight(1.6)).assertEqual(84);
+      expect(RecordBatchLayoutPolicy.barHeight(1.6)).assertEqual(124);
+      expect(RecordBatchLayoutPolicy.listBottomPadding(true, 1.6)).assertEqual(
+        RecordBatchLayoutPolicy.barHeight(1.6) + RecordBatchLayoutPolicy.bottomMargin() +
+          RecordBatchLayoutPolicy.contentGap());
+      expect(RecordBatchLayoutPolicy.listBottomPadding(true, 1.6)).assertEqual(152);
+      expect(RecordBatchLayoutPolicy.barHeight(3) > RecordBatchLayoutPolicy.barHeight(1.6)).assertTrue();
     });
 
     it('keeps short batch labels separate from complete accessibility descriptions', 0, () => {

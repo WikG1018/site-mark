@@ -201,6 +201,10 @@ export class RecordSelectionCoordinator {
     this.confirmDelete = false;
   }
 
+  resetForFilterChange(): void {
+    this.deselectAll();
+  }
+
   requestPermanentDelete(): boolean {
     if (this.selectedIds.length === 0) {
       this.confirmDelete = false;
@@ -239,8 +243,16 @@ export class RecordSelectionCoordinator {
 }
 
 export class RecordBatchLayoutPolicy {
-  static barHeight(): number {
-    return 104;
+  private static normalizedFontScale(fontScale: number): number {
+    if (!Number.isFinite(fontScale) || fontScale < 1) {
+      return 1;
+    }
+    return Math.min(fontScale, 3);
+  }
+
+  static barHeight(fontScale: number = 1): number {
+    const scale = RecordBatchLayoutPolicy.normalizedFontScale(fontScale);
+    return Math.max(104, Math.ceil(RecordBatchLayoutPolicy.actionHeight(scale) + 15 * scale + 16));
   }
 
   static bottomMargin(): number {
@@ -251,8 +263,9 @@ export class RecordBatchLayoutPolicy {
     return 16;
   }
 
-  static actionHeight(): number {
-    return 68;
+  static actionHeight(fontScale: number = 1): number {
+    const scale = RecordBatchLayoutPolicy.normalizedFontScale(fontScale);
+    return Math.max(68, Math.ceil(42 * scale + 16));
   }
 
   static actionLabelMaxLines(): number {
@@ -263,8 +276,8 @@ export class RecordBatchLayoutPolicy {
     return UiTokens.TOUCH_TARGET;
   }
 
-  static listBottomPadding(selectionMode: boolean): number {
-    return selectionMode ? RecordBatchLayoutPolicy.barHeight() + RecordBatchLayoutPolicy.bottomMargin() +
+  static listBottomPadding(selectionMode: boolean, fontScale: number = 1): number {
+    return selectionMode ? RecordBatchLayoutPolicy.barHeight(fontScale) + RecordBatchLayoutPolicy.bottomMargin() +
       RecordBatchLayoutPolicy.contentGap() : RootShellPolicy.contentBottomInset();
   }
 }

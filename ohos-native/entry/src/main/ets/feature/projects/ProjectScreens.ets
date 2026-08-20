@@ -557,7 +557,8 @@ export struct ProjectDetailScreen {
   }
 
   private markFilterChanged(): void {
-    this.selection.invalidatePending();
+    this.selection.resetForFilterChange();
+    this.syncSelection();
     this.savedFirstVisibleIndex = 0;
     this.pageState.beginRestore();
     this.saveDetailState();
@@ -671,6 +672,10 @@ export struct ProjectDetailScreen {
     this.confirmBatchDelete = this.selection.confirmDelete;
   }
 
+  private batchFontScale(): number {
+    return AppRuntime.require().context.config.fontSizeScale ?? 1;
+  }
+
   private toggleCapture(captureId: string): void {
     this.selection.toggle(captureId);
     this.syncSelection();
@@ -767,7 +772,7 @@ export struct ProjectDetailScreen {
     Column() {
       BatchActionBar({ selectedLabel: tr(`已选 ${this.selectedIds.length} 张`,
         `${this.selectedIds.length} selected`),
-        actionHeight: RecordBatchLayoutPolicy.actionHeight(),
+        actionHeight: RecordBatchLayoutPolicy.actionHeight(this.batchFontScale()),
         actionLabelMaxLines: RecordBatchLayoutPolicy.actionLabelMaxLines(), actions: [
           new BatchActionItem('export', '⇩', tr('导出', 'Export'), false, this.batchBusy,
             tr('导出所选照片', 'Export selected photos')),
@@ -789,7 +794,7 @@ export struct ProjectDetailScreen {
             AppRuntime.require().clearOriginal(captureId), tr('原图清理已完成', 'Original cleanup completed'));
           else if (id === 'delete') this.batchDelete();
         } })
-        .height(RecordBatchLayoutPolicy.barHeight())
+        .height(RecordBatchLayoutPolicy.barHeight(this.batchFontScale()))
     }
     .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
     .width('100%')
@@ -1063,7 +1068,8 @@ export struct ProjectDetailScreen {
               }
             }
             .layoutWeight(1).width('100%')
-            .padding({ bottom: RecordBatchLayoutPolicy.listBottomPadding(this.selectionMode) })
+            .padding({ bottom: RecordBatchLayoutPolicy.listBottomPadding(this.selectionMode,
+              this.batchFontScale()) })
             .cachedCount(4)
             .edgeEffect(EdgeEffect.Spring)
             .onScrollIndex((start: number, _end: number): void => {
