@@ -13,6 +13,7 @@ import keyedOperationGateTest from './KeyedOperationGate.test';
 import uiPolicyTest from './UiPolicy.test';
 import lazyListDataSourceTest from './LazyListDataSource.test';
 import capturePagedControllerTest from './CapturePagedController.test';
+import photoViewerWindowTest from './PhotoViewerWindow.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -30,4 +31,5 @@ export default function testsuite(): void {
   uiPolicyTest();
   lazyListDataSourceTest();
   capturePagedControllerTest();
+  photoViewerWindowTest();
 }

@@ -4,7 +4,8 @@ import { util } from '@kit.ArkTS';
 import { formatPhotoNumber, normalizeCaptureSearchTerms, normalizedProjectNameKey,
   safeProjectFileNameKey } from '../../domain/DomainRules';
 import { AppSettingsRecord, CaptureDraft, CaptureFilter, CapturePage, CapturePageCursor,
-  CaptureRecord, CaptureTemplateRecord, ProjectRecord, ProjectSummary } from '../../domain/Models';
+  CaptureRecord, CaptureTemplateRecord, CaptureViewerWindow, ProjectRecord, ProjectSummary } from
+  '../../domain/Models';
 import { canCaptureTransition, canProjectTransition, CaptureStatus,
   ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { RestoredProjectInput } from '../../domain/RestoreModels';
@@ -12,6 +13,11 @@ import { RestoredProjectInput } from '../../domain/RestoreModels';
 const DATABASE_NAME: string = 'sitemark_native.db';
 const DATABASE_SCHEMA_VERSION: number = 14;
 const DEFAULT_PAGE_SIZE: number = 50;
+
+export const CAPTURE_VIEWER_SORT_DESC: string =
+  'COALESCE(c.captured_at,c.created_at) DESC, c.id DESC';
+export const CAPTURE_VIEWER_SORT_ASC: string =
+  'COALESCE(c.captured_at,c.created_at) ASC, c.id ASC';
 
 const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS projects (
@@ -543,6 +549,80 @@ export class AppDatabase {
         return null;
       }
       return captureFromRow(rows);
+    } finally {
+      rows.close();
+    }
+  }
+
+  async captureViewerWindow(captureId: string, radius: number = 2): Promise<CaptureViewerWindow> {
+    const current = await this.captureById(captureId);
+    if (current === null) {
+      return new CaptureViewerWindow([], 0, 0, 0);
+    }
+    if (current.status !== CaptureStatus.READY) {
+      return new CaptureViewerWindow([current], 0, 0, 1);
+    }
+
+    const boundedRadius = Math.max(0, Math.floor(radius));
+    const sortTime = current.capturedAt;
+    const counts = await this.store.querySql(
+      `SELECT COUNT(*) AS total_count,
+       COALESCE(SUM(CASE WHEN (COALESCE(c.captured_at,c.created_at)>?
+         OR (COALESCE(c.captured_at,c.created_at)=? AND c.id>?)) THEN 1 ELSE 0 END),0) AS newer_count,
+       COALESCE(SUM(CASE WHEN c.id=? THEN 1 ELSE 0 END),0) AS current_count
+       FROM captures c WHERE c.project_id=? AND c.status='ready'`,
+      [sortTime, sortTime, current.id, current.id, current.projectId]);
+    let totalCount = 0;
+    let absoluteIndex = 0;
+    let currentCount = 0;
+    try {
+      if (counts.goToFirstRow()) {
+        totalCount = counts.getLong(counts.getColumnIndex('total_count'));
+        absoluteIndex = counts.getLong(counts.getColumnIndex('newer_count'));
+        currentCount = counts.getLong(counts.getColumnIndex('current_count'));
+      }
+    } finally {
+      counts.close();
+    }
+    if (currentCount !== 1) {
+      return new CaptureViewerWindow([current], 0, 0, 1);
+    }
+
+    const newer = await this.captureViewerRows(
+      `SELECT c.*, p.name AS project_name FROM captures c
+       JOIN projects p ON p.id=c.project_id
+       WHERE c.project_id=? AND c.status='ready'
+         AND (COALESCE(c.captured_at,c.created_at)>?
+           OR (COALESCE(c.captured_at,c.created_at)=? AND c.id>?))
+       ORDER BY ${CAPTURE_VIEWER_SORT_ASC} LIMIT ?`,
+      [current.projectId, sortTime, sortTime, current.id, boundedRadius]);
+    newer.reverse();
+    const older = await this.captureViewerRows(
+      `SELECT c.*, p.name AS project_name FROM captures c
+       JOIN projects p ON p.id=c.project_id
+       WHERE c.project_id=? AND c.status='ready'
+         AND (COALESCE(c.captured_at,c.created_at)<?
+           OR (COALESCE(c.captured_at,c.created_at)=? AND c.id<?))
+       ORDER BY ${CAPTURE_VIEWER_SORT_DESC} LIMIT ?`,
+      [current.projectId, sortTime, sortTime, current.id, boundedRadius]);
+    const result: CaptureRecord[] = [];
+    result.push(...newer);
+    result.push(current);
+    result.push(...older);
+    return new CaptureViewerWindow(result, newer.length, absoluteIndex, totalCount);
+  }
+
+  private async captureViewerRows(sql: string,
+    args: relationalStore.ValueType[]): Promise<CaptureRecord[]> {
+    const rows = await this.store.querySql(sql, args);
+    const captures: CaptureRecord[] = [];
+    try {
+      if (rows.goToFirstRow()) {
+        do {
+          captures.push(captureFromRow(rows));
+        } while (rows.goToNextRow());
+      }
+      return captures;
     } finally {
       rows.close();
     }
