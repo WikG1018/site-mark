@@ -602,6 +602,37 @@ void main() {
     expect(result.outcome, CameraOutcome.cancelled);
   });
 
+  test('OhosSystemApi detectGalleryAccess decodes picker fallback', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'detectGalleryAccess');
+          expect(call.arguments, isNull);
+          return 'pickerFallback';
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    expect(await OhosSystemApi().detectGalleryAccess(), 'pickerFallback');
+  });
+
+  test('OhosSystemApi detectGalleryAccess decodes acl only when proven', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'detectGalleryAccess');
+          return 'acl';
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    expect(await OhosSystemApi().detectGalleryAccess(), 'acl');
+  });
+
   test('OhosPlatformServices publishJpeg decodes media library uri', () async {
     const channel = MethodChannel('sitemark.system.ohos');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

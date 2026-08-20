@@ -366,10 +366,12 @@ export default class OhosSystemHost {
   }
 
   private async detectGalleryAccess(): Promise<string> {
-    if (await this.hasPermission(PERMISSION_READ_MEDIA) && await this.hasPermission(PERMISSION_WRITE_MEDIA)) {
-      return 'acl';
-    }
     return 'pickerFallback';
+  }
+
+  private async hasMediaWritePermission(): Promise<boolean> {
+    return await this.hasPermission(PERMISSION_READ_MEDIA) &&
+      await this.hasPermission(PERMISSION_WRITE_MEDIA);
   }
 
   private async publishJpeg(
@@ -400,7 +402,7 @@ export default class OhosSystemHost {
     captureId: string,
     displayName: string,
   ): Promise<string> {
-    if (await this.detectGalleryAccess() === 'acl') {
+    if (await this.hasMediaWritePermission()) {
       try {
         return await this.writeAclJpeg(sourcePath, displayName);
       } catch (_error) {

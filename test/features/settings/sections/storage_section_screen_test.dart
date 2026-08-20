@@ -1,6 +1,7 @@
 // test/features/settings/sections/storage_section_screen_test.dart
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -169,6 +170,61 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('records destination'), findsOneWidget);
+  });
+
+  void mockGalleryAccess(String? mode) {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method != 'detectGalleryAccess') return null;
+          return mode;
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+  }
+
+  testWidgets('picker fallback shows the gallery honesty hint on storage', (
+    tester,
+  ) async {
+    mockGalleryAccess('pickerFallback');
+    await pumpScreen(
+      tester,
+      storage: _RecordingStorageUsageService(const [
+        AppStorageUsage(
+          originalBytes: 0,
+          renderedBytes: 0,
+          exportBytes: 0,
+          databaseAndOtherBytes: 0,
+        ),
+      ]),
+    );
+
+    expect(
+      find.byKey(const Key('gallery-picker-fallback-hint')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('未进入系统相册'), findsOneWidget);
+  });
+
+  testWidgets('acl gallery access hides the storage honesty hint', (
+    tester,
+  ) async {
+    mockGalleryAccess('acl');
+    await pumpScreen(
+      tester,
+      storage: _RecordingStorageUsageService(const [
+        AppStorageUsage(
+          originalBytes: 0,
+          renderedBytes: 0,
+          exportBytes: 0,
+          databaseAndOtherBytes: 0,
+        ),
+      ]),
+    );
+
+    expect(find.byKey(const Key('gallery-picker-fallback-hint')), findsNothing);
   });
 }
 

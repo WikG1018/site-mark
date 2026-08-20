@@ -17,6 +17,7 @@ import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 class CaptureFormScreen extends ConsumerStatefulWidget {
   const CaptureFormScreen({super.key, required this.projectId});
@@ -59,6 +60,11 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   /// explanation card reflects any permission change the user made in the
   /// system dialog or settings. `null` means the first load has not finished.
   LocationPermissionViewState? _permissionState;
+
+  late final Future<String?> _galleryAccessMode = OhosSystemApi()
+      .detectGalleryAccess()
+      .then<String?>((value) => value)
+      .catchError((_) => null);
 
   bool _isCurrentInit(String projectId, int generation) =>
       mounted && widget.projectId == projectId && _initGeneration == generation;
@@ -501,20 +507,27 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                       constraints: const BoxConstraints(maxWidth: 620),
                       child: Form(
                         key: _formKey,
-                        child: _CaptureFormBody(
-                          key: const Key('capture-form'),
-                          locationController: _locationController,
-                          contentController: _contentController,
-                          photographerController: _photographerController,
-                          notesController: _notesController,
-                          locationFocusNode: _locationFocusNode,
-                          contentFocusNode: _contentFocusNode,
-                          photographerFocusNode: _photographerFocusNode,
-                          projectId: widget.projectId,
-                          loadSuggestions: _loadRecentSuggestions,
-                          strings: strings,
-                          onTemplates: _openTemplates,
-                          permissionPrompt: prompt,
+                        child: FutureBuilder<String?>(
+                          future: _galleryAccessMode,
+                          builder: (context, gallerySnapshot) {
+                            return _CaptureFormBody(
+                              key: const Key('capture-form'),
+                              locationController: _locationController,
+                              contentController: _contentController,
+                              photographerController: _photographerController,
+                              notesController: _notesController,
+                              locationFocusNode: _locationFocusNode,
+                              contentFocusNode: _contentFocusNode,
+                              photographerFocusNode: _photographerFocusNode,
+                              projectId: widget.projectId,
+                              loadSuggestions: _loadRecentSuggestions,
+                              strings: strings,
+                              onTemplates: _openTemplates,
+                              permissionPrompt: prompt,
+                              showGalleryPickerFallback:
+                                  gallerySnapshot.data == 'pickerFallback',
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -625,6 +638,7 @@ class _CaptureFormBody extends StatelessWidget {
     required this.strings,
     required this.onTemplates,
     this.permissionPrompt,
+    this.showGalleryPickerFallback = false,
   });
 
   final TextEditingController locationController;
@@ -643,6 +657,7 @@ class _CaptureFormBody extends StatelessWidget {
   /// form when the host permission is not granted and the user has not
   /// dismissed the explanation.
   final Widget? permissionPrompt;
+  final bool showGalleryPickerFallback;
 
   @override
   Widget build(BuildContext context) {
@@ -653,6 +668,14 @@ class _CaptureFormBody extends StatelessWidget {
         // Always-mounted animated slot: the prompt expands/fades in and
         // collapses out without the form fields jumping.
         LocationPermissionPromptArea(prompt: permissionPrompt),
+        if (showGalleryPickerFallback)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              strings.galleryPickerFallbackHint,
+              key: const Key('gallery-picker-fallback-hint'),
+            ),
+          ),
         Align(
           alignment: AlignmentDirectional.centerEnd,
           child: OutlinedButton.icon(

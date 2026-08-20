@@ -13,7 +13,8 @@
 - 应用内串行队列：`InAppSerialBackgroundWorkClient` 对 `CaptureProcessResult.retry` / runner 抛错做 30s × 2^(n-1) 退避，不挡后续 capture；`failed` 不重排。官方 `ohos_background_work_client_test` **6 项全绿**。不是 WorkScheduler 进程保活。
 - 官方测试：`degraded_image_pipeline_test` / `ohos_background_work_client_test` / `jpeg_gps_test` / `ohos_platform_services_test` / `platform_services_test` 绿灯。
 - `OhosArchivePickService` + 宿主 `pickArchive`：恢复选文件走原生 `DocumentViewPicker.select`（单选 `.zip`），`copyUriToPath` 到 `files/imports/sitemark-restore-*.zip`。未做模拟器点选 zip dump。
-- 宿主 `inspectImage`：ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS；宿主 GPS 空时 Dart 解析 JPEG EXIF 度分秒或单值十进制度回填。官方 `jpeg_gps_test` **6 项全绿**，`ohos_platform_services_test` **28 项全绿**。无拍成 dump、无坐标 dump。
+- 宿主 `inspectImage`：ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS；宿主 GPS 空时 Dart 解析 JPEG EXIF 度分秒或单值十进制度回填。官方 `jpeg_gps_test` **6 项全绿**，`ohos_platform_services_test` **30 项全绿**。无拍成 dump、无坐标 dump。
+- 相册探测诚实化：`detectGalleryAccess` 无 ACL 证明返回 `pickerFallback`，不再把 READ+WRITE 媒体权限当成 ACL。存储页和拍摄页显示「未进入系统相册」。发布路径在有媒体写权限时仍先尝试 `createAsset`。官方 `storage_section_screen_test` **5 绿**、`capture_form_screen_test` **17 绿**。无相册 dump。
 - 宿主 `launchCamera`：`CameraPicker` 省略沙箱 `saveUri`；`file://media/` 用 `fs.openSync(uri)` 拷进 `files/originals`。无拍成 dump。
 - `OhosShareFileService` + 宿主 `shareFile`：ShareKit `ShareController.show`，zip/jpeg/png 走对应 UTD。`main.dart` 鸿蒙入口不再覆盖成 `NoopShareFileService`。官方通道测试绿灯。无分享面板 dump。
 - `OhosCompletionNotificationService` + 宿主 NotificationKit：`requestEnableNotification` / `publishCaptureReady`；点击经 WantAgent 参数 `sitemarkDeepLink` 回 Dart。官方通道测试绿灯。无通知 dump。
@@ -31,4 +32,4 @@
 
 ## 水平结论
 
-项目能存；备份能在应用沙箱导出 zip 并弹出保存选择器；降级引擎能把该 zip 读回；恢复选文件已接到鸿蒙原生 Document picker；拍成后读图已接到 ImageKit，宿主 GPS 空时 Dart 回退读 JPEG EXIF；相机媒体 URI 拷沙箱已接；发布 JPEG 已接系统相册保存对话框；降级水印已叠与 Rust 同字段的半透明卡片；应用内队列瞬时失败会指数退避重试（进程被杀仍只靠冷启动对账）；分享通道已接 ShareKit；拍成通知通道已接 NotificationKit；外链通道已接 `startAbility`。拍成 dump / 定位坐标 dump / 水印像素对等 / 系统相册 dump / 系统文件落盘 / 系统文件选择恢复 / 系统分享面板 / 系统通知 / 系统浏览器仍未对等 Android v1.0.8。
+项目能存；备份能在应用沙箱导出 zip 并弹出保存选择器；降级引擎能把该 zip 读回；恢复选文件已接到鸿蒙原生 Document picker；拍成后读图已接到 ImageKit，宿主 GPS 空时 Dart 回退读 JPEG EXIF；相机媒体 URI 拷沙箱已接；发布 JPEG 已接系统相册保存对话框；无 ACL 证明时 UI 显示「未进入系统相册」；降级水印已叠与 Rust 同字段的半透明卡片；应用内队列瞬时失败会指数退避重试（进程被杀仍只靠冷启动对账）；分享通道已接 ShareKit；拍成通知通道已接 NotificationKit；外链通道已接 `startAbility`。拍成 dump / 定位坐标 dump / 水印像素对等 / 系统相册 dump / 系统文件落盘 / 系统文件选择恢复 / 系统分享面板 / 系统通知 / 系统浏览器仍未对等 Android v1.0.8。

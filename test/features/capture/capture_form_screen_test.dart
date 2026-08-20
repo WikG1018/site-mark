@@ -14,7 +14,6 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
-import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
   const fixedLocationHint = '拍摄前仅请求一次前台位置；拒绝授权也可以继续拍摄。';
@@ -135,6 +134,54 @@ void main() {
     expect(find.byKey(const Key('location-permission-prompt')), findsNothing);
     expect(find.text(fixedLocationHint), findsNothing);
     expect(platform.requestLocationPermissionCount, 0);
+    await disposeApp(tester);
+  });
+
+  void mockGalleryAccess(WidgetTester tester, String? mode) {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('sitemark.system.ohos'),
+      (call) async {
+        if (call.method != 'detectGalleryAccess') return null;
+        return mode;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('sitemark.system.ohos'),
+        null,
+      );
+    });
+  }
+
+  testWidgets('picker fallback shows the gallery honesty hint on capture form', (
+    tester,
+  ) async {
+    mockGalleryAccess(tester, 'pickerFallback');
+    final platform = _CaptureFormPlatform(
+      permissionState: LocationPermissionState.granted,
+    );
+
+    await pumpCaptureForm(tester, platform: platform);
+
+    expect(
+      find.byKey(const Key('gallery-picker-fallback-hint')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('未进入系统相册'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('acl gallery access hides the capture form honesty hint', (
+    tester,
+  ) async {
+    mockGalleryAccess(tester, 'acl');
+    final platform = _CaptureFormPlatform(
+      permissionState: LocationPermissionState.granted,
+    );
+
+    await pumpCaptureForm(tester, platform: platform);
+
+    expect(find.byKey(const Key('gallery-picker-fallback-hint')), findsNothing);
     await disposeApp(tester);
   });
 
