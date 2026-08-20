@@ -93,9 +93,14 @@ export struct AppImage {
   @Prop decodeEdge: number = 512;
   @Prop fit: ImageFit = ImageFit.Cover;
   @Prop transparentPlaceholder: boolean = false;
+  @Prop callbackToken: number = 0;
+  @Prop callbackAuxToken: number = 0;
+  @Prop callbackKey: string = '';
   @State private request: ImageRequestState = ImageRequestState.initial();
-  onLoaded: () => void = (): void => {};
-  onFailed: () => void = (): void => {};
+  onLoaded: (token: number, auxiliaryToken: number, key: string, uri: string) => void =
+    (_token: number, _auxiliaryToken: number, _key: string, _uri: string): void => {};
+  onFailed: (token: number, auxiliaryToken: number, key: string, uri: string) => void =
+    (_token: number, _auxiliaryToken: number, _key: string, _uri: string): void => {};
 
   aboutToAppear(): void {
     this.onRequestChanged();
@@ -105,23 +110,25 @@ export struct AppImage {
     this.request = this.request.forRequest(this.uri, this.requestVersion);
   }
 
-  private completeCallback(generation: number, uri: string): () => void {
+  private completeCallback(generation: number, uri: string, callbackToken: number,
+    callbackAuxToken: number, callbackKey: string): () => void {
     return (): void => {
       if (!this.request.accepts(generation, uri)) {
         return;
       }
       this.request = this.request.complete(generation);
-      this.onLoaded();
+      this.onLoaded(callbackToken, callbackAuxToken, callbackKey, uri);
     };
   }
 
-  private failCallback(generation: number, uri: string): () => void {
+  private failCallback(generation: number, uri: string, callbackToken: number,
+    callbackAuxToken: number, callbackKey: string): () => void {
     return (): void => {
       if (!this.request.accepts(generation, uri)) {
         return;
       }
       this.request = this.request.fail(generation);
-      this.onFailed();
+      this.onFailed(callbackToken, callbackAuxToken, callbackKey, uri);
     };
   }
 
@@ -140,8 +147,10 @@ export struct AppImage {
               .objectFit(this.fit)
               .sourceSize({ width: ImageDecodePolicy.sourceSizeEdge(this.decodeEdge),
                 height: ImageDecodePolicy.sourceSizeEdge(this.decodeEdge) })
-              .onComplete(this.completeCallback(request.generation, request.uri))
-              .onError(this.failCallback(request.generation, request.uri))
+              .onComplete(this.completeCallback(request.generation, request.uri, this.callbackToken,
+                this.callbackAuxToken, this.callbackKey))
+              .onError(this.failCallback(request.generation, request.uri, this.callbackToken,
+                this.callbackAuxToken, this.callbackKey))
           }, (request: ImageRequestState): string => request.nodeIdentity())
         }
         .width('100%')
