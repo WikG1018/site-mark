@@ -526,6 +526,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                               permissionPrompt: prompt,
                               showGalleryPickerFallback:
                                   gallerySnapshot.data == 'pickerFallback',
+                              showDegradedWatermark: ref
+                                  .watch(imagePipelineProvider)
+                                  .isDegraded,
                             );
                           },
                         ),
@@ -639,6 +642,7 @@ class _CaptureFormBody extends StatelessWidget {
     required this.onTemplates,
     this.permissionPrompt,
     this.showGalleryPickerFallback = false,
+    this.showDegradedWatermark = false,
   });
 
   final TextEditingController locationController;
@@ -658,6 +662,7 @@ class _CaptureFormBody extends StatelessWidget {
   /// dismissed the explanation.
   final Widget? permissionPrompt;
   final bool showGalleryPickerFallback;
+  final bool showDegradedWatermark;
 
   @override
   Widget build(BuildContext context) {
@@ -674,6 +679,14 @@ class _CaptureFormBody extends StatelessWidget {
             child: Text(
               strings.galleryPickerFallbackHint,
               key: const Key('gallery-picker-fallback-hint'),
+            ),
+          ),
+        if (showDegradedWatermark)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              strings.watermarkEngineDegraded,
+              key: const Key('watermark-engine-degraded'),
             ),
           ),
         Align(

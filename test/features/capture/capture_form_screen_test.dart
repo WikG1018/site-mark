@@ -14,6 +14,8 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/src/rust/api/image_core.dart' as rust;
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 void main() {
   const fixedLocationHint = '拍摄前仅请求一次前台位置；拒绝授权也可以继续拍摄。';
@@ -32,6 +34,7 @@ void main() {
     WidgetTester tester, {
     required _CaptureFormPlatform platform,
     Locale locale = const Locale('zh'),
+    ImagePipeline? imagePipeline,
   }) async {
     await database.createProject(id: 'project-1', name: '东区厂房改造');
     await tester.pumpWidget(
@@ -39,6 +42,7 @@ void main() {
         database: database,
         initialLocale: locale,
         platformServices: platform,
+        imagePipeline: imagePipeline,
         completionNotificationService: _NoOpCompletionNotificationService(),
         captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
@@ -182,6 +186,38 @@ void main() {
     await pumpCaptureForm(tester, platform: platform);
 
     expect(find.byKey(const Key('gallery-picker-fallback-hint')), findsNothing);
+    await disposeApp(tester);
+  });
+
+  testWidgets('degraded watermark engine shows honesty hint on capture form', (
+    tester,
+  ) async {
+    final platform = _CaptureFormPlatform(
+      permissionState: LocationPermissionState.granted,
+    );
+
+    await pumpCaptureForm(
+      tester,
+      platform: platform,
+      imagePipeline: const _DegradedHintPipeline(),
+    );
+
+    expect(find.byKey(const Key('watermark-engine-degraded')), findsOneWidget);
+    expect(find.text('降级水印引擎'), findsOneWidget);
+    await disposeApp(tester);
+  });
+
+  testWidgets('non-degraded watermark engine hides capture form honesty hint', (
+    tester,
+  ) async {
+    final platform = _CaptureFormPlatform(
+      permissionState: LocationPermissionState.granted,
+    );
+
+    await pumpCaptureForm(tester, platform: platform);
+
+    expect(find.byKey(const Key('watermark-engine-degraded')), findsNothing);
+    expect(find.text('降级水印引擎'), findsNothing);
     await disposeApp(tester);
   });
 
@@ -608,6 +644,38 @@ class _ThrowingProjectDatabase extends AppDatabase {
   Future<Project?> projectById(String projectId) {
     return Future<Project?>.error(StateError('lookup failed'));
   }
+}
+
+class _DegradedHintPipeline implements ImagePipeline {
+  const _DegradedHintPipeline();
+
+  @override
+  bool get isDegraded => true;
+
+  @override
+  Future<rust.ExportProjectResult> export(rust.ExportProjectRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<rust.ExportProjectResult> exportSelection(
+    rust.ExportSelectionRequest request,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<rust.ProjectArchivePreview> readProjectArchive(String zipPath) =>
+      throw UnimplementedError();
+
+  @override
+  Future<rust.ExtractedArchivePhoto> extractArchivePhoto(
+    rust.ExtractArchivePhotoRequest request,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<String> sha256(String path) => throw UnimplementedError();
+
+  @override
+  Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request) =>
+      throw UnimplementedError();
 }
 
 class _NoOpCompletionNotificationService

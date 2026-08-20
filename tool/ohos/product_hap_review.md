@@ -117,6 +117,17 @@
 | 官方测试 | `ohos_background_work_client_test` **6 项全绿** |
 | 模拟器 dump | **无**。不是 WorkScheduler 进程保活，不得写后台渲染已对等 |
 
+## 2026-08-20 Task 49
+
+拍摄页补上与存储页/拍摄详情相同的降级水印引擎提示。官方 UI 测试闭环，未重编 HAP，无拍成 dump。
+
+| 项 | 结果 |
+| --- | --- |
+| UI | `imagePipelineProvider.isDegraded` 时拍摄页显示「降级水印引擎」/`watermark-engine-degraded` |
+| 非降级 | 宿主默认 Rust 管线不显示该提示 |
+| 官方测试 | `capture_form_screen_test` **19 绿** |
+| 模拟器 dump | **无**。不得写水印已对等 Android 像素 |
+
 ## 2026-08-20 Task 48
 
 相册探测诚实化。无 ACL 成功证明时不得把媒体权限当成 `acl`。官方 UI / 通道测试闭环，未重编 HAP，无相册 dump。
@@ -126,7 +137,7 @@
 | 探测 | `detectGalleryAccess` 默认 `pickerFallback` |
 | 发布 | 有 READ+WRITE 媒体权限仍先 `createAsset`，失败再相册对话框/沙箱 |
 | UI | 存储页、拍摄页在 `pickerFallback` 显示「未进入系统相册」 |
-| 官方测试 | `storage_section_screen_test` **5 绿**、`capture_form_screen_test` **17 绿**、`ohos_platform_services_test` **30 绿** |
+| 官方测试 | `storage_section_screen_test` **5 绿**、`ohos_platform_services_test` **30 绿** |
 | 模拟器 dump | **无**。不得写系统相册已通 |
 
 ## 2026-08-20 Task 45
