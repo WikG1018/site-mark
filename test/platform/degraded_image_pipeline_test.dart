@@ -20,6 +20,8 @@ const _watermark = rust.ExportWatermarkSettings(
 );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('degraded pipeline implements ImagePipeline and reports degraded', () {
     const pipeline = DegradedImagePipeline();
     expect(pipeline, isA<ImagePipeline>());
@@ -30,7 +32,7 @@ void main() {
     final root = await Directory.systemTemp.createTemp('sitemark-degraded-');
     addTearDown(() => root.delete(recursive: true));
 
-    final source = img.Image(width: 48, height: 32);
+    final source = img.Image(width: 800, height: 600);
     img.fill(source, color: img.ColorRgb8(20, 40, 60));
     final sourcePath = '${root.path}${Platform.pathSeparator}source.jpg';
     final outputPath = '${root.path}${Platform.pathSeparator}out.jpg';
@@ -60,6 +62,151 @@ void main() {
     expect(result.outputPath, outputPath);
     expect(await pipeline.sha256(outputPath), result.outputSha256);
     expect(img.decodeJpg(await output.readAsBytes()), isNotNull);
+  });
+
+  test('degradedWatermarkLines uses Chinese engineering labels', () {
+    final lines = degradedWatermarkLines(
+      rust.RenderPhotoRequest(
+        sourcePath: 'in.jpg',
+        outputPath: 'out.jpg',
+        projectName: '一号楼',
+        workLocation: '3F梁底',
+        workContent: '钢筋验收',
+        photographer: '张三',
+        photoNumber: '001',
+        capturedAt: '2026-08-20T08:00:00Z',
+        address: '上海市',
+        coordinates: '31.2,121.5',
+        notes: '雨后',
+        position: rust.WatermarkPosition.bottomLeft,
+        opacity: 0.78,
+        accentColorArgb: 0xff37c58b,
+        fontScale: 1,
+        localeCode: 'zh',
+      ),
+    );
+
+    expect(lines, [
+      '现场记录 · 一号楼',
+      '位置  3F梁底',
+      '内容  钢筋验收',
+      '拍摄人  张三',
+      '时间  2026-08-20T08:00:00Z',
+      '地址  上海市',
+      '坐标  31.2,121.5',
+      '备注  雨后',
+    ]);
+    expect(lines.join('\n'), isNot(contains('001')));
+    expect(lines.join('\n'), isNot(contains('SiteMark')));
+  });
+
+  test('degradedWatermarkLines omits empty optional fields', () {
+    final lines = degradedWatermarkLines(
+      rust.RenderPhotoRequest(
+        sourcePath: 'in.jpg',
+        outputPath: 'out.jpg',
+        projectName: 'p',
+        workLocation: 'loc',
+        workContent: 'work',
+        photographer: 'cam',
+        photoNumber: '001',
+        capturedAt: '2026-08-18T00:00:00Z',
+        address: '  ',
+        coordinates: '',
+        notes: null,
+        position: rust.WatermarkPosition.bottomLeft,
+        opacity: 0.78,
+        accentColorArgb: 0xff37c58b,
+        fontScale: 1,
+        localeCode: 'zh',
+      ),
+    );
+
+    expect(lines, [
+      '现场记录 · p',
+      '位置  loc',
+      '内容  work',
+      '拍摄人  cam',
+      '时间  2026-08-18T00:00:00Z',
+    ]);
+  });
+
+  test('degradedWatermarkLines uses English labels', () {
+    final lines = degradedWatermarkLines(
+      rust.RenderPhotoRequest(
+        sourcePath: 'in.jpg',
+        outputPath: 'out.jpg',
+        projectName: 'Tower A',
+        workLocation: 'Grid 3',
+        workContent: 'Rebar',
+        photographer: 'Lee',
+        photoNumber: '009',
+        capturedAt: '2026-08-20T08:00:00Z',
+        address: 'Shanghai',
+        coordinates: '31.2,121.5',
+        notes: 'after rain',
+        position: rust.WatermarkPosition.bottomRight,
+        opacity: 0.78,
+        accentColorArgb: 0xff37c58b,
+        fontScale: 1,
+        localeCode: 'en',
+      ),
+    );
+
+    expect(lines, [
+      'Site record · Tower A',
+      'Location  Grid 3',
+      'Work  Rebar',
+      'Photographer  Lee',
+      'Time  2026-08-20T08:00:00Z',
+      'Address  Shanghai',
+      'Coordinates  31.2,121.5',
+      'Notes  after rain',
+    ]);
+  });
+
+  test('render composites a bottom-left card instead of a SiteMark stamp', () async {
+    final root = await Directory.systemTemp.createTemp('sitemark-degraded-card-');
+    addTearDown(() => root.delete(recursive: true));
+
+    final source = img.Image(width: 800, height: 600);
+    img.fill(source, color: img.ColorRgb8(20, 40, 60));
+    final sourcePath = '${root.path}${Platform.pathSeparator}source.jpg';
+    final outputPath = '${root.path}${Platform.pathSeparator}out.jpg';
+    await File(sourcePath).writeAsBytes(img.encodeJpg(source, quality: 100));
+
+    const pipeline = DegradedImagePipeline();
+    await pipeline.render(
+      rust.RenderPhotoRequest(
+        sourcePath: sourcePath,
+        outputPath: outputPath,
+        projectName: '一号楼',
+        workLocation: '3F',
+        workContent: '验收',
+        photographer: '张三',
+        photoNumber: '001',
+        capturedAt: '2026-08-20T08:00:00Z',
+        position: rust.WatermarkPosition.bottomLeft,
+        opacity: 0.78,
+        accentColorArgb: 0xff37c58b,
+        fontScale: 1,
+        localeCode: 'zh',
+      ),
+    );
+
+    final decoded = img.decodeJpg(await File(outputPath).readAsBytes());
+    expect(decoded, isNotNull);
+    final topLeft = decoded!.getPixel(8, 8);
+    expect(topLeft.r.toInt(), closeTo(20, 12));
+    expect(topLeft.g.toInt(), closeTo(40, 12));
+    expect(topLeft.b.toInt(), closeTo(60, 12));
+    final cardPixel = decoded.getPixel(16, decoded.height - 16);
+    expect(
+      (cardPixel.r.toInt() - 20).abs() +
+          (cardPixel.g.toInt() - 40).abs() +
+          (cardPixel.b.toInt() - 60).abs(),
+      greaterThan(20),
+    );
   });
 
   test('export writes a schema 5 zip with manifest and records.csv', () async {

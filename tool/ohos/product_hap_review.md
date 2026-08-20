@@ -94,6 +94,18 @@
 | 官方测试 | `ohos_platform_services_test` 22 项通过 |
 | 模拟器 dump | **无**。不得写系统外链已通 |
 
+## 2026-08-20 Tasks 43–44
+
+降级水印从只画英文 `SiteMark` 改为与 Rust `labels()` 同字段的半透明卡片。官方管线测试闭环，未重编 HAP，无拍成 dump。
+
+| 项 | 结果 |
+| --- | --- |
+| 文案 | `degradedWatermarkLines`：现场记录 · 项目 / 位置 / 内容 / 拍摄人 / 时间；非空地址、坐标、备注；照片编号不画 |
+| 叠图 | `dart:ui` Canvas 半透明底 + 左侧 accent + `compositeImage` |
+| 字体 | `NotoSansSC` ← `rust/assets/fonts/NotoSansSC-Regular.otf` |
+| 官方测试 | `degraded_image_pipeline_test` **18 项全绿** |
+| 模拟器 dump | **无**。不得写水印已对等 Android 像素 |
+
 ## 2026-08-20 Tasks 41–42
 
 无 ACL 发布走系统相册保存对话框。官方通道测试闭环，未重编 HAP，未在模拟器保存到相册。

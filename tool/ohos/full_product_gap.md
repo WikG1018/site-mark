@@ -21,7 +21,7 @@
 - 备份 zip **未证明**写进系统文件管理。本轮只证实沙箱 zip + picker 弹出，没有 picker 成功 dump。
 - 系统文件选择恢复 **未证明**。产品页已改走原生 Document picker → 沙箱 `files/imports`，再进现有 `prepareRestore`；无 picker 成功 dump，不等于系统文件选择恢复已通。
 - 相机未拍成；定位未出坐标；ACL 未证明。
-- 水印引擎仍 degraded，无 `ohos-arm64`。
+- 水印引擎仍 degraded，无 `ohos-arm64`。字段卡片已接，像素未对等。无拍成 dump。
 - 系统通知 / 系统分享 / 系统外链 **未证明**（通道已接，无 dump）。
 - 相机拍成 **未证明**（媒体 URI 拷沙箱已接，无 dump）。
 - 系统相册 **未证明**（保存对话框已接，无 dump）。
@@ -29,4 +29,4 @@
 
 ## 水平结论
 
-项目能存；备份能在应用沙箱导出 zip 并弹出保存选择器；降级引擎能把该 zip 读回；恢复选文件已接到鸿蒙原生 Document picker；拍成后读图已接到 ImageKit；相机媒体 URI 拷沙箱已接；发布 JPEG 已接系统相册保存对话框；分享通道已接 ShareKit；拍成通知通道已接 NotificationKit；外链通道已接 `startAbility`。拍成 dump / 水印 / 系统相册 dump / 系统文件落盘 / 系统文件选择恢复 / 系统分享面板 / 系统通知 / 系统浏览器仍未对等 Android v1.0.8。
+项目能存；备份能在应用沙箱导出 zip 并弹出保存选择器；降级引擎能把该 zip 读回；恢复选文件已接到鸿蒙原生 Document picker；拍成后读图已接到 ImageKit；相机媒体 URI 拷沙箱已接；发布 JPEG 已接系统相册保存对话框；降级水印已叠与 Rust 同字段的半透明卡片；分享通道已接 ShareKit；拍成通知通道已接 NotificationKit；外链通道已接 `startAbility`。拍成 dump / 水印像素对等 / 系统相册 dump / 系统文件落盘 / 系统文件选择恢复 / 系统分享面板 / 系统通知 / 系统浏览器仍未对等 Android v1.0.8。

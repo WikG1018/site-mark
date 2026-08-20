@@ -53,7 +53,7 @@
 明确还不是完整鸿蒙版：
 
 - 模拟器已跑全量 `lib/main.dart` 首页，**不等于** Android v1.0.8 能力对等
-- 水印引擎未编出 `ohos-arm64`，运行时走降级管线
+- 水印引擎未编出 `ohos-arm64`，运行时走降级管线（字段卡片已接，像素未对等）
 - 无真机，不能声称相机已拍成、定位出坐标、备份已进系统文件管理、系统文件选择恢复已通、系统分享已通、系统通知已通、系统外链已通、系统相册替换与 Android 对等；模拟器仅探测到权限框 + `CameraPicker.Pick` 回表单，以及备份沙箱 `files/exports/*.zip` + Document picker 弹出（未完成 picker 保存）。恢复导入引擎层已通；产品页已改走原生 Document picker，但无模拟器成功 dump，不得写系统文件选择恢复已通。读图通道与 ImageKit 宿主已接；相机媒体 URI 拷沙箱已接，无拍成 dump 不得写相机已拍成。发布通道已接系统相册保存对话框，无相册 dump 不得写系统相册已通。分享通道与 ShareKit 宿主已接，无分享面板 dump 不得写系统分享已通。通知通道与 NotificationKit 宿主已接，无通知 dump 不得写系统通知已通。外链通道与 `startAbility` 宿主已接，无浏览器 dump 不得写系统外链已通
 - 无签名 `flutter build hap --release`，不能当应用市场上架包
 - GitHub Releases 里的 APK 属于 Android 主线，不是本分支产物

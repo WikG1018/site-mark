@@ -48,7 +48,7 @@ No `librust_lib` / `libsitemark_core.so` was produced. HAP cannot package a real
 - On init failure it sets `rustInitFailed = true` in `lib/platform/ohos_capability.dart`.
 - `imagePipelineProvider` switches to `DegradedImagePipeline` only when `isOhosBuild && rustInitFailed`.
 - `DegradedImagePipeline.isDegraded == true`.
-- `render` copies the JPEG and draws plain text `SiteMark` via `package:image`. Not pixel-parity with Rust.
+- `render` composites a translucent field card via `dart:ui` (`NotoSansSC`, labels matching Rust `labels()`). Not `ohos-arm64` pixel-parity with Rust. No capture dump.
 - ZIP `export` / `exportSelection` / `readProjectArchive` / `extractArchivePhoto` throw `ImagePipelineException` with an `invalid_data:` message. Backup/export is also degraded.
 
 Do not claim full Android watermark parity. Task 4 may continue for capture closed-loop only with this degraded engine note.

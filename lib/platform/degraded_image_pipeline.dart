@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart' as crypto;
@@ -228,14 +230,7 @@ class DegradedImagePipeline implements ImagePipeline {
       throw _invalidData('decode jpeg');
     }
 
-    img.drawString(
-      decoded,
-      'SiteMark',
-      font: img.arial24,
-      x: 16,
-      y: 16,
-      color: img.ColorRgb8(255, 255, 255),
-    );
+    await _compositeDegradedWatermark(decoded, request);
 
     final encoded = img.encodeJpg(decoded);
     final output = File(request.outputPath);
@@ -249,6 +244,248 @@ class DegradedImagePipeline implements ImagePipeline {
       height: decoded.height,
     );
   }
+}
+
+List<String> degradedWatermarkLines(rust.RenderPhotoRequest request) {
+  final english = request.localeCode == 'en';
+  final title = english ? 'Site record' : '现场记录';
+  final location = english ? 'Location' : '位置';
+  final content = english ? 'Work' : '内容';
+  final photographer = english ? 'Photographer' : '拍摄人';
+  final time = english ? 'Time' : '时间';
+  final address = english ? 'Address' : '地址';
+  final coordinates = english ? 'Coordinates' : '坐标';
+  final notes = english ? 'Notes' : '备注';
+  final lines = <String>[
+    '$title · ${request.projectName}',
+    '$location  ${request.workLocation}',
+    '$content  ${request.workContent}',
+    '$photographer  ${request.photographer}',
+    '$time  ${request.capturedAt}',
+  ];
+  final addressValue = _nonEmptyOptional(request.address);
+  if (addressValue != null) {
+    lines.add('$address  $addressValue');
+  }
+  final coordinatesValue = _nonEmptyOptional(request.coordinates);
+  if (coordinatesValue != null) {
+    lines.add('$coordinates  $coordinatesValue');
+  }
+  final notesValue = _nonEmptyOptional(request.notes);
+  if (notesValue != null) {
+    lines.add('$notes  $notesValue');
+  }
+  return lines;
+}
+
+String? _nonEmptyOptional(String? value) {
+  final trimmed = value?.trim();
+  if (trimmed == null || trimmed.isEmpty) {
+    return null;
+  }
+  return trimmed;
+}
+
+Future<void> _compositeDegradedWatermark(
+  img.Image decoded,
+  rust.RenderPhotoRequest request,
+) async {
+  final width = decoded.width;
+  final height = decoded.height;
+  if (width < 8 || height < 8) {
+    return;
+  }
+
+  final lines = degradedWatermarkLines(request);
+  final scale = request.fontScale.clamp(0.80, 1.60);
+  var margin = math.max(1, ((math.min(width, height)) * 0.025).round());
+  var fontSize = ((width * 0.0312).clamp(31.2, 69.6)) * scale;
+  var titleSize = fontSize * 1.18;
+  var padding = math.max(22.0, (width * 0.0216).roundToDouble()) * scale;
+  final maxCardWidth = math.max(8, (width * 0.92).round());
+  var accentWidth = math.max(2.0, fontSize * 0.24);
+  var maxTextWidth = math.max(
+    8.0,
+    maxCardWidth - padding * 2 - accentWidth,
+  );
+
+  var laid = _layoutWatermarkLines(lines, titleSize, fontSize, maxTextWidth);
+  var measuredTextWidth = laid.measuredWidth;
+  var cardWidth = (measuredTextWidth + padding * 2 + accentWidth)
+      .round()
+      .clamp(8, maxCardWidth);
+  var cardHeight = (padding * 2 + laid.totalHeight).round().clamp(8, height);
+
+  final maxW = math.max(8, width - margin * 2);
+  final maxH = math.max(8, height - margin * 2);
+  final fit = math.min(1.0, math.min(maxW / cardWidth, maxH / cardHeight));
+  if (fit < 1) {
+    fontSize *= fit;
+    titleSize *= fit;
+    padding *= fit;
+    accentWidth = math.max(2.0, fontSize * 0.24);
+    maxTextWidth = math.max(8.0, maxW - padding * 2 - accentWidth);
+    laid = _layoutWatermarkLines(lines, titleSize, fontSize, maxTextWidth);
+    cardWidth = (laid.measuredWidth + padding * 2 + accentWidth)
+        .round()
+        .clamp(8, maxW);
+    cardHeight = (padding * 2 + laid.totalHeight).round().clamp(8, maxH);
+  }
+
+  final left = request.position == rust.WatermarkPosition.bottomRight
+      ? width - margin - cardWidth
+      : margin;
+  final top = height - margin - cardHeight;
+  final opacity = request.opacity.clamp(0.2, 0.95);
+  final overlay = await _paintWatermarkCard(
+    width: cardWidth,
+    height: cardHeight,
+    padding: padding,
+    accentWidth: accentWidth,
+    opacity: opacity,
+    accentColorArgb: request.accentColorArgb,
+    lines: laid.paragraphs,
+  );
+  img.compositeImage(
+    decoded,
+    overlay,
+    dstX: left,
+    dstY: top,
+    dstW: cardWidth,
+    dstH: cardHeight,
+  );
+}
+
+class _WatermarkLineLayout {
+  const _WatermarkLineLayout({
+    required this.paragraphs,
+    required this.measuredWidth,
+    required this.totalHeight,
+  });
+
+  final List<ui.Paragraph> paragraphs;
+  final double measuredWidth;
+  final double totalHeight;
+}
+
+_WatermarkLineLayout _layoutWatermarkLines(
+  List<String> lines,
+  double titleSize,
+  double fontSize,
+  double maxTextWidth,
+) {
+  final paragraphs = <ui.Paragraph>[];
+  var measuredWidth = 1.0;
+  var totalHeight = 0.0;
+  for (var index = 0; index < lines.length; index++) {
+    final size = index == 0 ? titleSize : fontSize;
+    final color = index == 0
+        ? const ui.Color(0xFFFFFFFF)
+        : const ui.Color(0xFFEEF4F2);
+    final paragraph = _buildWatermarkParagraph(
+      lines[index],
+      size,
+      color,
+      maxTextWidth,
+    );
+    measuredWidth = math.max(
+      measuredWidth,
+      math.min(paragraph.maxIntrinsicWidth, maxTextWidth),
+    );
+    totalHeight += math.max(paragraph.height, size * 1.42);
+    paragraphs.add(paragraph);
+  }
+  return _WatermarkLineLayout(
+    paragraphs: paragraphs,
+    measuredWidth: measuredWidth,
+    totalHeight: totalHeight,
+  );
+}
+
+ui.Paragraph _buildWatermarkParagraph(
+  String text,
+  double fontSize,
+  ui.Color color,
+  double maxWidth,
+) {
+  final builder = ui.ParagraphBuilder(
+    ui.ParagraphStyle(
+      fontFamily: 'NotoSansSC',
+      fontSize: fontSize,
+      maxLines: 8,
+      ellipsis: '…',
+    ),
+  )..pushStyle(
+      ui.TextStyle(
+        fontFamily: 'NotoSansSC',
+        fontSize: fontSize,
+        color: color,
+        height: 1.42,
+      ),
+    )
+    ..addText(text);
+  final paragraph = builder.build();
+  paragraph.layout(ui.ParagraphConstraints(width: maxWidth));
+  return paragraph;
+}
+
+Future<img.Image> _paintWatermarkCard({
+  required int width,
+  required int height,
+  required double padding,
+  required double accentWidth,
+  required double opacity,
+  required int accentColorArgb,
+  required List<ui.Paragraph> lines,
+}) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder);
+  final background = ui.Paint()
+    ..color = ui.Color.fromARGB(
+      (opacity * 255).round().clamp(1, 255),
+      8,
+      20,
+      18,
+    );
+  canvas.drawRect(
+    ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    background,
+  );
+  final accent = ui.Paint()
+    ..color = ui.Color.fromARGB(
+      (accentColorArgb >> 24) & 0xff,
+      (accentColorArgb >> 16) & 0xff,
+      (accentColorArgb >> 8) & 0xff,
+      accentColorArgb & 0xff,
+    );
+  canvas.drawRect(
+    ui.Rect.fromLTWH(0, 0, accentWidth, height.toDouble()),
+    accent,
+  );
+
+  var textTop = padding;
+  final textLeft = padding + accentWidth;
+  for (final paragraph in lines) {
+    canvas.drawParagraph(paragraph, ui.Offset(textLeft, textTop));
+    textTop += paragraph.height;
+  }
+
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(width, height);
+  picture.dispose();
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  image.dispose();
+  if (bytes == null) {
+    throw _invalidData('encode watermark card');
+  }
+  return img.Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: bytes.buffer,
+    bytesOffset: bytes.offsetInBytes,
+    numChannels: 4,
+    order: img.ChannelOrder.rgba,
+  );
 }
 
 class DegradedProjectBundlePipeline implements ProjectBundlePipeline {
