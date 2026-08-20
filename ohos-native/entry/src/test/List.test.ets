@@ -21,6 +21,8 @@ import rootShellPolicyTest from './RootShellPolicy.test';
 import recordUiCoordinatorTest from './RecordUiCoordinator.test';
 import screenActionCoordinatorTest from './ScreenActionCoordinator.test';
 import diagnosticsActionOutcomeTest from './DiagnosticsActionOutcome.test';
+import captureFormPolicyTest from './CaptureFormPolicy.test';
+import captureWorkflowValidationTest from './CaptureWorkflowValidation.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -46,4 +48,6 @@ export default function testsuite(): void {
   recordUiCoordinatorTest();
   screenActionCoordinatorTest();
   diagnosticsActionOutcomeTest();
+  captureFormPolicyTest();
+  captureWorkflowValidationTest();
 }

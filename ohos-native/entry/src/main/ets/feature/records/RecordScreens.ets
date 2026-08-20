@@ -3,10 +3,8 @@ import { util } from '@kit.ArkTS';
 import { AppRuntime } from '../../app/AppRuntime';
 import { Routes } from '../../app/Routes';
 import { CaptureFilter, CapturePage, CapturePageCursor, CaptureRecord, CaptureTemplateRecord, ProjectRecord } from '../../domain/Models';
-import { CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH, CAPTURE_TEMPLATE_LIMIT_PER_PROJECT,
-  CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH, CAPTURE_TEMPLATE_NAME_MAX_LENGTH,
-  CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH, captureTemplateNameKey,
-  normalizeCaptureTemplateName, resolveWatermarkLocale, validateTemplateField } from '../../domain/DomainRules';
+import { CAPTURE_TEMPLATE_LIMIT_PER_PROJECT, CAPTURE_TEMPLATE_NAME_MAX_LENGTH, captureTemplateNameKey,
+  normalizeCaptureTemplateName, resolveWatermarkLocale } from '../../domain/DomainRules';
 import { CaptureStatus, ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, FilterToolbar,
   InlineErrorPanel, ListSkeleton, SectionHeader } from '../../shared/AppComponents';
@@ -20,6 +18,11 @@ import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 import { MotionPolicy } from '../../shared/MotionPolicy';
+import { FormField, FormTextArea } from '../../shared/FormComponents';
+import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, CaptureFormMetrics,
+  applyDraftSuggestion, canEditCapture, filterSuggestions,
+  restoreRequiredFields, validateCaptureDraft, validateTemplateDraft,
+  validateTemplateName } from '../capture/CaptureFormPolicy';
 import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolicy, RecordSearchCoordinator,
   RecordNavigationSeedStore, RecordRefreshGate, RecordSelectionCoordinator, RenderedRefreshTracker,
   SystemRecordTimerScheduler } from './RecordUiCoordinator';
@@ -593,65 +596,227 @@ export struct CaptureFormScreen {
   @State private renamingTemplateId: string = '';
   @State private deleteTemplateId: string = '';
   @State private watermarkLocaleCode: string = 'zh';
+  @State private locationError: string = '';
+  @State private contentError: string = '';
+  @State private photographerError: string = '';
+  @State private notesError: string = '';
+  @State private suggestionField: string = '';
+  @State private focusedField: string = '';
+  @State private suggestionFilter: string = '';
+  @State private undoAvailable: boolean = false;
+  @State private loadFailed: boolean = false;
+  @State private templateLoadFailed: boolean = false;
+  private undoSnapshot: CaptureDraftSnapshot | null = null;
+  private readonly lifecycle: CaptureFormLifecycle = new CaptureFormLifecycle();
+  private captureGeneration: number = 0;
 
   aboutToAppear(): void {
-    this.load();
+    const generation = this.lifecycle.activate();
+    this.load(generation);
   }
 
-  private async load(): Promise<void> {
+  aboutToDisappear(): void {
+    this.lifecycle.deactivate();
+  }
+
+  private async load(generation: number): Promise<void> {
     const runtime = AppRuntime.require();
-    this.project = await runtime.database.projectById(runtime.selectedProjectId);
-    const settings = await runtime.database.settings();
-    const systemLocale = runtime.context.resourceManager.getConfigurationSync().locale;
-    this.watermarkLocaleCode = resolveWatermarkLocale(settings.localeCode, systemLocale);
-    this.locationGranted = await runtime.services.getLocationPermissionState();
-    this.locationPromptDismissed = settings.locationPermissionPromptDismissed;
-    this.locationSuggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
-      'work_location', 5);
-    this.contentSuggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
-      'work_content', 5);
-    this.photographerSuggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
-      'photographer', 5);
-    const recent = await runtime.database.listCaptures({
-      projectId: runtime.selectedProjectId,
-      year: 0,
-      month: 0,
-      day: 0,
-      searchText: ''
-    }, null, 1);
-    if (recent.rows.length > 0 && this.workLocation.length === 0 && this.workContent.length === 0 &&
-      this.photographer.length === 0) {
-      this.workLocation = recent.rows[0].workLocation;
-      this.workContent = recent.rows[0].workContent;
-      this.photographer = recent.rows[0].photographer;
+    try {
+      const project = await runtime.database.projectById(runtime.selectedProjectId);
+      if (!this.lifecycle.accept(generation)) return;
+      const settings = await runtime.database.settings();
+      if (!this.lifecycle.accept(generation)) return;
+      const systemLocale = runtime.context.resourceManager.getConfigurationSync().locale;
+      const locationGranted = await runtime.services.getLocationPermissionState();
+      if (!this.lifecycle.accept(generation)) return;
+      this.project = project;
+      this.watermarkLocaleCode = resolveWatermarkLocale(settings.localeCode, systemLocale);
+      this.locationGranted = locationGranted;
+      this.locationPromptDismissed = settings.locationPermissionPromptDismissed;
+      this.loadFailed = project === null;
+    } catch (_) {
+      if (this.lifecycle.accept(generation)) {
+        this.loadFailed = true;
+        this.message = tr('项目与拍摄表单暂时无法读取，请重试',
+          'The project and capture form could not be loaded. Try again.');
+      }
+      return;
     }
-    this.templates = await runtime.database.listTemplates(runtime.selectedProjectId);
+    try {
+      const recent = await runtime.database.listCaptures({
+        projectId: runtime.selectedProjectId, year: 0, month: 0, day: 0, searchText: ''
+      }, null, 1);
+      if (this.lifecycle.accept(generation) && recent.rows.length > 0 && this.workLocation.length === 0 &&
+        this.workContent.length === 0 && this.photographer.length === 0) {
+        this.workLocation = recent.rows[0].workLocation;
+        this.workContent = recent.rows[0].workContent;
+        this.photographer = recent.rows[0].photographer;
+      }
+    } catch (_) {
+      // Previous values are an optional convenience; manual entry remains available.
+    }
+    try {
+      const suggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
+        'work_location', CaptureFormMetrics.ALL_SUGGESTION_COUNT);
+      if (this.lifecycle.accept(generation)) this.locationSuggestions = suggestions;
+    } catch (_) { if (this.lifecycle.accept(generation)) this.locationSuggestions = []; }
+    try {
+      const suggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
+        'work_content', CaptureFormMetrics.ALL_SUGGESTION_COUNT);
+      if (this.lifecycle.accept(generation)) this.contentSuggestions = suggestions;
+    } catch (_) { if (this.lifecycle.accept(generation)) this.contentSuggestions = []; }
+    try {
+      const suggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
+        'photographer', CaptureFormMetrics.ALL_SUGGESTION_COUNT);
+      if (this.lifecycle.accept(generation)) this.photographerSuggestions = suggestions;
+    } catch (_) { if (this.lifecycle.accept(generation)) this.photographerSuggestions = []; }
+    try {
+      const templates = await runtime.database.listTemplates(runtime.selectedProjectId);
+      if (this.lifecycle.accept(generation)) {
+        this.templates = templates;
+        this.templateLoadFailed = false;
+      }
+    } catch (_) {
+      if (this.lifecycle.accept(generation)) {
+        this.templates = [];
+        this.templateLoadFailed = true;
+        this.message = tr('拍摄模板暂时无法读取；仍可手动填写并拍摄',
+          'Capture templates could not be loaded. You can still enter fields and capture.');
+      }
+    }
+  }
+
+  private async reloadTemplates(): Promise<void> {
+    const generation = this.lifecycle.snapshot();
+    try {
+      const templates = await AppRuntime.require().database.listTemplates(AppRuntime.require().selectedProjectId);
+      if (!this.lifecycle.accept(generation)) return;
+      this.templates = templates;
+      this.templateLoadFailed = false;
+      this.message = '';
+    } catch (_) {
+      if (this.lifecycle.accept(generation)) this.message = tr('拍摄模板仍无法读取，请稍后再试',
+        'Capture templates still could not be loaded. Try again later.');
+    }
+  }
+
+  private handleBack(): void {
+    if (this.suggestionField.length > 0) {
+      this.suggestionField = '';
+      this.suggestionFilter = '';
+      this.lifecycle.closeTransient();
+      return;
+    }
+    if (this.templateOpen || this.renamingTemplateId.length > 0 || this.deleteTemplateId.length > 0) {
+      this.templateOpen = false;
+      this.renamingTemplateId = '';
+      this.deleteTemplateId = '';
+      this.templateName = '';
+      this.lifecycle.closeTransient();
+      return;
+    }
+    this.captureGeneration += 1;
+    this.pathStack.pop();
+  }
+
+  private applyValidation(validation: CaptureDraftValidation): void {
+    this.locationError = validation.locationError;
+    this.contentError = validation.workError;
+    this.photographerError = validation.photographerError;
+    this.notesError = validation.notesError;
+  }
+
+  private currentSnapshot(): CaptureDraftSnapshot {
+    return new CaptureDraftSnapshot(this.workLocation, this.workContent, this.photographer, this.notes);
+  }
+
+  private focusField(field: string): void {
+    this.focusedField = field;
+    if (this.templateOpen) {
+      this.templateOpen = false;
+      this.renamingTemplateId = '';
+      this.deleteTemplateId = '';
+      this.templateName = '';
+      this.lifecycle.closeTransient();
+    }
+    if (this.suggestionField.length > 0 && this.suggestionField !== field) {
+      this.suggestionField = '';
+      this.suggestionFilter = '';
+      this.lifecycle.closeTransient();
+    }
+  }
+
+  private rememberAndApply(field: string, value: string): void {
+    const application = applyDraftSuggestion(this.currentSnapshot(), field, value);
+    this.undoSnapshot = application.previous;
+    this.undoAvailable = true;
+    this.workLocation = application.value.location;
+    this.workContent = application.value.work;
+    this.photographer = application.value.photographer;
+    this.notes = application.value.notes;
+    this.suggestionField = '';
+    this.suggestionFilter = '';
+    this.lifecycle.closeTransient();
+    this.applyValidation(validateCaptureDraft(this.workLocation, this.workContent, this.photographer, this.notes));
+  }
+
+  private undoLastApplication(): void {
+    if (this.undoSnapshot === null) return;
+    const restored = restoreRequiredFields(this.currentSnapshot(), this.undoSnapshot);
+    this.workLocation = restored.location;
+    this.workContent = restored.work;
+    this.photographer = restored.photographer;
+    this.notes = restored.notes;
+    this.undoSnapshot = null;
+    this.undoAvailable = false;
+    this.message = tr('已撤销上一次应用', 'The last application was undone');
   }
 
   private async dismissLocationPrompt(): Promise<void> {
+    const generation = this.lifecycle.snapshot();
     const runtime = AppRuntime.require();
-    const settings = await runtime.database.settings();
-    settings.locationPermissionPromptDismissed = true;
-    await runtime.database.updateSettings(settings);
-    this.locationPromptDismissed = true;
+    try {
+      const settings = await runtime.database.settings();
+      settings.locationPermissionPromptDismissed = true;
+      await runtime.database.updateSettings(settings);
+      if (this.lifecycle.accept(generation)) this.locationPromptDismissed = true;
+    } catch (_) {
+      if (this.lifecycle.accept(generation)) this.message = tr('暂时无法保存位置提示设置，请稍后重试',
+        'The location prompt setting could not be saved. Try again later.');
+    }
   }
 
   private async enableLocation(): Promise<void> {
+    const generation = this.lifecycle.snapshot();
     const runtime = AppRuntime.require();
-    const granted = await runtime.services.requestLocationPermission();
-    this.locationGranted = granted;
-    if (!granted) {
-      await this.dismissLocationPrompt();
-      this.message = tr('未授予位置权限，仍可正常拍摄；以后可在设置中重新开启',
-        'Location permission was not granted. You can keep shooting and enable it later in Settings.');
+    try {
+      const granted = await runtime.services.requestLocationPermission();
+      if (!this.lifecycle.accept(generation)) return;
+      this.locationGranted = granted;
+      if (!granted) {
+        const settings = await runtime.database.settings();
+        settings.locationPermissionPromptDismissed = true;
+        await runtime.database.updateSettings(settings);
+        if (!this.lifecycle.accept(generation)) return;
+        this.locationPromptDismissed = true;
+        this.message = tr('未授予位置权限，仍可正常拍摄；以后可在设置中重新开启',
+          'Location permission was not granted. You can keep shooting and enable it later in Settings.');
+      }
+    } catch (_) {
+      if (this.lifecycle.accept(generation)) this.message = tr('暂时无法请求位置权限，仍可继续拍摄',
+        'Location permission could not be requested. You can still capture.');
     }
   }
 
   private applyTemplate(template: CaptureTemplateRecord): void {
-    this.workLocation = template.workLocation;
-    this.workContent = template.workContent;
-    this.photographer = template.photographer;
+    this.undoSnapshot = this.currentSnapshot();
+    this.undoAvailable = true;
+    this.workLocation = template.workLocation.trim();
+    this.workContent = template.workContent.trim();
+    this.photographer = template.photographer.trim();
     this.templateOpen = false;
+    this.lifecycle.closeTransient();
+    this.applyValidation(validateCaptureDraft(this.workLocation, this.workContent, this.photographer, this.notes));
     this.message = tr(`已应用模板“${template.name}”`, `Template “${template.name}” applied`);
   }
 
@@ -662,11 +827,26 @@ export struct CaptureFormScreen {
   }
 
   private async saveTemplate(): Promise<void> {
-    const name = normalizeCaptureTemplateName(this.templateName);
-    if (!validateTemplateField(name, CAPTURE_TEMPLATE_NAME_MAX_LENGTH)) {
-      this.message = tr('请输入 1–80 个字符的模板名称', 'Enter a template name from 1 to 80 characters');
+    if (!this.lifecycle.beginSave()) return;
+    const generation = this.lifecycle.snapshot();
+    const nameValidation = validateTemplateName(this.templateName);
+    if (!nameValidation.valid) {
+      this.message = nameValidation.error;
+      this.lifecycle.finishSave(generation);
       return;
     }
+    const validation = validateTemplateDraft(this.templateName, this.workLocation, this.workContent,
+      this.photographer);
+    if (this.renamingTemplateId.length === 0 && !validation.valid) {
+      this.locationError = validation.locationError;
+      this.contentError = validation.workError;
+      this.photographerError = validation.photographerError;
+      this.message = validation.nameError.length > 0 ? validation.nameError :
+        tr('请先修正表单中的必填信息', 'Fix the required form fields first');
+      this.lifecycle.finishSave(generation);
+      return;
+    }
+    const name = normalizeCaptureTemplateName(nameValidation.value);
     const runtime = AppRuntime.require();
     try {
       if (this.renamingTemplateId.length > 0) {
@@ -676,27 +856,29 @@ export struct CaptureFormScreen {
           this.message = tr('每个项目最多保存 100 个拍摄模板', 'Each project can store up to 100 capture templates');
           return;
         }
-        if (!validateTemplateField(this.workLocation, CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH) ||
-          !validateTemplateField(this.workContent, CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH) ||
-          !validateTemplateField(this.photographer, CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH)) {
-          this.message = tr('请先完整填写工程部位、工作内容和拍摄人，再保存模板',
-            'Complete the location, work, and photographer fields before saving a template');
-          return;
-        }
         const now = Date.now();
         await runtime.database.saveTemplate(new CaptureTemplateRecord({
           id: util.generateRandomUUID(), projectId: runtime.selectedProjectId,
           name: name, nameKey: captureTemplateNameKey(name),
-          workLocation: this.workLocation.trim(), workContent: this.workContent.trim(),
-          photographer: this.photographer.trim(), createdAt: now, updatedAt: now
+          workLocation: validation.location, workContent: validation.work,
+          photographer: validation.photographer, createdAt: now, updatedAt: now
         }));
       }
-      this.templates = await runtime.database.listTemplates(runtime.selectedProjectId);
+      const templates = await runtime.database.listTemplates(runtime.selectedProjectId);
+      if (!this.lifecycle.accept(generation)) return;
+      this.templates = templates;
       this.templateName = '';
       this.renamingTemplateId = '';
       this.message = tr('拍摄模板已保存', 'Capture template saved');
-    } catch (_) {
-      this.message = tr('已有同名模板，请换一个名称', 'A template with this name already exists');
+    } catch (error) {
+      if (this.lifecycle.accept(generation)) {
+        const text = (error as Error).message.toLowerCase();
+        this.message = text.includes('unique') || text.includes('constraint') ?
+          tr('已有同名模板，请换一个名称', 'A template with this name already exists') :
+          tr('模板暂时无法保存，请稍后重试', 'The template could not be saved. Try again later.');
+      }
+    } finally {
+      this.lifecycle.finishSave(generation);
     }
   }
 
@@ -707,28 +889,45 @@ export struct CaptureFormScreen {
         `Tap “Confirm delete” again to delete template “${template.name}”`);
       return;
     }
-    await AppRuntime.require().database.deleteTemplate(template.id);
-    this.templates = await AppRuntime.require().database.listTemplates(template.projectId);
-    this.deleteTemplateId = '';
-    this.message = tr('拍摄模板已删除', 'Capture template deleted');
+    const generation = this.lifecycle.snapshot();
+    try {
+      await AppRuntime.require().database.deleteTemplate(template.id);
+      const templates = await AppRuntime.require().database.listTemplates(template.projectId);
+      if (!this.lifecycle.accept(generation)) return;
+      this.templates = templates;
+      this.deleteTemplateId = '';
+      this.message = tr('拍摄模板已删除', 'Capture template deleted');
+    } catch (_) {
+      if (this.lifecycle.accept(generation)) this.message = tr('模板暂时无法删除，请稍后重试',
+        'The template could not be deleted. Try again later.');
+    }
   }
 
   private async capture(): Promise<void> {
     if (this.busy || this.project === null) {
       return;
     }
+    const validation = validateCaptureDraft(this.workLocation, this.workContent, this.photographer, this.notes);
+    this.applyValidation(validation);
+    if (!validation.valid) {
+      this.message = tr('请修正表单中标出的内容后再拍摄',
+        'Fix the highlighted form fields before capturing');
+      return;
+    }
+    const generation = ++this.captureGeneration;
     this.busy = true;
     this.message = tr('正在打开系统相机…', 'Opening the system camera…');
     try {
       const result = await AppRuntime.require().captureWorkflow.capture({
         projectId: this.project.id,
         projectName: this.project.name,
-        workLocation: this.workLocation,
-        workContent: this.workContent,
-        photographer: this.photographer,
-        notes: this.notes,
+        workLocation: validation.location,
+        workContent: validation.work,
+        photographer: validation.photographer,
+        notes: validation.notes,
         localeCode: this.watermarkLocaleCode
       });
+      if (generation !== this.captureGeneration) return;
       if (result.captured) {
         this.notes = '';
         this.message = result.debugInjected ? tr(
@@ -740,105 +939,141 @@ export struct CaptureFormScreen {
       } else {
         this.message = result.message.length > 0 ? result.message : tr('已取消拍摄', 'Capture cancelled');
       }
-      this.locationGranted = await AppRuntime.require().services.getLocationPermissionState();
+      try {
+        const granted = await AppRuntime.require().services.getLocationPermissionState();
+        if (generation === this.captureGeneration) this.locationGranted = granted;
+      } catch (_) {
+        // Permission refresh is informational and must not turn a completed capture into a failure.
+      }
     } catch (error) {
-      const text = (error as Error).message;
-      this.message = text.includes('填写') ? tr('请填写工程部位、工作内容和拍摄人',
-        'Complete the location, work, and photographer fields') :
-        tr('无法完成拍摄，请检查项目状态后重试', 'Capture could not be completed. Check the project status and try again.');
+      if (generation === this.captureGeneration) {
+        const text = (error as Error).message;
+        this.message = text === 'capture_form_invalid' ? tr('请修正表单中标出的内容后再拍摄',
+          'Fix the highlighted form fields before capturing') :
+          tr('无法完成拍摄，请检查项目状态后重试',
+            'Capture could not be completed. Check the project status and try again.');
+      }
     } finally {
-      this.busy = false;
+      if (generation === this.captureGeneration) this.busy = false;
+    }
+  }
+
+  @Builder
+  private suggestionStrip(field: string, values: string[]) {
+    if (this.focusedField === field && values.length > 0) {
+      Scroll() {
+        Row({ space: 7 }) {
+          ForEach(filterSuggestions(values, '', CaptureFormMetrics.FOCUSED_SUGGESTION_COUNT),
+            (value: string) => {
+              Button(value)
+                .height(CaptureFormMetrics.TOUCH_TARGET)
+                .fontSize(12).fontColor(UiTokens.PRIMARY)
+                .backgroundColor(UiTokens.ACCENT_SURFACE).borderRadius(22)
+                .accessibilityText(tr(`应用建议 ${value}`, `Apply suggestion ${value}`))
+                .onClick((): void => { this.rememberAndApply(field, value); })
+            }, (value: string) => `${field}-${value}`)
+          if (values.length > CaptureFormMetrics.FOCUSED_SUGGESTION_COUNT) {
+            Button(tr('更多', 'More'))
+              .height(CaptureFormMetrics.TOUCH_TARGET)
+              .fontSize(12).fontColor(UiTokens.TEXT)
+              .backgroundColor(UiTokens.CONTROL).borderRadius(22)
+              .accessibilityText(tr('展开更多建议', 'Show more suggestions'))
+              .onClick((): void => {
+                this.suggestionField = field;
+                this.suggestionFilter = '';
+                this.lifecycle.openTransient(`suggestions-${field}`);
+              })
+          }
+        }
+      }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
+      if (this.suggestionField === field) {
+        Column({ space: 8 }) {
+          TextInput({ text: this.suggestionFilter, placeholder: tr('筛选建议', 'Filter suggestions') })
+            .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(14)
+            .backgroundColor(UiTokens.SURFACE_MUTED).borderRadius(UiTokens.CONTROL_RADIUS)
+            .onChange((value: string): void => { this.suggestionFilter = value; })
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start, alignItems: ItemAlign.Center }) {
+            ForEach(filterSuggestions(values, this.suggestionFilter,
+              CaptureFormMetrics.ALL_SUGGESTION_COUNT), (value: string) => {
+              Button(value).height(CaptureFormMetrics.TOUCH_TARGET).fontSize(12)
+                .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE).borderRadius(22)
+                .margin({ right: 7, bottom: 7 })
+                .accessibilityText(tr(`应用建议 ${value}`, `Apply suggestion ${value}`))
+                .onClick((): void => { this.rememberAndApply(field, value); })
+            }, (value: string) => `all-${field}-${value}`)
+          }.width('100%')
+          Button(tr('收起建议', 'Hide suggestions')).height(CaptureFormMetrics.TOUCH_TARGET)
+            .fontSize(13).fontColor(UiTokens.TEXT).backgroundColor(Color.Transparent)
+            .onClick((): void => {
+              this.suggestionField = '';
+              this.suggestionFilter = '';
+              this.lifecycle.closeTransient();
+            })
+        }.padding(12).width('100%').backgroundColor(UiTokens.GLASS_STRONG)
+          .borderRadius(UiTokens.CONTROL_RADIUS)
+      }
     }
   }
 
   @Builder
   private locationField() {
     Column({ space: 7 }) {
-      Text(tr('工程部位 *', 'Location *'))
-        .fontSize(14).fontWeight(FontWeight.Medium).fontColor(UiTokens.TEXT).width('100%')
-      TextInput({ text: this.workLocation,
-        placeholder: tr('例如：南地块 2# 楼', 'For example: South block, Building 2') })
-        .height(50).fontSize(15).backgroundColor(UiTokens.GLASS_STRONG).borderRadius(17)
-        .onChange((value: string): void => { this.workLocation = value; })
-      if (this.locationSuggestions.length > 0) {
-        Scroll() {
-          Row({ space: 7 }) {
-            ForEach(this.locationSuggestions, (value: string) => {
-              Button(value).height(32).fontSize(12).fontColor(UiTokens.PRIMARY)
-                .backgroundColor(UiTokens.ACCENT_SURFACE).borderRadius(16)
-                .onClick((): void => { this.workLocation = value; })
-            }, (value: string) => value)
-          }
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
-      }
-    }
-    .width('100%').alignItems(HorizontalAlign.Start)
+      FormField({ label: tr('工程部位', 'Location'), value: this.workLocation,
+        placeholder: tr('例如：南地块 2# 楼', 'For example: South block, Building 2'), required: true,
+        error: this.locationError, maxLength: CaptureFormMetrics.LOCATION_MAX_LENGTH,
+        onFieldFocus: (): void => { this.focusField('location'); },
+        onChange: (value: string): void => { this.workLocation = value; this.locationError = ''; } })
+      this.suggestionStrip('location', this.locationSuggestions)
+    }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private contentField() {
     Column({ space: 7 }) {
-      Text(tr('工作内容 *', 'Work *'))
-        .fontSize(14).fontWeight(FontWeight.Medium).fontColor(UiTokens.TEXT).width('100%')
-      TextInput({ text: this.workContent,
-        placeholder: tr('例如：月度巡检', 'For example: Monthly inspection') })
-        .height(50).fontSize(15).backgroundColor(UiTokens.GLASS_STRONG).borderRadius(17)
-        .onChange((value: string): void => { this.workContent = value; })
-      if (this.contentSuggestions.length > 0) {
-        Scroll() {
-          Row({ space: 7 }) {
-            ForEach(this.contentSuggestions, (value: string) => {
-              Button(value).height(32).fontSize(12).fontColor(UiTokens.PRIMARY)
-                .backgroundColor(UiTokens.ACCENT_SURFACE).borderRadius(16)
-                .onClick((): void => { this.workContent = value; })
-            }, (value: string) => value)
-          }
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
-      }
-    }
-    .width('100%').alignItems(HorizontalAlign.Start)
+      FormTextArea({ label: tr('工作内容', 'Work'), value: this.workContent,
+        placeholder: tr('例如：月度巡检', 'For example: Monthly inspection'), required: true,
+        error: this.contentError, maxLength: CaptureFormMetrics.WORK_MAX_LENGTH,
+        onFieldFocus: (): void => { this.focusField('work'); },
+        onChange: (value: string): void => { this.workContent = value; this.contentError = ''; } })
+      this.suggestionStrip('work', this.contentSuggestions)
+    }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private photographerField() {
     Column({ space: 7 }) {
-      Text(tr('拍摄人 *', 'Photographer *'))
-        .fontSize(14).fontWeight(FontWeight.Medium).fontColor(UiTokens.TEXT).width('100%')
-      TextInput({ text: this.photographer, placeholder: tr('请输入姓名', 'Enter a name') })
-        .height(50).fontSize(15).backgroundColor(UiTokens.GLASS_STRONG).borderRadius(17)
-        .onChange((value: string): void => { this.photographer = value; })
-      if (this.photographerSuggestions.length > 0) {
-        Scroll() {
-          Row({ space: 7 }) {
-            ForEach(this.photographerSuggestions, (value: string) => {
-              Button(value).height(32).fontSize(12).fontColor(UiTokens.PRIMARY)
-                .backgroundColor(UiTokens.ACCENT_SURFACE).borderRadius(16)
-                .onClick((): void => { this.photographer = value; })
-            }, (value: string) => value)
-          }
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
-      }
-    }
-    .width('100%').alignItems(HorizontalAlign.Start)
+      FormField({ label: tr('拍摄人', 'Photographer'), value: this.photographer,
+        placeholder: tr('请输入姓名', 'Enter a name'), required: true,
+        error: this.photographerError, maxLength: CaptureFormMetrics.PHOTOGRAPHER_MAX_LENGTH,
+        onFieldFocus: (): void => { this.focusField('photographer'); },
+        onChange: (value: string): void => { this.photographer = value; this.photographerError = ''; } })
+      this.suggestionStrip('photographer', this.photographerSuggestions)
+    }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
   private templatePanel() {
     Column({ space: 10 }) {
+      if (this.templateLoadFailed) {
+        InlineErrorPanel({ message: tr('拍摄模板暂时无法读取', 'Capture templates could not be loaded'),
+          retryLabel: tr('重试', 'Retry'), onRetry: (): void => { this.reloadTemplates(); } })
+      }
       Text(this.renamingTemplateId.length > 0 ? tr('重命名模板', 'Rename template') :
         tr('把当前三项必填信息保存为模板', 'Save the three required fields as a template'))
         .fontSize(14).fontWeight(FontWeight.Bold).width('100%')
       Row({ space: 8 }) {
         TextInput({ text: this.templateName, placeholder: tr('模板名称', 'Template name') })
-          .layoutWeight(1).height(42).backgroundColor(Color.White).borderRadius(14)
+          .layoutWeight(1).height(CaptureFormMetrics.TOUCH_TARGET).backgroundColor(Color.White).borderRadius(14)
+          .maxLength(CAPTURE_TEMPLATE_NAME_MAX_LENGTH)
           .onChange((value: string): void => { this.templateName = value; })
         Button(this.renamingTemplateId.length > 0 ? tr('保存名称', 'Save name') :
           tr('保存当前', 'Save current'))
-          .height(42).fontSize(12).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+          .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(12).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+          .enabled(!this.templateLoadFailed)
           .onClick((): void => { this.saveTemplate(); })
       }.width('100%')
       if (this.renamingTemplateId.length > 0) {
-          Button(tr('取消重命名', 'Cancel rename')).height(34).fontSize(12)
+          Button(tr('取消重命名', 'Cancel rename')).height(CaptureFormMetrics.TOUCH_TARGET).fontSize(12)
             .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
           .onClick((): void => { this.renamingTemplateId = ''; this.templateName = ''; })
       }
@@ -853,12 +1088,14 @@ export struct CaptureFormScreen {
               Text(template.name).fontSize(14).fontWeight(FontWeight.Bold).maxLines(1).width('100%')
               Text(`${template.workLocation} · ${template.workContent} · ${template.photographer}`)
                 .fontSize(11).fontColor(UiTokens.TEXT_SECONDARY).maxLines(2).width('100%')
-            }.layoutWeight(1).alignItems(HorizontalAlign.Start).onClick((): void => this.applyTemplate(template))
-            Button(tr('改名', 'Rename')).height(34).fontSize(11)
+            }.layoutWeight(1).constraintSize({ minHeight: CaptureFormMetrics.TOUCH_TARGET })
+              .alignItems(HorizontalAlign.Start).onClick((): void => this.applyTemplate(template))
+            Button(tr('改名', 'Rename')).height(CaptureFormMetrics.TOUCH_TARGET).fontSize(11)
               .backgroundColor(UiTokens.ACCENT_SURFACE).fontColor(UiTokens.PRIMARY)
               .onClick((): void => this.beginRename(template))
             Button(this.deleteTemplateId === template.id ? tr('确认删除', 'Confirm delete') : tr('删除', 'Delete'))
-              .height(34).fontSize(11).backgroundColor(UiTokens.DANGER_CONTAINER).fontColor(UiTokens.DANGER)
+              .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(11)
+              .backgroundColor(UiTokens.DANGER_CONTAINER).fontColor(UiTokens.DANGER)
               .onClick((): void => { this.deleteTemplate(template); })
           }.padding(10).width('100%').backgroundColor(Color.White).borderRadius(15)
         }, (template: CaptureTemplateRecord) => template.id)
@@ -871,7 +1108,8 @@ export struct CaptureFormScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('现场拍摄', 'Site capture'), subtitle: this.project?.name ?? '', showBack: true,
-          onBack: (): void => { this.pathStack.pop(); } })
+          backAccessibilityText: tr('返回项目详情', 'Back to project details'),
+          onBack: (): void => { this.handleBack(); } })
         Scroll() {
           Column({ space: 16 }) {
             if (!this.locationGranted && !this.locationPromptDismissed) {
@@ -880,10 +1118,12 @@ export struct CaptureFormScreen {
                 'Enable foreground location before capture if you want it in the watermark. Capturing works without it.'))
                   .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(18).width('100%')
                 Row({ space: 8 }) {
-                  Button(tr('暂不使用', 'Not now')).layoutWeight(1).height(34).fontSize(11)
+                  Button(tr('暂不使用', 'Not now')).layoutWeight(1)
+                    .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(11)
                     .fontColor(UiTokens.TEXT_SECONDARY)
                     .backgroundColor(Color.Transparent).onClick((): void => { this.dismissLocationPrompt(); })
-                  Button(tr('启用位置', 'Enable location')).layoutWeight(1).height(34).fontSize(11)
+                  Button(tr('启用位置', 'Enable location')).layoutWeight(1)
+                    .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(11)
                     .fontColor(UiTokens.PRIMARY)
                     .backgroundColor(Color.White).onClick((): void => { this.enableLocation(); })
                 }.width('100%')
@@ -892,21 +1132,39 @@ export struct CaptureFormScreen {
             }
             Button(this.templateOpen ? tr('收起拍摄模板', 'Hide capture templates') :
               tr(`拍摄模板（${this.templates.length}）`, `Capture templates (${this.templates.length})`))
-              .height(42).width('100%').fontSize(14).fontColor(UiTokens.PRIMARY)
-              .backgroundColor(UiTokens.ACCENT_SURFACE).onClick((): void => { this.templateOpen = !this.templateOpen; })
+              .height(CaptureFormMetrics.TOUCH_TARGET).width('100%').fontSize(14).fontColor(UiTokens.PRIMARY)
+              .backgroundColor(UiTokens.ACCENT_SURFACE).onClick((): void => {
+                this.templateOpen = !this.templateOpen;
+                this.focusedField = '';
+                this.suggestionField = '';
+                this.suggestionFilter = '';
+                if (this.templateOpen) this.lifecycle.openTransient('templates');
+                else this.lifecycle.closeTransient();
+              })
             if (this.templateOpen) {
               this.templatePanel()
             }
             this.locationField()
             this.contentField()
             this.photographerField()
-            Column({ space: 7 }) {
-            Text(tr('备注（选填）', 'Notes (optional)')).fontSize(14).fontWeight(FontWeight.Medium).width('100%')
-            TextArea({ text: this.notes, placeholder: tr('仅用于此张记录，连续拍摄后会自动清空',
-              'Applies only to this record and clears after each capture') })
-                .height(92).fontSize(14).backgroundColor(UiTokens.GLASS_STRONG).borderRadius(17)
-                .onChange((value: string): void => { this.notes = value; })
-            }.width('100%').alignItems(HorizontalAlign.Start)
+            FormTextArea({ label: tr('备注（选填）', 'Notes (optional)'), value: this.notes,
+              placeholder: tr('仅用于此张记录，连续拍摄后会自动清空',
+                'Applies only to this record and clears after each capture'),
+              error: this.notesError, maxLength: CaptureFormMetrics.NOTES_MAX_LENGTH,
+              onFieldFocus: (): void => { this.focusField(''); },
+              onChange: (value: string): void => { this.notes = value; this.notesError = ''; } })
+            if (this.undoAvailable) {
+              Button(tr('撤销上一次应用', 'Undo last application'))
+                .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(13).fontColor(UiTokens.PRIMARY)
+                .backgroundColor(UiTokens.CONTROL).accessibilityText(tr('撤销上一次模板或建议应用',
+                  'Undo the last template or suggestion application'))
+                .onClick((): void => { this.undoLastApplication(); })
+            }
+            if (this.loadFailed) {
+              InlineErrorPanel({ message: tr('项目或表单数据暂时无法读取',
+                'Project or form data could not be loaded'), retryLabel: tr('重试', 'Retry'),
+                onRetry: (): void => { this.load(this.lifecycle.snapshot()); } })
+            }
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
               .fontColor((this.message.includes('无法') || this.message.toLowerCase().includes('could not')) ?
@@ -929,6 +1187,10 @@ export struct CaptureFormScreen {
       .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }
     .hideTitleBar(true)
+    .onBackPressed((): boolean => {
+      this.handleBack();
+      return true;
+    })
   }
 }
 
@@ -1238,11 +1500,12 @@ export struct CaptureDetailScreen {
         AppTopBar({ title: tr('记录详情', 'Record details'), showBack: true,
           backAccessibilityText: tr('返回全部记录', 'Back to all records'),
           onBack: (): void => { this.pathStack.pop(); },
-          actionLabel: this.capture !== null && (this.capture!.status === CaptureStatus.READY ||
-            this.capture!.status === CaptureStatus.FAILED) ? tr('编辑', 'Edit') : '',
+          actionLabel: this.capture !== null && this.capture!.hasOriginal() &&
+            (this.capture!.status === CaptureStatus.READY ||
+              this.capture!.status === CaptureStatus.FAILED) ? tr('编辑', 'Edit') : '',
           onAction: (): void => {
-            if (this.capture !== null && (this.capture!.status === CaptureStatus.READY ||
-              this.capture!.status === CaptureStatus.FAILED)) {
+            if (this.capture !== null && this.capture!.hasOriginal() &&
+              (this.capture!.status === CaptureStatus.READY || this.capture!.status === CaptureStatus.FAILED)) {
               this.renderedRefresh.expectNextAttempt(this.capture!.processingAttempts);
               this.pathStack.pushPathByName(Routes.CAPTURE_EDITOR, null);
             }
@@ -1352,45 +1615,103 @@ export struct CaptureEditorScreen {
   @State private photographer: string = '';
   @State private notes: string = '';
   @State private message: string = '';
+  @State private project: ProjectRecord | null = null;
+  @State private locationError: string = '';
+  @State private contentError: string = '';
+  @State private photographerError: string = '';
+  @State private notesError: string = '';
+  @State private saving: boolean = false;
+  private readonly lifecycle: CaptureFormLifecycle = new CaptureFormLifecycle();
 
   aboutToAppear(): void {
-    AppRuntime.require().database.captureById(AppRuntime.require().selectedCaptureId)
-      .then((capture: CaptureRecord | null): void => {
-        this.capture = capture;
-        if (capture !== null) {
-          this.location = capture.workLocation;
-          this.content = capture.workContent;
-          this.photographer = capture.photographer;
-          this.notes = capture.notes;
+    this.load(this.lifecycle.activate());
+  }
+
+  aboutToDisappear(): void {
+    this.lifecycle.deactivate();
+  }
+
+  private async load(generation: number): Promise<void> {
+    try {
+      const capture = await AppRuntime.require().database.captureById(AppRuntime.require().selectedCaptureId);
+      if (!this.lifecycle.accept(generation)) return;
+      const project = capture === null ? null :
+        await AppRuntime.require().database.projectById(capture.projectId);
+      if (!this.lifecycle.accept(generation)) return;
+      this.capture = capture;
+      this.project = project;
+      if (capture !== null) {
+        this.location = capture.workLocation;
+        this.content = capture.workContent;
+        this.photographer = capture.photographer;
+        this.notes = capture.notes;
+        if (!capture.hasOriginal()) {
+          this.message = tr('原图已清理，无法重新生成水印成片',
+            'The original was cleared, so the watermarked image cannot be regenerated');
+        } else if (project === null || project.lifecycleStatus !== ProjectLifecycleStatus.ACTIVE) {
+          this.message = tr('项目当前为只读状态，不能编辑记录',
+            'This project is read-only; the record cannot be edited');
         }
-      });
+      } else {
+        this.message = tr('记录不存在或已被删除', 'The record does not exist or was deleted');
+      }
+    } catch (_) {
+      if (this.lifecycle.accept(generation)) {
+        this.message = tr('记录暂时无法读取，请返回后重试',
+          'The record could not be loaded. Go back and try again.');
+      }
+    }
+  }
+
+  private editable(): boolean {
+    return this.capture !== null && this.project !== null && canEditCapture(this.project!.lifecycleStatus,
+      this.capture!.status, this.capture!.hasOriginal());
+  }
+
+  private applyValidation(validation: CaptureDraftValidation): void {
+    this.locationError = validation.locationError;
+    this.contentError = validation.workError;
+    this.photographerError = validation.photographerError;
+    this.notesError = validation.notesError;
   }
 
   private async save(): Promise<void> {
-    if (this.capture === null || this.location.trim().length === 0 || this.content.trim().length === 0 ||
-      this.photographer.trim().length === 0) {
-      this.message = tr('请填写工程部位、工作内容和拍摄人',
-        'Complete the location, work, and photographer fields');
+    if (!this.lifecycle.beginSave() || this.capture === null) return;
+    const generation = this.lifecycle.snapshot();
+    const validation = validateCaptureDraft(this.location, this.content, this.photographer, this.notes);
+    this.applyValidation(validation);
+    if (!validation.valid) {
+      this.message = tr('请修正表单中标出的内容后再保存',
+        'Fix the highlighted form fields before saving');
+      this.lifecycle.finishSave(generation);
       return;
     }
-    const project = await AppRuntime.require().database.projectById(this.capture.projectId);
-    if (project === null || project.lifecycleStatus !== ProjectLifecycleStatus.ACTIVE) {
-      this.message = tr('项目当前为只读状态，不能编辑记录', 'This project is read-only; the record cannot be edited');
-      return;
-    }
-    const current = await AppRuntime.require().database.captureById(this.capture.id);
-    if (current === null || (current.status !== CaptureStatus.READY && current.status !== CaptureStatus.FAILED)) {
-      this.message = tr('照片仍在处理中，请完成后再编辑', 'Wait for photo processing to finish before editing');
-      return;
-    }
+    this.saving = true;
     try {
-      await AppRuntime.require().database.updateCaptureFields(this.capture.id, this.location,
-        this.content, this.photographer, this.notes);
+      const project = await AppRuntime.require().database.projectById(this.capture.projectId);
+      if (!this.lifecycle.accept(generation)) return;
+      const current = await AppRuntime.require().database.captureById(this.capture.id);
+      if (!this.lifecycle.accept(generation)) return;
+      if (project === null || current === null ||
+        !canEditCapture(project.lifecycleStatus, current.status, current.hasOriginal())) {
+        this.message = current !== null && !current.hasOriginal() ?
+          tr('原图已清理，无法保存并重新处理',
+            'The original was cleared, so this edit cannot be saved and reprocessed') :
+          tr('项目或记录状态已变化，请返回后重新打开',
+            'The project or record changed. Go back and open it again.');
+        return;
+      }
+      await AppRuntime.require().database.updateCaptureFields(current.id, validation.location,
+        validation.work, validation.photographer, validation.notes);
       AppRuntime.require().queue.enqueue(this.capture.id);
       AppRuntime.require().notifyDataChanged();
-      this.pathStack.pop();
+      if (this.lifecycle.accept(generation)) this.pathStack.pop();
     } catch (_) {
-      this.message = tr('记录状态已变化，请返回后重新打开', 'The record changed. Go back and open it again.');
+      if (this.lifecycle.accept(generation)) this.message = tr('记录状态已变化，请返回后重新打开',
+        'The record changed. Go back and open it again.');
+    } finally {
+      if (this.lifecycle.accept(generation)) this.saving = false;
+      this.lifecycle.finishSave(generation);
     }
   }
 
@@ -1398,24 +1719,33 @@ export struct CaptureEditorScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('编辑记录', 'Edit record'), showBack: true,
-          onBack: (): void => { this.pathStack.pop(); }, actionLabel: tr('保存', 'Save'),
+          backAccessibilityText: tr('取消编辑并返回记录详情',
+            'Cancel editing and return to record details'),
+          onBack: (): void => { this.pathStack.pop(); },
+          actionLabel: this.editable() ? (this.saving ? tr('保存中…', 'Saving…') : tr('保存', 'Save')) : '',
+          actionAccessibilityText: tr('保存编辑并重新生成水印成片',
+            'Save edits and regenerate the watermarked image'),
           onAction: (): void => { this.save(); } })
         Scroll() {
           Column({ space: 14 }) {
-            TextInput({ text: this.location, placeholder: tr('工程部位 *', 'Location *') }).height(52).fontSize(15)
-              .backgroundColor(UiTokens.GLASS_STRONG).borderRadius(17)
-              .onChange((value: string): void => { this.location = value; })
-            TextInput({ text: this.content, placeholder: tr('工作内容 *', 'Work *') }).height(52).fontSize(15)
-              .backgroundColor(UiTokens.GLASS_STRONG).borderRadius(17)
-              .onChange((value: string): void => { this.content = value; })
-            TextInput({ text: this.photographer, placeholder: tr('拍摄人 *', 'Photographer *') })
-              .height(52).fontSize(15)
-              .backgroundColor(UiTokens.GLASS_STRONG).borderRadius(17)
-              .onChange((value: string): void => { this.photographer = value; })
-            TextArea({ text: this.notes, placeholder: tr('备注（选填）', 'Notes (optional)') })
-              .height(110).fontSize(15)
-              .backgroundColor(UiTokens.GLASS_STRONG).borderRadius(17)
-              .onChange((value: string): void => { this.notes = value; })
+            FormField({ label: tr('工程部位', 'Location'), value: this.location, required: true,
+              error: this.locationError, maxLength: CaptureFormMetrics.LOCATION_MAX_LENGTH,
+              fieldEnabled: this.editable(),
+              onChange: (value: string): void => { this.location = value; this.locationError = ''; } })
+            FormTextArea({ label: tr('工作内容', 'Work'), value: this.content, required: true,
+              error: this.contentError, maxLength: CaptureFormMetrics.WORK_MAX_LENGTH,
+              fieldEnabled: this.editable(),
+              onChange: (value: string): void => { this.content = value; this.contentError = ''; } })
+            FormField({ label: tr('拍摄人', 'Photographer'), value: this.photographer, required: true,
+              error: this.photographerError, maxLength: CaptureFormMetrics.PHOTOGRAPHER_MAX_LENGTH,
+              fieldEnabled: this.editable(),
+              onChange: (value: string): void => {
+                this.photographer = value; this.photographerError = '';
+              } })
+            FormTextArea({ label: tr('备注（选填）', 'Notes (optional)'), value: this.notes,
+              error: this.notesError, maxLength: CaptureFormMetrics.NOTES_MAX_LENGTH,
+              fieldEnabled: this.editable(),
+              onChange: (value: string): void => { this.notes = value; this.notesError = ''; } })
             Text(tr('保存后会用当前项目水印设置重新生成成片；原照片编号和拍摄时间保持不变。',
               'Saving regenerates the image with current project watermark settings. The photo number and capture time stay unchanged.'))
               .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20).width('100%')
@@ -1429,5 +1759,9 @@ export struct CaptureEditorScreen {
       }
       .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }.hideTitleBar(true)
+      .onBackPressed((): boolean => {
+        this.pathStack.pop();
+        return true;
+      })
   }
 }
