@@ -107,6 +107,6 @@
 
 - [x] **Step 2: GREEN** — 官方 `--no-pub` 跑 `capture_workflow_test`；`ohos.yml` 在 `capture_workflow_test.dart` 后加 `test/workflow/capture_location_coordinator_test.dart`。生产路径已满足则不改 Dart 业务代码。官方合计 **29 绿**（workflow 20 + coordinator 9）。
 
-- [ ] **Step 3: Honest docs + commit + push origin/ohos**
+- [x] **Step 3: Honest docs + commit + push origin/ohos** (`7b82a42`)
 
 不得写系统相册 / 拍成 / WorkScheduler。写明 Task 46–57 Dart 未进 HAP。

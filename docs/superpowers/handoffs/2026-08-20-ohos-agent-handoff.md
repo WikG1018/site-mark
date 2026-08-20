@@ -2,7 +2,7 @@
 
 > 交接对象：下一个负责 `ohos` 分支的 Agent（云端环境）。
 > 本文档自包含：只依赖本仓库与 GitHub，不依赖任何上一台机器的本地路径。
-> 事实基准：`ohos` 分支本提交（2026-08-20）。
+> 事实基准：`ohos` 分支 `7b82a42`（2026-08-20）。
 
 ## 1. 一句话现状
 
@@ -43,7 +43,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 57：产品主链路（隐私�
 
 已验证过、可以写的事实（模拟器 DevEco `SiteMarkPhone602` x86_64）：隐私门 → 新建项目 → 项目详情 → 拍摄表单 → 全部记录 → 设置/关于 → 备份沙箱 `files/exports/*.zip` + Document picker 弹出。逐任务记录见 `tool/ohos/product_hap_review.md`，总账见 `tool/ohos/full_product_gap.md`。
 
-## 4. 已落地里程碑（Tasks 0–56）
+## 4. 已落地里程碑（Tasks 0–57）
 
 完整计划链见 `README.md` 顶部「后续实施计划」段。近期任务：
 
@@ -63,6 +63,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 57：产品主链路（隐私�
 | 54 | capture_workflow 进 CI + delayed 继续拍 | `bf0cb6c` | `2026-08-20-harmonyos-capture-workflow-ci-delayed.md` |
 | 55 | widget / lifecycle / 备份导入进 CI | `d742817` | `2026-08-20-harmonyos-ci-widget-lifecycle-backup.md` |
 | 56 | 取消拍照不占号 + 失败引导进 CI | `6484a86` | `2026-08-20-harmonyos-cancel-no-photo-number.md` |
+| 57 | 拒绝定位仍出片 + 连拍 001→002 | `7b82a42` | `2026-08-20-harmonyos-denied-location-burst-numbers.md` |
 
 早期任务（0–38）：系统宿主与通道、隐私同意、串行队列、HAP 工程与全量 `lib/main.dart` 编译、备份导出/读回、原生 Document picker 选档、ImageKit 读图、ShareKit、NotificationKit、startAbility 外链——链路与证据见 `README.md` 与 `tool/ohos/product_hap_review.md`。
 
@@ -70,7 +71,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 57：产品主链路（隐私�
 
 - CI：`.github/workflows/ohos.yml`，push 到 `ohos` 即触发；ubuntu-latest + 官方 Flutter **3.44.6**，`flutter pub get` + 指定测试子集。
 - 云端跑测试就是标准命令：`flutter test <文件或目录>`。无需任何本机技巧（此前 Windows 本机的沙箱终端问题属机器特例，云端不复现）。
-- 官方 Flutter 3.44.6 全绿的测试文件（Tasks 51–56 起已全部进 `ohos.yml`）：
+- 官方 Flutter 3.44.6 全绿的测试文件（Tasks 51–57 起已全部进 `ohos.yml`）：
 
 | 测试文件 | 计数 |
 | --- | --- |
@@ -136,14 +137,14 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 57：产品主链路（隐私�
 - 不提交：HAP、`ohos/entry/libs/`、构建缓存、一次性模拟器脚本、社区 pubspec lock、测试日志、审查 dump 临时文件。
 - 用户没有真机；此前的模拟器验证全部在上一台本地 Windows 环境完成。云端 Agent 若要 dump 类证据，需要用户提供本地环境配合。
 
-## 9. 下一步建议（Task 57 起）
+## 9. 下一步建议（Task 58 起）
 
 优先做**不依赖 dump** 的体验/诚实缺口（云端可闭环）：
 
-1. 对照规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 剩余「必须/不得」项，继续找可 TDD 的缺口（相册 ACL 精确替换仍无 dump）。不要再把「四窗串行阻塞」「CI 缺 widget/lifecycle/备份导入」或「取消拍照不占号」当缺口——已锁。
-2. 若用户能提供本地环境：按第 6 节重编 HAP（注意 wantAgent / EntryAbility import 风险；**Task 46–56 的 Dart 侧改动尚未重编进任何 HAP**），做拍成 / 坐标 / 相册 / 分享 / 通知 / 外链 dump 走查，逐项解除第 3 节的门控。杀进程四窗没有模拟器 dump，不得写进程被杀后四窗已在真机/模拟器验证。
+1. 对照规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 剩余「必须/不得」项，继续找可 TDD 的缺口（相册 ACL 精确替换仍无 dump）。不要再把「四窗串行阻塞」「CI 缺 widget/lifecycle/备份导入」「取消拍照不占号」或「拒绝定位仍出片 / 连拍编号」当缺口——已锁。
+2. 若用户能提供本地环境：按第 6 节重编 HAP（注意 wantAgent / EntryAbility import 风险；**Task 46–57 的 Dart 侧改动尚未重编进任何 HAP**），做拍成 / 坐标 / 相册 / 分享 / 通知 / 外链 dump 走查，逐项解除第 3 节的门控。杀进程四窗没有模拟器 dump，不得写进程被杀后四窗已在真机/模拟器验证。
 
-**已完成、不要重做：** Task 51 CI 扩容；Task 52 备份恢复同编号不得串 URI、删除按 URI/`captureId`；Task 53 启动四窗并行开工（回调 API，日记已抽出）；Task 54 delayed 继续拍 + `capture_workflow_test` 进 CI；Task 55 widget / lifecycle / 备份导入进 CI；Task 56 取消拍照不占号 + `capture_failure_guidance_test` 进 CI。
+**已完成、不要重做：** Task 51 CI 扩容；Task 52 备份恢复同编号不得串 URI、删除按 URI/`captureId`；Task 53 启动四窗并行开工（回调 API，日记已抽出）；Task 54 delayed 继续拍 + `capture_workflow_test` 进 CI；Task 55 widget / lifecycle / 备份导入进 CI；Task 56 取消拍照不占号 + `capture_failure_guidance_test` 进 CI；Task 57 拒绝定位仍出片 + 连拍 `001` 然后 `002` + `capture_location_coordinator_test` 进 CI。
 
 **明确放弃的假缺口（不要重做）**：last-known 定位（Android 也没有）、逆地理（Android `address` 也是 null）、叠水印后 JPEG 写回 GPS（Rust 也不写）、通知点击接线（`deliverNotificationTap` 已有）、照片编号入水印（Rust `labels()` 也不画）、WorkScheduler / `startBackgroundRunning` 当 WorkManager 对等。
 
