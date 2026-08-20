@@ -120,6 +120,21 @@ export default function uiPolicyTest(): void {
       expect(falseValue).assertFalse();
     });
 
+    it('reads reduce motion without committing until the caller accepts the result', 0, async () => {
+      MotionPolicy.reduceMotion = false;
+      const value = await MotionPolicy.readFor(23, async (): Promise<boolean> => true);
+
+      expect(value).assertTrue();
+      expect(MotionPolicy.reduceMotion).assertFalse();
+      MotionPolicy.commit(value);
+      expect(MotionPolicy.reduceMotion).assertTrue();
+
+      MotionPolicy.reduceMotion = false;
+      await MotionPolicy.refreshFor(23, async (): Promise<boolean> => true);
+      expect(MotionPolicy.reduceMotion).assertTrue();
+      MotionPolicy.reduceMotion = false;
+    });
+
     it('falls back to false when the reduce motion query throws', 0, async () => {
       const value = await ReduceMotionQueryPolicy.read(23, async (): Promise<boolean> => {
         throw new Error('expected_reduce_motion_failure');
