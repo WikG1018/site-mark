@@ -15,6 +15,7 @@ import lazyListDataSourceTest from './LazyListDataSource.test';
 import capturePagedControllerTest from './CapturePagedController.test';
 import photoViewerWindowTest from './PhotoViewerWindow.test';
 import settingsProjectSelectionTest from './SettingsProjectSelection.test';
+import projectFormPolicyTest from './ProjectFormPolicy.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -34,4 +35,5 @@ export default function testsuite(): void {
   capturePagedControllerTest();
   photoViewerWindowTest();
   settingsProjectSelectionTest();
+  projectFormPolicyTest();
 }

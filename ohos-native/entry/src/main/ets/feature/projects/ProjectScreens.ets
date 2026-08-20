@@ -5,15 +5,30 @@ import { CaptureFilter, CapturePage, CapturePageCursor, CaptureRecord, ProjectRe
 import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { CaptureCard } from '../records/RecordComponents';
 import { AppTopBar, EmptyPanel, InlineErrorPanel, ListSkeleton, SectionHeader } from '../../shared/AppComponents';
+import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { ProjectBackupService } from '../backup/BackupService';
-import { tr } from '../../shared/AppText';
+import { AppText, tr } from '../../shared/AppText';
 import { LazyListDataSource } from '../../shared/LazyListDataSource';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { ProjectCard } from './ProjectComponents';
 import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
+import {
+  ProjectFormCopy,
+  ProjectFormMetrics,
+  ProjectSaveFeedback,
+  projectFormCopy,
+  projectNameValidationError,
+  projectSaveFeedback,
+  selectionVisual,
+  WatermarkAccentChoice,
+  watermarkAccentChoices,
+  WatermarkPositionChoice,
+  watermarkPositionChoices,
+  WatermarkPreviewStyle,
+} from './ProjectFormPolicy';
 
 class RuntimeCapturePageLoader implements CapturePageLoader {
   load(filter: CaptureFilter, cursor: CapturePageCursor | null, pageSize: number): Promise<CapturePage> {
@@ -283,7 +298,12 @@ export struct ProjectEditorScreen {
   @State private description: string = '';
   @State private saving: boolean = false;
   @State private message: string = '';
+  @State private nameError: string = '';
   @State private editing: boolean = false;
+
+  private copy(): ProjectFormCopy {
+    return projectFormCopy(AppText.isEnglish());
+  }
 
   aboutToAppear(): void {
     const id = AppRuntime.require().selectedProjectId;
@@ -302,8 +322,10 @@ export struct ProjectEditorScreen {
     if (this.saving) {
       return;
     }
-    if (this.name.trim().length === 0) {
-      this.message = tr('请输入项目名称', 'Enter a project name');
+    const validationError = projectNameValidationError(this.name, AppText.isEnglish());
+    if (validationError.length > 0) {
+      this.nameError = validationError;
+      this.message = '';
       return;
     }
     this.saving = true;
@@ -324,9 +346,9 @@ export struct ProjectEditorScreen {
       this.pathStack.pop();
     } catch (error) {
       const text = (error as Error).message;
-      this.message = text.includes('conflict') ? tr('已存在同名项目或文件名冲突',
-        'A project with the same name or file name already exists') :
-        tr('项目保存失败，请稍后重试', 'The project could not be saved. Try again.');
+      const feedback: ProjectSaveFeedback = projectSaveFeedback(text, AppText.isEnglish());
+      this.nameError = feedback.nameError;
+      this.message = feedback.pageMessage;
     } finally {
       this.saving = false;
     }
@@ -336,33 +358,35 @@ export struct ProjectEditorScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: this.editing ? tr('编辑项目', 'Edit project') : tr('新建项目', 'New project'),
-          showBack: true, onBack: (): void => { this.pathStack.pop(); },
+          showBack: true, backAccessibilityText: tr('返回', 'Back'), onBack: (): void => { this.pathStack.pop(); },
           actionLabel: this.saving ? tr('保存中', 'Saving') : tr('保存', 'Save'),
+          actionAccessibilityText: this.saving ? tr('正在保存项目', 'Saving project') :
+            tr('保存项目', 'Save project'),
           onAction: (): void => { this.save(); } })
         Scroll() {
           Column({ space: 16 }) {
-            Column({ space: 8 }) {
-            Text(tr('项目名称', 'Project name')).fontSize(14).fontWeight(FontWeight.Medium).width('100%')
-            TextInput({ text: this.name, placeholder: tr('例如：云湖之城', 'For example: Riverside Tower') })
-                .height(52)
-                .fontSize(16)
-                .backgroundColor(UiTokens.GLASS_STRONG)
-                .borderRadius(18)
-                .onChange((value: string): void => { this.name = value; this.message = ''; })
-            }.alignItems(HorizontalAlign.Start).width('100%')
-            Column({ space: 8 }) {
-            Text(tr('项目说明（选填）', 'Project description (optional)')).fontSize(14)
-              .fontWeight(FontWeight.Medium).width('100%')
-            TextArea({ text: this.description, placeholder: tr('补充项目位置、合同或现场说明',
-              'Add the location, contract, or site notes') })
-                .height(120)
-                .fontSize(15)
-                .backgroundColor(UiTokens.GLASS_STRONG)
-                .borderRadius(18)
-                .onChange((value: string): void => { this.description = value; })
-            }.alignItems(HorizontalAlign.Start).width('100%')
+            FormField({
+              label: this.copy().nameLabel,
+              value: this.name,
+              placeholder: this.copy().namePlaceholder,
+              required: true,
+              error: this.nameError,
+              helper: this.copy().nameHelper,
+              onChange: (value: string): void => {
+                this.name = value;
+                this.nameError = '';
+                this.message = '';
+              },
+            })
+            FormTextArea({
+              label: this.copy().descriptionLabel,
+              value: this.description,
+              placeholder: this.copy().descriptionPlaceholder,
+              helper: this.copy().descriptionHelper,
+              onChange: (value: string): void => { this.description = value; },
+            })
             if (this.message.length > 0) {
-              Text(this.message).fontSize(14).fontColor(UiTokens.DANGER).width('100%')
+              InlineErrorPanel({ message: this.message })
             }
             Text(tr('项目名称必须唯一。重命名只影响以后新拍照片，历史编号和文件名不会改变。',
               'Project names must be unique. Renaming only affects future photos; existing numbers and file names stay unchanged.'))
@@ -371,8 +395,9 @@ export struct ProjectEditorScreen {
               .lineHeight(20)
               .padding(16)
               .width('100%')
-              .backgroundColor(UiTokens.GLASS)
-              .borderRadius(18)
+              .backgroundColor(UiTokens.SURFACE)
+              .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+              .borderRadius(UiTokens.CONTROL_RADIUS)
           }
           .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })
           .constraintSize({ minHeight: '100%' })
@@ -835,11 +860,15 @@ export struct ProjectDetailScreen {
       }
       Row({ space: 8 }) {
         Button(this.project!.isPinned ? tr('取消置顶', 'Unpin') : tr('置顶', 'Pin'))
-          .height(38).layoutWeight(1).fontSize(13).backgroundColor('#E3EEE8')
-          .fontColor(UiTokens.PRIMARY).borderRadius(19).onClick((): void => { this.togglePinned(); })
+          .height(UiTokens.TOUCH_TARGET).layoutWeight(1).fontSize(13).backgroundColor(UiTokens.ACCENT_SURFACE)
+          .fontColor(UiTokens.PRIMARY).borderRadius(UiTokens.CONTROL_RADIUS)
+          .accessibilityText(this.project!.isPinned ? tr('取消置顶项目', 'Unpin project') :
+            tr('置顶项目', 'Pin project'))
+          .onClick((): void => { this.togglePinned(); })
         Button(tr('此项目水印设置', 'Project watermark settings'))
-          .height(38).layoutWeight(2).fontSize(13).backgroundColor('#E3EEE8')
-          .fontColor(UiTokens.PRIMARY).borderRadius(19)
+          .height(UiTokens.TOUCH_TARGET).layoutWeight(2).fontSize(13).backgroundColor(UiTokens.ACCENT_SURFACE)
+          .fontColor(UiTokens.PRIMARY).borderRadius(UiTokens.CONTROL_RADIUS)
+          .accessibilityText(tr('打开此项目水印设置', 'Open project watermark settings'))
           .onClick((): void => { this.pathStack.pushPathByName(Routes.PROJECT_SETTINGS, null); })
       }.width('100%')
     }
@@ -867,21 +896,23 @@ export struct ProjectDetailScreen {
               ListItem() {
                 Row({ space: 8 }) {
                   if (this.project!.lifecycleStatus !== ProjectLifecycleStatus.ACTIVE) {
-                    Button(tr('恢复进行中', 'Reopen')).layoutWeight(1).height(38).fontSize(12)
+                    Button(tr('恢复进行中', 'Reopen')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
                       .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
                       .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ACTIVE); })
                   } else {
-                    Button(tr('标记完成', 'Mark completed')).layoutWeight(1).height(38).fontSize(12)
+                    Button(tr('标记完成', 'Mark completed')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
                       .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
                       .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.COMPLETED); })
                   }
                   if (this.project!.lifecycleStatus !== ProjectLifecycleStatus.ARCHIVED) {
-                    Button(tr('归档', 'Archive')).layoutWeight(1).height(38).fontSize(12)
+                    Button(tr('归档', 'Archive')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
                       .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
                       .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ARCHIVED); })
                   }
-                  Button(tr('删除项目', 'Delete project')).layoutWeight(1).height(38).fontSize(12)
+                  Button(tr('删除项目', 'Delete project')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
                     .fontColor(UiTokens.DANGER).backgroundColor(UiTokens.DANGER_CONTAINER)
+                    .accessibilityText(tr('删除项目，永久删除本机项目记录',
+                      'Delete project, permanently delete on-device project records'))
                     .onClick((): void => { this.confirmDelete = !this.confirmDelete; })
                 }
                 .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
@@ -894,11 +925,14 @@ export struct ProjectDetailScreen {
                       'The in-app project, records, and private files cannot be recovered. Gallery photos and saved backups remain.'))
                       .fontSize(13).fontColor(UiTokens.DANGER).lineHeight(19).width('100%')
                     Row({ space: 8 }) {
-                      Button(tr('取消', 'Cancel')).layoutWeight(1).height(38)
+                      Button(tr('取消', 'Cancel')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
                         .onClick((): void => { this.confirmDelete = false; })
-                      Button(tr('确认删除', 'Confirm delete')).layoutWeight(1).height(38)
+                      Button(tr('确认删除', 'Confirm delete')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
                         .backgroundColor(UiTokens.DANGER)
-                        .fontColor(Color.White).onClick((): void => { this.deleteProject(); })
+                        .fontColor(Color.White)
+                        .accessibilityText(tr('确认永久删除本机项目记录；不处理已保存到相册的照片',
+                          'Confirm permanent deletion of on-device project records; gallery photos remain'))
+                        .onClick((): void => { this.deleteProject(); })
                     }.width('100%')
                   }
                   .padding(14).margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
@@ -1049,6 +1083,10 @@ export struct ProjectSettingsScreen {
   @State private accent: number = 0xFF2E7D61;
   @State private message: string = '';
 
+  private copy(): ProjectFormCopy {
+    return projectFormCopy(AppText.isEnglish());
+  }
+
   aboutToAppear(): void {
     AppRuntime.require().database.projectById(AppRuntime.require().selectedProjectId)
       .then((project: ProjectRecord | null): void => {
@@ -1074,77 +1112,158 @@ export struct ProjectSettingsScreen {
   }
 
   @Builder
-  private colorChoice(value: number, color: string) {
-    Button()
-      .width(46).height(46).borderRadius(23).backgroundColor(color)
-      .border({ width: this.accent === value ? 4 : 1,
-        color: this.accent === value ? Color.White : '#33000000' })
-      .shadow({ radius: this.accent === value ? 8 : 0, color: '#33000000' })
-      .onClick((): void => { this.accent = value; })
+  private colorChoice(choice: WatermarkAccentChoice) {
+    Button(choice.selected ? '✓' : '')
+      .width(48)
+      .height(48)
+      .fontSize(20)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(Color.White)
+      .borderRadius(24)
+      .backgroundColor(choice.color)
+      .border({ width: choice.selected ? 3 : 1,
+        color: choice.selected ? UiTokens.TEXT : UiTokens.OUTLINE_SUBTLE })
+      .shadow({ radius: choice.selected ? 6 : 0, color: UiTokens.CARD_SHADOW })
+      .accessibilityText(choice.accessibilityText)
+      .onClick((): void => { this.accent = choice.value; })
+  }
+
+  @Builder
+  private positionChoice(choice: WatermarkPositionChoice) {
+    Button(choice.selected ? `✓  ${choice.label}` : choice.label)
+      .layoutWeight(1)
+      .height(ProjectFormMetrics.TOUCH_TARGET)
+      .fontSize(14)
+      .fontWeight(choice.selected ? FontWeight.Bold : FontWeight.Medium)
+      .backgroundColor(selectionVisual(choice.selected).backgroundColor)
+      .fontColor(choice.selected ? UiTokens.PRIMARY : UiTokens.TEXT)
+      .border({ width: selectionVisual(choice.selected).borderWidth,
+        color: selectionVisual(choice.selected).borderColor })
+      .borderRadius(UiTokens.CONTROL_RADIUS)
+      .accessibilityText(choice.accessibilityText)
+      .onClick((): void => { this.watermarkPosition = choice.value; })
   }
 
   build() {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('此项目水印设置', 'Project watermark settings'), showBack: true,
-          onBack: (): void => { this.pathStack.pop(); }, actionLabel: tr('保存', 'Save'),
+          backAccessibilityText: tr('返回', 'Back'), onBack: (): void => { this.pathStack.pop(); },
+          actionLabel: tr('保存', 'Save'), actionAccessibilityText: tr('保存项目水印设置',
+            'Save project watermark settings'),
           onAction: (): void => { this.save(); } })
         Scroll() {
-          Column({ space: 18 }) {
-            Column({ space: 8 }) {
-            Text(tr('水印位置', 'Watermark position')).fontSize(15).fontWeight(FontWeight.Bold).width('100%')
+          Column({ space: 16 }) {
+            Column({ space: 10 }) {
+              Text(this.copy().watermarkPositionLabel)
+                .fontSize(15)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(UiTokens.TEXT)
+                .width('100%')
               Row({ space: 8 }) {
-              Button(tr('左下', 'Bottom left')).layoutWeight(1).height(44)
-                  .backgroundColor(this.watermarkPosition === 'bottomLeft' ? UiTokens.PRIMARY_CONTAINER : '#E8EFEB')
-                  .fontColor(UiTokens.TEXT).onClick((): void => { this.watermarkPosition = 'bottomLeft'; })
-              Button(tr('右下', 'Bottom right')).layoutWeight(1).height(44)
-                  .backgroundColor(this.watermarkPosition === 'bottomRight' ? UiTokens.PRIMARY_CONTAINER : '#E8EFEB')
-                  .fontColor(UiTokens.TEXT).onClick((): void => { this.watermarkPosition = 'bottomRight'; })
+                ForEach(watermarkPositionChoices(AppText.isEnglish(), this.watermarkPosition),
+                  (choice: WatermarkPositionChoice) => {
+                    this.positionChoice(choice)
+                  }, (choice: WatermarkPositionChoice): string => choice.value)
               }.width('100%')
-            }.width('100%').alignItems(HorizontalAlign.Start)
-            Column({ space: 6 }) {
+            }
+            .width('100%')
+            .padding(16)
+            .alignItems(HorizontalAlign.Start)
+            .backgroundColor(UiTokens.SURFACE)
+            .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+            .borderRadius(UiTokens.CONTROL_RADIUS)
+            Column({ space: 12 }) {
               Row() {
-              Text(tr('透明度', 'Opacity')).fontSize(15).fontWeight(FontWeight.Bold).layoutWeight(1)
+                Text(this.copy().opacityLabel).fontSize(15).fontWeight(FontWeight.Bold)
+                  .fontColor(UiTokens.TEXT).layoutWeight(1)
                 Text(`${Math.round(this.watermarkOpacity * 100)}%`).fontSize(14).fontColor(UiTokens.PRIMARY)
               }.width('100%')
               Slider({ value: this.watermarkOpacity, min: 0.35, max: 1.0, step: 0.05 })
-                .selectedColor(UiTokens.PRIMARY).onChange((value: number): void => { this.watermarkOpacity = value; })
-            }.width('100%')
-            Column({ space: 6 }) {
+                .height(ProjectFormMetrics.TOUCH_TARGET)
+                .selectedColor(UiTokens.PRIMARY)
+                .trackColor(UiTokens.CONTROL)
+                .accessibilityText(`${this.copy().opacityLabel}${tr('，', ', ')}` +
+                  `${Math.round(this.watermarkOpacity * 100)}%`)
+                .onChange((value: number): void => { this.watermarkOpacity = value; })
+              Text(this.copy().opacityHelper).fontSize(12).fontColor(UiTokens.TEXT_SECONDARY)
+                .lineHeight(17).maxLines(3).width('100%')
+              Divider().strokeWidth(1).color(UiTokens.OUTLINE_SUBTLE)
               Row() {
-              Text(tr('字体大小', 'Font size')).fontSize(15).fontWeight(FontWeight.Bold).layoutWeight(1)
+                Text(this.copy().fontScaleLabel).fontSize(15).fontWeight(FontWeight.Bold)
+                  .fontColor(UiTokens.TEXT).layoutWeight(1)
                 Text(`${Math.round(this.fontScale * 100)}%`).fontSize(14).fontColor(UiTokens.PRIMARY)
               }.width('100%')
               Slider({ value: this.fontScale, min: 0.75, max: 1.6, step: 0.05 })
-                .selectedColor(UiTokens.PRIMARY).onChange((value: number): void => { this.fontScale = value; })
-            }.width('100%')
-            Column({ space: 10 }) {
-            Text(tr('强调色', 'Accent color')).fontSize(15).fontWeight(FontWeight.Bold).width('100%')
-              Row({ space: 12 }) {
-                this.colorChoice(0xFF2E7D61, '#2E7D61')
-                this.colorChoice(0xFF1565C0, '#1565C0')
-                this.colorChoice(0xFFC05A24, '#C05A24')
-                this.colorChoice(0xFF7B4DA8, '#7B4DA8')
-                this.colorChoice(0xFF37474F, '#37474F')
-              }.width('100%')
-            }.width('100%')
-            Column({ space: 8 }) {
-              Text(tr('工程印记预览', 'SiteMark preview')).fontSize(12).fontColor('#D6EEE4')
-              Text(this.project?.name ?? tr('项目名称', 'Project name')).fontSize(18 * this.fontScale)
-                .fontWeight(FontWeight.Bold).fontColor(Color.White).width('100%')
-              Text(tr('工程部位 · 工作内容\n拍摄人  2026-08-20 12:00',
-                'Location · Work\nPhotographer  2026-08-20 12:00'))
-                .fontSize(13 * this.fontScale).fontColor(Color.White).lineHeight(19 * this.fontScale)
-                .width('100%')
+                .height(ProjectFormMetrics.TOUCH_TARGET)
+                .selectedColor(UiTokens.PRIMARY)
+                .trackColor(UiTokens.CONTROL)
+                .accessibilityText(`${this.copy().fontScaleLabel}${tr('，', ', ')}` +
+                  `${Math.round(this.fontScale * 100)}%`)
+                .onChange((value: number): void => { this.fontScale = value; })
+              Text(this.copy().fontScaleHelper).fontSize(12).fontColor(UiTokens.TEXT_SECONDARY)
+                .lineHeight(17).maxLines(3).width('100%')
             }
-            .padding(18)
             .width('100%')
-            .opacity(this.watermarkOpacity)
-            .backgroundColor('#CC17201C')
-            .border({ width: 3, color: this.accent })
-            .borderRadius(16)
+            .padding(16)
+            .alignItems(HorizontalAlign.Start)
+            .backgroundColor(UiTokens.SURFACE)
+            .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+            .borderRadius(UiTokens.CONTROL_RADIUS)
+            Column({ space: 10 }) {
+              Text(this.copy().accentLabel).fontSize(15).fontWeight(FontWeight.Bold)
+                .fontColor(UiTokens.TEXT).width('100%')
+              Row({ space: 12 }) {
+                ForEach(watermarkAccentChoices(AppText.isEnglish(), this.accent),
+                  (choice: WatermarkAccentChoice) => {
+                    this.colorChoice(choice)
+                  }, (choice: WatermarkAccentChoice): string => choice.value.toString())
+              }.width('100%')
+            }
+            .width('100%')
+            .padding(16)
+            .alignItems(HorizontalAlign.Start)
+            .backgroundColor(UiTokens.SURFACE)
+            .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+            .borderRadius(UiTokens.CONTROL_RADIUS)
+            Column({ space: 10 }) {
+              Text(this.copy().previewLabel).fontSize(14).fontWeight(FontWeight.Bold)
+                .fontColor(UiTokens.TEXT).width('100%')
+              Stack({ alignContent: this.watermarkPosition === 'bottomLeft' ?
+                Alignment.BottomStart : Alignment.BottomEnd }) {
+                Column({ space: 8 }) {
+                  Text(this.project?.name ?? this.copy().nameLabel).fontSize(18 * this.fontScale)
+                    .fontWeight(FontWeight.Bold).fontColor(Color.White).width('100%').maxLines(2)
+                  Text(tr('工程部位 · 工作内容\n拍摄人  2026-08-20 12:00',
+                    'Location · Work\nPhotographer  2026-08-20 12:00'))
+                    .fontSize(13 * this.fontScale).fontColor(Color.White).lineHeight(19 * this.fontScale)
+                    .width('100%')
+                }
+                .padding(16)
+                .width('88%')
+                .opacity(this.watermarkOpacity)
+                .backgroundColor(WatermarkPreviewStyle.BACKGROUND)
+                .border({ width: 3, color: this.accent })
+                .borderRadius(UiTokens.CONTROL_RADIUS)
+              }
+              .width('100%')
+              .height(158)
+              .padding(12)
+              .backgroundColor(UiTokens.SURFACE_MUTED)
+              .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+              .borderRadius(UiTokens.CONTROL_RADIUS)
+            }
+            .width('100%')
+            .padding(16)
+            .alignItems(HorizontalAlign.Start)
+            .backgroundColor(UiTokens.SURFACE)
+            .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+            .borderRadius(UiTokens.CONTROL_RADIUS)
             if (this.message.length > 0) {
-              Text(this.message).fontSize(13).fontColor(UiTokens.SUCCESS).width('100%')
+              Text(this.message).fontSize(13).fontColor(UiTokens.SUCCESS).lineHeight(19)
+                .padding(12).width('100%').backgroundColor(UiTokens.SURFACE_MUTED)
+                .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+                .borderRadius(UiTokens.CONTROL_RADIUS)
             }
           }
           .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })
