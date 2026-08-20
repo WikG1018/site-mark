@@ -20,8 +20,9 @@ import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 import { MotionPolicy } from '../../shared/MotionPolicy';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, CaptureFormMetrics,
-  applyDraftSuggestion, canEditCapture, filterSuggestions,
-  restoreRequiredFields, validateCaptureDraft, validateTemplateDraft,
+  CaptureUndoCoordinator, SingleFlightRequestCoordinator,
+  applyCaptureOutcome, applyDraftSuggestion, canEditCapture, filterSuggestions,
+  validateCaptureDraft, validateTemplateDraft,
   validateTemplateName } from '../capture/CaptureFormPolicy';
 import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolicy, RecordSearchCoordinator,
   RecordNavigationSeedStore, RecordRefreshGate, RecordSelectionCoordinator, RenderedRefreshTracker,
@@ -606,48 +607,57 @@ export struct CaptureFormScreen {
   @State private undoAvailable: boolean = false;
   @State private loadFailed: boolean = false;
   @State private templateLoadFailed: boolean = false;
-  private undoSnapshot: CaptureDraftSnapshot | null = null;
+  @State private templateNameError: string = '';
+  private readonly undo: CaptureUndoCoordinator = new CaptureUndoCoordinator();
   private readonly lifecycle: CaptureFormLifecycle = new CaptureFormLifecycle();
+  private readonly loadRequest: SingleFlightRequestCoordinator = new SingleFlightRequestCoordinator();
+  private readonly templateRequest: SingleFlightRequestCoordinator = new SingleFlightRequestCoordinator();
   private captureGeneration: number = 0;
 
   aboutToAppear(): void {
-    const generation = this.lifecycle.activate();
-    this.load(generation);
+    this.lifecycle.activate();
+    this.load();
   }
 
   aboutToDisappear(): void {
     this.lifecycle.deactivate();
+    this.loadRequest.invalidate();
+    this.templateRequest.invalidate();
   }
 
-  private async load(generation: number): Promise<void> {
+  private async load(): Promise<void> {
+    const request = this.loadRequest.begin();
+    if (request === 0) return;
+    const generation = this.lifecycle.snapshot();
     const runtime = AppRuntime.require();
     try {
       const project = await runtime.database.projectById(runtime.selectedProjectId);
-      if (!this.lifecycle.accept(generation)) return;
+      if (!this.lifecycle.accept(generation) || !this.loadRequest.accept(request)) return;
       const settings = await runtime.database.settings();
-      if (!this.lifecycle.accept(generation)) return;
+      if (!this.lifecycle.accept(generation) || !this.loadRequest.accept(request)) return;
       const systemLocale = runtime.context.resourceManager.getConfigurationSync().locale;
       const locationGranted = await runtime.services.getLocationPermissionState();
-      if (!this.lifecycle.accept(generation)) return;
+      if (!this.lifecycle.accept(generation) || !this.loadRequest.accept(request)) return;
       this.project = project;
       this.watermarkLocaleCode = resolveWatermarkLocale(settings.localeCode, systemLocale);
       this.locationGranted = locationGranted;
       this.locationPromptDismissed = settings.locationPermissionPromptDismissed;
       this.loadFailed = project === null;
     } catch (_) {
-      if (this.lifecycle.accept(generation)) {
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) {
         this.loadFailed = true;
         this.message = tr('项目与拍摄表单暂时无法读取，请重试',
           'The project and capture form could not be loaded. Try again.');
       }
+      this.loadRequest.finish(request);
       return;
     }
     try {
       const recent = await runtime.database.listCaptures({
         projectId: runtime.selectedProjectId, year: 0, month: 0, day: 0, searchText: ''
       }, null, 1);
-      if (this.lifecycle.accept(generation) && recent.rows.length > 0 && this.workLocation.length === 0 &&
-        this.workContent.length === 0 && this.photographer.length === 0) {
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request) && recent.rows.length > 0 &&
+        this.workLocation.length === 0 && this.workContent.length === 0 && this.photographer.length === 0) {
         this.workLocation = recent.rows[0].workLocation;
         this.workContent = recent.rows[0].workContent;
         this.photographer = recent.rows[0].photographer;
@@ -658,45 +668,40 @@ export struct CaptureFormScreen {
     try {
       const suggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
         'work_location', CaptureFormMetrics.ALL_SUGGESTION_COUNT);
-      if (this.lifecycle.accept(generation)) this.locationSuggestions = suggestions;
-    } catch (_) { if (this.lifecycle.accept(generation)) this.locationSuggestions = []; }
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) this.locationSuggestions = suggestions;
+    } catch (_) { if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) this.locationSuggestions = []; }
     try {
       const suggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
         'work_content', CaptureFormMetrics.ALL_SUGGESTION_COUNT);
-      if (this.lifecycle.accept(generation)) this.contentSuggestions = suggestions;
-    } catch (_) { if (this.lifecycle.accept(generation)) this.contentSuggestions = []; }
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) this.contentSuggestions = suggestions;
+    } catch (_) { if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) this.contentSuggestions = []; }
     try {
       const suggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
         'photographer', CaptureFormMetrics.ALL_SUGGESTION_COUNT);
-      if (this.lifecycle.accept(generation)) this.photographerSuggestions = suggestions;
-    } catch (_) { if (this.lifecycle.accept(generation)) this.photographerSuggestions = []; }
-    try {
-      const templates = await runtime.database.listTemplates(runtime.selectedProjectId);
-      if (this.lifecycle.accept(generation)) {
-        this.templates = templates;
-        this.templateLoadFailed = false;
-      }
-    } catch (_) {
-      if (this.lifecycle.accept(generation)) {
-        this.templates = [];
-        this.templateLoadFailed = true;
-        this.message = tr('拍摄模板暂时无法读取；仍可手动填写并拍摄',
-          'Capture templates could not be loaded. You can still enter fields and capture.');
-      }
-    }
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) this.photographerSuggestions = suggestions;
+    } catch (_) { if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) this.photographerSuggestions = []; }
+    this.loadRequest.finish(request);
+    await this.reloadTemplates();
   }
 
   private async reloadTemplates(): Promise<void> {
+    const request = this.templateRequest.begin();
+    if (request === 0) return;
     const generation = this.lifecycle.snapshot();
     try {
       const templates = await AppRuntime.require().database.listTemplates(AppRuntime.require().selectedProjectId);
-      if (!this.lifecycle.accept(generation)) return;
+      if (!this.lifecycle.accept(generation) || !this.templateRequest.accept(request)) return;
       this.templates = templates;
       this.templateLoadFailed = false;
       this.message = '';
     } catch (_) {
-      if (this.lifecycle.accept(generation)) this.message = tr('拍摄模板仍无法读取，请稍后再试',
-        'Capture templates still could not be loaded. Try again later.');
+      if (this.lifecycle.accept(generation) && this.templateRequest.accept(request)) {
+        this.templateLoadFailed = true;
+        this.message = tr('拍摄模板仍无法读取，请稍后再试',
+          'Capture templates still could not be loaded. Try again later.');
+      }
+    } finally {
+      this.templateRequest.finish(request);
     }
   }
 
@@ -748,7 +753,7 @@ export struct CaptureFormScreen {
 
   private rememberAndApply(field: string, value: string): void {
     const application = applyDraftSuggestion(this.currentSnapshot(), field, value);
-    this.undoSnapshot = application.previous;
+    this.undo.arm(application.previous);
     this.undoAvailable = true;
     this.workLocation = application.value.location;
     this.workContent = application.value.work;
@@ -761,13 +766,12 @@ export struct CaptureFormScreen {
   }
 
   private undoLastApplication(): void {
-    if (this.undoSnapshot === null) return;
-    const restored = restoreRequiredFields(this.currentSnapshot(), this.undoSnapshot);
+    const restored = this.undo.consume(this.currentSnapshot());
+    if (restored === null) return;
     this.workLocation = restored.location;
     this.workContent = restored.work;
     this.photographer = restored.photographer;
     this.notes = restored.notes;
-    this.undoSnapshot = null;
     this.undoAvailable = false;
     this.message = tr('已撤销上一次应用', 'The last application was undone');
   }
@@ -809,7 +813,7 @@ export struct CaptureFormScreen {
   }
 
   private applyTemplate(template: CaptureTemplateRecord): void {
-    this.undoSnapshot = this.currentSnapshot();
+    this.undo.arm(this.currentSnapshot());
     this.undoAvailable = true;
     this.workLocation = template.workLocation.trim();
     this.workContent = template.workContent.trim();
@@ -824,6 +828,12 @@ export struct CaptureFormScreen {
     this.renamingTemplateId = template.id;
     this.templateName = template.name;
     this.deleteTemplateId = '';
+    this.templateNameError = '';
+  }
+
+  private requiredFieldEdited(): void {
+    this.undo.requiredFieldEdited();
+    this.undoAvailable = false;
   }
 
   private async saveTemplate(): Promise<void> {
@@ -831,7 +841,7 @@ export struct CaptureFormScreen {
     const generation = this.lifecycle.snapshot();
     const nameValidation = validateTemplateName(this.templateName);
     if (!nameValidation.valid) {
-      this.message = nameValidation.error;
+      this.templateNameError = nameValidation.error;
       this.lifecycle.finishSave(generation);
       return;
     }
@@ -841,7 +851,8 @@ export struct CaptureFormScreen {
       this.locationError = validation.locationError;
       this.contentError = validation.workError;
       this.photographerError = validation.photographerError;
-      this.message = validation.nameError.length > 0 ? validation.nameError :
+      this.templateNameError = validation.nameError;
+      this.message = validation.nameError.length > 0 ? '' :
         tr('请先修正表单中的必填信息', 'Fix the required form fields first');
       this.lifecycle.finishSave(generation);
       return;
@@ -868,14 +879,18 @@ export struct CaptureFormScreen {
       if (!this.lifecycle.accept(generation)) return;
       this.templates = templates;
       this.templateName = '';
+      this.templateNameError = '';
       this.renamingTemplateId = '';
       this.message = tr('拍摄模板已保存', 'Capture template saved');
     } catch (error) {
       if (this.lifecycle.accept(generation)) {
         const text = (error as Error).message.toLowerCase();
-        this.message = text.includes('unique') || text.includes('constraint') ?
-          tr('已有同名模板，请换一个名称', 'A template with this name already exists') :
-          tr('模板暂时无法保存，请稍后重试', 'The template could not be saved. Try again later.');
+        if (text.includes('unique') || text.includes('constraint')) {
+          this.templateNameError = tr('已有同名模板，请换一个名称', 'A template with this name already exists');
+        } else {
+          this.message = tr('模板暂时无法保存，请稍后重试',
+            'The template could not be saved. Try again later.');
+        }
       }
     } finally {
       this.lifecycle.finishSave(generation);
@@ -929,7 +944,8 @@ export struct CaptureFormScreen {
       });
       if (generation !== this.captureGeneration) return;
       if (result.captured) {
-        this.notes = '';
+        const next = applyCaptureOutcome(this.currentSnapshot(), true);
+        this.notes = next.notes;
         this.message = result.debugInjected ? tr(
           '模拟器已用测试样图完成拍摄，水印正在后台处理；完成后可从详情保存到系统相册',
           'The emulator used a test image. Its watermark is processing; save it to the system gallery from Details when complete.') :
@@ -937,6 +953,11 @@ export struct CaptureFormScreen {
             'Captured. The watermark is processing; save it to the gallery from Details when complete. You can keep shooting.');
         AppRuntime.require().notifyDataChanged();
       } else {
+        const next = applyCaptureOutcome(this.currentSnapshot(), false);
+        this.workLocation = next.location;
+        this.workContent = next.work;
+        this.photographer = next.photographer;
+        this.notes = next.notes;
         this.message = result.message.length > 0 ? result.message : tr('已取消拍摄', 'Capture cancelled');
       }
       try {
@@ -1022,7 +1043,9 @@ export struct CaptureFormScreen {
         placeholder: tr('例如：南地块 2# 楼', 'For example: South block, Building 2'), required: true,
         error: this.locationError, maxLength: CaptureFormMetrics.LOCATION_MAX_LENGTH,
         onFieldFocus: (): void => { this.focusField('location'); },
-        onChange: (value: string): void => { this.workLocation = value; this.locationError = ''; } })
+        onChange: (value: string): void => {
+          this.requiredFieldEdited(); this.workLocation = value; this.locationError = '';
+        } })
       this.suggestionStrip('location', this.locationSuggestions)
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
@@ -1034,7 +1057,9 @@ export struct CaptureFormScreen {
         placeholder: tr('例如：月度巡检', 'For example: Monthly inspection'), required: true,
         error: this.contentError, maxLength: CaptureFormMetrics.WORK_MAX_LENGTH,
         onFieldFocus: (): void => { this.focusField('work'); },
-        onChange: (value: string): void => { this.workContent = value; this.contentError = ''; } })
+        onChange: (value: string): void => {
+          this.requiredFieldEdited(); this.workContent = value; this.contentError = '';
+        } })
       this.suggestionStrip('work', this.contentSuggestions)
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
@@ -1046,7 +1071,9 @@ export struct CaptureFormScreen {
         placeholder: tr('请输入姓名', 'Enter a name'), required: true,
         error: this.photographerError, maxLength: CaptureFormMetrics.PHOTOGRAPHER_MAX_LENGTH,
         onFieldFocus: (): void => { this.focusField('photographer'); },
-        onChange: (value: string): void => { this.photographer = value; this.photographerError = ''; } })
+        onChange: (value: string): void => {
+          this.requiredFieldEdited(); this.photographer = value; this.photographerError = '';
+        } })
       this.suggestionStrip('photographer', this.photographerSuggestions)
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
@@ -1061,21 +1088,30 @@ export struct CaptureFormScreen {
       Text(this.renamingTemplateId.length > 0 ? tr('重命名模板', 'Rename template') :
         tr('把当前三项必填信息保存为模板', 'Save the three required fields as a template'))
         .fontSize(14).fontWeight(FontWeight.Bold).width('100%')
-      Row({ space: 8 }) {
-        TextInput({ text: this.templateName, placeholder: tr('模板名称', 'Template name') })
-          .layoutWeight(1).height(CaptureFormMetrics.TOUCH_TARGET).backgroundColor(Color.White).borderRadius(14)
-          .maxLength(CAPTURE_TEMPLATE_NAME_MAX_LENGTH)
-          .onChange((value: string): void => { this.templateName = value; })
-        Button(this.renamingTemplateId.length > 0 ? tr('保存名称', 'Save name') :
-          tr('保存当前', 'Save current'))
-          .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(12).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+      Column({ space: 8 }) {
+        FormField({ label: tr('模板名称', 'Template name'), value: this.templateName,
+          placeholder: tr('请输入模板名称', 'Enter a template name'), required: true,
+          error: this.templateNameError, maxLength: CAPTURE_TEMPLATE_NAME_MAX_LENGTH,
+          onChange: (value: string): void => { this.templateName = value; this.templateNameError = ''; } })
+        Button() {
+          Text(this.renamingTemplateId.length > 0 ? tr('保存名称', 'Save name') :
+            tr('保存当前', 'Save current')).maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES)
+            .textAlign(TextAlign.Center).fontSize(12)
+        }
+          .width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
+          .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
           .enabled(!this.templateLoadFailed)
           .onClick((): void => { this.saveTemplate(); })
       }.width('100%')
       if (this.renamingTemplateId.length > 0) {
-          Button(tr('取消重命名', 'Cancel rename')).height(CaptureFormMetrics.TOUCH_TARGET).fontSize(12)
+          Button() {
+            Text(tr('取消重命名', 'Cancel rename')).maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES)
+              .textAlign(TextAlign.Center).fontSize(12)
+          }.width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
             .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
-          .onClick((): void => { this.renamingTemplateId = ''; this.templateName = ''; })
+          .onClick((): void => {
+            this.renamingTemplateId = ''; this.templateName = ''; this.templateNameError = '';
+          })
       }
       if (this.templates.length === 0) {
         Text(tr('暂无模板。填写三项必填信息后即可保存。',
@@ -1083,18 +1119,24 @@ export struct CaptureFormScreen {
           .fontColor(UiTokens.TEXT_SECONDARY).width('100%')
       } else {
         ForEach(this.templates, (template: CaptureTemplateRecord) => {
-          Row({ space: 8 }) {
+          Column({ space: 8 }) {
             Column({ space: 3 }) {
-              Text(template.name).fontSize(14).fontWeight(FontWeight.Bold).maxLines(1).width('100%')
+              Text(template.name).fontSize(14).fontWeight(FontWeight.Bold)
+                .maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES).width('100%')
               Text(`${template.workLocation} · ${template.workContent} · ${template.photographer}`)
                 .fontSize(11).fontColor(UiTokens.TEXT_SECONDARY).maxLines(2).width('100%')
-            }.layoutWeight(1).constraintSize({ minHeight: CaptureFormMetrics.TOUCH_TARGET })
+            }.width('100%').constraintSize({ minHeight: CaptureFormMetrics.TOUCH_TARGET })
               .alignItems(HorizontalAlign.Start).onClick((): void => this.applyTemplate(template))
-            Button(tr('改名', 'Rename')).height(CaptureFormMetrics.TOUCH_TARGET).fontSize(11)
+            Button() {
+              Text(tr('改名', 'Rename')).maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES)
+                .textAlign(TextAlign.Center).fontSize(11)
+            }.width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
               .backgroundColor(UiTokens.ACCENT_SURFACE).fontColor(UiTokens.PRIMARY)
               .onClick((): void => this.beginRename(template))
-            Button(this.deleteTemplateId === template.id ? tr('确认删除', 'Confirm delete') : tr('删除', 'Delete'))
-              .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(11)
+            Button() {
+              Text(this.deleteTemplateId === template.id ? tr('确认删除', 'Confirm delete') : tr('删除', 'Delete'))
+                .maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES).textAlign(TextAlign.Center).fontSize(11)
+            }.width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
               .backgroundColor(UiTokens.DANGER_CONTAINER).fontColor(UiTokens.DANGER)
               .onClick((): void => { this.deleteTemplate(template); })
           }.padding(10).width('100%').backgroundColor(Color.White).borderRadius(15)
@@ -1163,7 +1205,7 @@ export struct CaptureFormScreen {
             if (this.loadFailed) {
               InlineErrorPanel({ message: tr('项目或表单数据暂时无法读取',
                 'Project or form data could not be loaded'), retryLabel: tr('重试', 'Retry'),
-                onRetry: (): void => { this.load(this.lifecycle.snapshot()); } })
+                onRetry: (): void => { this.load(); } })
             }
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
@@ -1198,6 +1240,7 @@ export struct CaptureFormScreen {
 export struct CaptureDetailScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @State private capture: CaptureRecord | null = null;
+  @State private project: ProjectRecord | null = null;
   @State private loadingRecord: boolean = true;
   @State private showingOriginal: boolean = false;
   @State private fileSize: number = 0;
@@ -1297,11 +1340,14 @@ export struct CaptureDetailScreen {
     }
     try {
       const capture = await AppRuntime.require().database.captureById(AppRuntime.require().selectedCaptureId);
+      const project = capture === null ? null :
+        await AppRuntime.require().database.projectById(capture.projectId);
       if (!this.pageState.isActive() || generation !== this.loadGeneration) {
         return;
       }
       const previous = this.capture;
       this.capture = capture;
+      this.project = project;
       this.loadingRecord = false;
       if (capture === null) {
         return;
@@ -1500,12 +1546,13 @@ export struct CaptureDetailScreen {
         AppTopBar({ title: tr('记录详情', 'Record details'), showBack: true,
           backAccessibilityText: tr('返回全部记录', 'Back to all records'),
           onBack: (): void => { this.pathStack.pop(); },
-          actionLabel: this.capture !== null && this.capture!.hasOriginal() &&
-            (this.capture!.status === CaptureStatus.READY ||
-              this.capture!.status === CaptureStatus.FAILED) ? tr('编辑', 'Edit') : '',
+          actionLabel: this.capture !== null && this.project !== null &&
+            canEditCapture(this.project!.lifecycleStatus, this.capture!.status,
+              this.capture!.hasOriginal()) ? tr('编辑', 'Edit') : '',
           onAction: (): void => {
-            if (this.capture !== null && this.capture!.hasOriginal() &&
-              (this.capture!.status === CaptureStatus.READY || this.capture!.status === CaptureStatus.FAILED)) {
+            if (this.capture !== null && this.project !== null &&
+              canEditCapture(this.project!.lifecycleStatus, this.capture!.status,
+                this.capture!.hasOriginal())) {
               this.renderedRefresh.expectNextAttempt(this.capture!.processingAttempts);
               this.pathStack.pushPathByName(Routes.CAPTURE_EDITOR, null);
             }
@@ -1621,23 +1668,34 @@ export struct CaptureEditorScreen {
   @State private photographerError: string = '';
   @State private notesError: string = '';
   @State private saving: boolean = false;
+  @State private loading: boolean = true;
+  @State private loadFailed: boolean = false;
   private readonly lifecycle: CaptureFormLifecycle = new CaptureFormLifecycle();
+  private readonly loadRequest: SingleFlightRequestCoordinator = new SingleFlightRequestCoordinator();
 
   aboutToAppear(): void {
-    this.load(this.lifecycle.activate());
+    this.lifecycle.activate();
+    this.load();
   }
 
   aboutToDisappear(): void {
     this.lifecycle.deactivate();
+    this.loadRequest.invalidate();
   }
 
-  private async load(generation: number): Promise<void> {
+  private async load(): Promise<void> {
+    const request = this.loadRequest.begin();
+    if (request === 0) return;
+    const generation = this.lifecycle.snapshot();
+    this.loading = true;
+    this.loadFailed = false;
+    this.message = '';
     try {
       const capture = await AppRuntime.require().database.captureById(AppRuntime.require().selectedCaptureId);
-      if (!this.lifecycle.accept(generation)) return;
+      if (!this.lifecycle.accept(generation) || !this.loadRequest.accept(request)) return;
       const project = capture === null ? null :
         await AppRuntime.require().database.projectById(capture.projectId);
-      if (!this.lifecycle.accept(generation)) return;
+      if (!this.lifecycle.accept(generation) || !this.loadRequest.accept(request)) return;
       this.capture = capture;
       this.project = project;
       if (capture !== null) {
@@ -1656,10 +1714,14 @@ export struct CaptureEditorScreen {
         this.message = tr('记录不存在或已被删除', 'The record does not exist or was deleted');
       }
     } catch (_) {
-      if (this.lifecycle.accept(generation)) {
-        this.message = tr('记录暂时无法读取，请返回后重试',
-          'The record could not be loaded. Go back and try again.');
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) {
+        this.loadFailed = true;
+        this.message = tr('记录暂时无法读取，请在此重试',
+          'The record could not be loaded. Retry here.');
       }
+    } finally {
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) this.loading = false;
+      this.loadRequest.finish(request);
     }
   }
 
@@ -1726,8 +1788,14 @@ export struct CaptureEditorScreen {
           actionAccessibilityText: tr('保存编辑并重新生成水印成片',
             'Save edits and regenerate the watermarked image'),
           onAction: (): void => { this.save(); } })
-        Scroll() {
-          Column({ space: 14 }) {
+        if (this.loading) {
+          ListSkeleton({ rows: 3 })
+        } else if (this.loadFailed) {
+          InlineErrorPanel({ message: this.message, retryLabel: tr('原地重试', 'Retry'),
+            onRetry: (): void => { this.load(); } })
+        } else {
+          Scroll() {
+            Column({ space: 14 }) {
             FormField({ label: tr('工程部位', 'Location'), value: this.location, required: true,
               error: this.locationError, maxLength: CaptureFormMetrics.LOCATION_MAX_LENGTH,
               fieldEnabled: this.editable(),
@@ -1752,10 +1820,11 @@ export struct CaptureEditorScreen {
             if (this.message.length > 0) {
               Text(this.message).fontSize(13).fontColor(UiTokens.DANGER).width('100%')
             }
-          }
-          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })
-          .width('100%')
-        }.layoutWeight(1)
+            }
+            .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })
+            .width('100%')
+          }.layoutWeight(1)
+        }
       }
       .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }.hideTitleBar(true)

@@ -1,4 +1,4 @@
-import { normalizeCaptureTemplateName, unicodeScalarLength } from '../../domain/DomainRules';
+import { inspectCaptureFields, normalizeCaptureTemplateName, unicodeScalarLength } from '../../domain/DomainRules';
 import { CaptureStatus, ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { tr } from '../../shared/AppText';
 
@@ -10,6 +10,8 @@ export class CaptureFormMetrics {
   static readonly NOTES_MAX_LENGTH: number = 0;
   static readonly FOCUSED_SUGGESTION_COUNT: number = 3;
   static readonly ALL_SUGGESTION_COUNT: number = 20;
+  static readonly TEMPLATE_ACTION_MIN_HEIGHT: number = 44;
+  static readonly TEMPLATE_ACTION_MAX_LINES: number = 2;
 }
 
 export class CaptureFormCopy {
@@ -77,10 +79,11 @@ export class CaptureDraftValidation {
 
 export function validateCaptureDraft(location: string, work: string, photographer: string,
   notes: string): CaptureDraftValidation {
-  const normalizedLocation = location.trim();
-  const normalizedWork = work.trim();
-  const normalizedPhotographer = photographer.trim();
-  const normalizedNotes = notes.trim();
+  const fields = inspectCaptureFields(location, work, photographer, notes);
+  const normalizedLocation = fields.location;
+  const normalizedWork = fields.work;
+  const normalizedPhotographer = fields.photographer;
+  const normalizedNotes = fields.notes;
   return new CaptureDraftValidation(
     normalizedLocation,
     normalizedWork,
@@ -197,9 +200,44 @@ export function applyDraftSuggestion(current: CaptureDraftSnapshot, field: strin
   return new CaptureDraftApplication(next, current);
 }
 
+export function applyCaptureOutcome(current: CaptureDraftSnapshot, captured: boolean): CaptureDraftSnapshot {
+  return new CaptureDraftSnapshot(current.location, current.work, current.photographer,
+    captured ? '' : current.notes);
+}
+
 export function restoreRequiredFields(current: CaptureDraftSnapshot,
   previous: CaptureDraftSnapshot): CaptureDraftSnapshot {
   return new CaptureDraftSnapshot(previous.location, previous.work, previous.photographer, current.notes);
+}
+
+export class CaptureUndoCoordinator {
+  private snapshot: CaptureDraftSnapshot | null = null;
+
+  arm(snapshot: CaptureDraftSnapshot): void { this.snapshot = snapshot; }
+  available(): boolean { return this.snapshot !== null; }
+  requiredFieldEdited(): void { this.snapshot = null; }
+  consume(current: CaptureDraftSnapshot): CaptureDraftSnapshot | null {
+    if (this.snapshot === null) return null;
+    const restored = restoreRequiredFields(current, this.snapshot);
+    this.snapshot = null;
+    return restored;
+  }
+}
+
+export class SingleFlightRequestCoordinator {
+  private generation: number = 0;
+  private busy: boolean = false;
+
+  begin(): number {
+    if (this.busy) return 0;
+    this.busy = true;
+    this.generation += 1;
+    return this.generation;
+  }
+
+  accept(generation: number): boolean { return this.busy && generation === this.generation; }
+  finish(generation: number): void { if (this.accept(generation)) this.busy = false; }
+  invalidate(): void { this.generation += 1; this.busy = false; }
 }
 
 export class CaptureFormLifecycle {
