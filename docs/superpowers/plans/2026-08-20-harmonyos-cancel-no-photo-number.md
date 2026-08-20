@@ -30,6 +30,6 @@
 
 - [x] **Step 1: RED** — 取消后再拍，断言下一张 `photoNumber` 仍是 `东区厂房改造-SM-20260716-001`
 - [x] **Step 2: GREEN** — 官方 `--no-pub` 跑 `capture_workflow_test`；`ohos.yml` 加 `capture_failure_guidance_test.dart`
-- [x] **Step 3: Honest docs + commit + push origin/ohos**
+- [x] **Step 3: Honest docs + commit + push origin/ohos** (`6484a86`)
 
 不得写系统相册 / 拍成 / WorkScheduler。写明 Task 46–56 Dart 未进 HAP。
