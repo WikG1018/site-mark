@@ -29,6 +29,6 @@
 
 - [x] **Step 1: Official `--no-pub` on the missing files**
 - [x] **Step 2: Add them to `ohos.yml`**
-- [x] **Step 3: Honest docs + commit + push origin/ohos**
+- [x] **Step 3: Honest docs + commit + push origin/ohos** (`d742817`)
 
 不得写系统相册 / 拍成 / WorkScheduler。写明 Task 46–55 Dart 未进 HAP。
