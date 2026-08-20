@@ -1,53 +1,74 @@
 # SiteMark 鸿蒙原生版
 
-本目录是 SiteMark 的 HarmonyOS NEXT 原生实现，使用 Stage 模型、ArkTS 和 ArkUI，不依赖 Flutter 鸿蒙分支。项目、拍摄记录、筛选与批量处理、水印设置、备份恢复、存储统计和诊断均在鸿蒙原生层实现；图像渲染与归档复用仓库根目录的同一 Rust 核心。
+本目录是 SiteMark 的 HarmonyOS NEXT 原生实现，采用 Stage 模型、ArkTS 与 ArkUI，不依赖 Flutter 鸿蒙分支。项目、工程记录、筛选与批量处理、水印设置、备份恢复、存储统计和诊断均在鸿蒙原生层实现；图像渲染与归档复用仓库根目录的 Rust 核心。
 
 ## 当前状态
 
-- 原生包名：`io.github.wikg1018.sitemark.native`，不会覆盖历史 Flutter `ohos` 试验包。
-- 目标 SDK：HarmonyOS 6.1.1 / API 24；当前功能回归在 API 22 x86_64 模拟器完成。
-- Rust 原生库同时生成 `arm64-v8a` 和 `x86_64` 两种 ABI。
-- 调试 HAP 可构建并安装；正式签名和 HarmonyOS 真机回归尚未完成，因此不宣称真机全量对等。
-- 当前自动化基线：33 项 ArkTS 单元测试，以及共享 Rust 核心的 fmt、Clippy 和全量测试。
+- 原生包名为 `io.github.wikg1018.sitemark.native`，不会覆盖历史 Flutter `ohos` 试验包。
+- 目标 SDK 为 HarmonyOS 6.1.1 / API 24，兼容 API 17；Rust 原生库覆盖 `arm64-v8a` 与 `x86_64`。
+- 当前可复现构建产物是 debug unsigned HAP；未配置发布签名，不应作为应用市场安装包分发。
+- ArkTS 全量测试、鸿蒙数据库契约测试、共享 Rust 核心与 Flutter 回归门禁均已通过；产品文档不固定测试数量，日期、命令和本次计数见[验证记录](docs/verification-2026-08-20.md)。
+- 当前 `hdc list targets` 返回 `[Empty]`。本轮没有可用模拟器或真机，因此视觉走查、系统相机、相册交互、RDB 导入恢复和设备性能均未完成设备级验收。
 
-已知平台差异和不可越界的验证边界见 [docs/deltas.md](docs/deltas.md)，工具链与模拟器实测见 [tool/ohos-native/probe.md](../tool/ohos-native/probe.md)。
+平台差异和未验证边界见 [docs/deltas.md](docs/deltas.md)。[tool/ohos-native/probe.md](../tool/ohos-native/probe.md) 是早期环境探测记录，只能说明当时的工具链和模拟器现象，不能替代本轮设备验收。
+
+## 体验与性能基线
+
+界面采用“克制工程感”：清晰标题层级、统一表面与间距、减少重复胶囊和厚重装饰。项目、全部记录、设置三个根入口使用无分割线的悬浮 Dock；选择态使用单层悬浮批量栏，并根据系统字体缩放动态计算高度和列表底部留白。主要交互热区不小于 44vp，图标操作提供中英文可读名称，并遵循系统减少动画设置。
+
+- 项目列表、记录列表和设置中的项目选择使用惰性数据源，避免一次创建全部卡片节点。
+- 记录查询固定每页 50 条，具有单次触底加载、去重、局部重试和过期请求丢弃；搜索、筛选及首个可见位置可在返回后恢复。
+- 记录详情限制图片解码尺寸；全屏查看器只保留当前照片前后各两张，内存窗口最多 5 条，当前图与邻图采用不同解码上限。
+- 图片请求使用稳定节点、代次校验和可重试占位，避免旧回调覆盖新照片或在转场结束后闪出错误文字。
+- 拍摄与编辑表单统一字段容器、字段级校验和保存单飞；必填字段在拉起相机前完成长度与非法字符检查。
+- 拍摄表单提供模板、最近建议、筛选和单步撤销；相机取消保留全部输入，拍摄成功后只清空备注。
+- 设置页统一二级页面、异步代次与操作防重；恢复流程包含预检、事务提交、恢复日记和暂存目录清理，失败不会被静默描述为成功。
+
+以上是实现与自动化约束，不等同于真机流畅度结论。长列表、50MP 图片、连续拍摄、系统相机返回、相册确认和内存压力仍需在实际 HarmonyOS 设备复验。
 
 ## 产品能力
 
 | 范围 | 鸿蒙原生实现 |
 | --- | --- |
 | 项目 | 不重名创建、搜索、置顶、重命名、进行中/已完成/已归档生命周期、删除 |
-| 拍摄 | 调用系统 CameraPicker，三个必填字段连拍保留，备注清空，定位可选且拒绝不阻止拍摄 |
-| 处理 | 应用存活期串行渲染，失败重试，启动时对账，发布日记按 `captureId` 持久化 |
-| 记录 | 项目/日期/关键词筛选，缩略图，详情，成片/原图，全屏相邻浏览，编辑，全选/取消全选 |
-| 批量操作 | 导出所选、再次保存、清理原图、删除记录；删除前完成全库引用检查 |
+| 拍摄 | 调用系统 CameraPicker；三个必填字段连拍保留，备注清空；定位可选且拒绝不阻止拍摄 |
+| 处理 | 应用存活期串行渲染、失败重试、启动对账；发布日记按 `captureId` 持久化 |
+| 记录 | 项目/日期/关键词筛选、50 条惰性分页、缩略图、详情、成片/原图、相邻全屏浏览、编辑、全选/取消全选 |
+| 批量操作 | 导出所选、再次保存、清理原图、删除记录；删除前执行全库引用检查 |
 | 水印 | 项目名、部位、内容、拍摄人、时间和可选位置；支持位置、透明度、字体比例和强调色 |
-| 数据 | 单/多项目 ZIP 备份与恢复、恢复事务和中断收敛、应用私有存储统计 |
-| 应用 | 首启隐私门、中英文、浅色/深色/跟随系统、诊断包、外部 GitHub 链接 |
+| 表单辅助 | 拍摄模板、最近建议、建议筛选、应用后单步撤销、字段级错误提示 |
+| 数据 | 单/多项目 ZIP 备份与恢复、恢复事务与中断收敛、应用私有存储统计 |
+| 设置 | 中英文、浅色/深色/跟随系统、减少动画适配、诊断包、外部 GitHub 链接 |
 
 ## 权限与数据边界
 
-应用只声明前台精确/模糊定位权限，不声明 `INTERNET`、`CAMERA`、广泛媒体读写权限。实际拍摄交给系统相机；保存到系统相册时使用 HarmonyOS 系统确认面板。GitHub 仓库链接交给外部浏览器，应用自身不联网。
+应用只声明前台精确/模糊定位权限，不声明 `INTERNET`、`CAMERA` 或广泛媒体读写权限。实际拍摄交给系统相机；保存到系统相册时使用 HarmonyOS 系统确认面板。GitHub 仓库链接交给外部浏览器，应用自身不联网。
 
 卸载会删除 RDB、私有原图、私有水印成片和未另存的导出文件。经用户确认保存到系统相册或文件选择器外部位置的副本不在应用私有目录内。
 
 ## 本地构建
 
-需要 DevEco Studio 6.1.1.300 及其内置 HarmonyOS SDK、稳定版 Rust 和已安装的 `x86_64-unknown-linux-ohos` / `aarch64-unknown-linux-ohos` Rust 目标。
+需要 DevEco Studio 6.1.1.300 及其内置 HarmonyOS SDK、稳定版 Rust，以及 `x86_64-unknown-linux-ohos`、`aarch64-unknown-linux-ohos` 两个 Rust 目标。以下命令均从仓库根目录执行：
 
 ```powershell
 # 编译两种 ABI 的共享 Rust 核心
 pwsh -File .\tool\ohos-native\build-rust.ps1
 
-# 执行 ArkTS 测试并构建 debug HAP
+# 执行数据库契约与 ArkTS 全量测试，并构建 debug HAP
 pwsh -File .\tool\ohos-native\build-hap.ps1 -SkipRust -RunTests
 
-# 构建 release 变体（未配置签名时仍为 unsigned）
+# 构建 release 变体；没有 signingConfigs 时仍为 unsigned
 pwsh -File .\tool\ohos-native\build-hap.ps1 -SkipRust -BuildMode release
 ```
 
-调试 HAP 位于 `ohos-native/entry/build/default/outputs/default/entry-default-unsigned.hap`。生产签名需在 DevEco 中配置自有证书；签名文件和密码不得提交。
+新工作树第一次使用 `-SkipRust` 前必须先运行 `build-rust.ps1`，否则本地没有被忽略的双 ABI 原生库。debug HAP 位于：
 
-## 开发调试通道
+```text
+ohos-native/entry/build/default/outputs/default/entry-default-unsigned.hap
+```
 
-API 22 模拟器的 CameraPicker 无法返回可用拍摄结果。只有 `applicationInfo.debug == true` 时，应用才会注入 `rawfile/probe.jpg` 驱动完整拍摄状态机；发布变体不会进入该通道。这不是产品相机实现，也不代表真机相机已验收。
+构建脚本会拒绝缺失、格式异常、失败数非零或统计不一致的 ArkTS 测试结果，避免仅凭测试进程退出码产生“假绿”。生产签名需在 DevEco 中配置自有证书；签名文件和密码不得提交。
+
+## 调试边界
+
+仅在 `applicationInfo.debug == true` 时，应用可以注入 `rawfile/probe.jpg` 驱动拍摄状态机；发布变体不会进入该通道。这不是产品相机实现，也不代表系统 CameraPicker 已通过真机验收。
