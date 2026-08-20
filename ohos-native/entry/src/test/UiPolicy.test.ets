@@ -5,6 +5,7 @@ import { ImageDecodePolicy, ImageRequestState } from '../main/ets/shared/AppImag
 import { ListPageCoordinator } from '../main/ets/shared/ListPageCoordinator';
 import { MotionPolicy, ReduceMotionQueryPolicy } from '../main/ets/shared/MotionPolicy';
 import { clampFirstVisibleIndex, ScreenStateStore } from '../main/ets/shared/ScreenStateStore';
+import { UiTokens } from '../main/ets/shared/UiTokens';
 import { forwardUiMemoryLevel, UiMemoryBroadcaster, UiMemoryCoordinator } from '../main/ets/shared/UiMemoryCoordinator';
 
 function filter(projectId: string, searchText: string): CaptureFilter {
@@ -90,13 +91,48 @@ export default function uiPolicyTest(): void {
       expect(retry.failed).assertFalse();
     });
 
+    it('accepts external image callbacks only for the current uri generation', 0, () => {
+      let state = ImageRequestState.initial().forUri('file://A');
+      const generationA = state.generation;
+      state = state.forUri('file://B');
+      const generationB = state.generation;
+
+      expect(state.accepts(generationA, 'file://A')).assertFalse();
+      expect(state.accepts(generationA, 'file://B')).assertFalse();
+      expect(state.accepts(generationB, 'file://A')).assertFalse();
+      expect(state.accepts(generationB, 'file://B')).assertTrue();
+    });
+
+    it('rebuilds a same-uri image only after its explicit request version changes', 0, () => {
+      let state = ImageRequestState.initial().forRequest('file://rendered', 7);
+      const firstGeneration = state.generation;
+      const firstNodeIdentity = state.nodeIdentity();
+      state = state.complete(firstGeneration);
+
+      const unchanged = state.forRequest('file://rendered', 7);
+      expect(unchanged.generation).assertEqual(firstGeneration);
+      expect(unchanged.loaded).assertTrue();
+      expect(unchanged.nodeIdentity()).assertEqual(firstNodeIdentity);
+
+      const refreshed = unchanged.forRequest('file://rendered', 8);
+      expect(refreshed.generation).assertEqual(firstGeneration + 1);
+      expect(refreshed.loaded).assertFalse();
+      expect(refreshed.requestVersion).assertEqual(8);
+      expect(refreshed.nodeIdentity() === firstNodeIdentity).assertFalse();
+
+      const staleCompletion = refreshed.complete(firstGeneration);
+      expect(staleCompletion.loaded).assertFalse();
+      expect(staleCompletion.accepts(firstGeneration, 'file://rendered')).assertFalse();
+      expect(staleCompletion.accepts(firstGeneration + 1, 'file://rendered')).assertTrue();
+    });
+
     it('removes motion duration and blur only when reduce motion is enabled', 0, () => {
       MotionPolicy.reduceMotion = false;
-      expect(MotionPolicy.duration(180)).assertEqual(180);
+      expect(MotionPolicy.duration(UiTokens.MOTION_STANDARD)).assertEqual(UiTokens.MOTION_STANDARD);
       expect(MotionPolicy.blur(20)).assertEqual(20);
 
       MotionPolicy.reduceMotion = true;
-      expect(MotionPolicy.duration(180)).assertEqual(0);
+      expect(MotionPolicy.duration(UiTokens.MOTION_STANDARD)).assertEqual(0);
       expect(MotionPolicy.blur(20)).assertEqual(0);
       MotionPolicy.reduceMotion = false;
     });

@@ -4,13 +4,7 @@ import { formatDay, imageUri, statusLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { tr } from '../../shared/AppText';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
-
-export function captureCardKey(capture: CaptureRecord): string {
-  return `${capture.id}\u001F${capture.status}\u001F${capture.workLocation}\u001F${capture.workContent}` +
-    `\u001F${capture.photographer}\u001F${capture.renderedPath}\u001F${capture.publishedUri}` +
-    `\u001F${capture.originalDeletedAt === null ? '' : capture.originalDeletedAt.toString()}` +
-    `\u001F${capture.failureReason}`;
-}
+import { MotionPolicy } from '../../shared/MotionPolicy';
 
 @Component
 export struct CaptureInfoRow {
@@ -41,6 +35,16 @@ export struct CaptureCard {
   @Prop showProject: boolean = false;
   onOpen: () => void = (): void => {};
   onToggle: () => void = (): void => {};
+
+  private cardAccessibilityText(): string {
+    const details = tr(`照片 ${this.capture.photoNumber}，${this.capture.workLocation}，${this.capture.workContent}`,
+      `Photo ${this.capture.photoNumber}, ${this.capture.workLocation}, ${this.capture.workContent}`);
+    if (!this.selectionMode) {
+      return details;
+    }
+    return this.selected ? tr(`${details}，已选择`, `${details}, selected`) :
+      tr(`${details}，未选择`, `${details}, not selected`);
+  }
 
   @Builder
   private thumbnail() {
@@ -81,7 +85,7 @@ export struct CaptureCard {
     .clip(true)
     .borderRadius(18)
     .sharedTransition(`capture-photo-${this.capture.id}`,
-      { duration: 260, curve: Curve.Friction })
+      { duration: MotionPolicy.duration(260), curve: Curve.Friction })
     .accessibilityText(tr(`照片 ${this.capture.photoNumber}`, `Photo ${this.capture.photoNumber}`))
   }
 
@@ -122,6 +126,7 @@ export struct CaptureCard {
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: this.selected ? UiTokens.PRIMARY : '#DCE8E0' })
     .shadow({ radius: 12, color: '#12000000', offsetY: 4 })
+    .accessibilityText(this.cardAccessibilityText())
     .onClick((): void => this.selectionMode ? this.onToggle() : this.onOpen())
   }
 }
