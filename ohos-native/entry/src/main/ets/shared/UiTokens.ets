@@ -17,9 +17,18 @@ export class UiTokens {
   static DELETE_PANEL: string = '#FFF1F0';
   static DOCK: string = '#F2F7FBF8';
   static DOCK_SELECTED: string = '#B8C7F1DF';
-  static readonly CARD_RADIUS: number = 24;
-  static readonly CONTROL_RADIUS: number = 18;
-  static readonly PAGE_PADDING: number = 20;
+  static IMAGE_PLACEHOLDER: string = '#E8EEE9';
+  static SURFACE_MUTED: string = '#EEF4F0';
+  static OUTLINE_SUBTLE: string = '#D9E3DC';
+  static CARD_SHADOW: string = '#14000000';
+  static readonly PAGE_PADDING: number = 16;
+  static readonly CARD_RADIUS: number = 18;
+  static readonly CONTROL_RADIUS: number = 12;
+  static readonly TOP_BAR_HEIGHT: number = 68;
+  static readonly TOUCH_TARGET: number = 44;
+  static readonly DOCK_HEIGHT: number = 64;
+  static readonly MOTION_FAST: number = 120;
+  static readonly MOTION_STANDARD: number = 180;
 
   static apply(dark: boolean, accentArgb: number): void {
     const accent = `#${(accentArgb >>> 0).toString(16).padStart(8, '0')}`;
@@ -42,6 +51,10 @@ export class UiTokens {
       UiTokens.DELETE_PANEL = '#3B201D';
       UiTokens.DOCK = '#E8202823';
       UiTokens.DOCK_SELECTED = '#80375648';
+      UiTokens.IMAGE_PLACEHOLDER = '#202A24';
+      UiTokens.SURFACE_MUTED = '#1F2823';
+      UiTokens.OUTLINE_SUBTLE = '#38453E';
+      UiTokens.CARD_SHADOW = '#3D000000';
     } else {
       UiTokens.BACKGROUND = '#F5FAF6';
       UiTokens.SURFACE = '#F9FCF9';
@@ -60,6 +73,10 @@ export class UiTokens {
       UiTokens.DELETE_PANEL = '#FFF1F0';
       UiTokens.DOCK = '#F2F7FBF8';
       UiTokens.DOCK_SELECTED = '#B8C7F1DF';
+      UiTokens.IMAGE_PLACEHOLDER = '#E8EEE9';
+      UiTokens.SURFACE_MUTED = '#EEF4F0';
+      UiTokens.OUTLINE_SUBTLE = '#D9E3DC';
+      UiTokens.CARD_SHADOW = '#14000000';
     }
   }
 }
