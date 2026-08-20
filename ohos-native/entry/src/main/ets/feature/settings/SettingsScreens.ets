@@ -18,11 +18,16 @@ import { StableSelectionList } from './SettingsProjectSelection';
 import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, watermarkAccentAccessibilityText,
   watermarkAccentOptions, WatermarkAccentOption, diagnosticsConfirmAccessibilityText } from './SettingsAccessibility';
 
+const notificationActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+const appearanceActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+const diagnosticsActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+const backupActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+
 @Component
 export struct SettingsView {
   @Consume('pathStack') pathStack: NavPathStack;
   private readonly loadCoordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
-  private readonly notificationCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+  private readonly notificationCoordinator: ScreenLifecycleActionCoordinator = notificationActionCoordinator;
   @State private notificationsEnabled: boolean = false;
   @State private notificationsLoading: boolean = true;
   @State private notificationsBusy: boolean = false;
@@ -32,8 +37,9 @@ export struct SettingsView {
   aboutToAppear(): void {
     this.loadCoordinator.activate();
     this.notificationCoordinator.activate();
-    this.notificationsBusy = false;
+    this.notificationsBusy = this.notificationCoordinator.isBusy();
     this.loadSettings();
+    if (this.notificationsBusy) this.reconcileNotificationWhenIdle();
   }
 
   aboutToDisappear(): void {
@@ -59,6 +65,13 @@ export struct SettingsView {
     } finally {
       if (this.loadCoordinator.isCurrent(token)) this.notificationsLoading = false;
     }
+  }
+
+  private async reconcileNotificationWhenIdle(): Promise<void> {
+    await this.notificationCoordinator.whenIdle();
+    if (!this.loadCoordinator.isActive()) return;
+    this.notificationsBusy = false;
+    await this.loadSettings();
   }
 
   private async setNotifications(enabled: boolean): Promise<void> {
@@ -94,11 +107,7 @@ export struct SettingsView {
         this.notificationError = true;
       }
     } finally {
-      if (this.notificationCoordinator.finish(token)) {
-        this.notificationsBusy = false;
-      } else if (this.loadCoordinator.isActive()) {
-        this.loadSettings();
-      }
+      if (this.notificationCoordinator.finish(token)) this.notificationsBusy = false;
     }
   }
 
@@ -189,7 +198,7 @@ export struct SettingsView {
 export struct AppearanceScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   private readonly loadCoordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
-  private readonly saveCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+  private readonly saveCoordinator: ScreenLifecycleActionCoordinator = appearanceActionCoordinator;
   private readonly accentOptions: WatermarkAccentOption[] = watermarkAccentOptions();
   @State private settings: AppSettingsRecord | null = null;
   @State private watermarkOpacity: number = 0.78;
@@ -206,8 +215,9 @@ export struct AppearanceScreen {
   aboutToAppear(): void {
     this.loadCoordinator.activate();
     this.saveCoordinator.activate();
-    this.saving = false;
+    this.saving = this.saveCoordinator.isBusy();
     this.load();
+    if (this.saving) this.reconcileSaveWhenIdle();
   }
 
   aboutToDisappear(): void {
@@ -241,6 +251,13 @@ export struct AppearanceScreen {
     }
   }
 
+  private async reconcileSaveWhenIdle(): Promise<void> {
+    await this.saveCoordinator.whenIdle();
+    if (!this.loadCoordinator.isActive()) return;
+    this.saving = false;
+    await this.load();
+  }
+
   private async save(): Promise<void> {
     if (this.settings === null) return;
     const token: number | null = this.saveCoordinator.begin();
@@ -271,11 +288,7 @@ export struct AppearanceScreen {
         this.messageError = true;
       }
     } finally {
-      if (this.saveCoordinator.finish(token)) {
-        this.saving = false;
-      } else if (this.loadCoordinator.isActive()) {
-        this.load();
-      }
+      if (this.saveCoordinator.finish(token)) this.saving = false;
     }
   }
 
@@ -441,7 +454,7 @@ export struct StorageScreen {
 export struct DiagnosticsScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   private readonly loadCoordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
-  private readonly actionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+  private readonly actionCoordinator: ScreenLifecycleActionCoordinator = diagnosticsActionCoordinator;
   @State private summary: DiagnosticSummary = new DiagnosticSummary(0, 0);
   @State private message: string = '';
   @State private confirming: boolean = false;
@@ -453,8 +466,9 @@ export struct DiagnosticsScreen {
   aboutToAppear(): void {
     this.loadCoordinator.activate();
     this.actionCoordinator.activate();
-    this.busy = false;
+    this.busy = this.actionCoordinator.isBusy();
     this.refresh();
+    if (this.busy) this.reconcileDiagnosticsWhenIdle();
   }
 
   aboutToDisappear(): void {
@@ -476,6 +490,14 @@ export struct DiagnosticsScreen {
     } finally {
       if (this.loadCoordinator.isCurrent(token)) this.loading = false;
     }
+  }
+
+  private async reconcileDiagnosticsWhenIdle(): Promise<void> {
+    await this.actionCoordinator.whenIdle();
+    if (!this.loadCoordinator.isActive()) return;
+    this.busy = false;
+    this.confirming = false;
+    await this.refresh();
   }
 
   private async clear(): Promise<void> {
@@ -663,7 +685,7 @@ export struct AboutScreen {
 export struct BackupScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   private readonly loadCoordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
-  private readonly actionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+  private readonly actionCoordinator: ScreenLifecycleActionCoordinator = backupActionCoordinator;
   private readonly projectSelection: StableSelectionList<ProjectSummary> =
     new StableSelectionList<ProjectSummary>((item: ProjectSummary): string => item.project.id);
   @State private projectCount: number = 0;
@@ -680,8 +702,9 @@ export struct BackupScreen {
   aboutToAppear(): void {
     this.loadCoordinator.activate();
     this.actionCoordinator.activate();
-    this.busy = false;
+    this.busy = this.actionCoordinator.isBusy();
     this.load();
+    if (this.busy) this.reconcileBackupWhenIdle();
   }
 
   aboutToDisappear(): void {
@@ -746,6 +769,16 @@ export struct BackupScreen {
     } finally {
       if (this.actionCoordinator.finish(token)) this.busy = false;
     }
+  }
+
+  private async reconcileBackupWhenIdle(): Promise<void> {
+    await this.actionCoordinator.whenIdle();
+    if (!this.loadCoordinator.isActive()) return;
+    this.busy = false;
+    this.message = '';
+    this.messageError = false;
+    this.result = null;
+    await this.load();
   }
 
   private async saveBackup(): Promise<void> {

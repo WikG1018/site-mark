@@ -34,41 +34,65 @@ export class ScreenActionCoordinator {
 }
 
 export class ScreenLifecycleActionCoordinator {
-  private activeToken: number = 0;
-  private busy: boolean = false;
+  private epoch: number = 0;
+  private nextActionToken: number = 0;
+  private inFlightToken: number = -1;
+  private inFlightEpoch: number = -1;
   private active: boolean = false;
+  private idleWaiters: Array<() => void> = [];
 
   activate(): void {
-    this.activeToken += 1;
+    this.epoch += 1;
     this.active = true;
-    this.busy = false;
   }
 
   begin(): number | null {
-    if (!this.active || this.busy) {
+    if (!this.active || this.inFlightToken >= 0) {
       return null;
     }
-    this.activeToken += 1;
-    this.busy = true;
-    return this.activeToken;
+    this.nextActionToken += 1;
+    this.inFlightToken = this.nextActionToken;
+    this.inFlightEpoch = this.epoch;
+    return this.inFlightToken;
   }
 
   isCurrent(token: number): boolean {
-    return this.active && this.busy && token === this.activeToken;
+    return this.active && token === this.inFlightToken && this.inFlightEpoch === this.epoch;
   }
 
   finish(token: number): boolean {
-    if (!this.isCurrent(token)) {
+    if (token !== this.inFlightToken) {
       return false;
     }
-    this.busy = false;
-    return true;
+    const canCommit: boolean = this.isCurrent(token);
+    this.inFlightToken = -1;
+    this.inFlightEpoch = -1;
+    const waiters: Array<() => void> = this.idleWaiters;
+    this.idleWaiters = [];
+    waiters.forEach((resolve: () => void): void => resolve());
+    return canCommit;
   }
 
   invalidate(): void {
-    this.activeToken += 1;
+    this.epoch += 1;
     this.active = false;
-    this.busy = false;
+  }
+
+  isBusy(): boolean {
+    return this.inFlightToken >= 0;
+  }
+
+  isActive(): boolean {
+    return this.active;
+  }
+
+  whenIdle(): Promise<void> {
+    if (!this.isBusy()) {
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve: () => void): void => {
+      this.idleWaiters.push(resolve);
+    });
   }
 }
 
