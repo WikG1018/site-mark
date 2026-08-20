@@ -39,7 +39,10 @@ import {
   WatermarkPreviewStyle,
 } from './ProjectFormPolicy';
 import { ScreenLifecycleActionCoordinator } from '../../shared/ScreenActionCoordinator';
-import { BackAction, BackCoordinator, ScreenLoadCoordinator } from '../../shared/ScreenUiStabilityCoordinator';
+import { BackAction, BackCoordinator, RootBackDispatcher,
+  ScreenLoadCoordinator } from '../../shared/ScreenUiStabilityCoordinator';
+import { AppDatabaseProjectSaveStore, ProjectDetailMutationPolicy, ProjectEditorSaveExecutor,
+  ProjectEditorSaveSnapshot, WatermarkSaveSnapshot } from './ProjectEditStability';
 
 class RuntimeCapturePageLoader implements CapturePageLoader {
   load(filter: CaptureFilter, cursor: CapturePageCursor | null, pageSize: number): Promise<CapturePage> {
@@ -62,6 +65,7 @@ export struct ProjectListView {
   private restoreTimer: number = -1;
   private loadGeneration: number = 0;
   private savedFirstVisibleIndex: number = 0;
+  private rootBackToken: number = -1;
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
   private readonly refreshListener: () => void = (): void => { this.load(); };
   private readonly memoryListener: (level: number) => void = (_level: number): void => {
@@ -77,6 +81,7 @@ export struct ProjectListView {
     this.searchText = restored.searchText;
     this.savedFirstVisibleIndex = restored.firstVisibleIndex;
     this.pageState.beginRestore();
+    this.rootBackToken = RootBackDispatcher.register((): boolean => this.handleRootBack());
     runtime.subscribe(this.refreshListener);
     runtime.uiMemory.register(this.memoryListener);
     this.load();
@@ -92,6 +97,8 @@ export struct ProjectListView {
     }
     this.saveProjectState();
     this.cancelTimers();
+    RootBackDispatcher.unregister(this.rootBackToken);
+    this.rootBackToken = -1;
     this.loadGeneration += 1;
     AppRuntime.current?.unsubscribe(this.refreshListener);
     AppRuntime.current?.uiMemory.unregister(this.memoryListener);
@@ -176,6 +183,22 @@ export struct ProjectListView {
       this.searchTimer = -1;
       this.load();
     }, 250);
+  }
+
+  private handleRootBack(): boolean {
+    if (this.pathStack.size() > 0 || this.searchText.length === 0) {
+      return false;
+    }
+    if (this.searchTimer >= 0) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = -1;
+    }
+    this.searchText = '';
+    this.savedFirstVisibleIndex = 0;
+    this.pageState.beginRestore();
+    this.saveProjectState();
+    this.load();
+    return true;
   }
 
   private openProject(item: ProjectSummary): void {
@@ -312,6 +335,7 @@ export struct ProjectEditorScreen {
   @State private loadError: string = '';
   private readonly loadCoordinator: ScreenLoadCoordinator<ProjectRecord> = new ScreenLoadCoordinator<ProjectRecord>();
   private readonly saveAction: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+  private projectId: string = '';
 
   private copy(): ProjectFormCopy {
     return projectFormCopy(AppText.isEnglish());
@@ -321,6 +345,7 @@ export struct ProjectEditorScreen {
     this.loadCoordinator.activate();
     this.saveAction.activate();
     const id = AppRuntime.require().selectedProjectId;
+    this.projectId = id;
     this.editing = id.length > 0;
     if (this.editing) {
       this.loadProject();
@@ -338,7 +363,7 @@ export struct ProjectEditorScreen {
     this.loading = true;
     this.loadError = '';
     try {
-      const project = await AppRuntime.require().database.projectById(AppRuntime.require().selectedProjectId);
+      const project = await AppRuntime.require().database.projectById(this.projectId);
       if (!this.loadCoordinator.resolve(token, project)) return;
       if (project === null) {
         this.loadError = tr('项目不存在，可能已被删除', 'The project no longer exists');
@@ -358,7 +383,8 @@ export struct ProjectEditorScreen {
   private async save(): Promise<void> {
     const actionToken = this.saveAction.begin();
     if (actionToken === null) return;
-    const validationError = projectNameValidationError(this.name, AppText.isEnglish());
+    const snapshot = new ProjectEditorSaveSnapshot(this.editing, this.projectId, this.name, this.description);
+    const validationError = projectNameValidationError(snapshot.name, AppText.isEnglish());
     if (validationError.length > 0) {
       this.nameError = validationError;
       this.message = '';
@@ -368,19 +394,11 @@ export struct ProjectEditorScreen {
     this.saving = true;
     try {
       const runtime = AppRuntime.require();
-      if (this.editing) {
-        await runtime.database.renameProject(runtime.selectedProjectId, this.name);
-        const project = await runtime.database.projectById(runtime.selectedProjectId);
-        if (project !== null) {
-          await runtime.database.updateProject(project.id, this.description, project.watermarkPosition,
-            project.watermarkOpacity, project.watermarkAccentColorArgb, project.watermarkFontScale);
-        }
-      } else {
-        const created = await runtime.database.createProject(this.name, this.description);
-        runtime.selectedProjectId = created.id;
-      }
+      const store = new AppDatabaseProjectSaveStore(runtime.database);
+      const savedProjectId = await ProjectEditorSaveExecutor.persistEditor(store, snapshot);
       runtime.notifyDataChanged();
       if (this.saveAction.isCurrent(actionToken)) {
+        if (!snapshot.editing) runtime.selectedProjectId = savedProjectId;
         this.pathStack.pop();
       }
     } catch (error) {
@@ -431,6 +449,7 @@ export struct ProjectEditorScreen {
               error: this.nameError,
               helper: this.copy().nameHelper,
               maxLength: ProjectFormMetrics.PROJECT_NAME_MAX_LENGTH,
+              fieldEnabled: !this.saving,
               onChange: (value: string): void => {
                 this.name = value;
                 this.nameError = '';
@@ -443,6 +462,7 @@ export struct ProjectEditorScreen {
               placeholder: this.copy().descriptionPlaceholder,
               helper: this.copy().descriptionHelper,
               maxLength: ProjectFormMetrics.PROJECT_DESCRIPTION_MAX_LENGTH,
+              fieldEnabled: !this.saving,
               onChange: (value: string): void => { this.description = value; },
             })
             if (this.message.length > 0) {
@@ -683,7 +703,7 @@ export struct ProjectDetailScreen {
   }
 
   private async retryCaptures(): Promise<void> {
-    if (!this.pageState.isActive()) {
+    if (this.batchBusy || !this.pageState.isActive()) {
       return;
     }
     const generation = ++this.contentGeneration;
@@ -716,6 +736,7 @@ export struct ProjectDetailScreen {
   }
 
   private openCapture(capture: CaptureRecord): void {
+    if (this.batchBusy) return;
     const path = capture.renderedPath.length > 0 ? capture.renderedPath : capture.originalPath;
     RecordNavigationSeedStore.put(capture, path.length > 0 ? imageUri(path) : '');
     AppRuntime.require().selectedCaptureId = capture.id;
@@ -727,6 +748,25 @@ export struct ProjectDetailScreen {
     if (enabled) this.selection.enter();
     else this.selection.exit();
     this.syncSelection();
+  }
+
+  private canMutateProject(): boolean {
+    return ProjectDetailMutationPolicy.enabled(this.batchBusy, this.project !== null);
+  }
+
+  private openProjectSettings(): void {
+    if (!this.canMutateProject()) return;
+    this.pathStack.pushPathByName(Routes.PROJECT_SETTINGS, null);
+  }
+
+  private editProject(): void {
+    if (!this.canMutateProject()) return;
+    this.pathStack.pushPathByName(Routes.PROJECT_EDITOR, null);
+  }
+
+  private beginCapture(): void {
+    if (!this.canMutateProject()) return;
+    this.pathStack.pushPathByName(Routes.CAPTURE_FORM, null);
   }
 
   private exitSelectionAfterBatch(): void {
@@ -981,7 +1021,7 @@ export struct ProjectDetailScreen {
   }
 
   private async setLifecycle(target: ProjectLifecycleStatus): Promise<void> {
-    if (this.project === null) {
+    if (!this.canMutateProject() || this.project === null) {
       return;
     }
     try {
@@ -996,7 +1036,7 @@ export struct ProjectDetailScreen {
   }
 
   private async togglePinned(): Promise<void> {
-    if (this.project === null) {
+    if (!this.canMutateProject() || this.project === null) {
       return;
     }
     await AppRuntime.require().database.setProjectPinned(this.project.id, !this.project.isPinned);
@@ -1006,7 +1046,7 @@ export struct ProjectDetailScreen {
   }
 
   private async deleteProject(): Promise<void> {
-    if (this.project === null) {
+    if (!this.canMutateProject() || this.project === null) {
       return;
     }
     try {
@@ -1038,14 +1078,16 @@ export struct ProjectDetailScreen {
         Button(this.project!.isPinned ? tr('取消置顶', 'Unpin') : tr('置顶', 'Pin'))
           .height(UiTokens.TOUCH_TARGET).layoutWeight(1).fontSize(13).backgroundColor(UiTokens.ACCENT_SURFACE)
           .fontColor(UiTokens.PRIMARY).borderRadius(UiTokens.CONTROL_RADIUS)
+          .enabled(this.canMutateProject())
           .accessibilityText(this.project!.isPinned ? tr('取消置顶项目', 'Unpin project') :
             tr('置顶项目', 'Pin project'))
           .onClick((): void => { this.togglePinned(); })
         Button(tr('此项目水印设置', 'Project watermark settings'))
           .height(UiTokens.TOUCH_TARGET).layoutWeight(2).fontSize(13).backgroundColor(UiTokens.ACCENT_SURFACE)
           .fontColor(UiTokens.PRIMARY).borderRadius(UiTokens.CONTROL_RADIUS)
+          .enabled(this.canMutateProject())
           .accessibilityText(tr('打开此项目水印设置', 'Open project watermark settings'))
-          .onClick((): void => { this.pathStack.pushPathByName(Routes.PROJECT_SETTINGS, null); })
+          .onClick((): void => { this.openProjectSettings(); })
       }.width('100%')
     }
     .padding(18)
@@ -1065,7 +1107,7 @@ export struct ProjectDetailScreen {
             actionLabel: this.selectionMode ? tr('完成', 'Done') : tr('编辑', 'Edit'),
             actionEnabled: this.project !== null && !this.batchBusy,
             onAction: (): void => { if (this.selectionMode) this.setSelectionMode(false);
-              else this.pathStack.pushPathByName(Routes.PROJECT_EDITOR, null); } })
+              else this.editProject(); } })
           if (this.project !== null) {
             List({ space: 10, scroller: this.detailScroller }) {
               ListItem() { this.projectSummary() }
@@ -1073,7 +1115,7 @@ export struct ProjectDetailScreen {
                 ListItem() {
                   Column() {
                     InlineErrorPanel({ message: this.projectLoadError, retryLabel: tr('重试', 'Retry'),
-                      onRetry: (): void => { this.loadProject(); } })
+                      onRetry: (): void => { if (!this.batchBusy) this.loadProject(); } })
                   }.padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING }).width('100%')
                 }
               }
@@ -1083,22 +1125,28 @@ export struct ProjectDetailScreen {
                   if (this.project!.lifecycleStatus !== ProjectLifecycleStatus.ACTIVE) {
                     Button(tr('恢复进行中', 'Reopen')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
                       .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
+                      .enabled(this.canMutateProject())
                       .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ACTIVE); })
                   } else {
                     Button(tr('标记完成', 'Mark completed')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
                       .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
+                      .enabled(this.canMutateProject())
                       .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.COMPLETED); })
                   }
                   if (this.project!.lifecycleStatus !== ProjectLifecycleStatus.ARCHIVED) {
                     Button(tr('归档', 'Archive')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
                       .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
+                      .enabled(this.canMutateProject())
                       .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ARCHIVED); })
                   }
                   Button(tr('删除项目', 'Delete project')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
                     .fontColor(UiTokens.DANGER).backgroundColor(UiTokens.DANGER_CONTAINER)
+                    .enabled(this.canMutateProject())
                     .accessibilityText(tr('删除项目，永久删除本机项目记录',
                       'Delete project, permanently delete on-device project records'))
-                    .onClick((): void => { this.confirmDelete = !this.confirmDelete; })
+                    .onClick((): void => {
+                      if (this.canMutateProject()) this.confirmDelete = !this.confirmDelete;
+                    })
                 }
                 .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
                 .width('100%')
@@ -1111,10 +1159,12 @@ export struct ProjectDetailScreen {
                       .fontSize(13).fontColor(UiTokens.DANGER).lineHeight(19).width('100%')
                     Row({ space: 8 }) {
                       Button(tr('取消', 'Cancel')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
-                        .onClick((): void => { this.confirmDelete = false; })
+                        .enabled(this.canMutateProject())
+                        .onClick((): void => { if (this.canMutateProject()) this.confirmDelete = false; })
                       Button(tr('确认删除', 'Confirm delete')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
                         .backgroundColor(UiTokens.DANGER)
                         .fontColor(Color.White)
+                        .enabled(this.canMutateProject())
                         .accessibilityText(tr('确认永久删除本机项目记录；不处理已保存到相册的照片',
                           'Confirm permanent deletion of on-device project records; gallery photos remain'))
                         .onClick((): void => { this.deleteProject(); })
@@ -1253,7 +1303,8 @@ export struct ProjectDetailScreen {
             .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
             .shadow({ radius: 18, color: '#40176B55', offsetY: 7 })
             .margin({ right: 18, bottom: 18 }).align(Alignment.BottomEnd)
-            .onClick((): void => { this.pathStack.pushPathByName(Routes.CAPTURE_FORM, null); })
+            .enabled(this.canMutateProject())
+            .onClick((): void => { this.beginCapture(); })
         }
         if (this.selectionMode) {
           this.batchBar()
@@ -1282,6 +1333,7 @@ export struct ProjectSettingsScreen {
   @State private saveError: string = '';
   private readonly loadCoordinator: ScreenLoadCoordinator<ProjectRecord> = new ScreenLoadCoordinator<ProjectRecord>();
   private readonly saveAction: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+  private projectId: string = '';
 
   private copy(): ProjectFormCopy {
     return projectFormCopy(AppText.isEnglish());
@@ -1298,6 +1350,7 @@ export struct ProjectSettingsScreen {
   aboutToAppear(): void {
     this.loadCoordinator.activate();
     this.saveAction.activate();
+    this.projectId = AppRuntime.require().selectedProjectId;
     this.loadProject();
   }
 
@@ -1312,7 +1365,7 @@ export struct ProjectSettingsScreen {
     this.loading = true;
     this.loadError = '';
     try {
-      const project = await AppRuntime.require().database.projectById(AppRuntime.require().selectedProjectId);
+      const project = await AppRuntime.require().database.projectById(this.projectId);
       if (!this.loadCoordinator.resolve(token, project)) return;
       this.project = project;
       if (project === null) {
@@ -1338,12 +1391,14 @@ export struct ProjectSettingsScreen {
     }
     const actionToken = this.saveAction.begin();
     if (actionToken === null) return;
+    const snapshot = new WatermarkSaveSnapshot(this.project.id, this.project.description,
+      this.watermarkPosition, this.watermarkOpacity, this.accent, this.fontScale);
     this.saving = true;
     this.saveError = '';
     this.message = '';
     try {
-      await AppRuntime.require().database.updateProject(this.project.id, this.project.description,
-        this.watermarkPosition, this.watermarkOpacity, this.accent, this.fontScale);
+      const store = new AppDatabaseProjectSaveStore(AppRuntime.require().database);
+      await ProjectEditorSaveExecutor.persistWatermark(store, snapshot);
       AppRuntime.require().notifyDataChanged();
       if (this.saveAction.isCurrent(actionToken)) {
         this.message = tr('已保存；新拍照片和重新生成的成片会使用这些设置',
@@ -1373,6 +1428,7 @@ export struct ProjectSettingsScreen {
       .border({ width: choice.selected ? 3 : 1,
         color: choice.selected ? UiTokens.TEXT : UiTokens.OUTLINE_SUBTLE })
       .shadow({ radius: choice.selected ? 6 : 0, color: UiTokens.CARD_SHADOW })
+      .enabled(!this.saving)
       .accessibilityText(choice.accessibilityText)
       .onClick((): void => { this.accent = choice.value; })
   }
@@ -1389,6 +1445,7 @@ export struct ProjectSettingsScreen {
       .border({ width: selectionVisual(choice.selected).borderWidth,
         color: selectionVisual(choice.selected).borderColor })
       .borderRadius(UiTokens.CONTROL_RADIUS)
+      .enabled(!this.saving)
       .accessibilityText(choice.accessibilityText)
       .onClick((): void => { this.watermarkPosition = choice.value; })
   }
@@ -1446,6 +1503,7 @@ export struct ProjectSettingsScreen {
               }.width('100%')
               Slider({ value: this.watermarkOpacity, min: 0.35, max: 1.0, step: 0.05 })
                 .height(ProjectFormMetrics.TOUCH_TARGET)
+                .enabled(!this.saving)
                 .selectedColor(UiTokens.PRIMARY)
                 .trackColor(UiTokens.CONTROL)
                 .accessibilityText(`${this.copy().opacityLabel}${tr('，', ', ')}` +
@@ -1461,6 +1519,7 @@ export struct ProjectSettingsScreen {
               }.width('100%')
               Slider({ value: this.fontScale, min: 0.75, max: 1.6, step: 0.05 })
                 .height(ProjectFormMetrics.TOUCH_TARGET)
+                .enabled(!this.saving)
                 .selectedColor(UiTokens.PRIMARY)
                 .trackColor(UiTokens.CONTROL)
                 .accessibilityText(`${this.copy().fontScaleLabel}${tr('，', ', ')}` +

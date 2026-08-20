@@ -15,6 +15,7 @@ import { UiTokens } from '../shared/UiTokens';
 import { AppText, tr } from '../shared/AppText';
 import { MotionPolicy } from '../shared/MotionPolicy';
 import { ScreenActionCoordinator } from '../shared/ScreenActionCoordinator';
+import { RootBackDispatcher } from '../shared/ScreenUiStabilityCoordinator';
 import { RootLifecycleCoordinator, RootMotionRefreshResult, RootMotionSpec, RootShellPolicy,
   RootTabAction, RootTabCoordinator } from '../shared/RootShellPolicy';
 
@@ -63,6 +64,10 @@ struct Index {
 
   onPageHide(): void {
     this.deactivateRootShell();
+  }
+
+  onBackPress(): boolean {
+    return RootBackDispatcher.handle();
   }
 
   private context(): common.UIAbilityContext {
