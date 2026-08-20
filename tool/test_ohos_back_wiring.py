@@ -56,6 +56,11 @@ class HarmonyBackWiringContractTest(unittest.TestCase):
         self.assertIn("this.batchBusy || this.mutationBusy", detail)
         self.assertIn("ProjectOperationKind.BATCH", detail)
         self.assertIn("ProjectOperationKind.MUTATION", detail)
+        self.assertIn("this.projectOperations.activate();\n    this.reconcileProjectOperationBusyState();", detail)
+        self.assertIn("this.batchBusy = state.batchBusy;", detail)
+        self.assertIn("this.mutationBusy = state.mutationBusy;", detail)
+        self.assertNotIn("this.batchBusy = true;", detail)
+        self.assertNotIn("this.mutationBusy = true;", detail)
         self.assertEqual(editor.count("fieldEnabled: !this.saving"), 2)
         self.assertGreaterEqual(settings.count(".enabled(!this.saving)"), 4)
 

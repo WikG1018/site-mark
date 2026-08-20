@@ -140,5 +140,32 @@ export default function projectEditStabilityTest(): void {
       expect(operations.finish(mutation as number)).assertFalse();
       expect(operations.begin(ProjectOperationKind.BATCH) === null).assertFalse();
     });
+
+    it('reconciles idle UI flags when a hidden operation finishes before activation', 0, () => {
+      const operations = new ProjectOperationCoordinator();
+      operations.activate();
+      const batch = operations.begin(ProjectOperationKind.BATCH) as number;
+      operations.invalidate();
+      operations.finish(batch);
+      operations.activate();
+      const state = operations.uiState();
+      expect(state.batchBusy).assertFalse();
+      expect(state.mutationBusy).assertFalse();
+    });
+
+    it('reconciles the active kind until a hidden operation finishes after activation', 0, () => {
+      const operations = new ProjectOperationCoordinator();
+      operations.activate();
+      const mutation = operations.begin(ProjectOperationKind.MUTATION) as number;
+      operations.invalidate();
+      operations.activate();
+      const activeState = operations.uiState();
+      expect(activeState.batchBusy).assertFalse();
+      expect(activeState.mutationBusy).assertTrue();
+      operations.finish(mutation);
+      const idleState = operations.uiState();
+      expect(idleState.batchBusy).assertFalse();
+      expect(idleState.mutationBusy).assertFalse();
+    });
   });
 }

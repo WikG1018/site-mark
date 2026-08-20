@@ -102,6 +102,16 @@ export enum ProjectOperationKind {
   MUTATION = 2,
 }
 
+export class ProjectOperationUiState {
+  readonly batchBusy: boolean;
+  readonly mutationBusy: boolean;
+
+  constructor(batchBusy: boolean, mutationBusy: boolean) {
+    this.batchBusy = batchBusy;
+    this.mutationBusy = mutationBusy;
+  }
+}
+
 export class ProjectOperationCoordinator {
   private epoch: number = 0;
   private nextToken: number = 0;
@@ -144,5 +154,13 @@ export class ProjectOperationCoordinator {
 
   isBusy(): boolean {
     return this.inFlightToken >= 0;
+  }
+
+  uiState(): ProjectOperationUiState {
+    if (!this.isBusy()) return new ProjectOperationUiState(false, false);
+    return new ProjectOperationUiState(
+      this.kind === ProjectOperationKind.BATCH,
+      this.kind === ProjectOperationKind.MUTATION
+    );
   }
 }

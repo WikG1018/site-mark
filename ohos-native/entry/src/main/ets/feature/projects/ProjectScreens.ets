@@ -551,6 +551,7 @@ export struct ProjectDetailScreen {
     }
     this.projectLoad.activate();
     this.projectOperations.activate();
+    this.reconcileProjectOperationBusyState();
     const runtime = AppRuntime.require();
     this.pageState.beginRestore();
     this.pageState.consumeSafeReloadRequest();
@@ -763,13 +764,20 @@ export struct ProjectDetailScreen {
   private beginProjectMutation(): number | null {
     if (!this.canMutateProject()) return null;
     const token = this.projectOperations.begin(ProjectOperationKind.MUTATION);
-    if (token !== null) this.mutationBusy = true;
+    this.reconcileProjectOperationBusyState();
     return token;
   }
 
   private finishProjectMutation(token: number): void {
     this.projectOperations.finish(token);
-    if (this.pageState.isActive() && !this.projectOperations.isBusy()) this.mutationBusy = false;
+    this.reconcileProjectOperationBusyState();
+  }
+
+  private reconcileProjectOperationBusyState(): void {
+    if (!this.pageState.isActive()) return;
+    const state = this.projectOperations.uiState();
+    this.batchBusy = state.batchBusy;
+    this.mutationBusy = state.mutationBusy;
   }
 
   private openProjectSettings(): void {
@@ -820,7 +828,7 @@ export struct ProjectDetailScreen {
     if (actionToken === null) return;
     const requestedFilter = this.currentFilter();
     const token = this.selection.beginSelectAll(requestedFilter);
-    this.batchBusy = true;
+    this.reconcileProjectOperationBusyState();
     try {
       const ids = await AppRuntime.require().database.captureIds(requestedFilter);
       if (!this.pageState.isActive() || !this.projectOperations.isCurrent(actionToken) ||
@@ -835,7 +843,7 @@ export struct ProjectDetailScreen {
       }
     } finally {
       this.projectOperations.finish(actionToken);
-      if (this.pageState.isActive() && !this.projectOperations.isBusy()) this.batchBusy = false;
+      this.reconcileProjectOperationBusyState();
     }
   }
 
@@ -847,7 +855,7 @@ export struct ProjectDetailScreen {
     const actionToken = this.projectOperations.begin(ProjectOperationKind.BATCH);
     if (actionToken === null) return;
     const ids = this.selectedIds.slice();
-    this.batchBusy = true;
+    this.reconcileProjectOperationBusyState();
     try {
       const service = new ProjectBackupService(AppRuntime.require());
       const result = await service.exportSelection(ids, false);
@@ -864,7 +872,7 @@ export struct ProjectDetailScreen {
       }
     } finally {
       this.projectOperations.finish(actionToken);
-      if (this.pageState.isActive() && !this.projectOperations.isBusy()) this.batchBusy = false;
+      this.reconcileProjectOperationBusyState();
     }
   }
 
@@ -876,7 +884,7 @@ export struct ProjectDetailScreen {
     }
     const actionToken = this.projectOperations.begin(ProjectOperationKind.BATCH);
     if (actionToken === null) return;
-    this.batchBusy = true;
+    this.reconcileProjectOperationBusyState();
     try {
       let succeeded = 0;
       for (const id of ids) {
@@ -894,7 +902,7 @@ export struct ProjectDetailScreen {
       }
     } finally {
       this.projectOperations.finish(actionToken);
-      if (this.pageState.isActive() && !this.projectOperations.isBusy()) this.batchBusy = false;
+      this.reconcileProjectOperationBusyState();
     }
   }
 
