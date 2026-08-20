@@ -13,7 +13,7 @@ import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr } from '../../shared/AppText';
 import { StableSelectionList } from './SettingsProjectSelection';
-import { settingsBackAccessibilityText, watermarkAccentAccessibilityText,
+import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, watermarkAccentAccessibilityText,
   watermarkAccentOptions, WatermarkAccentOption } from './SettingsAccessibility';
 
 @Component
@@ -396,9 +396,11 @@ export struct DiagnosticsScreen {
                   'Excludes photos, project names, work details, photographers, locations, file paths, hashes, raw exceptions, and stack traces.'))
                   .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20).width('100%')
                 Row({ space: 8 }) {
-                  Button(tr('取消', 'Cancel')).layoutWeight(1).height(40).backgroundColor(UiTokens.CONTROL)
+                  Button(tr('取消', 'Cancel')).layoutWeight(1).height(settingsConfirmationButtonHeight())
+                    .backgroundColor(UiTokens.CONTROL)
                     .fontColor(UiTokens.TEXT).onClick((): void => { this.confirming = false; })
-                  Button(tr('确认并选择位置', 'Confirm and choose location')).layoutWeight(2).height(40)
+                  Button(tr('确认并选择位置', 'Confirm and choose location')).layoutWeight(2)
+                    .height(settingsConfirmationButtonHeight())
                     .backgroundColor(UiTokens.PRIMARY)
                     .fontColor(Color.White).onClick((): void => { this.generate(); })
                 }.width('100%')
