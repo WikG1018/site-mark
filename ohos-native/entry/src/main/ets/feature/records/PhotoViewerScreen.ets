@@ -37,7 +37,6 @@ export struct PhotoViewerScreen {
   };
 
   aboutToAppear(): void {
-    this.applyNavigationSeed();
     this.activatePage();
   }
 
@@ -49,6 +48,7 @@ export struct PhotoViewerScreen {
     if (!this.pageState.activate()) {
       return;
     }
+    this.applyNavigationSeed();
     const runtime = AppRuntime.require();
     runtime.subscribe(this.refreshListener);
     runtime.uiMemory.register(this.memoryListener);
@@ -59,6 +59,8 @@ export struct PhotoViewerScreen {
     if (!this.pageState.deactivate()) {
       return;
     }
+    this.navigationSeed.invalidateCallbacks();
+    this.fullImage.invalidate();
     this.controller.invalidate();
     AppRuntime.current?.unsubscribe(this.refreshListener);
     AppRuntime.current?.uiMemory.unregister(this.memoryListener);
@@ -69,7 +71,9 @@ export struct PhotoViewerScreen {
     if (seed === null) {
       return;
     }
-    this.navigationSeed.seed(seed.capture.id, seed.uri);
+    const contentVersion = this.renderedVersion.versionFor(seed.capture.id,
+      seed.capture.status === 'ready', seed.capture.processingAttempts);
+    this.navigationSeed.seed(seed.capture.id, seed.uri, contentVersion);
     this.controller.seed(seed.capture);
   }
 
@@ -94,19 +98,19 @@ export struct PhotoViewerScreen {
     return this.controller.currentCaptureId();
   }
 
-  private photoUri(capture: CaptureRecord): string {
+  private rawPhotoUri(capture: CaptureRecord): string {
     const path = capture.renderedPath.length > 0 ? capture.renderedPath : capture.originalPath;
-    const currentUri = path.length > 0 ? imageUri(path) : '';
-    return this.navigationSeed.uriFor(capture.id, currentUri);
+    return path.length > 0 ? imageUri(path) : '';
   }
 
-  private photoRequestVersion(capture: CaptureRecord): number {
-    return this.renderedVersion.versionFor(capture.id, capture.status === 'ready', capture.processingAttempts);
+  private photoUri(capture: CaptureRecord): string {
+    return this.navigationSeed.sourceUriFor(capture.id, this.rawPhotoUri(capture));
   }
 
   private controllerChanged(): void {
-    const captureId = this.controller.currentCaptureId();
-    this.navigationSeed.releaseAfterTrustedWindow(captureId, this.controller.hasTrustedWindow(captureId));
+    if (!this.pageState.isActive()) {
+      return;
+    }
     this.prepareCurrentFullImage();
     this.viewerRevision += 1;
   }
@@ -116,36 +120,69 @@ export struct PhotoViewerScreen {
       return;
     }
     const capture = this.controller.rows[this.controller.currentIndex];
-    this.fullImage.prepare(capture.id, this.photoUri(capture), this.photoRequestVersion(capture));
+    const rawUri = this.rawPhotoUri(capture);
+    const contentVersion = this.renderedVersion.versionFor(capture.id,
+      capture.status === 'ready', capture.processingAttempts);
+    this.navigationSeed.acceptTrustedWindow(capture.id, rawUri, contentVersion,
+      this.controller.hasTrustedWindow(capture.id));
+    this.fullImage.prepare(capture.id, this.photoUri(capture),
+      this.navigationSeed.sourceContentVersionFor(capture.id, contentVersion));
   }
 
-  private fullRequest(capture: CaptureRecord): ViewerFullImageRequest {
-    const uri = this.photoUri(capture);
+  private fullRequest(capture: CaptureRecord): ViewerFullImageRequest | null {
     const request = this.fullImage.current();
-    if (request !== null && request.captureId === capture.id && request.uri === uri) {
+    if (request !== null && request.captureId === capture.id && request.uri === this.photoUri(capture)) {
       return request;
     }
-    return this.fullImage.prepare(capture.id, uri, this.photoRequestVersion(capture));
+    return null;
   }
 
-  private fullLoadedCallback(generation: number, captureId: string, uri: string): () => void {
+  private targetLoadedCallback(generation: number, captureId: string, uri: string): () => void {
     return (): void => {
+      if (this.pageState.isActive() && this.navigationSeed.targetLoaded(generation, captureId, uri)) {
+        this.viewerRevision += 1;
+      }
+    };
+  }
+
+  private targetFailedCallback(generation: number, captureId: string, uri: string): () => void {
+    return (): void => {
+      if (this.pageState.isActive() && this.navigationSeed.targetFailed(generation, captureId, uri)) {
+        this.viewerRevision += 1;
+      }
+    };
+  }
+
+  private fullLoadedCallback(generation: number, targetGeneration: number,
+    captureId: string, uri: string): () => void {
+    return (): void => {
+      if (!this.pageState.isActive()) {
+        return;
+      }
       if (this.fullImage.complete(generation, captureId, uri)) {
+        if (this.navigationSeed.targetLoaded(targetGeneration, captureId, uri)) {
+          this.viewerRevision += 1;
+        }
         this.fullImageRevision += 1;
       }
     };
   }
 
-  private fullFailedCallback(generation: number, captureId: string, uri: string): () => void {
+  private fullFailedCallback(generation: number, targetGeneration: number,
+    captureId: string, uri: string): () => void {
     return (): void => {
+      if (!this.pageState.isActive()) {
+        return;
+      }
       if (this.fullImage.fail(generation, captureId, uri)) {
+        this.navigationSeed.targetFailed(targetGeneration, captureId, uri);
         this.fullImageRevision += 1;
       }
     };
   }
 
   private retryFullImage(): void {
-    if (this.fullImage.retry() !== null) {
+    if (this.pageState.isActive() && this.fullImage.retry() !== null) {
       this.fullImageRevision += 1;
     }
   }
@@ -176,20 +213,37 @@ export struct PhotoViewerScreen {
   }
 
   @Builder
-  private currentPhoto(capture: CaptureRecord) {
+  private currentPhoto(capture: CaptureRecord, request: ViewerFullImageRequest | null) {
     Stack() {
       Row().width('100%').height('100%').backgroundColor(Color.Black)
-      AppImage({ uri: this.photoUri(capture), decodeEdge: ViewerNodePolicy.decodeEdge(false),
-        fit: ImageFit.Contain })
-        .width('100%').height('100%')
-      AppImage({ uri: this.fullRequest(capture).uri,
-        requestVersion: this.fullImageRevision >= 0 ? this.fullRequest(capture).requestVersion : 0,
-        decodeEdge: ViewerNodePolicy.decodeEdge(true), fit: ImageFit.Contain, transparentPlaceholder: true,
-        onLoaded: this.fullLoadedCallback(this.fullRequest(capture).generation, capture.id,
-          this.fullRequest(capture).uri),
-        onFailed: this.fullFailedCallback(this.fullRequest(capture).generation, capture.id,
-          this.fullRequest(capture).uri) })
-        .width('100%').height('100%')
+      if (this.navigationSeed.backingUriFor(capture.id).length > 0) {
+        AppImage({ uri: this.navigationSeed.backingUriFor(capture.id),
+          requestVersion: this.navigationSeed.backingContentVersionFor(capture.id),
+          decodeEdge: ViewerNodePolicy.decodeEdge(false), fit: ImageFit.Contain })
+          .width('100%').height('100%')
+      }
+      if (this.navigationSeed.shouldRenderTarget(capture.id)) {
+        AppImage({ uri: this.photoUri(capture),
+          requestVersion: this.navigationSeed.targetRequestVersionFor(capture.id,
+            request === null ? 0 : request.contentVersion),
+          decodeEdge: ViewerNodePolicy.decodeEdge(false), fit: ImageFit.Contain,
+          transparentPlaceholder: this.navigationSeed.backingUriFor(capture.id).length > 0,
+          onLoaded: this.targetLoadedCallback(this.navigationSeed.targetGenerationFor(capture.id),
+            capture.id, this.photoUri(capture)),
+          onFailed: this.targetFailedCallback(this.navigationSeed.targetGenerationFor(capture.id),
+            capture.id, this.photoUri(capture)) })
+          .width('100%').height('100%')
+      }
+      if (request !== null) {
+        AppImage({ uri: request.uri,
+          requestVersion: this.fullImageRevision >= 0 ? request.requestVersion : 0,
+          decodeEdge: ViewerNodePolicy.decodeEdge(true), fit: ImageFit.Contain, transparentPlaceholder: true,
+          onLoaded: this.fullLoadedCallback(request.generation,
+            this.navigationSeed.targetGenerationFor(capture.id), capture.id, request.uri),
+          onFailed: this.fullFailedCallback(request.generation,
+            this.navigationSeed.targetGenerationFor(capture.id), capture.id, request.uri) })
+          .width('100%').height('100%')
+      }
       if (this.fullImageRevision >= 0 && this.fullImage.isFailedFor(capture.id, this.photoUri(capture))) {
         Button(`↻  ${tr('重试高清图', 'Retry full image')}`)
           .height(UiTokens.TOUCH_TARGET)
@@ -236,7 +290,7 @@ export struct PhotoViewerScreen {
   @Builder
   private photoPage(capture: CaptureRecord) {
     if (capture.id === this.currentCaptureId()) {
-      this.currentPhoto(capture)
+      this.currentPhoto(capture, this.fullRequest(capture))
     } else {
       this.previewPhoto(capture)
     }

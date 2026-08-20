@@ -250,15 +250,49 @@ export default function recordUiCoordinatorTest(): void {
       expect(RecordNavigationSeedStore.take('capture-a') === null).assertTrue();
     });
 
-    it('uses an original navigation seed only until a trusted ready window supplies a rendered path', 0, () => {
+    it('switches data to a trusted rendered target while retaining the decoded seed as visual backing', 0, () => {
       const seed = new ViewerNavigationSeedCoordinator();
-      seed.seed('capture-a', 'file://original-a');
+      seed.seed('capture-a', 'file://original-a', 1);
 
-      expect(seed.uriFor('capture-a', 'file://rendered-new')).assertEqual('file://original-a');
-      expect(seed.releaseAfterTrustedWindow('capture-a', false)).assertFalse();
-      expect(seed.uriFor('capture-a', 'file://rendered-new')).assertEqual('file://original-a');
-      expect(seed.releaseAfterTrustedWindow('capture-a', true)).assertTrue();
-      expect(seed.uriFor('capture-a', 'file://rendered-new')).assertEqual('file://rendered-new');
+      expect(seed.sourceUriFor('capture-a', 'file://rendered-new')).assertEqual('file://original-a');
+      expect(seed.acceptTrustedWindow('capture-a', 'file://rendered-new', 2, false)).assertFalse();
+      expect(seed.acceptTrustedWindow('capture-a', 'file://rendered-new', 2, true)).assertTrue();
+      expect(seed.sourceUriFor('capture-a', 'file://ignored')).assertEqual('file://rendered-new');
+      expect(seed.backingUriFor('capture-a')).assertEqual('file://original-a');
+      expect(seed.shouldRenderTarget('capture-a')).assertTrue();
+
+      const generation = seed.targetGenerationFor('capture-a');
+      expect(seed.targetFailed(generation, 'capture-a', 'file://rendered-new')).assertTrue();
+      expect(seed.backingUriFor('capture-a')).assertEqual('file://original-a');
+      expect(seed.targetLoaded(generation, 'capture-a', 'file://rendered-new')).assertTrue();
+      expect(seed.backingUriFor('capture-a')).assertEqual('');
+    });
+
+    it('does not let an older image callback release the visual seed for a newer target', 0, () => {
+      const seed = new ViewerNavigationSeedCoordinator();
+      seed.seed('capture-a', 'file://original-a', 1);
+      seed.acceptTrustedWindow('capture-a', 'file://rendered-v1', 2, true);
+      const oldGeneration = seed.targetGenerationFor('capture-a');
+      seed.acceptTrustedWindow('capture-a', 'file://rendered-v2', 3, true);
+
+      expect(seed.targetLoaded(oldGeneration, 'capture-a', 'file://rendered-v1')).assertFalse();
+      expect(seed.backingUriFor('capture-a')).assertEqual('file://original-a');
+      expect(seed.targetLoaded(seed.targetGenerationFor('capture-a'), 'capture-a',
+        'file://rendered-v2')).assertTrue();
+      expect(seed.backingUriFor('capture-a')).assertEqual('');
+    });
+
+    it('keeps the visual seed when a target callback arrives after the viewer is hidden', 0, () => {
+      const seed = new ViewerNavigationSeedCoordinator();
+      seed.seed('capture-a', 'file://original-a', 1);
+      seed.acceptTrustedWindow('capture-a', 'file://rendered-new', 2, true);
+      const hiddenGeneration = seed.targetGenerationFor('capture-a');
+
+      seed.invalidateCallbacks();
+
+      expect(seed.targetLoaded(hiddenGeneration, 'capture-a', 'file://rendered-new')).assertFalse();
+      expect(seed.targetFailed(hiddenGeneration, 'capture-a', 'file://rendered-new')).assertFalse();
+      expect(seed.backingUriFor('capture-a')).assertEqual('file://original-a');
     });
 
     it('derives selected list padding from the exact batch bar height', 0, () => {
@@ -372,6 +406,24 @@ export default function recordUiCoordinatorTest(): void {
       expect(full.complete(retry!.generation, retry!.captureId, retry!.uri)).assertTrue();
       expect(full.failed).assertFalse();
       expect(full.loaded).assertTrue();
+    });
+
+    it('invalidates late full-resolution success and failure callbacks while the page is hidden', 0, () => {
+      const full = new ViewerFullImageCoordinator();
+      const hiddenRequest = full.prepare('capture-a', 'file://rendered-new', 4);
+
+      full.invalidate();
+
+      expect(full.current() === null).assertTrue();
+      expect(full.complete(hiddenRequest.generation, hiddenRequest.captureId, hiddenRequest.uri)).assertFalse();
+      expect(full.fail(hiddenRequest.generation, hiddenRequest.captureId, hiddenRequest.uri)).assertFalse();
+      expect(full.loaded).assertFalse();
+      expect(full.failed).assertFalse();
+
+      const shownRequest = full.prepare('capture-a', 'file://rendered-new', 4);
+      expect(shownRequest.generation > hiddenRequest.generation).assertTrue();
+      expect(full.complete(hiddenRequest.generation, hiddenRequest.captureId, hiddenRequest.uri)).assertFalse();
+      expect(full.complete(shownRequest.generation, shownRequest.captureId, shownRequest.uri)).assertTrue();
     });
 
     it('refreshes a rewritten same-uri render only after the next processing attempt is ready', 0, () => {
