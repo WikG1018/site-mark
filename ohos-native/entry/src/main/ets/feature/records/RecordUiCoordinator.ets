@@ -1,4 +1,6 @@
 import { CaptureFilter, CaptureRecord } from '../../domain/Models';
+import { RootShellPolicy } from '../../shared/RootShellPolicy';
+import { UiTokens } from '../../shared/UiTokens';
 
 export interface RecordTimerScheduler {
   schedule(action: () => void, delayMs: number): number;
@@ -257,9 +259,13 @@ export class RecordBatchLayoutPolicy {
     return 2;
   }
 
+  static filterControlHeight(): number {
+    return UiTokens.TOUCH_TARGET;
+  }
+
   static listBottomPadding(selectionMode: boolean): number {
     return selectionMode ? RecordBatchLayoutPolicy.barHeight() + RecordBatchLayoutPolicy.bottomMargin() +
-      RecordBatchLayoutPolicy.contentGap() : 92;
+      RecordBatchLayoutPolicy.contentGap() : RootShellPolicy.contentBottomInset();
   }
 }
 

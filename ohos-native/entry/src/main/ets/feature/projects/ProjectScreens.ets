@@ -4,8 +4,10 @@ import { CaptureFilter, CapturePage, CapturePageCursor, CaptureRecord, ProjectRe
   ProjectSummary } from '../../domain/Models';
 import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { CaptureCard } from '../records/RecordComponents';
-import { RecordNavigationSeedStore } from '../records/RecordUiCoordinator';
-import { AppTopBar, EmptyPanel, InlineErrorPanel, ListSkeleton, SectionHeader } from '../../shared/AppComponents';
+import { RecordBatchLayoutPolicy, RecordNavigationSeedStore,
+  RecordSelectionCoordinator } from '../records/RecordUiCoordinator';
+import { AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, InlineErrorPanel, ListSkeleton,
+  SectionHeader } from '../../shared/AppComponents';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
@@ -14,6 +16,7 @@ import { AppText, tr } from '../../shared/AppText';
 import { LazyListDataSource } from '../../shared/LazyListDataSource';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
+import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { ProjectCard } from './ProjectComponents';
 import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
 import {
@@ -199,13 +202,13 @@ export struct ProjectListView {
   @Builder
   private statusChip(label: string, value: ProjectLifecycleStatus) {
     Button(label)
-      .height(38)
+      .height(UiTokens.TOUCH_TARGET)
       .layoutWeight(1)
       .fontSize(14)
       .fontWeight(this.lifecycle === value ? FontWeight.Bold : FontWeight.Regular)
       .fontColor(this.lifecycle === value ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
       .backgroundColor(this.lifecycle === value ? UiTokens.PRIMARY_CONTAINER : Color.Transparent)
-      .borderRadius(19)
+      .borderRadius(UiTokens.TOUCH_TARGET / 2)
       .onClick((): void => {
         this.switchLifecycle(value);
       })
@@ -275,7 +278,8 @@ export struct ProjectListView {
         }
         .layoutWeight(1)
         .width('100%')
-        .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6, bottom: 112 })
+        .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6,
+          bottom: RootShellPolicy.contentBottomInset() })
         .cachedCount(4)
         .edgeEffect(EdgeEffect.Spring)
         .onScrollIndex((start: number, _end: number): void => {
@@ -435,6 +439,7 @@ export struct ProjectDetailScreen {
   @State private yearText: string = '';
   @State private monthText: string = '';
   @State private dayText: string = '';
+  private readonly selection: RecordSelectionCoordinator = new RecordSelectionCoordinator();
   private readonly controller: CapturePagedController = new CapturePagedController(new RuntimeCapturePageLoader(),
     (): void => { this.controllerRevision += 1; });
   private readonly detailScroller: Scroller = new Scroller();
@@ -487,6 +492,8 @@ export struct ProjectDetailScreen {
     this.cancelTimers();
     this.projectGeneration += 1;
     this.contentGeneration += 1;
+    this.selection.invalidatePending();
+    this.batchBusy = false;
     this.controller.invalidate();
     AppRuntime.current?.unsubscribe(this.refreshListener);
     AppRuntime.current?.uiMemory.unregister(this.memoryListener);
@@ -550,6 +557,7 @@ export struct ProjectDetailScreen {
   }
 
   private markFilterChanged(): void {
+    this.selection.invalidatePending();
     this.savedFirstVisibleIndex = 0;
     this.pageState.beginRestore();
     this.saveDetailState();
@@ -651,42 +659,47 @@ export struct ProjectDetailScreen {
   }
 
   private setSelectionMode(enabled: boolean): void {
-    this.selectionMode = enabled;
-    if (!enabled) {
-      this.selectedIds = [];
-      this.allSelected = false;
-      this.confirmBatchDelete = false;
-    }
+    if (enabled) this.selection.enter();
+    else this.selection.exit();
+    this.syncSelection();
+  }
+
+  private syncSelection(): void {
+    this.selectionMode = this.selection.selectionMode;
+    this.selectedIds = this.selection.selectedIds.slice();
+    this.allSelected = this.selection.allSelected;
+    this.confirmBatchDelete = this.selection.confirmDelete;
   }
 
   private toggleCapture(captureId: string): void {
-    const index = this.selectedIds.indexOf(captureId);
-    if (index >= 0) {
-      const next = this.selectedIds.slice();
-      next.splice(index, 1);
-      this.selectedIds = next;
-    } else {
-      this.selectedIds = this.selectedIds.concat([captureId]);
-    }
-    this.allSelected = false;
-    this.confirmBatchDelete = false;
+    this.selection.toggle(captureId);
+    this.syncSelection();
   }
 
   private async toggleAll(): Promise<void> {
     if (this.batchBusy || this.project === null) return;
-    if (this.allSelected) {
-      this.selectedIds = [];
-      this.allSelected = false;
+    if (this.selection.allSelected) {
+      this.selection.deselectAll();
+      this.syncSelection();
       return;
     }
+    const requestedFilter = this.currentFilter();
+    const token = this.selection.beginSelectAll(requestedFilter);
     this.batchBusy = true;
     try {
-      this.selectedIds = await AppRuntime.require().database.captureIds(this.currentFilter());
-      this.allSelected = this.selectedIds.length > 0;
+      const ids = await AppRuntime.require().database.captureIds(requestedFilter);
+      if (!this.pageState.isActive() || !this.selection.commitSelectAll(token, this.currentFilter(), ids)) {
+        return;
+      }
+      this.syncSelection();
     } catch (_) {
-      this.message = tr('无法全选项目记录，请重试', 'Could not select every project record. Try again.');
+      if (this.pageState.isActive() && this.selection.isSelectAllCurrent(token, this.currentFilter())) {
+        this.message = tr('无法全选项目记录，请重试', 'Could not select every project record. Try again.');
+      }
     } finally {
-      this.batchBusy = false;
+      if (this.pageState.isActive()) {
+        this.batchBusy = false;
+      }
     }
   }
 
@@ -735,8 +748,12 @@ export struct ProjectDetailScreen {
   }
 
   private async batchDelete(): Promise<void> {
-    if (!this.confirmBatchDelete) {
-      this.confirmBatchDelete = true;
+    if (this.selectedIds.length === 0) {
+      this.message = tr('请先选择照片', 'Select photos first');
+      return;
+    }
+    if (!this.selection.requestPermanentDelete()) {
+      this.syncSelection();
       this.message = tr(`再次点击“确认删除”将永久删除已选 ${this.selectedIds.length} 条记录`,
         `Tap “Confirm delete” again to permanently delete ${this.selectedIds.length} selected records`);
       return;
@@ -747,57 +764,65 @@ export struct ProjectDetailScreen {
 
   @Builder
   private batchBar() {
-    Column({ space: 8 }) {
-      Text(tr(`已选 ${this.selectedIds.length} 张`, `${this.selectedIds.length} selected`))
-        .fontSize(13).fontWeight(FontWeight.Bold)
-      Row({ space: 6 }) {
-        Button(tr('导出所选', 'Export')).layoutWeight(1).height(42).fontSize(11)
-          .backgroundColor(Color.Transparent).fontColor(UiTokens.TEXT).enabled(!this.batchBusy)
-          .onClick((): void => { this.batchExport(); })
-        Button(tr('再次保存', 'Save')).layoutWeight(1).height(42).fontSize(11)
-          .backgroundColor(Color.Transparent).fontColor(UiTokens.TEXT).enabled(!this.batchBusy)
-          .onClick((): void => { this.runBatch((id: string): Promise<void> =>
-            AppRuntime.require().republishCapture(id), tr('已再次保存到相册', 'Saved to the gallery')); })
-        Button(tr('清理原图', 'Clear originals')).layoutWeight(1).height(42).fontSize(11)
-          .backgroundColor(Color.Transparent).fontColor(UiTokens.TEXT).enabled(!this.batchBusy)
-          .onClick((): void => { this.runBatch((id: string): Promise<void> =>
-            AppRuntime.require().clearOriginal(id), tr('原图清理已完成', 'Original cleanup completed')); })
-        Button(this.confirmBatchDelete ? tr('确认删除', 'Confirm delete') : tr('删除所选', 'Delete'))
-          .layoutWeight(1).height(42).fontSize(11)
-          .fontColor(UiTokens.DANGER).backgroundColor(Color.Transparent).enabled(!this.batchBusy)
-          .onClick((): void => { this.batchDelete(); })
-      }.width('100%')
+    Column() {
+      BatchActionBar({ selectedLabel: tr(`已选 ${this.selectedIds.length} 张`,
+        `${this.selectedIds.length} selected`),
+        actionHeight: RecordBatchLayoutPolicy.actionHeight(),
+        actionLabelMaxLines: RecordBatchLayoutPolicy.actionLabelMaxLines(), actions: [
+          new BatchActionItem('export', '⇩', tr('导出', 'Export'), false, this.batchBusy,
+            tr('导出所选照片', 'Export selected photos')),
+          new BatchActionItem('save', '▣', tr('再次保存', 'Save again'), false, this.batchBusy,
+            tr('将所选水印照片再次保存到相册', 'Save selected watermarked photos to the gallery again')),
+          new BatchActionItem('clear', '⌫', tr('清原图', 'Clear original'), false, this.batchBusy,
+            tr('清理所选照片的原图', 'Clear originals for selected photos')),
+          new BatchActionItem('delete', '×', this.confirmBatchDelete ? tr('确认删除', 'Confirm delete') :
+            tr('删除', 'Delete'), true, this.batchBusy,
+            this.confirmBatchDelete ? tr('确认永久删除所选照片，此操作无法撤销',
+              'Confirm permanent deletion of selected photos; this action cannot be undone') :
+              tr('永久删除所选照片，此操作无法撤销',
+                'Permanently delete selected photos; this action cannot be undone')),
+        ], onAction: (id: string): void => {
+          if (id === 'export') this.batchExport();
+          else if (id === 'save') this.runBatch((captureId: string): Promise<void> =>
+            AppRuntime.require().republishCapture(captureId), tr('已再次保存到相册', 'Saved to the gallery'));
+          else if (id === 'clear') this.runBatch((captureId: string): Promise<void> =>
+            AppRuntime.require().clearOriginal(captureId), tr('原图清理已完成', 'Original cleanup completed'));
+          else if (id === 'delete') this.batchDelete();
+        } })
+        .height(RecordBatchLayoutPolicy.barHeight())
     }
-    .padding({ left: 12, right: 12, top: 9, bottom: 10 })
-    .margin({ left: 16, right: 16, bottom: 12 })
-    .width('100%').backgroundColor(UiTokens.GLASS_STRONG).backdropBlur(24)
-    .border({ width: 1, color: UiTokens.OUTLINE }).borderRadius(26)
-    .shadow({ radius: 18, color: '#28000000', offsetY: 6 })
+    .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
+    .width('100%')
   }
 
   @Builder
   private recordFilterPanel() {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
-        TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1).height(42)
+        TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1)
+          .height(RecordBatchLayoutPolicy.filterControlHeight())
           .type(InputType.Number)
           .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
-        TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1).height(42)
+        TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
+          .height(RecordBatchLayoutPolicy.filterControlHeight())
           .type(InputType.Number)
           .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
-        TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1).height(42)
+        TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
+          .height(RecordBatchLayoutPolicy.filterControlHeight())
           .type(InputType.Number)
           .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
       }.width('100%')
       Row({ space: 8 }) {
-          Button(tr('清除日期', 'Clear date')).layoutWeight(1).height(38)
+          Button(tr('清除日期', 'Clear date')).layoutWeight(1)
+            .height(RecordBatchLayoutPolicy.filterControlHeight())
             .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
           .onClick((): void => {
             this.yearText = ''; this.monthText = ''; this.dayText = '';
             this.markFilterChanged();
             this.resetCaptures();
           })
-          Button(tr('应用筛选', 'Apply filters')).layoutWeight(1).height(38)
+          Button(tr('应用筛选', 'Apply filters')).layoutWeight(1)
+            .height(RecordBatchLayoutPolicy.filterControlHeight())
             .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
           .onClick((): void => { this.filterOpen = false; this.markFilterChanged(); this.resetCaptures(); })
       }.width('100%')
@@ -956,7 +981,7 @@ export struct ProjectDetailScreen {
                     .onChange((value: string): void => { this.searchText = value; this.scheduleSearch(); })
                   Row({ space: 8 }) {
                     Button(this.filterOpen ? tr('收起筛选', 'Hide filters') : tr('筛选', 'Filter'))
-                      .height(38).fontSize(13).fontColor(UiTokens.PRIMARY)
+                      .height(RecordBatchLayoutPolicy.filterControlHeight()).fontSize(13).fontColor(UiTokens.PRIMARY)
                       .backgroundColor(UiTokens.ACCENT_SURFACE)
                       .onClick((): void => { this.filterOpen = !this.filterOpen; })
                     Blank()
@@ -981,7 +1006,7 @@ export struct ProjectDetailScreen {
                   if (this.captureCount() > 0) {
                     Button(this.selectionMode ? (this.allSelected ? tr('取消全选', 'Deselect all') :
                       tr('全选', 'Select all')) : tr('选择', 'Select'))
-                      .height(36).fontSize(12)
+                      .height(UiTokens.TOUCH_TARGET).fontSize(12)
                       .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
                       .enabled(!this.batchBusy)
                       .onClick((): void => { if (this.selectionMode) this.toggleAll();
@@ -1038,7 +1063,7 @@ export struct ProjectDetailScreen {
               }
             }
             .layoutWeight(1).width('100%')
-            .padding({ bottom: this.selectionMode ? 132 : 96 })
+            .padding({ bottom: RecordBatchLayoutPolicy.listBottomPadding(this.selectionMode) })
             .cachedCount(4)
             .edgeEffect(EdgeEffect.Spring)
             .onScrollIndex((start: number, _end: number): void => {
