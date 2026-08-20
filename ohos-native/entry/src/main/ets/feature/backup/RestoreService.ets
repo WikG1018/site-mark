@@ -9,6 +9,7 @@ import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { tr } from '../../shared/AppText';
 import { DatabaseRestorePathReferenceLookup, HarmonyRestoreFileAccess,
   RestoreAttemptGate, RestoreFileCleanup } from './RestoreFileCleanup';
+import { RestoreStagingScope } from './RestoreStagingScope';
 
 interface ArchiveWatermarkPreview {
   position: string;
@@ -120,10 +121,12 @@ export class ProjectRestoreService {
     if (uris.length === 0) return null;
     const operationId = util.generateRandomUUID();
     const staging = `${this.runtime.context.filesDir}/restore/${operationId}`;
-    this.ensureDirectory(staging);
-    const sourcePath = `${staging}/selected.zip`;
-    await fileIo.copyFile(uris[0], sourcePath);
-    return this.restoreFromLocal(sourcePath, operationId, staging);
+    return new RestoreStagingScope().run(async (): Promise<RestoreResult> => {
+      this.ensureDirectory(staging);
+      const sourcePath = `${staging}/selected.zip`;
+      await fileIo.copyFile(uris[0], sourcePath);
+      return this.restoreFromLocal(sourcePath, operationId, staging);
+    }, (): void => this.removeDirectory(staging));
   }
 
   private async restoreFromLocal(sourcePath: string, operationId: string,

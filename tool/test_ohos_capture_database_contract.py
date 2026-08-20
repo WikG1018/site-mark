@@ -182,6 +182,26 @@ class HarmonyCaptureDatabaseContractTest(unittest.TestCase):
         self.assertEqual(order, tuple(sorted(order)))
         self.assertIn("restore_preview_invalid:", attempt)
 
+    def test_restore_selection_copy_is_inside_executable_staging_scope(self) -> None:
+        restore = (
+            ROOT / "ohos-native/entry/src/main/ets/feature/backup/RestoreService.ets"
+        ).read_text(encoding="utf-8")
+        choose = restore[restore.index("async chooseAndRestore") : restore.index("private async restoreFromLocal")]
+        for token in (
+            "new RestoreStagingScope().run",
+            "this.ensureDirectory(staging)",
+            "fileIo.copyFile(uris[0], sourcePath)",
+            "this.restoreFromLocal(sourcePath, operationId, staging)",
+            "this.removeDirectory(staging)",
+        ):
+            self.assertIn(token, choose)
+        scope = (
+            ROOT / "ohos-native/entry/src/main/ets/feature/backup/RestoreStagingScope.ets"
+        ).read_text(encoding="utf-8")
+        self.assertLess(scope.index("try {"), scope.index("return await action()"))
+        self.assertLess(scope.index("return await action()"), scope.index("finally"))
+        self.assertLess(scope.index("finally"), scope.index("cleanup()"))
+
     def test_templates_insert_without_overwrite_and_database_recomputes_rename_keys(self) -> None:
         save = method_body("saveTemplate")
         rename = method_body("renameTemplate")
