@@ -268,6 +268,38 @@ class HarmonyCaptureDatabaseContractTest(unittest.TestCase):
         for pattern, label in contracts:
             self.assertRegex(records, re.compile(pattern, re.S), label)
 
+    def test_project_description_and_watermark_updates_own_disjoint_columns(self) -> None:
+        description = method_body("updateProjectDescription")
+        watermark = method_body("updateProjectWatermark")
+        self.assertIn("SET description=?,updated_at=?", description)
+        self.assertNotIn("watermark_", description)
+        self.assertIn("watermark_position=?", watermark)
+        self.assertNotIn("description=?", watermark)
+        self.assertIn("changed < 1", description)
+        self.assertIn("changed < 1", watermark)
+
+        db = sqlite3.connect(":memory:")
+        db.execute(
+            "CREATE TABLE projects(id TEXT PRIMARY KEY,description TEXT,watermark_position TEXT,"
+            "watermark_opacity REAL,watermark_accent_color_argb INTEGER,watermark_font_scale REAL,"
+            "updated_at INTEGER)"
+        )
+        db.execute("INSERT INTO projects VALUES('p','old','bottomLeft',0.78,1,1.0,0)")
+        db.execute(
+            "UPDATE projects SET watermark_position=?,watermark_opacity=?,"
+            "watermark_accent_color_argb=?,watermark_font_scale=?,updated_at=? WHERE id=?",
+            ("topRight", 0.6, 22, 1.3, 1, "p"),
+        )
+        db.execute(
+            "UPDATE projects SET description=?,updated_at=? WHERE id=?",
+            ("new description", 2, "p"),
+        )
+        row = db.execute(
+            "SELECT description,watermark_position,watermark_opacity,"
+            "watermark_accent_color_argb,watermark_font_scale FROM projects WHERE id='p'"
+        ).fetchone()
+        self.assertEqual(row, ("new description", "topRight", 0.6, 22, 1.3))
+
 
 if __name__ == "__main__":
     unittest.main()

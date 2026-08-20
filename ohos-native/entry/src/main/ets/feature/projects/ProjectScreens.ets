@@ -42,7 +42,8 @@ import { ScreenLifecycleActionCoordinator } from '../../shared/ScreenActionCoord
 import { BackAction, BackCoordinator, RootBackDispatcher,
   ScreenLoadCoordinator } from '../../shared/ScreenUiStabilityCoordinator';
 import { AppDatabaseProjectSaveStore, ProjectDetailMutationPolicy, ProjectEditorSaveExecutor,
-  ProjectEditorSaveSnapshot, WatermarkSaveSnapshot } from './ProjectEditStability';
+  ProjectEditorSaveSnapshot, ProjectOperationCoordinator, ProjectOperationKind,
+  WatermarkSaveSnapshot } from './ProjectEditStability';
 
 class RuntimeCapturePageLoader implements CapturePageLoader {
   load(filter: CaptureFilter, cursor: CapturePageCursor | null, pageSize: number): Promise<CapturePage> {
@@ -507,6 +508,7 @@ export struct ProjectDetailScreen {
   @State private selectedIds: string[] = [];
   @State private allSelected: boolean = false;
   @State private batchBusy: boolean = false;
+  @State private mutationBusy: boolean = false;
   @State private confirmBatchDelete: boolean = false;
   @State private searchText: string = '';
   @State private filterOpen: boolean = false;
@@ -520,7 +522,7 @@ export struct ProjectDetailScreen {
   private searchTimer: number = -1;
   private restoreTimer: number = -1;
   private readonly projectLoad: ScreenLoadCoordinator<ProjectRecord> = new ScreenLoadCoordinator<ProjectRecord>();
-  private readonly batchAction: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
+  private readonly projectOperations: ProjectOperationCoordinator = new ProjectOperationCoordinator();
   private contentGeneration: number = 0;
   private savedFirstVisibleIndex: number = 0;
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
@@ -548,7 +550,7 @@ export struct ProjectDetailScreen {
       return;
     }
     this.projectLoad.activate();
-    this.batchAction.activate();
+    this.projectOperations.activate();
     const runtime = AppRuntime.require();
     this.pageState.beginRestore();
     this.pageState.consumeSafeReloadRequest();
@@ -568,7 +570,7 @@ export struct ProjectDetailScreen {
     this.saveDetailState();
     this.cancelTimers();
     this.projectLoad.deactivate();
-    this.batchAction.invalidate();
+    this.projectOperations.invalidate();
     this.contentGeneration += 1;
     this.selection.invalidatePending();
     this.controller.invalidate();
@@ -703,7 +705,7 @@ export struct ProjectDetailScreen {
   }
 
   private async retryCaptures(): Promise<void> {
-    if (this.batchBusy || !this.pageState.isActive()) {
+    if (this.pageBusy() || !this.pageState.isActive()) {
       return;
     }
     const generation = ++this.contentGeneration;
@@ -736,7 +738,7 @@ export struct ProjectDetailScreen {
   }
 
   private openCapture(capture: CaptureRecord): void {
-    if (this.batchBusy) return;
+    if (this.pageBusy()) return;
     const path = capture.renderedPath.length > 0 ? capture.renderedPath : capture.originalPath;
     RecordNavigationSeedStore.put(capture, path.length > 0 ? imageUri(path) : '');
     AppRuntime.require().selectedCaptureId = capture.id;
@@ -744,14 +746,30 @@ export struct ProjectDetailScreen {
   }
 
   private setSelectionMode(enabled: boolean): void {
-    if (this.batchBusy) return;
+    if (this.pageBusy()) return;
     if (enabled) this.selection.enter();
     else this.selection.exit();
     this.syncSelection();
   }
 
+  private pageBusy(): boolean {
+    return this.batchBusy || this.mutationBusy;
+  }
+
   private canMutateProject(): boolean {
-    return ProjectDetailMutationPolicy.enabled(this.batchBusy, this.project !== null);
+    return ProjectDetailMutationPolicy.enabled(this.pageBusy() || this.selectionMode, this.project !== null);
+  }
+
+  private beginProjectMutation(): number | null {
+    if (!this.canMutateProject()) return null;
+    const token = this.projectOperations.begin(ProjectOperationKind.MUTATION);
+    if (token !== null) this.mutationBusy = true;
+    return token;
+  }
+
+  private finishProjectMutation(token: number): void {
+    this.projectOperations.finish(token);
+    if (this.pageState.isActive() && !this.projectOperations.isBusy()) this.mutationBusy = false;
   }
 
   private openProjectSettings(): void {
@@ -786,38 +804,38 @@ export struct ProjectDetailScreen {
   }
 
   private toggleCapture(captureId: string): void {
-    if (this.batchBusy) return;
+    if (this.pageBusy()) return;
     this.selection.toggle(captureId);
     this.syncSelection();
   }
 
   private async toggleAll(): Promise<void> {
-    if (this.batchBusy || this.project === null) return;
+    if (this.pageBusy() || this.project === null) return;
     if (this.selection.allSelected) {
       this.selection.deselectAll();
       this.syncSelection();
       return;
     }
-    const actionToken = this.batchAction.begin();
+    const actionToken = this.projectOperations.begin(ProjectOperationKind.BATCH);
     if (actionToken === null) return;
     const requestedFilter = this.currentFilter();
     const token = this.selection.beginSelectAll(requestedFilter);
     this.batchBusy = true;
     try {
       const ids = await AppRuntime.require().database.captureIds(requestedFilter);
-      if (!this.pageState.isActive() || !this.batchAction.isCurrent(actionToken) ||
+      if (!this.pageState.isActive() || !this.projectOperations.isCurrent(actionToken) ||
         !this.selection.commitSelectAll(token, this.currentFilter(), ids)) {
         return;
       }
       this.syncSelection();
     } catch (_) {
-      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken) &&
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken) &&
         this.selection.isSelectAllCurrent(token, this.currentFilter())) {
         this.message = tr('无法全选项目记录，请重试', 'Could not select every project record. Try again.');
       }
     } finally {
-      this.batchAction.finish(actionToken);
-      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
+      this.projectOperations.finish(actionToken);
+      if (this.pageState.isActive() && !this.projectOperations.isBusy()) this.batchBusy = false;
     }
   }
 
@@ -826,7 +844,7 @@ export struct ProjectDetailScreen {
       this.message = tr('请先选择照片', 'Select photos first');
       return;
     }
-    const actionToken = this.batchAction.begin();
+    const actionToken = this.projectOperations.begin(ProjectOperationKind.BATCH);
     if (actionToken === null) return;
     const ids = this.selectedIds.slice();
     this.batchBusy = true;
@@ -834,19 +852,19 @@ export struct ProjectDetailScreen {
       const service = new ProjectBackupService(AppRuntime.require());
       const result = await service.exportSelection(ids, false);
       const saved = await service.saveAs(result);
-      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken)) {
         this.message = saved ? tr('所选照片已导出到你选择的位置',
           'Selected photos were exported to your chosen location') :
           tr('已取消保存导出文件', 'Export save was cancelled');
       }
     } catch (_) {
-      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken)) {
         this.message = tr('所选照片暂时无法导出，请检查记录状态和存储空间',
           'Selected photos could not be exported. Check their status and available storage.');
       }
     } finally {
-      this.batchAction.finish(actionToken);
-      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
+      this.projectOperations.finish(actionToken);
+      if (this.pageState.isActive() && !this.projectOperations.isBusy()) this.batchBusy = false;
     }
   }
 
@@ -856,7 +874,7 @@ export struct ProjectDetailScreen {
       this.message = tr('请先选择照片', 'Select photos first');
       return;
     }
-    const actionToken = this.batchAction.begin();
+    const actionToken = this.projectOperations.begin(ProjectOperationKind.BATCH);
     if (actionToken === null) return;
     this.batchBusy = true;
     try {
@@ -868,21 +886,21 @@ export struct ProjectDetailScreen {
         } catch (_) {
         }
       }
-      if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken)) {
         this.message = succeeded === ids.length ? success :
         tr(`已完成 ${succeeded}/${ids.length} 项`, `Completed ${succeeded}/${ids.length}`);
         this.exitSelectionAfterBatch();
         await this.resetCaptures();
       }
     } finally {
-      this.batchAction.finish(actionToken);
-      if (this.pageState.isActive() && !this.batchAction.isBusy()) this.batchBusy = false;
+      this.projectOperations.finish(actionToken);
+      if (this.pageState.isActive() && !this.projectOperations.isBusy()) this.batchBusy = false;
     }
   }
 
   private consumeBack(): boolean {
     const action = BackCoordinator.next({
-      busy: this.batchBusy,
+      busy: this.pageBusy(),
       selection: this.selectionMode,
       confirmation: this.confirmDelete,
       filter: this.filterOpen,
@@ -917,7 +935,7 @@ export struct ProjectDetailScreen {
 
   private backAccessibilityText(): string {
     const action = BackCoordinator.next({
-      busy: this.batchBusy,
+      busy: this.pageBusy(),
       selection: this.selectionMode,
       confirmation: this.confirmDelete,
       filter: this.filterOpen,
@@ -953,14 +971,14 @@ export struct ProjectDetailScreen {
         `${this.selectedIds.length} selected`),
         actionHeight: RecordBatchLayoutPolicy.actionHeight(this.batchFontScale()),
         actionLabelMaxLines: RecordBatchLayoutPolicy.actionLabelMaxLines(), actions: [
-          new BatchActionItem('export', '⇩', tr('导出', 'Export'), false, this.batchBusy,
+          new BatchActionItem('export', '⇩', tr('导出', 'Export'), false, this.pageBusy(),
             tr('导出所选照片', 'Export selected photos')),
-          new BatchActionItem('save', '▣', tr('再次保存', 'Save again'), false, this.batchBusy,
+          new BatchActionItem('save', '▣', tr('再次保存', 'Save again'), false, this.pageBusy(),
             tr('将所选水印照片再次保存到相册', 'Save selected watermarked photos to the gallery again')),
-          new BatchActionItem('clear', '⌫', tr('清原图', 'Clear original'), false, this.batchBusy,
+          new BatchActionItem('clear', '⌫', tr('清原图', 'Clear original'), false, this.pageBusy(),
             tr('清理所选照片的原图', 'Clear originals for selected photos')),
           new BatchActionItem('delete', '×', this.confirmBatchDelete ? tr('确认删除', 'Confirm delete') :
-            tr('删除', 'Delete'), true, this.batchBusy,
+            tr('删除', 'Delete'), true, this.pageBusy(),
             this.confirmBatchDelete ? tr('确认永久删除所选照片，此操作无法撤销',
               'Confirm permanent deletion of selected photos; this action cannot be undone') :
               tr('永久删除所选照片，此操作无法撤销',
@@ -985,24 +1003,24 @@ export struct ProjectDetailScreen {
       Row({ space: 8 }) {
         TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1)
           .height(RecordBatchLayoutPolicy.filterControlHeight())
-          .enabled(!this.batchBusy)
+          .enabled(!this.pageBusy())
           .type(InputType.Number)
           .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
         TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
           .height(RecordBatchLayoutPolicy.filterControlHeight())
-          .enabled(!this.batchBusy)
+          .enabled(!this.pageBusy())
           .type(InputType.Number)
           .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
         TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
           .height(RecordBatchLayoutPolicy.filterControlHeight())
-          .enabled(!this.batchBusy)
+          .enabled(!this.pageBusy())
           .type(InputType.Number)
           .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
       }.width('100%')
       Row({ space: 8 }) {
           Button(tr('清除日期', 'Clear date')).layoutWeight(1)
             .height(RecordBatchLayoutPolicy.filterControlHeight())
-            .enabled(!this.batchBusy)
+            .enabled(!this.pageBusy())
             .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
           .onClick((): void => {
             this.yearText = ''; this.monthText = ''; this.dayText = '';
@@ -1011,7 +1029,7 @@ export struct ProjectDetailScreen {
           })
           Button(tr('应用筛选', 'Apply filters')).layoutWeight(1)
             .height(RecordBatchLayoutPolicy.filterControlHeight())
-            .enabled(!this.batchBusy)
+            .enabled(!this.pageBusy())
             .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
           .onClick((): void => { this.filterOpen = false; this.markFilterChanged(); this.resetCaptures(); })
       }.width('100%')
@@ -1021,40 +1039,68 @@ export struct ProjectDetailScreen {
   }
 
   private async setLifecycle(target: ProjectLifecycleStatus): Promise<void> {
-    if (!this.canMutateProject() || this.project === null) {
-      return;
-    }
+    if (this.project === null) return;
+    const projectId = this.project.id;
+    const operationToken = this.beginProjectMutation();
+    if (operationToken === null) return;
     try {
-      await AppRuntime.require().database.setProjectLifecycle(this.project.id, target, true);
+      await AppRuntime.require().database.setProjectLifecycle(projectId, target, true);
       AppRuntime.require().notifyDataChanged();
-      await this.loadProject();
-      await this.resetCaptures();
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
+        await this.loadProject();
+        if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
+          await this.resetCaptures();
+        }
+      }
     } catch (_) {
-      this.message = tr('有照片仍在处理中，暂时不能更改项目状态',
-        'Project status cannot change while photos are processing');
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
+        this.message = tr('有照片仍在处理中，暂时不能更改项目状态',
+          'Project status cannot change while photos are processing');
+      }
+    } finally {
+      this.finishProjectMutation(operationToken);
     }
   }
 
   private async togglePinned(): Promise<void> {
-    if (!this.canMutateProject() || this.project === null) {
-      return;
+    if (this.project === null) return;
+    const projectId = this.project.id;
+    const pinned = !this.project.isPinned;
+    const operationToken = this.beginProjectMutation();
+    if (operationToken === null) return;
+    try {
+      await AppRuntime.require().database.setProjectPinned(projectId, pinned);
+      AppRuntime.require().notifyDataChanged();
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
+        await this.loadProject();
+        if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
+          await this.resetCaptures();
+        }
+      }
+    } catch (_) {
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
+        this.message = tr('暂时无法更改置顶状态，请重试', 'Could not change the pinned state. Try again.');
+      }
+    } finally {
+      this.finishProjectMutation(operationToken);
     }
-    await AppRuntime.require().database.setProjectPinned(this.project.id, !this.project.isPinned);
-    AppRuntime.require().notifyDataChanged();
-    await this.loadProject();
-    await this.resetCaptures();
   }
 
   private async deleteProject(): Promise<void> {
-    if (!this.canMutateProject() || this.project === null) {
-      return;
-    }
+    if (this.project === null) return;
+    const projectId = this.project.id;
+    const operationToken = this.beginProjectMutation();
+    if (operationToken === null) return;
     try {
-      await AppRuntime.require().deleteProject(this.project.id);
-      this.pathStack.pop();
+      await AppRuntime.require().deleteProject(projectId);
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) this.pathStack.pop();
     } catch (_) {
-      this.message = tr('有照片仍在处理中，项目暂时不能删除',
-        'The project cannot be deleted while photos are processing');
+      if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
+        this.message = tr('有照片仍在处理中，项目暂时不能删除',
+          'The project cannot be deleted while photos are processing');
+      }
+    } finally {
+      this.finishProjectMutation(operationToken);
     }
   }
 
@@ -1105,7 +1151,7 @@ export struct ProjectDetailScreen {
             `${this.selectedIds.length} selected`) : (this.project?.name ?? tr('项目', 'Project')), showBack: true,
             backAccessibilityText: this.backAccessibilityText(), onBack: (): void => { this.navigateBack(); },
             actionLabel: this.selectionMode ? tr('完成', 'Done') : tr('编辑', 'Edit'),
-            actionEnabled: this.project !== null && !this.batchBusy,
+            actionEnabled: this.project !== null && !this.pageBusy(),
             onAction: (): void => { if (this.selectionMode) this.setSelectionMode(false);
               else this.editProject(); } })
           if (this.project !== null) {
@@ -1115,7 +1161,7 @@ export struct ProjectDetailScreen {
                 ListItem() {
                   Column() {
                     InlineErrorPanel({ message: this.projectLoadError, retryLabel: tr('重试', 'Retry'),
-                      onRetry: (): void => { if (!this.batchBusy) this.loadProject(); } })
+                      onRetry: (): void => { if (!this.pageBusy()) this.loadProject(); } })
                   }.padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING }).width('100%')
                 }
               }
@@ -1186,13 +1232,13 @@ export struct ProjectDetailScreen {
                   TextInput({ text: this.searchText, placeholder: tr('搜索部位、内容、拍摄人或编号',
                     'Search location, work, photographer, or number') })
                     .height(44).fontSize(14).backgroundColor(UiTokens.GLASS_STRONG).borderRadius(22)
-                    .enabled(!this.batchBusy)
+                    .enabled(!this.pageBusy())
                     .onChange((value: string): void => { this.searchText = value; this.scheduleSearch(); })
                   Row({ space: 8 }) {
                     Button(this.filterOpen ? tr('收起筛选', 'Hide filters') : tr('筛选', 'Filter'))
                       .height(RecordBatchLayoutPolicy.filterControlHeight()).fontSize(13).fontColor(UiTokens.PRIMARY)
                       .backgroundColor(UiTokens.ACCENT_SURFACE)
-                      .enabled(!this.batchBusy)
+                      .enabled(!this.pageBusy())
                       .onClick((): void => { this.filterOpen = !this.filterOpen; })
                     Blank()
                     if (this.captureCount() > 0) {
@@ -1218,7 +1264,7 @@ export struct ProjectDetailScreen {
                       tr('全选', 'Select all')) : tr('选择', 'Select'))
                       .height(UiTokens.TOUCH_TARGET).fontSize(12)
                       .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
-                      .enabled(!this.batchBusy)
+                      .enabled(!this.pageBusy())
                       .onClick((): void => { if (this.selectionMode) this.toggleAll();
                         else this.setSelectionMode(true); })
                   }
@@ -1391,8 +1437,8 @@ export struct ProjectSettingsScreen {
     }
     const actionToken = this.saveAction.begin();
     if (actionToken === null) return;
-    const snapshot = new WatermarkSaveSnapshot(this.project.id, this.project.description,
-      this.watermarkPosition, this.watermarkOpacity, this.accent, this.fontScale);
+    const snapshot = new WatermarkSaveSnapshot(this.project.id, this.watermarkPosition,
+      this.watermarkOpacity, this.accent, this.fontScale);
     this.saving = true;
     this.saveError = '';
     this.message = '';

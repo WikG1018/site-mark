@@ -335,17 +335,42 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     }
   }
 
-  async updateProject(id: string, description: string, watermarkPosition: string,
+  async updateProjectDescription(id: string, description: string): Promise<void> {
+    const transaction = await this.store.createTransaction();
+    try {
+      const changedValue = await transaction.execute(
+        `UPDATE projects SET description=?,updated_at=? WHERE id=?`,
+        [description.trim(), Date.now(), id]
+      );
+      const changed = typeof changedValue === 'number' ? changedValue : 0;
+      if (changed < 1) throw new Error('project_not_found');
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw new Error((error as Error).message);
+    }
+  }
+
+  async updateProjectWatermark(id: string, watermarkPosition: string,
     watermarkOpacity: number, watermarkAccentColorArgb: number,
     watermarkFontScale: number): Promise<void> {
     const position = watermarkPosition === 'bottomRight' ? 'bottomRight' : 'bottomLeft';
     const opacity = Math.max(0.35, Math.min(1, watermarkOpacity));
     const fontScale = Math.max(0.75, Math.min(1.6, watermarkFontScale));
-    await this.store.executeSql(
-      `UPDATE projects SET description=?,watermark_position=?,watermark_opacity=?,
+    const transaction = await this.store.createTransaction();
+    try {
+      const changedValue = await transaction.execute(
+        `UPDATE projects SET watermark_position=?,watermark_opacity=?,
        watermark_accent_color_argb=?,watermark_font_scale=?,updated_at=? WHERE id=?`,
-      [description.trim(), position, opacity, watermarkAccentColorArgb, fontScale, Date.now(), id]
-    );
+        [position, opacity, watermarkAccentColorArgb, fontScale, Date.now(), id]
+      );
+      const changed = typeof changedValue === 'number' ? changedValue : 0;
+      if (changed < 1) throw new Error('project_not_found');
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw new Error((error as Error).message);
+    }
   }
 
   async projectById(id: string): Promise<ProjectRecord | null> {
