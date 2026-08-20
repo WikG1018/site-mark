@@ -6,6 +6,8 @@ export class ProjectFormMetrics {
   static readonly TEXT_AREA_HEIGHT: number = FormLayoutMetrics.TEXT_AREA_HEIGHT;
   static readonly SUPPORTING_TEXT_MIN_HEIGHT: number = FormLayoutMetrics.SUPPORTING_TEXT_MIN_HEIGHT;
   static readonly TOUCH_TARGET: number = FormLayoutMetrics.TOUCH_TARGET;
+  static readonly PROJECT_NAME_MAX_LENGTH: number = 120;
+  static readonly PROJECT_DESCRIPTION_MAX_LENGTH: number = 0;
 }
 
 export class ProjectFormCopy {
@@ -13,6 +15,7 @@ export class ProjectFormCopy {
   namePlaceholder: string;
   nameHelper: string;
   nameRequiredError: string;
+  nameTooLongError: string;
   nameInvalidError: string;
   nameConflictError: string;
   descriptionLabel: string;
@@ -31,9 +34,12 @@ export class ProjectFormCopy {
     this.nameLabel = english ? 'Project name' : '项目名称';
     this.namePlaceholder = english ? 'For example: Riverside Tower' : '例如：云湖之城';
     this.nameHelper = english ?
-      'Required and unique. Renaming applies only to future photo names.' :
-      '必填且不能与其他项目同名；重命名仅影响以后新拍照片。';
+      'Required, unique, and up to 120 characters. Renaming applies only to future photo names.' :
+      '必填、不能与其他项目同名，最多 120 个字符；重命名仅影响以后新拍照片。';
     this.nameRequiredError = english ? 'Enter a project name' : '请输入项目名称';
+    this.nameTooLongError = english ?
+      'Project names cannot exceed 120 characters' :
+      '项目名称不能超过 120 个字符';
     this.nameInvalidError = english ? 'Enter a valid project name' : '请输入有效的项目名称';
     this.nameConflictError = english ?
       'A project with the same name or file name already exists' :
@@ -67,8 +73,13 @@ export function projectFormCopy(english: boolean): ProjectFormCopy {
 }
 
 export function projectNameValidationError(name: string, english: boolean): string {
-  if (name.trim().length === 0) {
-    return projectFormCopy(english).nameRequiredError;
+  const copy = projectFormCopy(english);
+  const displayName = name.trim().replace(/\s+/g, ' ');
+  if (displayName.length === 0) {
+    return copy.nameRequiredError;
+  }
+  if (displayName.length > ProjectFormMetrics.PROJECT_NAME_MAX_LENGTH) {
+    return copy.nameTooLongError;
   }
   return '';
 }
@@ -99,6 +110,10 @@ function selectionAccessibility(label: string, selected: boolean, english: boole
     return `${label}, ${selected ? 'selected' : 'not selected'}`;
   }
   return `${label}，${selected ? '已选择' : '未选择'}`;
+}
+
+export function selectionKey(identity: string, selected: boolean): string {
+  return `${identity}:${selected ? 'selected' : 'unselected'}`;
 }
 
 export class WatermarkPositionChoice {
@@ -178,5 +193,52 @@ export function selectionVisual(selected: boolean): SelectionVisual {
 }
 
 export class WatermarkPreviewStyle {
-  static readonly BACKGROUND: string = '#CC17201C';
+  static readonly BACKGROUND: string = '#081412';
+}
+
+export class WatermarkPreviewLayer {
+  backgroundOpacity: number;
+  contentOpacity: number;
+  borderOpacity: number;
+
+  constructor(backgroundOpacity: number) {
+    this.backgroundOpacity = backgroundOpacity;
+    this.contentOpacity = 1;
+    this.borderOpacity = 1;
+  }
+}
+
+export function watermarkPreviewLayer(opacity: number): WatermarkPreviewLayer {
+  const safeOpacity = Number.isFinite(opacity) ? Math.max(0, Math.min(1, opacity)) : 1;
+  return new WatermarkPreviewLayer(safeOpacity);
+}
+
+export class WatermarkPreviewLayout {
+  fontScale: number;
+  projectNameLineHeight: number;
+  detailLineHeight: number;
+  requiredContentHeight: number;
+  panelHeight: number;
+  frameHeight: number;
+
+  constructor(fontScale: number, projectNameLineHeight: number, detailLineHeight: number,
+    requiredContentHeight: number, panelHeight: number, frameHeight: number) {
+    this.fontScale = fontScale;
+    this.projectNameLineHeight = projectNameLineHeight;
+    this.detailLineHeight = detailLineHeight;
+    this.requiredContentHeight = requiredContentHeight;
+    this.panelHeight = panelHeight;
+    this.frameHeight = frameHeight;
+  }
+}
+
+export function watermarkPreviewLayout(fontScale: number): WatermarkPreviewLayout {
+  const safeScale = Number.isFinite(fontScale) ? Math.max(0.75, Math.min(1.6, fontScale)) : 1;
+  const projectNameLineHeight = 24 * safeScale;
+  const detailLineHeight = 19 * safeScale;
+  const requiredContentHeight = Math.ceil(32 + 8 + projectNameLineHeight * 2 + detailLineHeight * 2 + 6);
+  const panelHeight = requiredContentHeight;
+  const frameHeight = Math.max(158, panelHeight + 24);
+  return new WatermarkPreviewLayout(safeScale, projectNameLineHeight, detailLineHeight,
+    requiredContentHeight, panelHeight, frameHeight);
 }

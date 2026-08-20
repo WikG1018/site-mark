@@ -22,9 +22,14 @@ import {
   projectFormCopy,
   projectNameValidationError,
   projectSaveFeedback,
+  selectionKey,
   selectionVisual,
   WatermarkAccentChoice,
   watermarkAccentChoices,
+  WatermarkPreviewLayer,
+  watermarkPreviewLayer,
+  WatermarkPreviewLayout,
+  watermarkPreviewLayout,
   WatermarkPositionChoice,
   watermarkPositionChoices,
   WatermarkPreviewStyle,
@@ -72,10 +77,6 @@ export struct ProjectListView {
   }
 
   aboutToDisappear(): void {
-    this.deactivatePage();
-  }
-
-  aboutToBeDeleted(): void {
     this.deactivatePage();
   }
 
@@ -372,6 +373,7 @@ export struct ProjectEditorScreen {
               required: true,
               error: this.nameError,
               helper: this.copy().nameHelper,
+              maxLength: ProjectFormMetrics.PROJECT_NAME_MAX_LENGTH,
               onChange: (value: string): void => {
                 this.name = value;
                 this.nameError = '';
@@ -383,6 +385,7 @@ export struct ProjectEditorScreen {
               value: this.description,
               placeholder: this.copy().descriptionPlaceholder,
               helper: this.copy().descriptionHelper,
+              maxLength: ProjectFormMetrics.PROJECT_DESCRIPTION_MAX_LENGTH,
               onChange: (value: string): void => { this.description = value; },
             })
             if (this.message.length > 0) {
@@ -472,10 +475,6 @@ export struct ProjectDetailScreen {
   }
 
   aboutToDisappear(): void {
-    this.deactivatePage();
-  }
-
-  aboutToBeDeleted(): void {
     this.deactivatePage();
   }
 
@@ -1087,6 +1086,14 @@ export struct ProjectSettingsScreen {
     return projectFormCopy(AppText.isEnglish());
   }
 
+  private previewLayer(): WatermarkPreviewLayer {
+    return watermarkPreviewLayer(this.watermarkOpacity);
+  }
+
+  private previewLayout(): WatermarkPreviewLayout {
+    return watermarkPreviewLayout(this.fontScale);
+  }
+
   aboutToAppear(): void {
     AppRuntime.require().database.projectById(AppRuntime.require().selectedProjectId)
       .then((project: ProjectRecord | null): void => {
@@ -1164,7 +1171,7 @@ export struct ProjectSettingsScreen {
                 ForEach(watermarkPositionChoices(AppText.isEnglish(), this.watermarkPosition),
                   (choice: WatermarkPositionChoice) => {
                     this.positionChoice(choice)
-                  }, (choice: WatermarkPositionChoice): string => choice.value)
+                  }, (choice: WatermarkPositionChoice): string => selectionKey(choice.value, choice.selected))
               }.width('100%')
             }
             .width('100%')
@@ -1217,7 +1224,8 @@ export struct ProjectSettingsScreen {
                 ForEach(watermarkAccentChoices(AppText.isEnglish(), this.accent),
                   (choice: WatermarkAccentChoice) => {
                     this.colorChoice(choice)
-                  }, (choice: WatermarkAccentChoice): string => choice.value.toString())
+                  }, (choice: WatermarkAccentChoice): string =>
+                    selectionKey(choice.value.toString(), choice.selected))
               }.width('100%')
             }
             .width('100%')
@@ -1231,23 +1239,37 @@ export struct ProjectSettingsScreen {
                 .fontColor(UiTokens.TEXT).width('100%')
               Stack({ alignContent: this.watermarkPosition === 'bottomLeft' ?
                 Alignment.BottomStart : Alignment.BottomEnd }) {
-                Column({ space: 8 }) {
-                  Text(this.project?.name ?? this.copy().nameLabel).fontSize(18 * this.fontScale)
-                    .fontWeight(FontWeight.Bold).fontColor(Color.White).width('100%').maxLines(2)
-                  Text(tr('工程部位 · 工作内容\n拍摄人  2026-08-20 12:00',
-                    'Location · Work\nPhotographer  2026-08-20 12:00'))
-                    .fontSize(13 * this.fontScale).fontColor(Color.White).lineHeight(19 * this.fontScale)
+                Stack({ alignContent: Alignment.Center }) {
+                  Row()
                     .width('100%')
+                    .height('100%')
+                    .backgroundColor(WatermarkPreviewStyle.BACKGROUND)
+                    .opacity(this.previewLayer().backgroundOpacity)
+                    .borderRadius(UiTokens.CONTROL_RADIUS)
+                  Column({ space: 8 }) {
+                    Text(this.project?.name ?? this.copy().nameLabel).fontSize(18 * this.fontScale)
+                      .fontWeight(FontWeight.Bold).fontColor(Color.White).width('100%').maxLines(2)
+                      .lineHeight(this.previewLayout().projectNameLineHeight)
+                      .opacity(this.previewLayer().contentOpacity)
+                    Text(tr('工程部位 · 工作内容\n拍摄人  2026-08-20 12:00',
+                      'Location · Work\nPhotographer  2026-08-20 12:00'))
+                      .fontSize(13 * this.fontScale).fontColor(Color.White)
+                      .lineHeight(this.previewLayout().detailLineHeight)
+                      .width('100%')
+                      .opacity(this.previewLayer().contentOpacity)
+                  }
+                  .padding(16)
+                  .width('100%')
+                  .height('100%')
                 }
-                .padding(16)
                 .width('88%')
-                .opacity(this.watermarkOpacity)
-                .backgroundColor(WatermarkPreviewStyle.BACKGROUND)
+                .height(this.previewLayout().panelHeight)
                 .border({ width: 3, color: this.accent })
+                .opacity(this.previewLayer().borderOpacity)
                 .borderRadius(UiTokens.CONTROL_RADIUS)
               }
               .width('100%')
-              .height(158)
+              .height(this.previewLayout().frameHeight)
               .padding(12)
               .backgroundColor(UiTokens.SURFACE_MUTED)
               .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
