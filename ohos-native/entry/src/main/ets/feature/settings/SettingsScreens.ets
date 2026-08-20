@@ -13,6 +13,8 @@ import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr } from '../../shared/AppText';
 import { StableSelectionList } from './SettingsProjectSelection';
+import { settingsBackAccessibilityText, watermarkAccentAccessibilityText,
+  watermarkAccentOptions, WatermarkAccentOption } from './SettingsAccessibility';
 
 @Component
 export struct SettingsView {
@@ -128,6 +130,7 @@ export struct SettingsView {
 @Component
 export struct AppearanceScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  private readonly accentOptions: WatermarkAccentOption[] = watermarkAccentOptions();
   @State private settings: AppSettingsRecord | null = null;
   @State private watermarkOpacity: number = 0.78;
   @State private fontScale: number = 1.0;
@@ -171,6 +174,7 @@ export struct AppearanceScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('外观与默认水印', 'Appearance & watermark'), showBack: true,
+          backAccessibilityText: settingsBackAccessibilityText(),
           onBack: (): void => { this.pathStack.pop(); }, actionLabel: tr('保存', 'Save'),
           onAction: (): void => { this.save(); } })
         Scroll() {
@@ -217,14 +221,12 @@ export struct AppearanceScreen {
               .accessibilityText(tr('水印字体大小', 'Watermark font size'))
               .onChange((value: number): void => { this.fontScale = value; })
             Row({ space: 11 }) {
-              ForEach([0xFF2E7D61, 0xFF1565C0, 0xFFC05A24, 0xFF7B4DA8, 0xFF37474F],
-                (color: number) => {
-                  Button().width(44).height(44).borderRadius(22).backgroundColor(color)
-                    .border({ width: this.accent === color ? 4 : 1, color: Color.White })
-                    .accessibilityText(this.accent === color ? tr('已选择水印强调色',
-                      'Selected watermark accent color') : tr('选择水印强调色', 'Select watermark accent color'))
-                    .onClick((): void => { this.accent = color; })
-                }, (color: number) => color.toString())
+              ForEach(this.accentOptions, (option: WatermarkAccentOption) => {
+                Button().width(44).height(44).borderRadius(22).backgroundColor(option.color)
+                  .border({ width: this.accent === option.color ? 4 : 1, color: Color.White })
+                  .accessibilityText(watermarkAccentAccessibilityText(option, this.accent === option.color))
+                  .onClick((): void => { this.accent = option.color; })
+              }, (option: WatermarkAccentOption): string => option.color.toString())
             }.width('100%')
             if (this.message.length > 0) {
               Text(this.message).fontSize(13).fontColor(UiTokens.SUCCESS).width('100%')
@@ -265,6 +267,7 @@ export struct StorageScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('存储', 'Storage'), showBack: true,
+          backAccessibilityText: settingsBackAccessibilityText(),
           onBack: (): void => { this.pathStack.pop(); } })
         Scroll() {
           Column({ space: 16 }) {
@@ -352,6 +355,7 @@ export struct DiagnosticsScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('诊断与反馈', 'Diagnostics and feedback'), showBack: true,
+          backAccessibilityText: settingsBackAccessibilityText(),
           onBack: (): void => { this.pathStack.pop(); } })
         Scroll() {
           Column({ space: 16 }) {
@@ -425,6 +429,7 @@ export struct AboutScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('关于工程印记', 'About SiteMark'), showBack: true,
+          backAccessibilityText: settingsBackAccessibilityText(),
           onBack: (): void => { this.pathStack.pop(); } })
         Scroll() {
           Column({ space: 14 }) {
@@ -543,6 +548,7 @@ export struct BackupScreen {
     NavDestination() {
       Column() {
         AppTopBar({ title: tr('备份与恢复', 'Backup and restore'), showBack: true,
+          backAccessibilityText: settingsBackAccessibilityText(),
           onBack: (): void => { this.pathStack.pop(); } })
         List({ space: 14 }) {
           ListItem() {
