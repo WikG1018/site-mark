@@ -35,13 +35,14 @@
 - Modify: `lib/platform/degraded_image_pipeline.dart`
 - Modify: `test/platform/degraded_image_pipeline_test.dart`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
-- `degradedWatermarkLines` 中文 locale 含 `项目` / `地点` / `工作内容` / `拍摄人` / `照片编号` / `拍摄时间` / `地址` / `坐标` / `备注`
+- `degradedWatermarkLines` 中文 locale 含 `现场记录 ·` / `位置` / `内容` / `拍摄人` / `时间` / `地址` / `坐标` / `备注`
 - 空的 address / coordinates / notes 不出现
-- 英文 locale 用 `Project` / `Location` 等
+- 英文 locale 用 `Site record` / `Location` / `Work` / `Photographer` / `Time` 等
+- 照片编号不出现
 
-- [ ] **Step 2: Implement `degradedWatermarkLines` to match Rust `labels()`**
+- [x] **Step 2: Implement `degradedWatermarkLines` to match Rust `labels()`**
 
 ---
 

@@ -230,9 +230,10 @@ class DegradedImagePipeline implements ImagePipeline {
       throw _invalidData('decode jpeg');
     }
 
-    await _compositeDegradedWatermark(decoded, request);
+    final oriented = img.bakeOrientation(decoded);
+    await _compositeDegradedWatermark(oriented, request);
 
-    final encoded = img.encodeJpg(decoded);
+    final encoded = img.encodeJpg(oriented, quality: 92);
     final output = File(request.outputPath);
     await output.parent.create(recursive: true);
     await output.writeAsBytes(Uint8List.fromList(encoded), flush: true);
@@ -240,8 +241,8 @@ class DegradedImagePipeline implements ImagePipeline {
     return rust.RenderPhotoResult(
       outputPath: request.outputPath,
       outputSha256: crypto.sha256.convert(encoded).toString(),
-      width: decoded.width,
-      height: decoded.height,
+      width: oriented.width,
+      height: oriented.height,
     );
   }
 }

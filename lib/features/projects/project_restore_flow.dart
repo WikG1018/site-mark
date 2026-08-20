@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -183,14 +182,6 @@ Future<void> runProjectRestoreFlow(
     await discardGuard.discard();
     lifetime?._release(discardGuard);
   }
-}
-
-Future<String?> _pickRestoreZip() async {
-  final result = await FilePicker.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: const ['zip'],
-  );
-  return result?.files.single.path;
 }
 
 @visibleForTesting

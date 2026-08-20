@@ -94,6 +94,17 @@
 | 官方测试 | `ohos_platform_services_test` 22 项通过 |
 | 模拟器 dump | **无**。不得写系统外链已通 |
 
+## 2026-08-20 Task 45
+
+降级 `render` 叠水印前烘焙 EXIF orientation（orientation 6：48×32 → 32×48）。删除恢复页未使用的 `FilePicker` 路径。官方管线测试闭环，未重编 HAP，无拍成 dump。
+
+| 项 | 结果 |
+| --- | --- |
+| 方向 | `img.bakeOrientation` 在 decode 后、卡片叠图前 |
+| 恢复页 | 去掉 `_pickRestoreZip`；产品路径仍走 `OhosArchivePickService` |
+| 官方测试 | `degraded_image_pipeline_test` **19 项全绿** |
+| 模拟器 dump | **无**。不得写方向已对等 Android 像素 |
+
 ## 2026-08-20 Tasks 43–44
 
 降级水印从只画英文 `SiteMark` 改为与 Rust `labels()` 同字段的半透明卡片。官方管线测试闭环，未重编 HAP，无拍成 dump。
@@ -103,7 +114,7 @@
 | 文案 | `degradedWatermarkLines`：现场记录 · 项目 / 位置 / 内容 / 拍摄人 / 时间；非空地址、坐标、备注；照片编号不画 |
 | 叠图 | `dart:ui` Canvas 半透明底 + 左侧 accent + `compositeImage` |
 | 字体 | `NotoSansSC` ← `rust/assets/fonts/NotoSansSC-Regular.otf` |
-| 官方测试 | `degraded_image_pipeline_test` **18 项全绿** |
+| 官方测试 | `degraded_image_pipeline_test` **18 项全绿**（随后 Task 45 扩到 19） |
 | 模拟器 dump | **无**。不得写水印已对等 Android 像素 |
 
 ## 2026-08-20 Tasks 41–42

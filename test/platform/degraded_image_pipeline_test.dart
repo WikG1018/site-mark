@@ -209,6 +209,44 @@ void main() {
     );
   });
 
+  test('render bakes EXIF orientation 6 before overlay', () async {
+    final root = await Directory.systemTemp.createTemp('sitemark-degraded-exif-');
+    addTearDown(() => root.delete(recursive: true));
+
+    final source = img.Image(width: 48, height: 32);
+    img.fill(source, color: img.ColorRgb8(20, 40, 60));
+    source.exif.imageIfd.orientation = 6;
+    final sourcePath = '${root.path}${Platform.pathSeparator}source.jpg';
+    final outputPath = '${root.path}${Platform.pathSeparator}out.jpg';
+    await File(sourcePath).writeAsBytes(img.encodeJpg(source, quality: 100));
+
+    const pipeline = DegradedImagePipeline();
+    final result = await pipeline.render(
+      rust.RenderPhotoRequest(
+        sourcePath: sourcePath,
+        outputPath: outputPath,
+        projectName: 'p',
+        workLocation: 'loc',
+        workContent: 'work',
+        photographer: 'cam',
+        photoNumber: '001',
+        capturedAt: '2026-08-20T08:00:00Z',
+        position: rust.WatermarkPosition.bottomLeft,
+        opacity: 0.78,
+        accentColorArgb: 0xff37c58b,
+        fontScale: 1,
+        localeCode: 'zh',
+      ),
+    );
+
+    expect(result.width, 32);
+    expect(result.height, 48);
+    final decoded = img.decodeJpg(await File(outputPath).readAsBytes());
+    expect(decoded, isNotNull);
+    expect(decoded!.width, 32);
+    expect(decoded.height, 48);
+  });
+
   test('export writes a schema 5 zip with manifest and records.csv', () async {
     final root = await Directory.systemTemp.createTemp('sitemark-degraded-zip-');
     addTearDown(() => root.delete(recursive: true));
