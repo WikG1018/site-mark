@@ -31,6 +31,10 @@ export function settingsConfirmationButtonHeight(): number {
   return UiTokens.TOUCH_TARGET;
 }
 
+export function diagnosticsConfirmAccessibilityText(): string {
+  return tr('确认并选择保存位置', 'Confirm and choose save location');
+}
+
 export function watermarkAccentAccessibilityText(option: WatermarkAccentOption, selected: boolean): string {
   return selected ? tr(`${option.chineseName}，已选择`, `${option.englishName}, selected`) :
     tr(`${option.chineseName}，未选择`, `${option.englishName}, not selected`);

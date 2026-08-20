@@ -2,7 +2,10 @@ import { describe, expect, it } from '@ohos/hypium';
 import { StableSelectionList } from '../main/ets/feature/settings/SettingsProjectSelection';
 import { AppText } from '../main/ets/shared/AppText';
 import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, watermarkAccentAccessibilityText,
-  watermarkAccentOptions, WatermarkAccentOption } from '../main/ets/feature/settings/SettingsAccessibility';
+  watermarkAccentOptions, WatermarkAccentOption, diagnosticsConfirmAccessibilityText }
+  from '../main/ets/feature/settings/SettingsAccessibility';
+import { choiceAccessibilityText, joinAccessibilityText, lifecycleAccessibilityText }
+  from '../main/ets/shared/AccessibilityText';
 import { UiTokens } from '../main/ets/shared/UiTokens';
 
 class RecordingListener implements DataChangeListener {
@@ -110,6 +113,22 @@ export default function settingsProjectSelectionTest(): void {
     it('keeps diagnostics confirmation actions at the shared touch target height', 0, () => {
       expect(settingsConfirmationButtonHeight()).assertEqual(UiTokens.TOUCH_TARGET);
       expect(settingsConfirmationButtonHeight() >= 44).assertTrue();
+    });
+
+    it('announces option state and punctuation in the active language', 0, () => {
+      AppText.apply('zh', 'en-US');
+      expect(choiceAccessibilityText('浅色', true)).assertEqual('浅色，已选择');
+      expect(choiceAccessibilityText('浅色', false)).assertEqual('浅色，未选择');
+      expect(lifecycleAccessibilityText('进行中', true)).assertEqual('进行中，当前');
+      expect(joinAccessibilityText(['项目', '3 条记录'])).assertEqual('项目，3 条记录');
+
+      AppText.apply('en', 'zh-CN');
+      expect(choiceAccessibilityText('Light', true)).assertEqual('Light, selected');
+      expect(choiceAccessibilityText('Light', false)).assertEqual('Light, not selected');
+      expect(lifecycleAccessibilityText('Active', true)).assertEqual('Active, current');
+      expect(joinAccessibilityText(['Project', '3 records'])).assertEqual('Project, 3 records');
+      expect(diagnosticsConfirmAccessibilityText()).assertEqual('Confirm and choose save location');
+      AppText.apply('', 'zh-CN');
     });
   });
 }

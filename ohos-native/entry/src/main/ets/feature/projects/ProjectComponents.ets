@@ -4,6 +4,7 @@ import { tr } from '../../shared/AppText';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
+import { joinAccessibilityText } from '../../shared/AccessibilityText';
 
 function emptyProjectSummary(): ProjectSummary {
   return new ProjectSummary(new ProjectRecord({
@@ -118,7 +119,7 @@ export struct ProjectCard {
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS)
     .shadow({ radius: 10, color: UiTokens.CARD_SHADOW, offsetY: 3 })
-    .accessibilityText(`${this.summary.project.name}，${projectSummaryText(this.summary)}`)
+    .accessibilityText(joinAccessibilityText([this.summary.project.name, projectSummaryText(this.summary)]))
     .onClick(this.onOpen)
   }
 }

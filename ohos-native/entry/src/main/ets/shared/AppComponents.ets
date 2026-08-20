@@ -1,4 +1,6 @@
 import { UiTokens } from './UiTokens';
+import { choiceAccessibilityText, joinAccessibilityText, lifecycleAccessibilityText } from './AccessibilityText';
+import { MotionPolicy } from './MotionPolicy';
 
 export class SegmentOption {
   value: string;
@@ -37,6 +39,7 @@ export struct AppTopBar {
   @Prop actionLabel: string = '';
   @Prop backAccessibilityText: string = '返回';
   @Prop actionAccessibilityText: string = '';
+  @Prop actionEnabled: boolean = true;
   onBack: () => void = (): void => {};
   onAction: () => void = (): void => {};
 
@@ -81,6 +84,7 @@ export struct AppTopBar {
           .borderRadius(UiTokens.CONTROL_RADIUS)
           .accessibilityText(this.actionAccessibilityText.length > 0 ?
             this.actionAccessibilityText : this.actionLabel)
+          .enabled(this.actionEnabled)
           .onClick(this.onAction)
       }
     }
@@ -129,7 +133,7 @@ export struct EmptyPanel {
     .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 34 })
     .width(`calc(100% - ${UiTokens.PAGE_PADDING * 2}vp)`)
     .backgroundColor(UiTokens.GLASS)
-    .backdropBlur(18)
+    .backdropBlur(MotionPolicy.blur(18))
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
   }
@@ -162,6 +166,7 @@ export struct SectionHeader {
 export struct ChoiceButton {
   @Prop label: string = '';
   @Prop selected: boolean = false;
+  @Prop controlEnabled: boolean = true;
   onSelect: () => void = (): void => {};
 
   build() {
@@ -169,7 +174,8 @@ export struct ChoiceButton {
       .backgroundColor(this.selected ? UiTokens.PRIMARY_CONTAINER : UiTokens.CONTROL)
       .fontColor(this.selected ? UiTokens.PRIMARY : UiTokens.TEXT)
       .borderRadius(UiTokens.CONTROL_RADIUS)
-      .accessibilityText(this.label)
+      .enabled(this.controlEnabled)
+      .accessibilityText(choiceAccessibilityText(this.label, this.selected))
       .onClick(this.onSelect)
   }
 }
@@ -227,7 +233,7 @@ export struct SettingRow {
       .width('100%')
       .constraintSize({ minHeight: 64 })
       .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-      .accessibilityText(this.subtitle.length > 0 ? `${this.title}，${this.subtitle}` : this.title)
+      .accessibilityText(this.subtitle.length > 0 ? joinAccessibilityText([this.title, this.subtitle]) : this.title)
       .onClick(this.action)
       if (this.showDivider) {
         Divider()
@@ -289,7 +295,7 @@ export struct LifecycleSegment {
           .fontColor(this.selectedValue === option.value ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
           .backgroundColor(this.selectedValue === option.value ? UiTokens.PRIMARY_CONTAINER : Color.Transparent)
           .borderRadius(UiTokens.CONTROL_RADIUS)
-          .accessibilityText(option.label)
+          .accessibilityText(lifecycleAccessibilityText(option.label, this.selectedValue === option.value))
           .onClick((): void => this.onSelect(option.value))
       }, (option: SegmentOption): string => option.value)
     }
@@ -385,7 +391,7 @@ export struct BatchActionBar {
     .width('100%')
     .padding({ left: 10, right: 10, top: 4, bottom: 4 })
     .backgroundColor(UiTokens.GLASS_STRONG)
-    .backdropBlur(18)
+    .backdropBlur(MotionPolicy.blur(18))
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS)
   }

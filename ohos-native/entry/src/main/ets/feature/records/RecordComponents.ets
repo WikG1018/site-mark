@@ -122,7 +122,7 @@ export struct CaptureCard {
     .padding(14)
     .width('100%')
     .backgroundColor(UiTokens.GLASS)
-    .backdropBlur(16)
+    .backdropBlur(MotionPolicy.blur(16))
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: this.selected ? UiTokens.PRIMARY : '#DCE8E0' })
     .shadow({ radius: 12, color: '#12000000', offsetY: 4 })
