@@ -2,6 +2,7 @@ import { describe, expect, it } from '@ohos/hypium';
 import { RestoreJournalStorage, RestoreJournalStore } from '../main/ets/data/prefs/RestoreJournalStore';
 import { RestoreAttemptGate, RestoreFileAccess, RestoreFileCleanup, RestorePathReferenceLookup } from
   '../main/ets/feature/backup/RestoreFileCleanup';
+import { RestoreStagingScope } from '../main/ets/feature/backup/RestoreStagingScope';
 
 class MemoryRestoreJournalStorage implements RestoreJournalStorage {
   value: string = '';
@@ -122,6 +123,30 @@ export default function restoreJournalTest(): void {
       files.failedPath = '';
       await gate.begin('newer');
       expect((await store.recover())?.operationId).assertEqual('newer');
+    });
+
+    it('cleans a partially written selected archive when copy fails', 0, async () => {
+      let stagingExists = false;
+      let partialArchiveExists = false;
+      let cleanupCount = 0;
+      let rejected = false;
+      try {
+        await new RestoreStagingScope().run(async (): Promise<string> => {
+          stagingExists = true;
+          partialArchiveExists = true;
+          throw new Error('controlled_copy_failure');
+        }, (): void => {
+          cleanupCount += 1;
+          partialArchiveExists = false;
+          stagingExists = false;
+        });
+      } catch (_) {
+        rejected = true;
+      }
+      expect(rejected).assertTrue();
+      expect(cleanupCount).assertEqual(1);
+      expect(stagingExists).assertFalse();
+      expect(partialArchiveExists).assertFalse();
     });
   });
 }
