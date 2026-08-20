@@ -12,6 +12,7 @@ import { BackupResult, ProjectBackupService } from '../backup/BackupService';
 import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr } from '../../shared/AppText';
+import { StableSelectionList } from './SettingsProjectSelection';
 
 @Component
 export struct SettingsView {
@@ -54,58 +55,67 @@ export struct SettingsView {
           Column() {
             SettingRow({ icon: '◩', title: tr('新建项目水印默认值', 'New-project watermark defaults'),
               subtitle: tr('位置、透明度、字体大小和强调色', 'Position, opacity, font size, and accent color'),
+              showDivider: true,
               action: (): void => { this.pathStack.pushPathByName(Routes.APPEARANCE, null); } })
-            Divider().color('#DDE8E1').margin({ left: 62 })
             SettingRow({ icon: '⌖', title: tr('位置权限', 'Location permission'),
               subtitle: tr('拒绝定位也不会阻止拍摄', 'Declining location does not block capture'),
+              showDivider: true,
               action: (): void => { AppRuntime.require().services.openApplicationSettings(); } })
-            Divider().color(UiTokens.OUTLINE).margin({ left: 62 })
-            Row({ space: 12 }) {
-              Text('◉').fontSize(22).fontColor(UiTokens.PRIMARY).width(34)
+            Row({ space: 14 }) {
+              Text('◉').fontSize(22).fontColor(UiTokens.PRIMARY).width(36).textAlign(TextAlign.Center)
               Column({ space: 3 }) {
-                Text(tr('完成通知', 'Completion notifications')).fontSize(15)
+                Text(tr('完成通知', 'Completion notifications')).fontSize(16)
                   .fontWeight(FontWeight.Medium).width('100%')
                 Text(tr('可选；关闭后不影响后台处理', 'Optional; disabling this does not affect processing'))
-                  .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
+                  .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Toggle({ type: ToggleType.Switch, isOn: this.notificationsEnabled })
                 .selectedColor(UiTokens.PRIMARY)
+                .accessibilityText(tr('完成通知', 'Completion notifications'))
                 .onChange((value: boolean): void => { this.setNotifications(value); })
-            }.padding({ left: 14, right: 14, top: 12, bottom: 12 }).width('100%')
+            }
+            .constraintSize({ minHeight: 64 })
+            .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+            .accessibilityText(tr('完成通知，可选；关闭后不影响后台处理',
+              'Completion notifications. Optional; disabling this does not affect processing'))
+            .width('100%')
           }.margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
-            .backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
+            .backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
+            .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
           if (this.notificationMessage.length > 0) {
             Text(this.notificationMessage).fontSize(12).fontColor(UiTokens.TEXT_SECONDARY)
-              .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6 }).width('100%')
+              .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6, bottom: 2 }).width('100%')
           }
           SectionHeader({ title: tr('数据与安全', 'Data and safety') })
           Column() {
             SettingRow({ icon: '⇅', title: tr('备份与恢复', 'Backup and restore'),
               subtitle: tr('备份一个或多个项目，并从 SiteMark ZIP 恢复',
                 'Back up one or more projects and restore SiteMark ZIP files'),
+              showDivider: true,
               action: (): void => { this.pathStack.pushPathByName(Routes.BACKUP, null); } })
-            Divider().color('#DDE8E1').margin({ left: 62 })
             SettingRow({ icon: '▤', title: tr('存储', 'Storage'),
               subtitle: tr('查看应用内原图、成片和导出占用', 'Review private originals, images, and exports'),
+              showDivider: true,
               action: (): void => { this.pathStack.pushPathByName(Routes.STORAGE, null); } })
-            Divider().color('#DDE8E1').margin({ left: 62 })
             SettingRow({ icon: '◇', title: tr('诊断与反馈', 'Diagnostics and feedback'),
               subtitle: tr('本机生成隐私安全的诊断包，不会自动上传',
                 'Create a privacy-safe diagnostic bundle locally; nothing is uploaded automatically'),
               action: (): void => { this.pathStack.pushPathByName(Routes.DIAGNOSTICS, null); } })
           }.margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
-            .backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
+            .backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
+            .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
           SectionHeader({ title: tr('应用', 'App') })
           Column() {
             SettingRow({ icon: '◐', title: tr('外观与语言', 'Appearance and language'),
               subtitle: tr('跟随系统、浅色/深色和中英文', 'System, light/dark, Chinese, and English'),
+              showDivider: true,
               action: (): void => { this.pathStack.pushPathByName(Routes.APPEARANCE, null); } })
-            Divider().color('#DDE8E1').margin({ left: 62 })
             SettingRow({ icon: 'ⓘ', title: tr('关于工程印记', 'About SiteMark'),
               subtitle: tr('版本、隐私说明和 GitHub 代码仓库', 'Version, privacy, and GitHub repository'),
               action: (): void => { this.pathStack.pushPathByName(Routes.ABOUT, null); } })
           }.margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
-            .backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
+            .backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
+            .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
         }
         .padding({ bottom: 124 })
         .width('100%')
@@ -197,16 +207,22 @@ export struct AppearanceScreen {
             Row() { Text(tr('透明度', 'Opacity')).layoutWeight(1); Text(`${Math.round(this.watermarkOpacity * 100)}%`) }
               .width('100%')
             Slider({ value: this.watermarkOpacity, min: 0.35, max: 1, step: 0.05 })
-              .selectedColor(UiTokens.PRIMARY).onChange((value: number): void => { this.watermarkOpacity = value; })
+              .selectedColor(UiTokens.PRIMARY)
+              .accessibilityText(tr('水印透明度', 'Watermark opacity'))
+              .onChange((value: number): void => { this.watermarkOpacity = value; })
             Row() { Text(tr('字体大小', 'Font size')).layoutWeight(1); Text(`${Math.round(this.fontScale * 100)}%`) }
               .width('100%')
             Slider({ value: this.fontScale, min: 0.75, max: 1.6, step: 0.05 })
-              .selectedColor(UiTokens.PRIMARY).onChange((value: number): void => { this.fontScale = value; })
+              .selectedColor(UiTokens.PRIMARY)
+              .accessibilityText(tr('水印字体大小', 'Watermark font size'))
+              .onChange((value: number): void => { this.fontScale = value; })
             Row({ space: 11 }) {
               ForEach([0xFF2E7D61, 0xFF1565C0, 0xFFC05A24, 0xFF7B4DA8, 0xFF37474F],
                 (color: number) => {
                   Button().width(44).height(44).borderRadius(22).backgroundColor(color)
                     .border({ width: this.accent === color ? 4 : 1, color: Color.White })
+                    .accessibilityText(this.accent === color ? tr('已选择水印强调色',
+                      'Selected watermark accent color') : tr('选择水印强调色', 'Select watermark accent color'))
                     .onClick((): void => { this.accent = color; })
                 }, (color: number) => color.toString())
             }.width('100%')
@@ -214,8 +230,12 @@ export struct AppearanceScreen {
               Text(this.message).fontSize(13).fontColor(UiTokens.SUCCESS).width('100%')
             }
           }
-          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
-          .width('100%')
+          .padding(16)
+          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+          .width(`calc(100% - ${UiTokens.PAGE_PADDING * 2}vp)`)
+          .backgroundColor(UiTokens.SURFACE)
+          .borderRadius(UiTokens.CARD_RADIUS)
+          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
         }.layoutWeight(1)
       }.width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }.hideTitleBar(true)
@@ -246,31 +266,41 @@ export struct StorageScreen {
       Column() {
         AppTopBar({ title: tr('存储', 'Storage'), showBack: true,
           onBack: (): void => { this.pathStack.pop(); } })
-        Column({ space: 2 }) {
-          Text(formatBytes(this.snapshot.total())).fontSize(34).fontWeight(FontWeight.Bold)
-            .fontColor(UiTokens.PRIMARY).width('100%')
-          Text(tr('SiteMark 应用内数据占用', 'SiteMark in-app data')).fontSize(13)
-            .fontColor(UiTokens.TEXT_SECONDARY).width('100%')
-          Divider().margin({ top: 12 })
-          ValueTextRow({ label: tr('私有原图', 'Private originals'), value: formatBytes(this.snapshot.originals) })
-          ValueTextRow({ label: tr('私有水印成片', 'Private watermarked images'),
-            value: formatBytes(this.snapshot.rendered) })
-          ValueTextRow({ label: tr('备份与导出 ZIP', 'Backup and export ZIP files'),
-            value: formatBytes(this.snapshot.exports) })
-          ValueTextRow({ label: tr('其他应用文件', 'Other app files'), value: formatBytes(this.snapshot.other) })
-        }
-        .padding(20).margin(20).width('100%').backgroundColor(UiTokens.GLASS)
-        .borderRadius(UiTokens.CARD_RADIUS)
-        Text(tr('此统计不包含已经保存到系统相册的照片。卸载应用会删除这里的数据库、原图和成片。',
-          'This total excludes photos saved to the system gallery. Uninstalling deletes this database, private originals, and rendered images.'))
-          .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20)
-          .padding({ left: 20, right: 20 }).width('100%')
-        Button(tr('清理本机私有导出 ZIP', 'Clear private export ZIP files')).height(46).margin(20)
-          .fontColor(UiTokens.DANGER)
-          .backgroundColor(UiTokens.DANGER_CONTAINER).onClick((): void => this.clearExports())
-        if (this.message.length > 0) {
-          Text(this.message).fontSize(13).fontColor(UiTokens.PRIMARY).padding({ left: 20, right: 20 }).width('100%')
-        }
+        Scroll() {
+          Column({ space: 16 }) {
+            Column({ space: 2 }) {
+              Text(formatBytes(this.snapshot.total())).fontSize(28).fontWeight(FontWeight.Bold)
+                .fontColor(UiTokens.PRIMARY).width('100%')
+              Text(tr('SiteMark 应用内数据占用', 'SiteMark in-app data')).fontSize(13)
+                .fontColor(UiTokens.TEXT_SECONDARY).width('100%')
+              Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 12 })
+              ValueTextRow({ label: tr('私有原图', 'Private originals'), value: formatBytes(this.snapshot.originals) })
+              ValueTextRow({ label: tr('私有水印成片', 'Private watermarked images'),
+                value: formatBytes(this.snapshot.rendered) })
+              ValueTextRow({ label: tr('备份与导出 ZIP', 'Backup and export ZIP files'),
+                value: formatBytes(this.snapshot.exports) })
+              ValueTextRow({ label: tr('其他应用文件', 'Other app files'), value: formatBytes(this.snapshot.other) })
+            }
+            .padding(16).width('100%').backgroundColor(UiTokens.SURFACE)
+            .borderRadius(UiTokens.CARD_RADIUS).border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+            Text(tr('此统计不包含已经保存到系统相册的照片。卸载应用会删除这里的数据库、原图和成片。',
+              'This total excludes photos saved to the system gallery. Uninstalling deletes this database, private originals, and rendered images.'))
+              .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20).width('100%')
+            Button(tr('清理本机私有导出 ZIP', 'Clear private export ZIP files')).height(UiTokens.TOUCH_TARGET)
+              .width('100%').fontColor(UiTokens.DANGER).backgroundColor(UiTokens.DANGER_CONTAINER)
+              .accessibilityText(tr('清理本机私有导出 ZIP', 'Clear private export ZIP files'))
+              .onClick((): void => this.clearExports())
+            if (this.message.length > 0) {
+              Text(this.message).fontSize(13).fontColor(UiTokens.PRIMARY).width('100%')
+            }
+          }
+          .padding(16)
+          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+          .width(`calc(100% - ${UiTokens.PAGE_PADDING * 2}vp)`)
+          .backgroundColor(UiTokens.SURFACE)
+          .borderRadius(UiTokens.CARD_RADIUS)
+          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+        }.layoutWeight(1)
       }.width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }.hideTitleBar(true)
   }
@@ -334,7 +364,9 @@ export struct DiagnosticsScreen {
               Text(tr('只有你主动确认并选择保存位置后，诊断 ZIP 才会离开应用私有目录。',
                 'A diagnostic ZIP leaves private storage only after you confirm and choose a save location.'))
                 .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20).width('100%')
-            }.padding(18).width('100%').backgroundColor(UiTokens.PRIMARY_CONTAINER).borderRadius(22)
+            }
+            .padding(16).width('100%').backgroundColor(UiTokens.PRIMARY_CONTAINER)
+            .borderRadius(UiTokens.CARD_RADIUS).border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
             Column({ space: 8 }) {
               Text(tr(`本机诊断事件：${this.summary.eventCount} 条`,
                 `Local diagnostic events: ${this.summary.eventCount}`)).fontSize(16)
@@ -342,7 +374,9 @@ export struct DiagnosticsScreen {
               Text(tr(`最近记录：${formatDateTime(this.summary.latestAt)}`,
                 `Latest: ${formatDateTime(this.summary.latestAt)}`)).fontSize(13)
                 .fontColor(UiTokens.TEXT_SECONDARY).width('100%')
-            }.padding(18).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(22)
+            }
+            .padding(16).width('100%').backgroundColor(UiTokens.SURFACE)
+            .borderRadius(UiTokens.CARD_RADIUS).border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
             Button(this.busy ? tr('正在生成…', 'Generating…') :
               tr('生成并保存诊断包', 'Generate and save diagnostic bundle'))
               .height(48).width('100%').backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
@@ -365,7 +399,8 @@ export struct DiagnosticsScreen {
                     .fontColor(Color.White).onClick((): void => { this.generate(); })
                 }.width('100%')
               }
-              .padding(16).width('100%').backgroundColor(UiTokens.GLASS_STRONG).borderRadius(20)
+              .padding(16).width('100%').backgroundColor(UiTokens.SURFACE)
+              .borderRadius(UiTokens.CARD_RADIUS).border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
             }
             Button(tr('清除本机诊断记录', 'Clear local diagnostic records')).height(44).width('100%')
               .fontColor(UiTokens.DANGER)
@@ -391,26 +426,30 @@ export struct AboutScreen {
       Column() {
         AppTopBar({ title: tr('关于工程印记', 'About SiteMark'), showBack: true,
           onBack: (): void => { this.pathStack.pop(); } })
-        Column({ space: 14 }) {
-          Text('SiteMark').fontSize(34).fontWeight(FontWeight.Bold).fontColor(UiTokens.PRIMARY)
-          Text(tr('工程印记 · 鸿蒙原生版', 'SiteMark · Native HarmonyOS')).fontSize(18)
-            .fontWeight(FontWeight.Medium)
-          Text(tr('版本 1.0.0', 'Version 1.0.0')).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
-          Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无云同步；照片和项目数据在本机处理。',
-            'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or cloud sync; photos and project data are processed on-device.'))
-            .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).textAlign(TextAlign.Center)
-          Divider().margin({ top: 8, bottom: 4 })
-          Button(tr('GitHub 代码仓库\ngithub.com/WikG1018/site-mark',
-            'GitHub repository\ngithub.com/WikG1018/site-mark'))
-            .height(64).width('100%').fontSize(14).fontColor(UiTokens.PRIMARY)
-            .backgroundColor(UiTokens.PRIMARY_CONTAINER)
-            .onClick((): void => { AppRuntime.require().services.openRepository(); })
-          Text(tr('本应用不申请网络权限。点击仓库链接时会交给系统浏览器。',
-            'This app does not request network permission. Repository links open in the system browser.'))
-            .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
-        }
-        .padding(24).margin(20).width('100%').backgroundColor(UiTokens.GLASS)
-        .borderRadius(UiTokens.CARD_RADIUS)
+        Scroll() {
+          Column({ space: 14 }) {
+            Text('SiteMark').fontSize(30).fontWeight(FontWeight.Bold).fontColor(UiTokens.PRIMARY)
+            Text(tr('工程印记 · 鸿蒙原生版', 'SiteMark · Native HarmonyOS')).fontSize(18)
+              .fontWeight(FontWeight.Medium)
+            Text(tr('版本 1.0.0', 'Version 1.0.0')).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
+            Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无云同步；照片和项目数据在本机处理。',
+              'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or cloud sync; photos and project data are processed on-device.'))
+              .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).textAlign(TextAlign.Center)
+            Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
+            Button(tr('GitHub 代码仓库\ngithub.com/WikG1018/site-mark',
+              'GitHub repository\ngithub.com/WikG1018/site-mark'))
+              .height(64).width('100%').fontSize(14).fontColor(UiTokens.PRIMARY)
+              .backgroundColor(UiTokens.PRIMARY_CONTAINER)
+              .accessibilityText(tr('打开 GitHub 代码仓库', 'Open GitHub repository'))
+              .onClick((): void => { AppRuntime.require().services.openRepository(); })
+            Text(tr('本应用不申请网络权限。点击仓库链接时会交给系统浏览器。',
+              'This app does not request network permission. Repository links open in the system browser.'))
+              .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
+          }
+          .padding(20).width('100%').backgroundColor(UiTokens.SURFACE)
+          .borderRadius(UiTokens.CARD_RADIUS).border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+        }.layoutWeight(1)
       }.width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }.hideTitleBar(true)
   }
@@ -419,7 +458,9 @@ export struct AboutScreen {
 @Component
 export struct BackupScreen {
   @Consume('pathStack') pathStack: NavPathStack;
-  @State private projects: ProjectSummary[] = [];
+  private readonly projectSelection: StableSelectionList<ProjectSummary> =
+    new StableSelectionList<ProjectSummary>((item: ProjectSummary): string => item.project.id);
+  @State private projectCount: number = 0;
   @State private selectedIds: string[] = [];
   @State private includeOriginals: boolean = true;
   @State private skipFailed: boolean = false;
@@ -429,21 +470,26 @@ export struct BackupScreen {
 
   aboutToAppear(): void { this.load(); }
 
+  aboutToDisappear(): void {
+    this.projectSelection.invalidate();
+  }
+
   private async load(): Promise<void> {
+    const generation = this.projectSelection.beginLoad();
     const database = AppRuntime.require().database;
     const active = await database.listProjectSummaries(ProjectLifecycleStatus.ACTIVE);
     const completed = await database.listProjectSummaries(ProjectLifecycleStatus.COMPLETED);
     const archived = await database.listProjectSummaries(ProjectLifecycleStatus.ARCHIVED);
-    this.projects = active.concat(completed).concat(archived);
+    const rows = active.concat(completed).concat(archived);
+    if (this.projectSelection.replaceFor(generation, rows)) {
+      this.projectCount = this.projectSelection.count();
+      this.selectedIds = this.projectSelection.selectedIds();
+    }
   }
 
   private toggle(id: string): void {
-    const index = this.selectedIds.indexOf(id);
-    if (index >= 0) {
-      const next = this.selectedIds.slice(); next.splice(index, 1); this.selectedIds = next;
-    } else {
-      this.selectedIds = this.selectedIds.concat([id]);
-    }
+    this.projectSelection.toggle(id);
+    this.selectedIds = this.projectSelection.selectedIds();
   }
 
   private async createBackup(): Promise<void> {
@@ -498,30 +544,53 @@ export struct BackupScreen {
       Column() {
         AppTopBar({ title: tr('备份与恢复', 'Backup and restore'), showBack: true,
           onBack: (): void => { this.pathStack.pop(); } })
-        Scroll() {
-          Column({ space: 14 }) {
-            Text(tr('备份项目', 'Back up projects')).fontSize(19).fontWeight(FontWeight.Bold).width('100%')
-            Text(tr('选择一个或多个项目。空白项目同样会保留项目说明和水印设置。',
-              'Select one or more projects. Empty projects still retain their description and watermark settings.'))
-              .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(19).width('100%')
-            Column({ space: 8 }) {
-              ForEach(this.projects, (item: ProjectSummary) => {
+        List({ space: 14 }) {
+          ListItem() {
+            Column({ space: 6 }) {
+              Text(tr('备份项目', 'Back up projects')).fontSize(19).fontWeight(FontWeight.Bold).width('100%')
+              Text(tr('选择一个或多个项目。空白项目同样会保留项目说明和水印设置。',
+                'Select one or more projects. Empty projects still retain their description and watermark settings.'))
+                .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(19).width('100%')
+            }.width('100%')
+          }
+          if (this.projectCount === 0) {
+            ListItem() {
+              Text(tr('没有可备份的项目', 'No projects available for backup'))
+                .fontSize(14).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
+                .padding(16).backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
+                .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+            }
+          } else {
+            LazyForEach(this.projectSelection.data, (item: ProjectSummary) => {
+              ListItem() {
                 Row({ space: 12 }) {
-                  Text(this.selectedIds.indexOf(item.project.id) >= 0 ? '✓' : '')
-                    .width(30).height(30).textAlign(TextAlign.Center).fontColor(Color.White)
-                    .backgroundColor(this.selectedIds.indexOf(item.project.id) >= 0 ?
-                      UiTokens.PRIMARY : '#CCD8D0').borderRadius(15)
+                  Text(this.projectSelection.isSelected(item.project.id) ? '✓' : '')
+                    .width(UiTokens.TOUCH_TARGET).height(UiTokens.TOUCH_TARGET).textAlign(TextAlign.Center)
+                    .fontColor(this.projectSelection.isSelected(item.project.id) ? Color.White : UiTokens.TEXT_SECONDARY)
+                    .backgroundColor(this.projectSelection.isSelected(item.project.id) ?
+                      UiTokens.PRIMARY : UiTokens.SURFACE_MUTED)
+                    .border({ width: 1, color: this.projectSelection.isSelected(item.project.id) ?
+                      UiTokens.PRIMARY : UiTokens.OUTLINE_SUBTLE })
+                    .borderRadius(UiTokens.TOUCH_TARGET / 2)
                   Column({ space: 3 }) {
-                    Text(item.project.name).fontSize(15).fontWeight(FontWeight.Medium).width('100%')
+                    Text(item.project.name).fontSize(16).fontWeight(FontWeight.Medium).width('100%')
                     Text(tr(`${item.captureCount} 条记录 · ${lifecycleLabel(item.project.lifecycleStatus)}`,
                       `${item.captureCount} record(s) · ${lifecycleLabel(item.project.lifecycleStatus)}`))
-                      .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
+                      .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
                   }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                 }
-                .padding(12).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(16)
+                .constraintSize({ minHeight: 64 })
+                .padding({ left: 12, right: 12, top: 10, bottom: 10 }).width('100%')
+                .backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
+                .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+                .accessibilityText(this.projectSelection.isSelected(item.project.id) ?
+                  tr(`已选择：${item.project.name}`, `Selected: ${item.project.name}`) :
+                  tr(`未选择：${item.project.name}`, `Not selected: ${item.project.name}`))
                 .onClick((): void => this.toggle(item.project.id))
-              }, (item: ProjectSummary) => item.project.id)
-            }.width('100%')
+              }
+            }, (item: ProjectSummary): string => item.project.id)
+          }
+          ListItem() {
             Row() {
               Column({ space: 3 }) {
                 Text(tr('包含私有原图', 'Include private originals')).fontSize(15)
@@ -531,8 +600,12 @@ export struct BackupScreen {
                   .fontColor(UiTokens.TEXT_SECONDARY).width('100%')
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Toggle({ type: ToggleType.Switch, isOn: this.includeOriginals })
-                .selectedColor(UiTokens.PRIMARY).onChange((value: boolean): void => { this.includeOriginals = value; })
-            }.padding(14).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(18)
+                .selectedColor(UiTokens.PRIMARY).accessibilityText(tr('包含私有原图', 'Include private originals'))
+                .onChange((value: boolean): void => { this.includeOriginals = value; })
+            }.padding(14).width('100%').backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
+              .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          }
+          ListItem() {
             Row() {
               Column({ space: 3 }) {
                 Text(tr('仅备份已完成记录', 'Back up completed records only')).fontSize(15)
@@ -542,37 +615,51 @@ export struct BackupScreen {
                   .fontColor(UiTokens.TEXT_SECONDARY).width('100%')
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Toggle({ type: ToggleType.Switch, isOn: this.skipFailed })
-                .selectedColor(UiTokens.PRIMARY).onChange((value: boolean): void => { this.skipFailed = value; })
-            }.padding(14).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(18)
+                .selectedColor(UiTokens.PRIMARY).accessibilityText(tr('仅备份已完成记录', 'Back up completed records only'))
+                .onChange((value: boolean): void => { this.skipFailed = value; })
+            }.padding(14).width('100%').backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
+              .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          }
+          ListItem() {
             Button(this.busy ? tr('正在生成…', 'Generating…') :
               tr(`生成备份（已选 ${this.selectedIds.length} 个）`,
                 `Generate backup (${this.selectedIds.length} selected)`))
               .height(50).width('100%').backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
               .enabled(!this.busy && this.selectedIds.length > 0).onClick((): void => { this.createBackup(); })
-            if (this.result !== null) {
+          }
+          if (this.result !== null) {
+            ListItem() {
               Button(tr('保存到其他位置', 'Save to another location')).height(46).width('100%')
                 .backgroundColor(UiTokens.PRIMARY_CONTAINER)
                 .fontColor(UiTokens.PRIMARY).onClick((): void => { this.saveBackup(); })
             }
-            if (this.message.length > 0) {
+          }
+          if (this.message.length > 0) {
+            ListItem() {
               Text(this.message).fontSize(13).fontColor(this.result === null ? UiTokens.DANGER : UiTokens.PRIMARY)
                 .lineHeight(20).width('100%')
             }
-            Divider().margin({ top: 8, bottom: 4 })
-            Text(tr('恢复项目', 'Restore projects')).fontSize(19).fontWeight(FontWeight.Bold).width('100%')
-            Text(tr('请选择由 SiteMark“备份项目”生成的单项目 ZIP 或多项目 bundle；普通照片分享 ZIP 无法恢复。',
-              'Choose a project ZIP or multi-project bundle created by SiteMark Backup. Ordinary photo-sharing ZIP files cannot be restored.'))
-              .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(19).width('100%')
-            Button(tr('选择备份 ZIP', 'Choose backup ZIP')).height(46).width('100%').backgroundColor('#E5EEE8')
+          }
+          ListItem() {
+            Column({ space: 8 }) {
+              Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
+              Text(tr('恢复项目', 'Restore projects')).fontSize(19).fontWeight(FontWeight.Bold).width('100%')
+              Text(tr('请选择由 SiteMark“备份项目”生成的单项目 ZIP 或多项目 bundle；普通照片分享 ZIP 无法恢复。',
+                'Choose a project ZIP or multi-project bundle created by SiteMark Backup. Ordinary photo-sharing ZIP files cannot be restored.'))
+                .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(19).width('100%')
+              Button(tr('选择备份 ZIP', 'Choose backup ZIP')).height(46).width('100%').backgroundColor(UiTokens.SURFACE_MUTED)
               .fontColor(UiTokens.PRIMARY).enabled(!this.busy)
               .onClick((): void => { this.restoreBackup(); })
-            Text(tr('系统相册中的照片独立保留；重要备份请保存到应用目录之外。',
-              'System gallery photos remain independent. Save important backups outside the app directory.'))
-              .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(18).width('100%')
+              Text(tr('系统相册中的照片独立保留；重要备份请保存到应用目录之外。',
+                'System gallery photos remain independent. Save important backups outside the app directory.'))
+                .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(18).width('100%')
+            }.width('100%')
           }
-          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
-          .width('100%')
-        }.layoutWeight(1)
+        }
+        .cachedCount(4)
+        .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+        .width('100%')
+        .layoutWeight(1)
       }.width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }.hideTitleBar(true)
   }
