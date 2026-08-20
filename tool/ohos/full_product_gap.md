@@ -13,7 +13,7 @@
 - 应用内串行队列：`InAppSerialBackgroundWorkClient` 对 `CaptureProcessResult.retry` / runner 抛错做 30s × 2^(n-1) 退避，不挡后续 capture；`failed` 不重排。官方 `ohos_background_work_client_test` **6 项全绿**。不是 WorkScheduler 进程保活。
 - 相册适配器删除按 URI 身份：`ProbingGalleryStore.delete` 对沙箱 `file://` 走 picker，其余走 ACL，不再按当前探测模式转发。官方 `gallery_store_test` **8 绿**。无相册 dump。
 - 备份恢复同编号：删刚恢复 / 再发布后的副本只动本行 `captureId` 与 `publishedUri`，不得串原项目 gallery URI。官方 `capture_media_service_test` 已锁。
-- `.github/workflows/ohos.yml` 已纳入降级引擎 / GPS / 鸿蒙通道 / 存储页 / 外观页 / 拍摄表单 / 拍摄工作流 / 定位协调器 / 启动恢复 / widget / lifecycle / 备份导入 / 拍摄失败引导测试。push `ohos` 即跑。取消拍照不占下一张当日编号；拒绝定位仍 queued 出片；连拍当日 `001` 然后 `002`（官方 `capture_workflow_test` 已锁）。
+- `.github/workflows/ohos.yml` 已纳入降级引擎 / GPS / 鸿蒙通道 / 存储页 / 外观页 / 拍摄表单 / 拍摄工作流 / 定位协调器 / 启动恢复 / widget / lifecycle / 备份导入 / 拍摄失败引导测试。push `ohos` 即跑。取消拍照不占下一张当日编号；pending 空文件恢复不占号；live 空 URI / materialize 无内容走 cancelled（官方 `capture_workflow_test` / `capture_session_store_test` 已锁）。拒绝定位仍 queued 出片；连拍当日 `001` 然后 `002`。
 - 启动恢复四窗：`AppStartupRecovery` 回调式并行开工相册待清理 / 发布日记 / 相机 / 定位 / 队列；日记抽出为 `CaptureMediaService.recoverPublishJournals()`。官方 `app_startup_recovery_test` 已锁「相机挂起仍开工其余窗」。无杀进程 dump。队列仍是应用内内存串行。
 - `OhosArchivePickService` + 宿主 `pickArchive`：恢复选文件走原生 `DocumentViewPicker.select`（单选 `.zip`），`copyUriToPath` 到 `files/imports/sitemark-restore-*.zip`。未做模拟器点选 zip dump。
 - 宿主 `inspectImage`：ImageKit 读宽高 / 大小 / MIME / 可选 EXIF GPS；宿主 GPS 空时 Dart 解析 JPEG EXIF 度分秒或单值十进制度回填。官方 `jpeg_gps_test` **6 项全绿**，`ohos_platform_services_test` **30 项全绿**。无拍成 dump、无坐标 dump。

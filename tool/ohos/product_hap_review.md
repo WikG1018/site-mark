@@ -2,6 +2,16 @@
 
 包名 `io.github.wikg1018.sitemark`，版本 `1.0.8+23`。设备：DevEco 模拟器 `SiteMarkPhone602`，hdc `127.0.0.1:5555`。入口：全量 `lib/main.dart` 未签名 HAP。
 
+## 2026-08-20 Task 58
+
+云端闭环：pending 空文件恢复为 cancelled 且不占下一张当日编号；live `launchCamera` 空 `resultUri` / materialize 后无内容走 `cameraCancelled`，不再留下失败行。权限拒绝 / 无 Ability / picker 抛错 / 拷贝失败仍 `cameraFailed`。官方测试闭环，未重编 HAP，无拍成 dump。队列仍是应用内内存串行。Task 46–58 Dart 未进 HAP。
+
+| 项 | 结果 |
+| --- | --- |
+| CI | 规格点名测试已在 `ohos.yml`（`capture_workflow_test` + `packages/sitemark_system_api/test`），本刀未改清单 |
+| 官方测试 | `capture_workflow_test` + `capture_session_store_test` 合计 **24 绿** |
+| 模拟器 dump | **无**。不得写相机已拍成；不得写 WorkScheduler 保活 |
+
 ## 2026-08-20 Task 57
 
 云端闭环：拒绝定位仍 `queued` 出片且有当日编号；两张成功连拍当日 `001` 然后 `002`；`ohos.yml` 纳入 `capture_location_coordinator_test.dart`。生产路径已先 `markCaptured` 再解析定位，本刀未改编号或定位语义。官方测试闭环，未重编 HAP，无拍成 dump。队列仍是应用内内存串行。

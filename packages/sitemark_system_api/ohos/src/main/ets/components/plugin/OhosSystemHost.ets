@@ -234,7 +234,7 @@ export default class OhosSystemHost {
         }
         const resultUri = pickerResult.resultUri ?? '';
         if (resultUri.length === 0) {
-          return this.cameraFailed(target);
+          return this.cameraCancelled(target);
         }
         return await this.materializeCapture(resultUri, target);
       } catch (_pickerError) {
@@ -1100,7 +1100,7 @@ export default class OhosSystemHost {
     if (this.hasCaptureContent(target)) {
       return this.cameraCaptured(target);
     }
-    return this.cameraFailed(target);
+    return this.cameraCancelled(target);
   }
 
   private isSandboxCapturePath(uri: string, target: string): boolean {
