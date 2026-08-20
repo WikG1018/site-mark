@@ -4,9 +4,10 @@ import { CaptureFilter, CapturePage, CapturePageCursor, CaptureRecord, ProjectRe
   ProjectSummary } from '../../domain/Models';
 import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { CaptureCard } from '../records/RecordComponents';
+import { RecordNavigationSeedStore } from '../records/RecordUiCoordinator';
 import { AppTopBar, EmptyPanel, InlineErrorPanel, ListSkeleton, SectionHeader } from '../../shared/AppComponents';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
-import { formatDateTime, lifecycleLabel } from '../../shared/Formatters';
+import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { ProjectBackupService } from '../backup/BackupService';
 import { AppText, tr } from '../../shared/AppText';
@@ -643,6 +644,8 @@ export struct ProjectDetailScreen {
   }
 
   private openCapture(capture: CaptureRecord): void {
+    const path = capture.renderedPath.length > 0 ? capture.renderedPath : capture.originalPath;
+    RecordNavigationSeedStore.put(capture, path.length > 0 ? imageUri(path) : '');
     AppRuntime.require().selectedCaptureId = capture.id;
     this.pathStack.pushPathByName(Routes.CAPTURE_DETAIL, null);
   }
