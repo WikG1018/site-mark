@@ -80,6 +80,6 @@
 - [x] **Step 2: Run tests to verify the probing-delete tests fail**
 - [x] **Step 3: Minimal implementation** — `ProbingGalleryStore.delete` 按 URI 方案路由，不再 `_resolve()` 到当前模式
 - [x] **Step 4: Official tests green**
-- [ ] **Step 5: Honest docs + commit + push origin/ohos**
+- [x] **Step 5: Honest docs + commit + push origin/ohos**
 
 不得写系统相册 / 拍成 / 备份进系统文件管理已通。

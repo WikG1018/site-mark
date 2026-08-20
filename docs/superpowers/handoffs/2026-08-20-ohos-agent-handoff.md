@@ -2,7 +2,7 @@
 
 > 交接对象：下一个负责 `ohos` 分支的 Agent（云端环境）。
 > 本文档自包含：只依赖本仓库与 GitHub，不依赖任何上一台机器的本地路径。
-> 事实基准：`ohos` 分支 `754afe3`（2026-08-20）。
+> 事实基准：`ohos` 分支 `3b76d90`（2026-08-20）。
 
 ## 1. 一句话现状
 
@@ -58,7 +58,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私�
 | 48 | 相册探测诚实化 | `9956843` | `2026-08-20-harmonyos-gallery-access-honesty.md` |
 | 49 | 拍摄页降级水印提示 | `f3f80d2` | `2026-08-20-harmonyos-capture-degraded-watermark-hint.md` |
 | 50 | 动态取色诚实化 | `754afe3` | `2026-08-20-harmonyos-dynamic-color-honesty.md` |
-| 51–52 | CI 扩容 + captureId 删除锁 | 本轮 | `2026-08-20-harmonyos-ci-and-captureid-delete.md` |
+| 51–52 | CI 扩容 + captureId 删除锁 | `3b76d90` | `2026-08-20-harmonyos-ci-and-captureid-delete.md` |
 
 早期任务（0–38）：系统宿主与通道、隐私同意、串行队列、HAP 工程与全量 `lib/main.dart` 编译、备份导出/读回、原生 Document picker 选档、ImageKit 读图、ShareKit、NotificationKit、startAbility 外链——链路与证据见 `README.md` 与 `tool/ohos/product_hap_review.md`。
 
