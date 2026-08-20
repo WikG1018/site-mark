@@ -26,13 +26,8 @@ if (-not $SkipRust) {
     -NativeSdkRoot (Join-Path $env:DEVECO_SDK_HOME 'default\openharmony\native')
 }
 if ($RunTests) {
-  Push-Location $repoRoot
-  try {
-    & python -m unittest tool.test_ohos_capture_database_contract
-    if ($LASTEXITCODE -ne 0) { throw 'HarmonyOS SQLite contract tests failed' }
-  } finally {
-    Pop-Location
-  }
+  & (Join-Path $PSScriptRoot 'run-host-tests.ps1')
+  if ($LASTEXITCODE -ne 0) { throw 'HarmonyOS host tests failed' }
 }
 Push-Location $projectRoot
 try {
