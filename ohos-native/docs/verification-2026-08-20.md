@@ -1,26 +1,26 @@
 # 鸿蒙原生版自动化验证记录（2026-08-20）
 
-本记录对应实现基线 `37cd6d6`。它记录可重复的自动化证据，不代表模拟器或真机验收。
+本记录对应实现基线 `cd4a8bd`。它记录可重复的自动化证据，不代表模拟器或真机验收。
 
 ## 自动化结果
 
 | 门禁 | 命令 | 结果 |
 | --- | --- | --- |
-| 鸿蒙数据库契约 | `python -m unittest tool.test_ohos_capture_database_contract` | 10 项通过 |
-| ArkTS 全量测试 + debug HAP | `pwsh -File .\tool\ohos-native\build-hap.ps1 -SkipRust -RunTests` | 169 项通过；debug unsigned HAP 构建成功 |
-| ArkTS 报告防假绿 | `pwsh -File .\tool\ohos-native\test\verify-test-result.Tests.ps1` | 成功报告可解析；失败、错误、缺失/畸形汇总均会使门禁失败 |
-| Python 仓库门禁 | `python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources tool.test_verify_release_tag tool.test_release_workflow tool.test_verify_ohos_native_manifest tool.test_ohos_capture_database_contract` | 全量通过 |
+| 鸿蒙主机门禁 | `pwsh -File .\tool\ohos-native\run-host-tests.ps1` | 34 项通过；包含数据库契约、返回接线、清单与门禁自测 |
+| ArkTS 全量测试 + debug HAP | `pwsh -File .\tool\ohos-native\build-hap.ps1 -SkipRust -RunTests` | 182 项通过；debug unsigned HAP 构建成功 |
+| ArkTS 报告防假绿 | 由主机门禁调用 `verify-test-result.Tests.ps1` | 成功报告可解析；失败、错误、缺失/畸形汇总均会使门禁失败 |
 | Rust 格式 | `cargo fmt --manifest-path rust/Cargo.toml --check` | 通过 |
-| Rust 鸿蒙特性静态检查 | `cargo clippy --manifest-path rust/Cargo.toml --no-default-features --features ohos-native --all-targets -- -D warnings` | 通过 |
-| Rust 鸿蒙特性测试 | `cargo test --manifest-path rust/Cargo.toml --no-default-features --features ohos-native` | 全量通过 |
+| Rust 鸿蒙特性静态检查 | `cargo clippy --manifest-path rust/Cargo.toml --features ohos-native --all-targets -- -D warnings` | 通过 |
+| Rust 鸿蒙特性测试 | `cargo test --manifest-path rust/Cargo.toml --features ohos-native` | 64 项通过 |
 | Flutter 静态检查 | `flutter analyze` | 通过 |
-| Flutter 回归 | `flutter test` | 全量通过 |
+| Flutter 回归 | `flutter test` | 1,000 项通过 |
 
 本地新工作树先运行 `pwsh -File .\tool\ohos-native\build-rust.ps1` 生成 `arm64-v8a` 与 `x86_64` 原生库，再使用 `-SkipRust` 构建 HAP。2026-08-20 的 debug 产物为：
 
 ```text
 ohos-native/entry/build/default/outputs/default/entry-default-unsigned.hap
-SHA-256: 5CE33B5D5092B35614E188813B523CF273614D315F07AA794BC32BA80777AE9D
+大小: 35,334,917 bytes
+SHA-256: 5C14F0AC8D299F92368F0D3FA876A1F5256B67A43DA6F7A72644BBCE91180674
 ```
 
 该哈希仅对应本次本地 debug unsigned 构建；重新编译后应重新计算，不能作为发布签名包哈希复用。
