@@ -1,6 +1,7 @@
 export class LazyListDataSource<T> implements IDataSource {
   private items: T[] = [];
   private listeners: DataChangeListener[] = [];
+  private hasReplaced: boolean = false;
   private readonly keyOf: (item: T) => string;
 
   constructor(keyOf: (item: T) => string) {
@@ -12,7 +13,7 @@ export class LazyListDataSource<T> implements IDataSource {
   }
 
   getData(index: number): T {
-    if (index < 0 || index >= this.items.length) {
+    if (!Number.isFinite(index) || !Number.isInteger(index) || index < 0 || index >= this.items.length) {
       throw new Error('lazy_list_index_out_of_range');
     }
     return this.items[index];
@@ -27,8 +28,10 @@ export class LazyListDataSource<T> implements IDataSource {
     const nextKeys = values.map((item: T): string => this.keyOf(item));
     const sameOrder = previousKeys.length === nextKeys.length &&
       previousKeys.every((key: string, index: number): boolean => key === nextKeys[index]);
+    const isFirstReplacement = !this.hasReplaced;
+    this.hasReplaced = true;
     this.items = values.slice();
-    if (!sameOrder) {
+    if (isFirstReplacement || !sameOrder) {
       for (const listener of this.listeners) {
         listener.onDataReloaded();
       }

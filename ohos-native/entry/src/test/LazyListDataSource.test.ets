@@ -18,6 +18,15 @@ class RecordingListener implements DataChangeListener {
   onDatasetChange(_operations: DataOperation[]): void {}
 }
 
+function rejectsIndex(source: LazyListDataSource<string>, index: number): boolean {
+  try {
+    source.getData(index);
+    return false;
+  } catch (_) {
+    return true;
+  }
+}
+
 export default function lazyListDataSourceTest(): void {
   describe('LazyListDataSource', () => {
     it('reloads on the first replace and changes every stable-key item on replacement', 0, () => {
@@ -30,6 +39,18 @@ export default function lazyListDataSourceTest(): void {
 
       expect(listener.reloads).assertEqual(1);
       expect(listener.changed.join(',')).assertEqual('0,1');
+    });
+
+    it('reloads the first empty replacement but ignores a second identical empty replacement', 0, () => {
+      const source = new LazyListDataSource<string>((value: string): string => value);
+      const listener = new RecordingListener();
+      source.registerDataChangeListener(listener);
+
+      source.replace([]);
+      source.replace([]);
+
+      expect(listener.reloads).assertEqual(1);
+      expect(listener.changed.length).assertEqual(0);
     });
 
     it('reloads when replacement key order changes', 0, () => {
@@ -70,13 +91,12 @@ export default function lazyListDataSourceTest(): void {
 
       expect(source.totalCount()).assertEqual(1);
       expect(source.getData(0)).assertEqual('a');
-      let outOfRange = false;
-      try {
-        source.getData(1);
-      } catch (error) {
-        outOfRange = (error as Error).message === 'lazy_list_index_out_of_range';
-      }
-      expect(outOfRange).assertTrue();
+      expect(rejectsIndex(source, Number.NaN)).assertTrue();
+      expect(rejectsIndex(source, Number.POSITIVE_INFINITY)).assertTrue();
+      expect(rejectsIndex(source, Number.NEGATIVE_INFINITY)).assertTrue();
+      expect(rejectsIndex(source, 0.5)).assertTrue();
+      expect(rejectsIndex(source, -1)).assertTrue();
+      expect(rejectsIndex(source, 1)).assertTrue();
       source.unregisterDataChangeListener(listener);
       source.appendUnique(['b']);
       expect(listener.added.length).assertEqual(0);
