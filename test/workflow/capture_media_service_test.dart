@@ -355,7 +355,7 @@ void main() {
             supersededUris: const [],
           ),
         );
-      await observed.cleanupInterrupted();
+      await observed.recoverPublishJournals();
       await pumpEventQueue();
 
       final recoveries = store.events
@@ -383,6 +383,7 @@ void main() {
             supersededUris: const ['content://media/site-mark/8'],
           ),
         );
+      await observed.recoverPublishJournals();
       await observed.cleanupInterrupted();
       await pumpEventQueue();
 
@@ -678,7 +679,7 @@ void main() {
   });
 
   // ------------------------------------------------------------------
-  // Publish-journal reconciliation (_recoverPublishJournals).
+  // Publish-journal reconciliation (recoverPublishJournals).
   //
   // The Android publisher journals a finalized publish right after the
   // new MediaStore row is finalized but before the caller's database
@@ -707,6 +708,7 @@ void main() {
         ),
       );
 
+      await service.recoverPublishJournals();
       await service.cleanupInterrupted();
 
       final record = await database.captureById('capture-1');
@@ -735,7 +737,7 @@ void main() {
       ),
     );
 
-    await service.cleanupInterrupted();
+    await service.recoverPublishJournals();
 
     expect(platform.clearedJournalIds, ['capture-1']);
     expect(platform.deletedUris, isEmpty);
@@ -772,7 +774,7 @@ void main() {
       ),
     );
 
-    await service.cleanupInterrupted();
+    await service.recoverPublishJournals();
 
     expect(platform.clearedJournalIds, isEmpty);
     expect(platform.recoveredJournals, hasLength(1));
@@ -796,6 +798,7 @@ void main() {
         ),
       );
 
+      await service.recoverPublishJournals();
       await service.cleanupInterrupted();
 
       expect(platform.deletedUris.toSet(), {
@@ -837,6 +840,7 @@ void main() {
         ),
       );
 
+      await service.recoverPublishJournals();
       await service.cleanupInterrupted();
 
       expect(platform.clearedJournalIds, ['capture-2']);
@@ -918,6 +922,7 @@ void main() {
         ),
       );
 
+      await service.recoverPublishJournals();
       await service.cleanupInterrupted();
 
       // ONLY the restored row adopts the journaled URI.
@@ -1013,7 +1018,7 @@ void main() {
           supersededUris: const [],
         ),
       );
-      await service.cleanupInterrupted();
+      await service.recoverPublishJournals();
 
       expect(platform.clearedJournalIds, ['capture-1']);
       expect(platform.publishCount, 1);
@@ -1235,6 +1240,7 @@ void main() {
         ),
       );
 
+      await service.recoverPublishJournals();
       await service.cleanupInterrupted();
 
       expect(platform.deletedUris.toSet(), {
@@ -1294,6 +1300,7 @@ void main() {
         expect(fresh.succeededIds, ['capture-1']);
       };
 
+      await service.recoverPublishJournals();
       await service.cleanupInterrupted();
 
       // The record keeps the NEWER U3 — the stale journal U2 was never

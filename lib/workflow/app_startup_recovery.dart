@@ -8,6 +8,7 @@ class AppStartupRecovery {
     required this.cleanupInterruptedBundleRestores,
     required this.cleanupInterruptedProjectDeletions,
     required this.cleanupInterruptedCaptureMedia,
+    required this.recoverPublishJournals,
   });
 
   final Future<void> Function() recoverCamera;
@@ -18,6 +19,7 @@ class AppStartupRecovery {
   final Future<void> Function() cleanupInterruptedBundleRestores;
   final Future<void> Function() cleanupInterruptedProjectDeletions;
   final Future<void> Function() cleanupInterruptedCaptureMedia;
+  final Future<void> Function() recoverPublishJournals;
 
   Future<void> run() async {
     await _bestEffort(cleanupInterruptedExports);
@@ -26,15 +28,18 @@ class AppStartupRecovery {
     await _bestEffort(cleanupInterruptedImports);
     await _bestEffort(cleanupInterruptedBundleRestores);
     await _bestEffort(cleanupInterruptedProjectDeletions);
-    await _bestEffort(cleanupInterruptedCaptureMedia);
 
-    // Core recovery stages are best-effort for the same reason as cleanup:
-    // camera/plugin, SQLite, location and WorkManager failures are independent.
-    // A transient failure in one subsystem must not skip later recovery work or
-    // escape into the root post-frame callback.
-    await _bestEffort(recoverCamera);
-    await _bestEffort(resolveLocations);
-    await _bestEffort(reconcileQueue);
+    // Kill-process windows must start together. Camera recovery can hang on a
+    // dead plugin host; the queue, album cleanup, and publish-journal windows
+    // still have to re-enter. Each callback is isolated so one error cannot
+    // skip a sibling window.
+    await Future.wait([
+      _bestEffort(cleanupInterruptedCaptureMedia),
+      _bestEffort(recoverPublishJournals),
+      _bestEffort(recoverCamera),
+      _bestEffort(resolveLocations),
+      _bestEffort(reconcileQueue),
+    ]);
   }
 
   Future<void> _bestEffort(Future<void> Function() operation) async {

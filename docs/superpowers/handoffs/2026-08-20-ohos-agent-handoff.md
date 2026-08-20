@@ -2,7 +2,7 @@
 
 > 交接对象：下一个负责 `ohos` 分支的 Agent（云端环境）。
 > 本文档自包含：只依赖本仓库与 GitHub，不依赖任何上一台机器的本地路径。
-> 事实基准：`ohos` 分支 `3b76d90`（2026-08-20）。
+> 事实基准：`ohos` 分支 Task 53（杀进程四窗语义）。提交哈希以本文件落地后的 `git log origin/ohos -1` 为准。
 
 ## 1. 一句话现状
 
@@ -66,7 +66,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私�
 
 - CI：`.github/workflows/ohos.yml`，push 到 `ohos` 即触发；ubuntu-latest + 官方 Flutter **3.44.6**，`flutter pub get` + 指定测试子集。
 - 云端跑测试就是标准命令：`flutter test <文件或目录>`。无需任何本机技巧（此前 Windows 本机的沙箱终端问题属机器特例，云端不复现）。
-- 官方 Flutter 3.44.6 全绿的测试文件（Tasks 51–52 起已全部进 `ohos.yml`）：
+- 官方 Flutter 3.44.6 全绿的测试文件（Tasks 51–53 起已全部进 `ohos.yml`）：
 
 | 测试文件 | 计数 |
 | --- | --- |
@@ -79,7 +79,8 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私�
 | `test/features/settings/sections/appearance_section_screen_test.dart` | 9 绿 |
 | `test/features/capture/capture_form_screen_test.dart` | 19 绿 |
 | `test/workflow/capture_processor_test.dart` | CI 覆盖 |
-| `test/workflow/capture_media_service_test.dart` | CI 覆盖；含恢复同编号删除锁 |
+| `test/workflow/capture_media_service_test.dart` | CI 覆盖；含恢复同编号删除锁；日记对账走独立 `recoverPublishJournals()` |
+| `test/workflow/app_startup_recovery_test.dart` | CI 覆盖；相机挂起时队列 / 日记 / 相册窗仍开工 |
 | `test/background/capture_background_scheduler_test.dart` | CI 覆盖 |
 | `test/features/onboarding/privacy_consent_gate_test.dart` | CI 覆盖 |
 
@@ -103,7 +104,8 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私�
 | 降级引擎 | `lib/platform/degraded_image_pipeline.dart` | `isDegraded => true`；`render` = `bakeOrientation` + `dart:ui` 半透明字段卡片（对齐 Rust `labels()`）；`export`/`readProjectArchive` 等用 `package:archive` + `crypto` 实现 schema 5 zip 自读自恢复 |
 | pipeline 注入 | `lib/app.dart` 的 `imagePipelineProvider` | ohos 或 rust init 失败 → `DegradedImagePipeline`；`MyApp(imagePipeline:)` 供测试注入 |
 | 动态取色 | `lib/app.dart` 的 `supportsDynamicColorProvider` | 默认 `!isOhosBuild`；外观页据此隐藏「跟随系统取色」开关并显示「鸿蒙暂不支持壁纸动态取色」 |
-| 后台队列 | `lib/platform/ohos_background_work_client.dart` | 应用内串行队列；`retry`/抛错 30s × 2^(n-1) 指数退避，最多 3 次调度重试；`failed` 不重排。**不是** WorkScheduler 进程保活 |
+| 后台队列 | `lib/platform/ohos_background_work_client.dart` | 应用内串行队列；`retry`/抛错 30s × 2^(n-1) 指数退避，最多 3 次调度重试；`failed` 不重排。**不是** WorkScheduler 进程保活。进程被杀后只靠冷启动 `reconcilePending` 对账 Drift 行 |
+| 启动四窗 | `lib/workflow/app_startup_recovery.dart` | 回调式：先串行清理 exports/imports/bundles/deletions，再 `Future.wait` 相册待清理 / 发布日记 / 相机 / 定位 / 队列。一窗挂起或抛错不得跳过其余窗。日记抽出为 `CaptureMediaService.recoverPublishJournals()`，不得折回 `cleanupInterrupted`。无杀进程 dump |
 | GPS 回退 | `lib/platform/jpeg_gps.dart` | 宿主 GPS 皆空时解析 JPEG EXIF（度分秒 3 rational 或单值十进制度；S/W 取负） |
 | UI 诚实提示 | 三个语义 Key | `watermark-engine-degraded`（存储页/拍摄详情/拍摄表单）、`gallery-picker-fallback`（存储页/拍摄表单）、`dynamic-color-unavailable`（外观页） |
 | 相册诚实化 | `OhosSystemHost.ets` 的 `detectGalleryAccess` | 无 ACL 证明固定返回 `pickerFallback`；READ+WRITE 媒体权限不算 ACL；发布路径 `hasMediaWritePermission()` 才尝试 `createAsset` |
@@ -122,14 +124,14 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 52：产品主链路（隐私�
 - 不提交：HAP、`ohos/entry/libs/`、构建缓存、一次性模拟器脚本、社区 pubspec lock、测试日志、审查 dump 临时文件。
 - 用户没有真机；此前的模拟器验证全部在上一台本地 Windows 环境完成。云端 Agent 若要 dump 类证据，需要用户提供本地环境配合。
 
-## 9. 下一步建议（Task 53 起）
+## 9. 下一步建议（Task 54 起）
 
 优先做**不依赖 dump** 的体验/诚实缺口（云端可闭环）：
 
-1. 对照规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 剩余「必须/不得」项，继续找可 TDD 的缺口（杀进程四窗在鸿蒙队列上的语义补强仍可做；相册 ACL 精确替换仍无 dump）。
-2. 若用户能提供本地环境：按第 6 节重编 HAP（注意 wantAgent / EntryAbility import 风险；**Task 46–52 的 Dart 侧改动尚未重编进任何 HAP**），做拍成 / 坐标 / 相册 / 分享 / 通知 / 外链 dump 走查，逐项解除第 3 节的门控。
+1. 对照规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 剩余「必须/不得」项，继续找可 TDD 的缺口（相册 ACL 精确替换仍无 dump）。不要再把「四窗串行阻塞」当缺口——语义已锁。
+2. 若用户能提供本地环境：按第 6 节重编 HAP（注意 wantAgent / EntryAbility import 风险；**Task 46–53 的 Dart 侧改动尚未重编进任何 HAP**），做拍成 / 坐标 / 相册 / 分享 / 通知 / 外链 dump 走查，逐项解除第 3 节的门控。杀进程四窗没有模拟器 dump，不得写进程被杀后四窗已在真机/模拟器验证。
 
-**已完成、不要重做：** Task 51 CI 扩容；Task 52 备份恢复同编号不得串 URI、删除按 URI/`captureId`。
+**已完成、不要重做：** Task 51 CI 扩容；Task 52 备份恢复同编号不得串 URI、删除按 URI/`captureId`；Task 53 启动四窗并行开工（回调 API，日记已抽出）。
 
 **明确放弃的假缺口（不要重做）**：last-known 定位（Android 也没有）、逆地理（Android `address` 也是 null）、叠水印后 JPEG 写回 GPS（Rust 也不写）、通知点击接线（`deliverNotificationTap` 已有）、照片编号入水印（Rust `labels()` 也不画）、WorkScheduler / `startBackgroundRunning` 当 WorkManager 对等。
 

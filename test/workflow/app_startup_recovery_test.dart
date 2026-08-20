@@ -1,97 +1,94 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
+
+AppStartupRecovery recoveryFor(
+  List<String> events, {
+  Future<void> Function()? recoverCamera,
+  Future<void> Function()? reconcileQueue,
+  Future<void> Function()? cleanupInterruptedCaptureMedia,
+  Future<void> Function()? recoverPublishJournals,
+  Future<void> Function()? cleanupInterruptedExports,
+  Future<void> Function()? cleanupInterruptedImports,
+  Future<void> Function()? cleanupInterruptedBundleRestores,
+  Future<void> Function()? cleanupInterruptedProjectDeletions,
+  Future<void> Function()? resolveLocations,
+}) {
+  Future<void> stage(String name) async => events.add(name);
+  return AppStartupRecovery(
+    recoverCamera: recoverCamera ?? () => stage('camera'),
+    resolveLocations: resolveLocations ?? () => stage('location'),
+    reconcileQueue: reconcileQueue ?? () => stage('queue'),
+    cleanupInterruptedExports:
+        cleanupInterruptedExports ?? () => stage('exports'),
+    cleanupInterruptedImports:
+        cleanupInterruptedImports ?? () => stage('imports'),
+    cleanupInterruptedBundleRestores:
+        cleanupInterruptedBundleRestores ?? () => stage('bundles'),
+    cleanupInterruptedProjectDeletions:
+        cleanupInterruptedProjectDeletions ?? () => stage('deletions'),
+    cleanupInterruptedCaptureMedia:
+        cleanupInterruptedCaptureMedia ?? () => stage('media'),
+    recoverPublishJournals:
+        recoverPublishJournals ?? () => stage('publishJournals'),
+  );
+}
+
+void expectCleanupThenCore(List<String> events) {
+  expect(events.take(4).toList(), [
+    'exports',
+    'imports',
+    'bundles',
+    'deletions',
+  ]);
+  expect(
+    events.skip(4).toSet(),
+    {
+      'media',
+      'publishJournals',
+      'camera',
+      'location',
+      'queue',
+    },
+  );
+  expect(events, hasLength(9));
+}
 
 void main() {
   test(
     'cleans interrupted imports, bundles, and deletions before core recovery',
     () async {
       final events = <String>[];
-      final recovery = AppStartupRecovery(
-        recoverCamera: () async => events.add('camera'),
-        resolveLocations: () async => events.add('location'),
-        reconcileQueue: () async => events.add('queue'),
-        cleanupInterruptedExports: () async => events.add('exports'),
-        cleanupInterruptedImports: () async => events.add('imports'),
-        cleanupInterruptedBundleRestores: () async => events.add('bundles'),
-        cleanupInterruptedProjectDeletions: () async => events.add('deletions'),
-        cleanupInterruptedCaptureMedia: () async => events.add('media'),
-      );
-
-      await recovery.run();
-
-      expect(events, [
-        'exports',
-        'imports',
-        'bundles',
-        'deletions',
-        'media',
-        'camera',
-        'location',
-        'queue',
-      ]);
+      await recoveryFor(events).run();
+      expectCleanupThenCore(events);
     },
   );
 
   test('import cleanup failure does not block core startup recovery', () async {
     final events = <String>[];
-    final recovery = AppStartupRecovery(
-      recoverCamera: () async => events.add('camera'),
-      resolveLocations: () async => events.add('location'),
-      reconcileQueue: () async => events.add('queue'),
-      cleanupInterruptedExports: () async => events.add('exports'),
+    await recoveryFor(
+      events,
       cleanupInterruptedImports: () async {
         events.add('imports');
         throw StateError('simulated cleanup failure');
       },
-      cleanupInterruptedBundleRestores: () async => events.add('bundles'),
-      cleanupInterruptedProjectDeletions: () async => events.add('deletions'),
-      cleanupInterruptedCaptureMedia: () async => events.add('media'),
-    );
-
-    await recovery.run();
-
-    expect(events, [
-      'exports',
-      'imports',
-      'bundles',
-      'deletions',
-      'media',
-      'camera',
-      'location',
-      'queue',
-    ]);
+    ).run();
+    expectCleanupThenCore(events);
   });
 
   test(
     'bundle cleanup failure does not block later startup recovery',
     () async {
       final events = <String>[];
-      final recovery = AppStartupRecovery(
-        recoverCamera: () async => events.add('camera'),
-        resolveLocations: () async => events.add('location'),
-        reconcileQueue: () async => events.add('queue'),
-        cleanupInterruptedExports: () async => events.add('exports'),
-        cleanupInterruptedImports: () async => events.add('imports'),
+      await recoveryFor(
+        events,
         cleanupInterruptedBundleRestores: () async {
           events.add('bundles');
           throw StateError('simulated bundle cleanup failure');
         },
-        cleanupInterruptedProjectDeletions: () async => events.add('deletions'),
-        cleanupInterruptedCaptureMedia: () async => events.add('media'),
-      );
-
-      await recovery.run();
-
-      expect(events, [
-        'exports',
-        'imports',
-        'bundles',
-        'deletions',
-        'media',
-        'camera',
-        'location',
-        'queue',
-      ]);
+      ).run();
+      expectCleanupThenCore(events);
     },
   );
 
@@ -99,41 +96,21 @@ void main() {
     'project deletion cleanup failure does not block core startup recovery',
     () async {
       final events = <String>[];
-      final recovery = AppStartupRecovery(
-        recoverCamera: () async => events.add('camera'),
-        resolveLocations: () async => events.add('location'),
-        reconcileQueue: () async => events.add('queue'),
-        cleanupInterruptedExports: () async => events.add('exports'),
-        cleanupInterruptedImports: () async => events.add('imports'),
-        cleanupInterruptedBundleRestores: () async => events.add('bundles'),
+      await recoveryFor(
+        events,
         cleanupInterruptedProjectDeletions: () async {
           events.add('deletions');
           throw StateError('simulated deletion cleanup failure');
         },
-        cleanupInterruptedCaptureMedia: () async => events.add('media'),
-      );
-
-      await recovery.run();
-
-      expect(events, [
-        'exports',
-        'imports',
-        'bundles',
-        'deletions',
-        'media',
-        'camera',
-        'location',
-        'queue',
-      ]);
+      ).run();
+      expectCleanupThenCore(events);
     },
   );
 
   test('all cleanup failures remain isolated from core recovery', () async {
     final events = <String>[];
-    final recovery = AppStartupRecovery(
-      recoverCamera: () async => events.add('camera'),
-      resolveLocations: () async => events.add('location'),
-      reconcileQueue: () async => events.add('queue'),
+    await recoveryFor(
+      events,
       cleanupInterruptedExports: () async {
         events.add('exports');
         throw StateError('export');
@@ -154,23 +131,11 @@ void main() {
         events.add('media');
         throw StateError('media');
       },
-    );
-
-    await recovery.run();
-
-    expect(events, [
-      'exports',
-      'imports',
-      'bundles',
-      'deletions',
-      'media',
-      'camera',
-      'location',
-      'queue',
-    ]);
+    ).run();
+    expectCleanupThenCore(events);
   });
 
-  for (final failingStage in ['camera', 'location', 'queue']) {
+  for (final failingStage in ['publishJournals', 'camera', 'location', 'queue']) {
     test(
       '$failingStage recovery failure does not block later stages',
       () async {
@@ -180,7 +145,8 @@ void main() {
           if (name == failingStage) throw StateError(name);
         }
 
-        final recovery = AppStartupRecovery(
+        await recoveryFor(
+          events,
           recoverCamera: () => stage('camera'),
           resolveLocations: () => stage('location'),
           reconcileQueue: () => stage('queue'),
@@ -189,21 +155,64 @@ void main() {
           cleanupInterruptedBundleRestores: () => stage('bundles'),
           cleanupInterruptedProjectDeletions: () => stage('deletions'),
           cleanupInterruptedCaptureMedia: () => stage('media'),
-        );
-
-        await recovery.run();
-
-        expect(events, [
-          'exports',
-          'imports',
-          'bundles',
-          'deletions',
-          'media',
-          'camera',
-          'location',
-          'queue',
-        ]);
+          recoverPublishJournals: () => stage('publishJournals'),
+        ).run();
+        expectCleanupThenCore(events);
       },
     );
   }
+
+  test(
+    'hanging camera recovery still starts queue journal and album windows',
+    () async {
+      final cameraHang = Completer<void>();
+      final started = <String>[];
+      final recovery = AppStartupRecovery(
+        recoverCamera: () async {
+          started.add('camera');
+          await cameraHang.future;
+        },
+        resolveLocations: () async => started.add('location'),
+        reconcileQueue: () async => started.add('queue'),
+        cleanupInterruptedExports: () async => started.add('exports'),
+        cleanupInterruptedImports: () async => started.add('imports'),
+        cleanupInterruptedBundleRestores: () async => started.add('bundles'),
+        cleanupInterruptedProjectDeletions: () async => started.add('deletions'),
+        cleanupInterruptedCaptureMedia: () async => started.add('media'),
+        recoverPublishJournals: () async => started.add('publishJournals'),
+      );
+
+      unawaited(recovery.run());
+      for (var i = 0; i < 20; i++) {
+        if (started.contains('queue') &&
+            started.contains('media') &&
+            started.contains('publishJournals')) {
+          break;
+        }
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      expect(
+        started,
+        containsAll(['camera', 'queue', 'media', 'publishJournals']),
+      );
+      expect(cameraHang.isCompleted, isFalse);
+    },
+  );
+
+  test('camera recovery error does not skip queue reconcile', () async {
+    final events = <String>[];
+    await recoveryFor(
+      events,
+      recoverCamera: () async {
+        events.add('camera');
+        throw StateError('camera host dead');
+      },
+    ).run();
+
+    expect(
+      events,
+      containsAll(['camera', 'queue', 'media', 'publishJournals']),
+    );
+  });
 }

@@ -242,7 +242,7 @@ class CaptureMediaService {
         } else {
           // The database commit survived, so the native publish journal has
           // served its purpose; a crash before this point is reconciled by
-          // [_recoverPublishJournals] on the next launch. The clear is
+          // [recoverPublishJournals] on the next launch. The clear is
           // CONDITIONAL on the journal still recording THIS publish's URI:
           // if a newer same-capture publish already overwrote the journal,
           // clearing must not destroy that newer entry. It is also
@@ -307,7 +307,6 @@ class CaptureMediaService {
         // Keep the durable marker for a later launch and continue with others.
       }
     }
-    await _recoverPublishJournals();
     await _cleanupSuperseded();
   }
 
@@ -349,7 +348,11 @@ class CaptureMediaService {
   /// by `captureById` — NEVER by photo number, which a backup restore can
   /// duplicate across projects (reconciling by number could write THIS
   /// capture's URI into ANOTHER capture's row).
-  Future<void> _recoverPublishJournals() async {
+  ///
+  /// This is a first-class startup window: callers must not fold it into
+  /// [cleanupInterrupted], or a hanging album cleanup would skip journal
+  /// recovery (and the reverse).
+  Future<void> recoverPublishJournals() async {
     final journals = await platform.recoverPublishJournals();
     for (final journal in journals) {
       try {

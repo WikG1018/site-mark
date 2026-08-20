@@ -2,6 +2,18 @@
 
 包名 `io.github.wikg1018.sitemark`，版本 `1.0.8+23`。设备：DevEco 模拟器 `SiteMarkPhone602`，hdc `127.0.0.1:5555`。入口：全量 `lib/main.dart` 未签名 HAP。
 
+## 2026-08-20 Task 53
+
+云端闭环：启动恢复四窗互不阻塞。`AppStartupRecovery` 是回调式，不是 `FakeCaptureWorkflow`。先串行清理中断导入，再并行开工相册待清理 / 发布日记 / 相机 / 定位 / 队列。日记抽出为 `recoverPublishJournals()`。官方测试闭环，未重编 HAP，无杀进程 dump。队列仍是应用内内存串行。
+
+| 项 | 结果 |
+| --- | --- |
+| 并行开工 | 相机挂起时队列 / 日记 / 相册窗仍开工；一窗抛错不跳过其余窗 |
+| 日记抽出 | `CaptureMediaService.recoverPublishJournals()` 按 `captureById` 对账；真正删 URI 仍由 `cleanupInterrupted` |
+| CI | `.github/workflows/ohos.yml` 纳入 `app_startup_recovery_test.dart` |
+| 官方测试 | `app_startup_recovery_test` + `capture_media_service_test` + `widget_test` + `app_lifecycle_test` **88 绿** |
+| 模拟器 dump | **无**。不得写杀进程后四窗已在设备上验证；不得写 WorkScheduler 保活 |
+
 ## 2026-08-20 Tasks 51–52
 
 云端闭环：扩充 `ohos.yml`；相册删除按 URI 身份；备份恢复同编号不得串 URI。官方测试闭环，未重编 HAP，无相册 dump。

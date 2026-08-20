@@ -412,6 +412,8 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
         ref.read(projectDeletionServiceProvider).cleanupInterruptedDeletions(),
     cleanupInterruptedCaptureMedia: () =>
         ref.read(captureMediaServiceProvider).cleanupInterrupted(),
+    recoverPublishJournals: () =>
+        ref.read(captureMediaServiceProvider).recoverPublishJournals(),
   );
 });
 

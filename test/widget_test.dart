@@ -47,6 +47,7 @@ void main() {
       cleanupInterruptedBundleRestores: () async {},
       cleanupInterruptedProjectDeletions: () async {},
       cleanupInterruptedCaptureMedia: () async {},
+      recoverPublishJournals: () async {},
     );
 
     await tester.pumpWidget(
@@ -60,7 +61,9 @@ void main() {
     );
     await tester.pump();
 
-    expect(events, ['exports', 'imports', 'camera', 'location', 'queue']);
+    expect(events.take(2).toList(), ['exports', 'imports']);
+    expect(events.skip(2).toSet(), {'camera', 'location', 'queue'});
+    expect(events, hasLength(5));
     await disposeApp(tester);
   });
 
