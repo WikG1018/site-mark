@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { ScreenActionCoordinator } from '../main/ets/shared/ScreenActionCoordinator';
+import { ScreenActionCoordinator, ScreenLifecycleActionCoordinator, ScreenRequestCoordinator }
+  from '../main/ets/shared/ScreenActionCoordinator';
 
 export default function screenActionCoordinatorTest(): void {
   describe('ScreenActionCoordinator', () => {
@@ -24,6 +25,31 @@ export default function screenActionCoordinatorTest(): void {
       expect(coordinator.isCurrent(token)).assertFalse();
       expect(coordinator.finish(token)).assertFalse();
       expect(coordinator.isBusy()).assertFalse();
+    });
+
+    it('rejects work while inactive and accepts fresh work after reactivation', 0, () => {
+      const coordinator = new ScreenLifecycleActionCoordinator();
+      coordinator.invalidate();
+
+      expect(coordinator.begin() === null).assertTrue();
+      coordinator.activate();
+      const token = coordinator.begin();
+
+      expect(token === null).assertFalse();
+      expect(coordinator.isCurrent(token as number)).assertTrue();
+    });
+
+    it('accepts only the newest request while a page remains active', 0, () => {
+      const coordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
+      coordinator.activate();
+      const first: number = coordinator.begin();
+      const second: number = coordinator.begin();
+
+      expect(coordinator.isCurrent(first)).assertFalse();
+      expect(coordinator.isCurrent(second)).assertTrue();
+      coordinator.deactivate();
+      expect(coordinator.isCurrent(second)).assertFalse();
+      expect(coordinator.begin()).assertEqual(-1);
     });
   });
 }
