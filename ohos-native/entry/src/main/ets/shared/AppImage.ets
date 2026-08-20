@@ -103,7 +103,7 @@ export struct AppImage {
       Row()
         .width('100%')
         .height('100%')
-        .backgroundColor(UiTokens.CONTROL)
+        .backgroundColor(UiTokens.IMAGE_PLACEHOLDER)
       if (this.request.uri.length > 0 && !this.request.failed) {
         Image(this.request.uri)
           .key(`app-image-${this.request.generation}`)
