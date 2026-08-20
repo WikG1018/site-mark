@@ -19,6 +19,8 @@ import settingsProjectSelectionTest from './SettingsProjectSelection.test';
 import projectFormPolicyTest from './ProjectFormPolicy.test';
 import rootShellPolicyTest from './RootShellPolicy.test';
 import recordUiCoordinatorTest from './RecordUiCoordinator.test';
+import captureFormPolicyTest from './CaptureFormPolicy.test';
+import captureWorkflowValidationTest from './CaptureWorkflowValidation.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -42,4 +44,6 @@ export default function testsuite(): void {
   projectFormPolicyTest();
   rootShellPolicyTest();
   recordUiCoordinatorTest();
+  captureFormPolicyTest();
+  captureWorkflowValidationTest();
 }

@@ -1,8 +1,10 @@
 import { common } from '@kit.AbilityKit';
 import { relationalStore } from '@kit.ArkData';
 import { util } from '@kit.ArkTS';
-import { formatPhotoNumber, normalizeCaptureSearchTerms, normalizedProjectNameKey,
-  safeProjectFileNameKey } from '../../domain/DomainRules';
+import { CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH, CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH,
+  CAPTURE_TEMPLATE_NAME_MAX_LENGTH, CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH, formatPhotoNumber,
+  normalizeCaptureSearchTerms, normalizedProjectNameKey, safeProjectFileNameKey,
+  validateTemplateField } from '../../domain/DomainRules';
 import { AppSettingsRecord, CaptureDraft, CaptureFilter, CapturePage, CapturePageCursor,
   CaptureRecord, CaptureTemplateRecord, CaptureViewerWindow, ProjectRecord, ProjectSummary } from
   '../../domain/Models';
@@ -11,6 +13,12 @@ import { canCaptureTransition, canProjectTransition, CaptureStatus,
 import { RestoredProjectInput } from '../../domain/RestoreModels';
 import { CaptureViewerQueryExecutor, CaptureViewerQueryResultSet, CaptureViewerWindowQuery } from
   './CaptureViewerWindowQuery';
+
+export interface CaptureWorkflowDatabase {
+  projectById(id: string): Promise<ProjectRecord | null>;
+  createCaptured(draft: CaptureDraft): Promise<CaptureRecord>;
+  captureById(id: string): Promise<CaptureRecord | null>;
+}
 
 const DATABASE_NAME: string = 'sitemark_native.db';
 const DATABASE_SCHEMA_VERSION: number = 14;
@@ -242,7 +250,7 @@ class RdbCaptureViewerQueryExecutor implements CaptureViewerQueryExecutor {
   }
 }
 
-export class AppDatabase {
+export class AppDatabase implements CaptureWorkflowDatabase {
   private readonly store: relationalStore.RdbStore;
 
   private constructor(store: relationalStore.RdbStore) {
@@ -779,10 +787,23 @@ export class AppDatabase {
 
   async updateCaptureFields(id: string, workLocation: string, workContent: string,
     photographer: string, notes: string): Promise<void> {
+    const location = workLocation.trim();
+    const content = workContent.trim();
+    const author = photographer.trim();
+    const normalizedNotes = notes.trim();
+    if (!validateTemplateField(location, CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH) ||
+      !validateTemplateField(content, CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH) ||
+      !validateTemplateField(author, CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH) ||
+      normalizedNotes.indexOf('\u0000') >= 0) {
+      throw new Error('capture_form_invalid');
+    }
     const changedValue = await this.store.execute(
       `UPDATE captures SET work_location=?, work_content=?, photographer=?, notes=?,
-       status='captured', failure_reason=NULL WHERE id=? AND status IN ('ready','failed')`,
-      [workLocation.trim(), workContent.trim(), photographer.trim(), notes.trim(), id]
+       status='captured', failure_reason=NULL WHERE id=? AND status IN ('ready','failed')
+       AND original_deleted_at IS NULL AND original_path<>''
+       AND EXISTS(SELECT 1 FROM projects WHERE projects.id=captures.project_id
+         AND projects.lifecycle_status='active')`,
+      [location, content, author, normalizedNotes, id]
     );
     const changed = typeof changedValue === 'number' ? changedValue : 0;
     if (changed < 1) {
@@ -1059,14 +1080,23 @@ export class AppDatabase {
   }
 
   async saveTemplate(template: CaptureTemplateRecord): Promise<void> {
+    const name = template.name.trim();
+    const nameKey = template.nameKey.trim();
+    const location = template.workLocation.trim();
+    const content = template.workContent.trim();
+    const photographer = template.photographer.trim();
+    if (!validateTemplateField(name, CAPTURE_TEMPLATE_NAME_MAX_LENGTH) ||
+      !validateTemplateField(nameKey, CAPTURE_TEMPLATE_NAME_MAX_LENGTH) ||
+      !validateTemplateField(location, CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH) ||
+      !validateTemplateField(content, CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH) ||
+      !validateTemplateField(photographer, CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH)) {
+      throw new Error('capture_template_invalid');
+    }
     await this.store.executeSql(
       `INSERT INTO capture_templates(id,project_id,name,name_key,work_location,work_content,photographer,
-       created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)
-       ON CONFLICT(project_id,name_key) DO UPDATE SET name=excluded.name,
-       work_location=excluded.work_location,work_content=excluded.work_content,
-       photographer=excluded.photographer,updated_at=excluded.updated_at`,
-      [template.id, template.projectId, template.name, template.nameKey, template.workLocation,
-        template.workContent, template.photographer, template.createdAt, template.updatedAt]
+       created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+      [template.id, template.projectId, name, nameKey, location,
+        content, photographer, template.createdAt, template.updatedAt]
     );
   }
 
@@ -1086,10 +1116,14 @@ export class AppDatabase {
     if (!allowed) {
       return [];
     }
+    const boundedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
     const rows = await this.store.querySql(
-      `SELECT ${field} AS value, MAX(COALESCE(captured_at,created_at)) AS latest
-       FROM captures WHERE project_id=? AND ${field}<>'' GROUP BY ${field}
-       ORDER BY latest DESC LIMIT ?`, [projectId, limit]);
+      `SELECT value FROM (
+         SELECT TRIM(${field}) AS value, COALESCE(captured_at,created_at) AS latest,
+           ROW_NUMBER() OVER (PARTITION BY LOWER(TRIM(${field}))
+             ORDER BY COALESCE(captured_at,created_at) DESC,id DESC) AS suggestion_rank
+         FROM captures WHERE project_id=? AND status<>'pendingCamera' AND TRIM(${field})<>''
+       ) WHERE suggestion_rank=1 ORDER BY latest DESC LIMIT ?`, [projectId, boundedLimit]);
     const result: string[] = [];
     try {
       if (rows.goToFirstRow()) {

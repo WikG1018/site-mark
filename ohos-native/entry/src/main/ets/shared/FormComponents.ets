@@ -23,7 +23,9 @@ export struct FormField {
   @Prop error: string = '';
   @Prop helper: string = '';
   @Prop maxLength: number = 256;
+  @Prop fieldEnabled: boolean = true;
   onChange: (value: string) => void = (_value: string): void => {};
+  onFieldFocus: () => void = (): void => {};
 
   build() {
     Column({ space: 7 }) {
@@ -50,8 +52,10 @@ export struct FormField {
         .border({ width: 1, color: this.error.length > 0 ? UiTokens.DANGER : UiTokens.OUTLINE_SUBTLE })
         .borderRadius(UiTokens.CONTROL_RADIUS)
         .padding({ left: 13, right: 13 })
+        .enabled(this.fieldEnabled)
         .maxLength(this.maxLength)
         .accessibilityText(this.required ? `${this.label}${tr('，必填', ', required')}` : this.label)
+        .onFocus((): void => { this.onFieldFocus(); })
         .onChange(this.onChange)
       Text(this.error.length > 0 ? this.error : (this.helper.length > 0 ? this.helper : ' '))
         .width('100%')
@@ -75,7 +79,9 @@ export struct FormTextArea {
   @Prop error: string = '';
   @Prop helper: string = '';
   @Prop maxLength: number = 0;
+  @Prop fieldEnabled: boolean = true;
   onChange: (value: string) => void = (_value: string): void => {};
+  onFieldFocus: () => void = (): void => {};
 
   @Builder
   private unlimitedInput() {
@@ -88,7 +94,9 @@ export struct FormTextArea {
       .border({ width: 1, color: this.error.length > 0 ? UiTokens.DANGER : UiTokens.OUTLINE_SUBTLE })
       .borderRadius(UiTokens.CONTROL_RADIUS)
       .padding(13)
+      .enabled(this.fieldEnabled)
       .accessibilityText(this.required ? `${this.label}${tr('，必填', ', required')}` : this.label)
+      .onFocus((): void => { this.onFieldFocus(); })
       .onChange(this.onChange)
   }
 
@@ -103,8 +111,10 @@ export struct FormTextArea {
       .border({ width: 1, color: this.error.length > 0 ? UiTokens.DANGER : UiTokens.OUTLINE_SUBTLE })
       .borderRadius(UiTokens.CONTROL_RADIUS)
       .padding(13)
+      .enabled(this.fieldEnabled)
       .maxLength(this.maxLength)
       .accessibilityText(this.required ? `${this.label}${tr('，必填', ', required')}` : this.label)
+      .onFocus((): void => { this.onFieldFocus(); })
       .onChange(this.onChange)
   }
 
