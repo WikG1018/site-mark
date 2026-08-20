@@ -56,9 +56,8 @@ interface JpegCreateOptions {
   title: string;
 }
 
-interface CameraPickerSaveProfile {
+interface CameraPickerPositionProfile {
   cameraPosition: camera.CameraPosition;
-  saveUri: string;
 }
 
 const CAPTURE_PREFERENCES = 'sitemark_capture_recovery';
@@ -405,10 +404,10 @@ export default class OhosSystemHost {
       try {
         return await this.writeAclJpeg(sourcePath, displayName);
       } catch (_error) {
-        return await this.writePickerOrSandboxJpeg(sourcePath, captureId, displayName);
+        return await this.writeAlbumOrSandboxJpeg(sourcePath, captureId, displayName);
       }
     }
-    return await this.writePickerOrSandboxJpeg(sourcePath, captureId, displayName);
+    return await this.writeAlbumOrSandboxJpeg(sourcePath, captureId, displayName);
   }
 
   private async writeAclJpeg(sourcePath: string, displayName: string): Promise<string> {
@@ -427,30 +426,43 @@ export default class OhosSystemHost {
     return uri;
   }
 
-  private async writePickerOrSandboxJpeg(
+  private async writeAlbumOrSandboxJpeg(
     sourcePath: string,
     captureId: string,
     displayName: string,
   ): Promise<string> {
-    const abilityContext = this.ability?.context as common.UIAbilityContext | undefined;
-    if (abilityContext === undefined) {
+    try {
+      return await this.writeAlbumJpeg(sourcePath, displayName);
+    } catch (error) {
+      if (this.isUserCancelledPublish(error)) {
+        throw error;
+      }
       return await this.writeSandboxJpeg(sourcePath, captureId);
     }
-    const documentPicker = new picker.DocumentViewPicker(abilityContext);
-    const destinations = await documentPicker.save({
-      newFileNames: [this.normalizedJpegName(displayName)],
-      fileSuffixChoices: ['jpg'],
-    });
+  }
+
+  private async writeAlbumJpeg(sourcePath: string, displayName: string): Promise<string> {
+    const helper = photoAccessHelper.getPhotoAccessHelper(this.context);
+    const fileName = this.normalizedJpegName(displayName);
+    const title = fileName.replace(/\.jpe?g$/i, '');
+    const srcUri = fileUri.getUriFromPath(sourcePath);
+    const config: photoAccessHelper.PhotoCreationConfig = {
+      title: title,
+      fileNameExtension: 'jpg',
+      photoType: photoAccessHelper.PhotoType.IMAGE,
+    };
+    const destinations = await helper.showAssetsCreationDialog([srcUri], [config]);
     if (destinations === undefined || destinations.length === 0) {
-      throw new Error('User cancelled the save picker');
+      throw new Error('User cancelled the album save dialog');
     }
     const destination = this.stringAt(destinations, 0);
-    if (destination.startsWith('file://')) {
-      this.copyFile(sourcePath, this.pathFromUri(destination));
-      return destination;
-    }
     await this.copyFileToUri(sourcePath, destination);
     return destination;
+  }
+
+  private isUserCancelledPublish(error: Object): boolean {
+    const message = `${error}`;
+    return message.indexOf('cancelled') >= 0 || message.indexOf('Canceled') >= 0;
   }
 
   private async writeSandboxJpeg(sourcePath: string, captureId: string): Promise<string> {
@@ -720,7 +732,7 @@ export default class OhosSystemHost {
     if (contentUri.length === 0) {
       return;
     }
-    if (contentUri.startsWith('file://')) {
+    if (contentUri.startsWith('file://') && !this.isMediaLibraryUri(contentUri)) {
       try {
         const path = this.pathFromUri(contentUri);
         if (this.pathExists(path)) {
@@ -729,9 +741,6 @@ export default class OhosSystemHost {
       } catch (_error) {
         return;
       }
-      return;
-    }
-    if (await this.detectGalleryAccess() !== 'acl') {
       return;
     }
     try {

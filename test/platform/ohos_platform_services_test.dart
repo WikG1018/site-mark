@@ -532,4 +532,62 @@ void main() {
     final result = await OhosPlatformServices().launchCamera('capture-1');
     expect(result.outcome, CameraOutcome.cancelled);
   });
+
+  test('OhosPlatformServices publishJpeg decodes media library uri', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'publishJpeg');
+          expect(call.arguments, {
+            'sourcePath': '/tmp/a.jpg',
+            'displayName': 'IMG-0001',
+            'captureId': 'capture-1',
+            'publishedUri': null,
+          });
+          return <String, Object?>{
+            'contentUri': 'file://media/Photo/12',
+            'supersededUris': <String>['file://media/Photo/11'],
+          };
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final result = await OhosPlatformServices().publishJpeg(
+      '/tmp/a.jpg',
+      'IMG-0001',
+      'capture-1',
+      null,
+    );
+    expect(result.contentUri, 'file://media/Photo/12');
+    expect(result.supersededUris, ['file://media/Photo/11']);
+  });
+
+  test('OhosPlatformServices requestCurrentLocation decodes a precise fix', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'requestCurrentLocation');
+          expect(call.arguments, {'timeoutMillis': 1000});
+          return <String, Object?>{
+            'outcome': 0,
+            'latitude': 31.23,
+            'longitude': 121.47,
+            'accuracyMeters': 12.5,
+            'address': null,
+            'errorMessage': null,
+          };
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final result = await OhosPlatformServices().requestCurrentLocation(1000);
+    expect(result.outcome, LocationOutcome.precise);
+    expect(result.latitude, closeTo(31.23, 0.0001));
+    expect(result.longitude, closeTo(121.47, 0.0001));
+    expect(result.accuracyMeters, closeTo(12.5, 0.0001));
+  });
 }

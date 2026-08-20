@@ -94,6 +94,18 @@
 | 官方测试 | `ohos_platform_services_test` 22 项通过 |
 | 模拟器 dump | **无**。不得写系统外链已通 |
 
+## 2026-08-20 Tasks 41–42
+
+无 ACL 发布走系统相册保存对话框。官方通道测试闭环，未重编 HAP，未在模拟器保存到相册。
+
+| 项 | 结果 |
+| --- | --- |
+| 通道 | `publishJpeg` 解码媒体库 URI；`requestCurrentLocation` 解码精确坐标 |
+| 宿主 | `showAssetsCreationDialog` + `PhotoCreationConfig`；用户取消不静默沙箱 |
+| 删除 | 沙箱 `file://` 才 unlink；`file://media/` 走 `deleteAssets` |
+| 官方测试 | `ohos_platform_services_test` **26 项全绿** |
+| 模拟器 dump | **无**。不得写系统相册已通 |
+
 ## 2026-08-20 Tasks 39–40
 
 系统相机 `resultUri` 拷进沙箱 `files/originals`。官方通道测试闭环，未重编 HAP，未在模拟器拍成。
