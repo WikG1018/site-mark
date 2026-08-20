@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
+import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
@@ -35,6 +36,7 @@ void main() {
     required _CaptureFormPlatform platform,
     Locale locale = const Locale('zh'),
     ImagePipeline? imagePipeline,
+    CaptureBackgroundScheduler? backgroundScheduler,
   }) async {
     await database.createProject(id: 'project-1', name: '东区厂房改造');
     await tester.pumpWidget(
@@ -43,6 +45,7 @@ void main() {
         initialLocale: locale,
         platformServices: platform,
         imagePipeline: imagePipeline,
+        backgroundScheduler: backgroundScheduler,
         completionNotificationService: _NoOpCompletionNotificationService(),
         captureFormDraftStore: MemoryCaptureFormDraftStore(),
       ),
@@ -90,6 +93,49 @@ void main() {
     await tester.enterText(find.byKey(const Key('work-content')), '设备安装检查');
     await tester.enterText(find.byKey(const Key('photographer')), '张工');
   }
+
+  testWidgets(
+    'delayed queue keeps the capture button enabled for another shot',
+    (tester) async {
+      recordPlatformCalls(tester);
+      final platform = _CaptureFormPlatform(
+        permissionState: LocationPermissionState.granted,
+        cameraOutcome: CameraOutcome.captured,
+      );
+      final scheduler = _FailingEnqueueScheduler();
+
+      await pumpCaptureForm(
+        tester,
+        platform: platform,
+        backgroundScheduler: scheduler,
+      );
+      await enterRequiredFields(tester);
+      await tester.tap(find.byKey(const Key('capture-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(
+        find.text('照片已安全保留，后台处理启动延迟并会自动重试，可继续拍摄'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('capture-button')))
+            .onPressed,
+        isNotNull,
+      );
+      expect(platform.launchCameraCount, 1);
+
+      await tester.tap(find.byKey(const Key('capture-button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(platform.launchCameraCount, 2);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump(const Duration(seconds: 2));
+      await disposeApp(tester);
+    },
+  );
 
   testWidgets(
     'first-use denied state shows only the contextual location prompt',
@@ -676,6 +722,22 @@ class _DegradedHintPipeline implements ImagePipeline {
   @override
   Future<rust.RenderPhotoResult> render(rust.RenderPhotoRequest request) =>
       throw UnimplementedError();
+}
+
+class _FailingEnqueueScheduler implements CaptureBackgroundScheduler {
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<void> enqueue(String captureId) async {
+    throw StateError('queue unavailable');
+  }
+
+  @override
+  Future<void> retry(String captureId) async {}
+
+  @override
+  Future<void> reconcilePending() async {}
 }
 
 class _NoOpCompletionNotificationService

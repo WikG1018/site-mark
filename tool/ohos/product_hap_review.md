@@ -2,6 +2,17 @@
 
 包名 `io.github.wikg1018.sitemark`，版本 `1.0.8+23`。设备：DevEco 模拟器 `SiteMarkPhone602`，hdc `127.0.0.1:5555`。入口：全量 `lib/main.dart` 未签名 HAP。
 
+## 2026-08-20 Task 54
+
+云端闭环：`ohos.yml` 纳入 `capture_workflow_test.dart`；拍摄页锁 delayed 后仍可再拍。生产 `CaptureWorkflowOutcome.delayed` 与 snackbar 已有，本刀未改表单语义。官方测试闭环，未重编 HAP，无拍成 dump。队列仍是应用内内存串行。
+
+| 项 | 结果 |
+| --- | --- |
+| CI | `.github/workflows/ohos.yml` 纳入 `capture_workflow_test.dart` |
+| delayed 继续拍 | 入队抛错后出现 delayed snackbar，`capture-button` 仍可点，再拍一次 `launchCameraCount` 从 1 到 2 |
+| 官方测试 | `capture_workflow_test` **17 绿**；`capture_form_screen_test` **20 绿** |
+| 模拟器 dump | **无**。不得写相机已拍成；不得写 WorkScheduler 保活 |
+
 ## 2026-08-20 Task 53
 
 云端闭环：启动恢复四窗互不阻塞。`AppStartupRecovery` 是回调式，不是 `FakeCaptureWorkflow`。先串行清理中断导入，再并行开工相册待清理 / 发布日记 / 相机 / 定位 / 队列。日记抽出为 `recoverPublishJournals()`。官方测试闭环，未重编 HAP，无杀进程 dump。队列仍是应用内内存串行。
