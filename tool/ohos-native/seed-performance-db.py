@@ -1,16 +1,23 @@
 """Seed a disposable SiteMark Native database copy for emulator list-load tests."""
 
 import argparse
+from dataclasses import dataclass
 import json
 import os
 import sqlite3
 import stat
 import sys
+import time
 from pathlib import Path
 
 
 EXPECTED_DATABASE_NAME = "sitemark_native.db"
 EXPECTED_SCHEMA_VERSION = 14
+MAX_CAPTURES = 10_000
+CHECKPOINT_BUSY_EXIT_CODE = 3
+CHECKPOINT_ATTEMPTS = 3
+CHECKPOINT_BUSY_TIMEOUT_MILLISECONDS = 50
+REPARSE_POINT_ATTRIBUTE = 0x0400
 FIXTURE_PROJECT_ID = "sitemark-performance-fixture-v1"
 FIXTURE_PROJECT_NAME = "[PERF FIXTURE] SiteMark Native"
 FIXTURE_PROJECT_NAME_KEY = "perf fixture sitemark native"
@@ -35,30 +42,96 @@ class DatabaseSafetyError(ValueError):
     """Raised when a supplied database is not a safe, compatible fixture target."""
 
 
+@dataclass(frozen=True)
+class DatabaseTarget:
+    path: Path
+    identity: tuple[int, int, int, int]
+
+
+def validate_capture_count(captures: int) -> int:
+    if isinstance(captures, bool) or not isinstance(captures, int):
+        raise DatabaseSafetyError(f"captures must be in range 1..{MAX_CAPTURES}")
+    if not 1 <= captures <= MAX_CAPTURES:
+        raise DatabaseSafetyError(f"captures must be in range 1..{MAX_CAPTURES}")
+    return captures
+
+
 def require_positive(value: str) -> int:
     try:
         captures = int(value)
     except ValueError as error:
-        raise argparse.ArgumentTypeError("--captures must be a positive integer") from error
-    if captures < 1:
-        raise argparse.ArgumentTypeError("--captures must be a positive integer")
-    return captures
+        raise argparse.ArgumentTypeError(
+            f"--captures must be in range 1..{MAX_CAPTURES}"
+        ) from error
+    try:
+        return validate_capture_count(captures)
+    except DatabaseSafetyError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
 
 
-def validate_database_path(database: Path) -> Path:
+def path_identity(details: os.stat_result) -> tuple[int, int, int, int]:
+    return (
+        details.st_dev,
+        details.st_ino,
+        stat.S_IFMT(details.st_mode),
+        getattr(details, "st_file_attributes", 0),
+    )
+
+
+def checked_lstat(path: Path) -> os.stat_result:
+    try:
+        details = os.lstat(path)
+    except FileNotFoundError as error:
+        raise DatabaseSafetyError("database path must already exist") from error
+    if stat.S_ISLNK(details.st_mode) or (
+        getattr(details, "st_file_attributes", 0) & REPARSE_POINT_ATTRIBUTE
+    ):
+        raise DatabaseSafetyError(
+            f"database path must not contain a symbolic link or reparse point: {path}"
+        )
+    return details
+
+
+def lexical_absolute_path(database: Path) -> Path:
+    expanded = os.path.expanduser(os.fspath(database))
+    if ".." in Path(expanded).parts:
+        raise DatabaseSafetyError("database path must not contain parent traversal")
+    return Path(os.path.abspath(expanded))
+
+
+def inspect_database_path(database: Path) -> DatabaseTarget:
     if database.name != EXPECTED_DATABASE_NAME:
         raise DatabaseSafetyError(
             f"database basename must be exactly {EXPECTED_DATABASE_NAME!r}"
         )
-    try:
-        details = os.lstat(database)
-    except FileNotFoundError as error:
-        raise DatabaseSafetyError("database must already exist") from error
-    if getattr(details, "st_file_attributes", 0) & 0x0400:
-        raise DatabaseSafetyError("database must not be a symbolic link or reparse point")
-    if not stat.S_ISREG(details.st_mode):
-        raise DatabaseSafetyError("database must be an existing regular file")
-    return database.resolve()
+    absolute_path = lexical_absolute_path(database)
+    if not absolute_path.anchor:
+        raise DatabaseSafetyError("database path must have an absolute filesystem anchor")
+    current = Path(absolute_path.anchor)
+    root_details = checked_lstat(current)
+    if not stat.S_ISDIR(root_details.st_mode):
+        raise DatabaseSafetyError("database filesystem anchor must be a directory")
+    parts = absolute_path.parts
+    for index, part in enumerate(parts[1:], start=1):
+        current = current / part
+        details = checked_lstat(current)
+        if index == len(parts) - 1:
+            if not stat.S_ISREG(details.st_mode):
+                raise DatabaseSafetyError("database must be an existing regular file")
+            return DatabaseTarget(absolute_path, path_identity(details))
+        if not stat.S_ISDIR(details.st_mode):
+            raise DatabaseSafetyError(f"database parent is not a directory: {current}")
+    raise DatabaseSafetyError("database path must name an existing regular file")
+
+
+def validate_database_path(database: Path) -> DatabaseTarget:
+    return inspect_database_path(database)
+
+
+def verify_database_target(target: DatabaseTarget) -> None:
+    current = inspect_database_path(target.path)
+    if current.path != target.path or current.identity != target.identity:
+        raise DatabaseSafetyError("database path changed during validation")
 
 
 def database_connection(database: Path) -> sqlite3.Connection:
@@ -126,17 +199,41 @@ def fixture_capture_rows(image_path: str, captures: int):
         )
 
 
-def seed_performance_database(database: Path, captures: int) -> dict[str, object]:
-    if captures < 1:
-        raise DatabaseSafetyError("captures must be a positive integer")
-    database = validate_database_path(Path(database))
-    connection = database_connection(database)
+def checkpoint_wal(connection: sqlite3.Connection) -> str:
+    original_timeout = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+    connection.execute(f"PRAGMA busy_timeout={CHECKPOINT_BUSY_TIMEOUT_MILLISECONDS}")
     try:
+        for attempt in range(CHECKPOINT_ATTEMPTS):
+            try:
+                checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            except sqlite3.OperationalError as error:
+                if "busy" not in str(error).lower() and "locked" not in str(error).lower():
+                    raise
+                checkpoint = (1, 0, 0)
+            if checkpoint is None:
+                raise DatabaseSafetyError("WAL checkpoint returned no status")
+            if checkpoint[0] == 0:
+                return "complete"
+            if attempt + 1 < CHECKPOINT_ATTEMPTS:
+                time.sleep(CHECKPOINT_BUSY_TIMEOUT_MILLISECONDS / 1000)
+    finally:
+        connection.execute(f"PRAGMA busy_timeout={original_timeout}")
+    return "busy"
+
+
+def seed_performance_database(database: Path, captures: int) -> dict[str, object]:
+    captures = validate_capture_count(captures)
+    target = validate_database_path(Path(database))
+    connection = database_connection(target.path)
+    try:
+        verify_database_target(target)
         connection.execute("PRAGMA foreign_keys = ON")
         validate_schema(connection)
         image_path = reusable_image_path(connection)
+        verify_database_target(target)
         connection.execute("BEGIN IMMEDIATE")
         try:
+            verify_database_target(target)
             connection.execute("DELETE FROM projects WHERE id=?", (FIXTURE_PROJECT_ID,))
             insert_fixture_project(connection)
             connection.executemany(
@@ -147,19 +244,20 @@ def seed_performance_database(database: Path, captures: int) -> dict[str, object
                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 fixture_capture_rows(image_path, captures),
             )
+            verify_database_target(target)
             connection.commit()
         except BaseException:
             connection.rollback()
             raise
-        checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-        if checkpoint is None or checkpoint[0] != 0:
-            raise DatabaseSafetyError("WAL checkpoint did not complete")
+        checkpoint = checkpoint_wal(connection)
     finally:
         connection.close()
     return {
         "seeded": captures,
         "fixture_project_id": FIXTURE_PROJECT_ID,
-        "database": str(database),
+        "database": str(target.path),
+        "committed": True,
+        "checkpoint": checkpoint,
     }
 
 
@@ -173,10 +271,14 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     arguments = parse_arguments(argv)
     try:
-        print(json.dumps(seed_performance_database(arguments.database, arguments.captures), ensure_ascii=False))
+        summary = seed_performance_database(arguments.database, arguments.captures)
     except (DatabaseSafetyError, sqlite3.Error, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    print(json.dumps(summary, ensure_ascii=False))
+    if summary["checkpoint"] == "busy":
+        print("warning: data committed; WAL checkpoint remains busy", file=sys.stderr)
+        return CHECKPOINT_BUSY_EXIT_CODE
     return 0
 
 

@@ -1,4 +1,8 @@
+import contextlib
 import importlib.util
+import io
+import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -99,6 +103,14 @@ def insert_ready_source(connection: sqlite3.Connection, project_id: str = "sourc
     connection.commit()
 
 
+def database_snapshot(connection: sqlite3.Connection) -> tuple[object, tuple[tuple[object, ...], ...], tuple[tuple[object, ...], ...]]:
+    return (
+        connection.execute("PRAGMA user_version").fetchone()[0],
+        tuple(connection.execute("SELECT * FROM projects ORDER BY id").fetchall()),
+        tuple(connection.execute("SELECT * FROM captures ORDER BY id").fetchall()),
+    )
+
+
 class SeedPerformanceDatabaseTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -118,6 +130,110 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
             module.seed_performance_database(wrong_name, 1)
 
         self.assertEqual(wrong_name.read_bytes(), b"do-not-touch")
+
+    def test_refuses_a_database_below_a_symbolic_linked_parent_without_modifying_it(self) -> None:
+        module = load_module()
+        actual_parent = self.directory / "actual"
+        actual_parent.mkdir()
+        actual_database = actual_parent / "sitemark_native.db"
+        create_schema(actual_database)
+        connection = sqlite3.connect(actual_database)
+        try:
+            insert_ready_source(connection)
+            before = database_snapshot(connection)
+        finally:
+            connection.close()
+
+    def test_refuses_parent_traversal_before_path_normalization(self) -> None:
+        module = load_module()
+        actual_parent = self.directory / "traversal-target"
+        actual_parent.mkdir()
+        actual_database = actual_parent / "sitemark_native.db"
+        create_schema(actual_database)
+        connection = sqlite3.connect(actual_database)
+        try:
+            insert_ready_source(connection)
+            before = database_snapshot(connection)
+        finally:
+            connection.close()
+        (self.directory / "traversal-start").mkdir()
+        traversal_path = (
+            self.directory / "traversal-start" / ".." / "traversal-target" / "sitemark_native.db"
+        )
+
+        with self.assertRaisesRegex(module.DatabaseSafetyError, "parent traversal"):
+            module.seed_performance_database(traversal_path, 1)
+
+        connection = sqlite3.connect(actual_database)
+        try:
+            self.assertEqual(database_snapshot(connection), before)
+        finally:
+            connection.close()
+        linked_parent = self.directory / "linked-parent"
+        try:
+            linked_parent.symlink_to(actual_parent, target_is_directory=True)
+        except OSError as error:
+            self.skipTest(f"symbolic links unavailable: {error}")
+
+        with self.assertRaisesRegex(module.DatabaseSafetyError, "symbolic link|reparse"):
+            module.seed_performance_database(linked_parent / "sitemark_native.db", 1)
+
+        connection = sqlite3.connect(actual_database)
+        try:
+            self.assertEqual(database_snapshot(connection), before)
+        finally:
+            connection.close()
+
+    @unittest.skipUnless(os.name == "nt", "junctions are Windows-only")
+    def test_refuses_a_database_below_a_windows_junction_when_available(self) -> None:
+        module = load_module()
+        actual_parent = self.directory / "junction-target"
+        actual_parent.mkdir()
+        actual_database = actual_parent / "sitemark_native.db"
+        create_schema(actual_database)
+        connection = sqlite3.connect(actual_database)
+        try:
+            insert_ready_source(connection)
+            before = database_snapshot(connection)
+        finally:
+            connection.close()
+        junction = self.directory / "junction-parent"
+        environment = dict(os.environ)
+        environment["SEED_TEST_JUNCTION"] = str(junction)
+        environment["SEED_TEST_TARGET"] = str(actual_parent)
+        result = subprocess.run(
+            ["pwsh.exe", "-NoLogo", "-NoProfile", "-Command",
+             "New-Item -ItemType Junction -LiteralPath $env:SEED_TEST_JUNCTION -Target $env:SEED_TEST_TARGET | Out-Null"],
+            check=False, capture_output=True, text=True, env=environment,
+        )
+        if result.returncode != 0:
+            self.skipTest(f"junction creation unavailable: {result.stderr.strip()}")
+        try:
+            with self.assertRaisesRegex(module.DatabaseSafetyError, "symbolic link|reparse"):
+                module.seed_performance_database(junction / "sitemark_native.db", 1)
+            connection = sqlite3.connect(actual_database)
+            try:
+                self.assertEqual(database_snapshot(connection), before)
+            finally:
+                connection.close()
+        finally:
+            junction.rmdir()
+
+    def test_capture_count_is_limited_by_argument_parser_and_seed_function(self) -> None:
+        module = load_module()
+        self.assertEqual(module.require_positive("1"), 1)
+        self.assertEqual(module.require_positive("10000"), 10000)
+        for invalid in ("0", "10001"):
+            with self.subTest(invalid=invalid):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        module.parse_arguments(
+                            ["--database", str(self.database), "--captures", invalid]
+                        )
+        for invalid in (0, 10001):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(module.DatabaseSafetyError, "1..10000"):
+                    module.seed_performance_database(self.database, invalid)
 
     def test_rejects_missing_required_schema_tables_or_columns(self) -> None:
         module = load_module()
@@ -207,37 +323,46 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
         finally:
             connection.close()
 
-    def test_insert_failure_rolls_back_the_entire_fixture(self) -> None:
+    def test_mid_insert_failure_restores_a_complete_snapshot_of_old_fixture_and_other_rows(self) -> None:
         module = load_module()
         connection = sqlite3.connect(self.database)
         try:
             insert_ready_source(connection)
+            insert_ready_source(connection, "other-project")
             connection.execute(
-                """CREATE TRIGGER abort_fixture_capture BEFORE INSERT ON captures
-                   WHEN NEW.project_id = 'sitemark-performance-fixture-v1'
+                """INSERT INTO projects(id,name,name_key,safe_name_key,description,lifecycle_status,is_pinned,
+                   watermark_position,watermark_opacity,watermark_accent_color_argb,watermark_font_scale,
+                   created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (module.FIXTURE_PROJECT_ID, "Old fixture", "old fixture", "old-fixture", "old description",
+                 "archived", 1, "bottomRight", 0.35, 123, 1.6, 99, 101),
+            )
+            connection.execute(
+                """INSERT INTO captures(id,project_id,photo_number,work_location,work_content,photographer,
+                   notes,original_path,rendered_path,published_uri,original_sha256,status,failure_reason,
+                   created_at,captured_at,latitude,longitude,accuracy_meters,address,location_outcome,
+                   processing_attempts,watermark_locale_code,location_resolution,original_deleted_at)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                ("old-fixture-capture", module.FIXTURE_PROJECT_ID, "OLD-1", "Old location", "Old content",
+                 "Old photographer", "old note", "/old/original.jpg", "/old/rendered.jpg", "media://old",
+                 "old-sha", "ready", None, 99, 100, 1.25, 2.5, 3.75, "Old address", "manual", 4,
+                 "en", "unresolved", 102),
+            )
+            connection.execute(
+                """CREATE TRIGGER abort_second_fixture_capture BEFORE INSERT ON captures
+                   WHEN NEW.id = 'sitemark-performance-capture-000002'
                    BEGIN SELECT RAISE(ABORT, 'fixture capture blocked'); END"""
             )
             connection.commit()
+            before = database_snapshot(connection)
         finally:
             connection.close()
 
         with self.assertRaisesRegex(sqlite3.DatabaseError, "fixture capture blocked"):
-            module.seed_performance_database(self.database, 2)
+            module.seed_performance_database(self.database, 3)
 
         connection = sqlite3.connect(self.database)
         try:
-            self.assertEqual(
-                connection.execute(
-                    "SELECT COUNT(*) FROM projects WHERE id=?", (module.FIXTURE_PROJECT_ID,)
-                ).fetchone()[0],
-                0,
-            )
-            self.assertEqual(
-                connection.execute(
-                    "SELECT COUNT(*) FROM captures WHERE project_id=?", (module.FIXTURE_PROJECT_ID,)
-                ).fetchone()[0],
-                0,
-            )
+            self.assertEqual(database_snapshot(connection), before)
         finally:
             connection.close()
 
@@ -250,17 +375,17 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
             connection.close()
 
         result = subprocess.run(
-            [sys.executable, str(SCRIPT), "--database", str(self.database), "--captures", "2"],
+            [sys.executable, str(SCRIPT), "--database", str(self.database), "--captures", "2000"],
             check=False, capture_output=True, text=True,
         )
         second_result = subprocess.run(
-            [sys.executable, str(SCRIPT), "--database", str(self.database), "--captures", "2"],
+            [sys.executable, str(SCRIPT), "--database", str(self.database), "--captures", "2000"],
             check=False, capture_output=True, text=True,
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(second_result.returncode, 0, second_result.stderr)
-        self.assertIn('"seeded": 2', result.stdout)
+        self.assertIn('"seeded": 2000', result.stdout)
         connection = sqlite3.connect(self.database)
         try:
             self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 14)
@@ -268,7 +393,7 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
                 connection.execute(
                     "SELECT COUNT(*) FROM captures WHERE project_id='sitemark-performance-fixture-v1'"
                 ).fetchone()[0],
-                2,
+                2000,
             )
             self.assertEqual(
                 connection.execute(
@@ -277,6 +402,43 @@ class SeedPerformanceDatabaseTest(unittest.TestCase):
                 1,
             )
             self.assertEqual(connection.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()[0], 0)
+        finally:
+            connection.close()
+
+    def test_active_wal_reader_reports_committed_data_when_checkpoint_stays_busy(self) -> None:
+        module = load_module()
+        connection = sqlite3.connect(self.database)
+        try:
+            self.assertEqual(connection.execute("PRAGMA journal_mode=WAL").fetchone()[0], "wal")
+            insert_ready_source(connection)
+        finally:
+            connection.close()
+        reader = sqlite3.connect(self.database)
+        try:
+            reader.execute("BEGIN")
+            reader.execute("SELECT * FROM captures").fetchall()
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "--database", str(self.database), "--captures", "2"],
+                check=False, capture_output=True, text=True,
+            )
+        finally:
+            reader.rollback()
+            reader.close()
+
+        self.assertEqual(result.returncode, 3, result.stderr)
+        summary = json.loads(result.stdout)
+        self.assertEqual(summary["seeded"], 2)
+        self.assertTrue(summary["committed"])
+        self.assertEqual(summary["checkpoint"], "busy")
+        self.assertIn("data committed", result.stderr)
+        connection = sqlite3.connect(self.database)
+        try:
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM captures WHERE project_id='sitemark-performance-fixture-v1'"
+                ).fetchone()[0],
+                2,
+            )
         finally:
             connection.close()
 
