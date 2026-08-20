@@ -56,3 +56,25 @@ export class RestoreFileCleanup {
     return this.journal.clear(pending.operationId);
   }
 }
+
+export class RestoreAttemptGate {
+  private readonly cleanup: RestoreFileCleanup;
+  private readonly journal: RestoreJournalStore;
+
+  constructor(cleanup: RestoreFileCleanup, journal: RestoreJournalStore) {
+    this.cleanup = cleanup;
+    this.journal = journal;
+  }
+
+  async begin(operationId: string): Promise<void> {
+    try {
+      if (await this.cleanup.run()) {
+        await this.journal.begin(operationId);
+        return;
+      }
+    } catch (_) {
+      // The caller maps this stable boundary error to a bilingual retry message.
+    }
+    throw new Error('restore_cleanup_pending');
+  }
+}

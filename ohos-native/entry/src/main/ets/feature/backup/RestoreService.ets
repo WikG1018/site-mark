@@ -8,7 +8,7 @@ import { RestoredCaptureInput, RestoredProjectInput,
 import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { tr } from '../../shared/AppText';
 import { DatabaseRestorePathReferenceLookup, HarmonyRestoreFileAccess,
-  RestoreFileCleanup } from './RestoreFileCleanup';
+  RestoreAttemptGate, RestoreFileCleanup } from './RestoreFileCleanup';
 
 interface ArchiveWatermarkPreview {
   position: string;
@@ -129,8 +129,11 @@ export class ProjectRestoreService {
   private async restoreFromLocal(sourcePath: string, operationId: string,
     staging: string): Promise<RestoreResult> {
     let committed = false;
-    await this.runtime.restoreJournal.begin(operationId);
     try {
+      const cleanup = new RestoreFileCleanup(this.runtime.restoreJournal,
+        new DatabaseRestorePathReferenceLookup(this.runtime.database),
+        new HarmonyRestoreFileAccess(), this.runtime.context.filesDir);
+      await new RestoreAttemptGate(cleanup, this.runtime.restoreJournal).begin(operationId);
       const sources = await this.expandSources(sourcePath, staging);
       this.preflightSources(sources);
       const settings = await this.runtime.database.settings();
@@ -218,6 +221,10 @@ export class ProjectRestoreService {
         const field = message.substring(message.indexOf(':') + 1);
         throw new Error(tr(`备份字段“${field}”无效，尚未解压任何照片，请修正源备份后重试`,
           `Backup field “${field}” is invalid. No photos were extracted. Fix the source backup and try again.`));
+      }
+      if (message.includes('restore_cleanup_pending') || message.includes('restore_journal_pending')) {
+        throw new Error(tr('上次恢复仍在清理，请稍后重试',
+          'The previous restore is still being cleaned up. Try again shortly.'));
       }
       throw new Error(message.length > 0 ? message : tr('恢复失败，请重新选择备份',
         'Restore failed. Choose the backup again.'));

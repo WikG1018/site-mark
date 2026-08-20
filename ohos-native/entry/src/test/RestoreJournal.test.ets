@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium';
 import { RestoreJournalStorage, RestoreJournalStore } from '../main/ets/data/prefs/RestoreJournalStore';
-import { RestoreFileAccess, RestoreFileCleanup, RestorePathReferenceLookup } from
+import { RestoreAttemptGate, RestoreFileAccess, RestoreFileCleanup, RestorePathReferenceLookup } from
   '../main/ets/feature/backup/RestoreFileCleanup';
 
 class MemoryRestoreJournalStorage implements RestoreJournalStorage {
@@ -63,6 +63,19 @@ export default function restoreJournalTest(): void {
       expect((await store.recover())?.operationId).assertEqual('newer');
     });
 
+    it('refuses to overwrite an unfinished restore journal', 0, async () => {
+      const store = new RestoreJournalStore(new MemoryRestoreJournalStorage());
+      await store.begin('older');
+      let rejected = false;
+      try {
+        await store.begin('newer');
+      } catch (_) {
+        rejected = true;
+      }
+      expect(rejected).assertTrue();
+      expect((await store.recover())?.operationId).assertEqual('older');
+    });
+
     it('treats a corrupted preference as no recoverable journal', 0, async () => {
       const storage = new MemoryRestoreJournalStorage();
       storage.value = '{not-json';
@@ -87,6 +100,28 @@ export default function restoreJournalTest(): void {
       expect(await cleanup.run('restore-2')).assertTrue();
       expect(await store.recover()).assertNull();
       expect(files.deleted.indexOf('/private/committed.jpg')).assertEqual(-1);
+    });
+
+    it('blocks a second restore until the previous cleanup converges', 0, async () => {
+      const store = new RestoreJournalStore(new MemoryRestoreJournalStorage());
+      await store.begin('older');
+      await store.addPaths('older', ['/private/failed.jpg']);
+      const files = new ControlledRestoreFiles();
+      files.paths = ['/private/failed.jpg'];
+      files.failedPath = '/private/failed.jpg';
+      const cleanup = new RestoreFileCleanup(store, new ControlledRestoreReferences(), files, '/private/');
+      const gate = new RestoreAttemptGate(cleanup, store);
+      let rejected = false;
+      try {
+        await gate.begin('newer');
+      } catch (_) {
+        rejected = true;
+      }
+      expect(rejected).assertTrue();
+      expect((await store.recover())?.operationId).assertEqual('older');
+      files.failedPath = '';
+      await gate.begin('newer');
+      expect((await store.recover())?.operationId).assertEqual('newer');
     });
   });
 }

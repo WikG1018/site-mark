@@ -25,6 +25,10 @@ export class RestoreJournalStore {
   }
 
   async begin(operationId: string): Promise<void> {
+    const current = await this.recover();
+    if (current !== null) {
+      throw new Error('restore_journal_pending');
+    }
     await this.write(new RestoreJournalEntry(operationId, []));
   }
 
