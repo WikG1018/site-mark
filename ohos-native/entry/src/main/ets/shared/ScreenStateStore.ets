@@ -1,6 +1,14 @@
 import { CaptureFilter } from '../domain/Models';
 import { ProjectLifecycleStatus } from '../domain/StateMachine';
 
+export function clampFirstVisibleIndex(index: number, itemCount: number): number {
+  if (!Number.isFinite(index) || !Number.isFinite(itemCount) || itemCount <= 0) {
+    return 0;
+  }
+  const lastIndex = Math.max(0, Math.floor(itemCount) - 1);
+  return Math.min(lastIndex, Math.max(0, Math.floor(index)));
+}
+
 export interface ProjectScreenState {
   searchText: string;
   firstVisibleIndex: number;
@@ -62,11 +70,15 @@ export class ScreenStateStore {
   projectDetail(projectId: string): ProjectDetailScreenState {
     const state = this.projectDetailStates.get(projectId);
     if (state === undefined) {
-      return { filter: ScreenStateStore.emptyFilter(), firstVisibleIndex: 0 };
+      const empty = ScreenStateStore.emptyFilter();
+      empty.projectId = projectId;
+      return { filter: empty, firstVisibleIndex: 0 };
     }
     this.projectDetailStates.delete(projectId);
     this.projectDetailStates.set(projectId, state);
-    return ScreenStateStore.copyProjectDetailState(state);
+    const restored = ScreenStateStore.copyProjectDetailState(state);
+    restored.filter.projectId = projectId;
+    return restored;
   }
 
   hasProjectDetail(projectId: string): boolean {

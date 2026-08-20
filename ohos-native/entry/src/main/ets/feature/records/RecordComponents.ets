@@ -3,6 +3,7 @@ import { CaptureStatus } from '../../domain/StateMachine';
 import { formatDay, imageUri, statusLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { tr } from '../../shared/AppText';
+import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 
 export function captureCardKey(capture: CaptureRecord): string {
   return `${capture.id}\u001F${capture.status}\u001F${capture.workLocation}\u001F${capture.workContent}` +
@@ -44,22 +45,17 @@ export struct CaptureCard {
   @Builder
   private thumbnail() {
     Stack({ alignContent: Alignment.TopStart }) {
-      if (this.capture.renderedPath.length > 0 || this.capture.originalPath.length > 0) {
-        Image(imageUri(this.capture.renderedPath.length > 0 ? this.capture.renderedPath :
-          this.capture.originalPath))
-          .width(112)
-          .height(112)
-          .sourceSize({ width: 224, height: 224 })
-          .objectFit(ImageFit.Cover)
-          .borderRadius(18)
-          .sharedTransition(`capture-photo-${this.capture.id}`,
-            { duration: 260, curve: Curve.Friction })
-      } else {
+      AppImage({ uri: this.capture.renderedPath.length > 0 ? imageUri(this.capture.renderedPath) :
+        (this.capture.originalPath.length > 0 ? imageUri(this.capture.originalPath) : ''),
+        decodeEdge: ImageDecodePolicy.thumbnail(112, this.getUIContext().vp2px(1)) })
+        .width(112)
+        .height(112)
+      if (this.capture.renderedPath.length === 0 && this.capture.originalPath.length === 0) {
         Column() {
           Text('▣').fontSize(30).fontColor(UiTokens.TEXT_SECONDARY)
         }
-        .justifyContent(FlexAlign.Center)
-        .width(112).height(112).backgroundColor('#E2ECE6').borderRadius(18)
+        .justifyContent(FlexAlign.Center).width(112).height(112)
+        .backgroundColor(UiTokens.IMAGE_PLACEHOLDER).borderRadius(18)
       }
       if (this.selectionMode) {
         Text(this.selected ? '✓' : '')
@@ -82,6 +78,11 @@ export struct CaptureCard {
     }
     .width(112)
     .height(112)
+    .clip(true)
+    .borderRadius(18)
+    .sharedTransition(`capture-photo-${this.capture.id}`,
+      { duration: 260, curve: Curve.Friction })
+    .accessibilityText(tr(`照片 ${this.capture.photoNumber}`, `Photo ${this.capture.photoNumber}`))
   }
 
   build() {
