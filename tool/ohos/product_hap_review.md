@@ -2,6 +2,16 @@
 
 包名 `io.github.wikg1018.sitemark`，版本 `1.0.8+23`。设备：DevEco 模拟器 `SiteMarkPhone602`，hdc `127.0.0.1:5555`。入口：全量 `lib/main.dart` 未签名 HAP。
 
+## 2026-08-20 Task 55
+
+云端闭环：`ohos.yml` 纳入 `widget_test.dart`、`app_lifecycle_test.dart`、`project_import_test.dart`、`project_export_test.dart`、`backup_restore_section_screen_test.dart`。不改生产语义。官方测试闭环，未重编 HAP，无拍成 dump。队列仍是应用内内存串行。
+
+| 项 | 结果 |
+| --- | --- |
+| CI | `.github/workflows/ohos.yml` 纳入 widget / lifecycle / 备份导入 |
+| 官方测试 | `widget_test` **33 绿**；`app_lifecycle_test` **9 绿**；import/export/备份页合计 **84 绿** |
+| 模拟器 dump | **无**。不得写相机已拍成；不得写备份已进系统文件管理；不得写 WorkScheduler 保活 |
+
 ## 2026-08-20 Task 54
 
 云端闭环：`ohos.yml` 纳入 `capture_workflow_test.dart`；拍摄页锁 delayed 后仍可再拍。生产 `CaptureWorkflowOutcome.delayed` 与 snackbar 已有，本刀未改表单语义。官方测试闭环，未重编 HAP，无拍成 dump。队列仍是应用内内存串行。

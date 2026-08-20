@@ -20,7 +20,7 @@
 **默认起点：**
 
 - 做 Android 产品：以远端 `main` 为准，先读 `pubspec.yaml` 和 `git log origin/main -5`。
-- 做鸿蒙适配：只在 `ohos` 分支，先读交接文档 `docs/superpowers/handoffs/2026-08-20-ohos-agent-handoff.md`（自包含现状 / 硬红线 / 诚实边界 / 测试方法 / 下一步），再看 `README.md` 顶部与 `tool/ohos/full_product_gap.md`。禁止把社区 Flutter / `ohos/` 合进 `main`。引擎 degraded。已完成 Tasks 0–54。
+- 做鸿蒙适配：只在 `ohos` 分支，先读交接文档 `docs/superpowers/handoffs/2026-08-20-ohos-agent-handoff.md`（自包含现状 / 硬红线 / 诚实边界 / 测试方法 / 下一步），再看 `README.md` 顶部与 `tool/ohos/full_product_gap.md`。禁止把社区 Flutter / `ohos/` 合进 `main`。引擎 degraded。已完成 Tasks 0–55。
 
 历史阶段性计划保留在 `docs/superpowers/`，只供追溯；**当前行为**以：
 

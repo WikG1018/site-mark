@@ -32,4 +32,9 @@ jobs:
             test/workflow/capture_workflow_test.dart \
             test/workflow/capture_media_service_test.dart \
             test/workflow/app_startup_recovery_test.dart \
-            test/background/capture_background_scheduler_test.dart
+            test/background/capture_background_scheduler_test.dart \
+            test/widget_test.dart \
+            test/app_lifecycle_test.dart \
+            test/workflow/project_import_test.dart \
+            test/workflow/project_export_test.dart \
+            test/features/settings/sections/backup_restore_section_screen_test.dart
