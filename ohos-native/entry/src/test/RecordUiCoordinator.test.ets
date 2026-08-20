@@ -8,6 +8,8 @@ import { DetailMediaSwapCoordinator, PhotoViewerGestureState, RecordBatchLayoutP
   ViewerFullImageCoordinator, ViewerNavigationSeedCoordinator,
   ViewerNodePolicy } from '../main/ets/feature/records/RecordUiCoordinator';
 import { ListPageCoordinator } from '../main/ets/shared/ListPageCoordinator';
+import { RootShellPolicy } from '../main/ets/shared/RootShellPolicy';
+import { UiTokens } from '../main/ets/shared/UiTokens';
 
 class ScheduledTask {
   id: number;
@@ -305,6 +307,12 @@ export default function recordUiCoordinatorTest(): void {
       expect(RecordBatchLayoutPolicy.listBottomPadding(true)).assertEqual(132);
       expect(RecordBatchLayoutPolicy.listBottomPadding(false) <
         RecordBatchLayoutPolicy.listBottomPadding(true)).assertTrue();
+    });
+
+    it('shares root dock clearance and accessible filter heights with project detail', 0, () => {
+      expect(RecordBatchLayoutPolicy.listBottomPadding(false)).assertEqual(RootShellPolicy.contentBottomInset());
+      expect(RecordBatchLayoutPolicy.filterControlHeight()).assertEqual(UiTokens.TOUCH_TARGET);
+      expect(RecordBatchLayoutPolicy.filterControlHeight() >= 44).assertTrue();
     });
 
     it('keeps short batch labels separate from complete accessibility descriptions', 0, () => {

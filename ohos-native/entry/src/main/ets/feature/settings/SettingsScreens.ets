@@ -12,6 +12,7 @@ import { BackupResult, ProjectBackupService } from '../backup/BackupService';
 import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr } from '../../shared/AppText';
+import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { StableSelectionList } from './SettingsProjectSelection';
 import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, watermarkAccentAccessibilityText,
   watermarkAccentOptions, WatermarkAccentOption } from './SettingsAccessibility';
@@ -119,7 +120,7 @@ export struct SettingsView {
             .backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
             .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
         }
-        .padding({ bottom: 124 })
+        .padding({ bottom: RootShellPolicy.contentBottomInset() })
         .width('100%')
       }.layoutWeight(1)
     }
