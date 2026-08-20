@@ -10,6 +10,7 @@ import { UiTokens } from '../../shared/UiTokens';
 import { ProjectBackupService } from '../backup/BackupService';
 import { tr } from '../../shared/AppText';
 import { LazyListDataSource } from '../../shared/LazyListDataSource';
+import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { ProjectCard } from './ProjectComponents';
 import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
@@ -35,36 +36,38 @@ export struct ProjectListView {
   private restoreTimer: number = -1;
   private loadGeneration: number = 0;
   private savedFirstVisibleIndex: number = 0;
-  private restorePending: boolean = true;
-  private visible: boolean = false;
+  private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
   private readonly refreshListener: () => void = (): void => { this.load(); };
   private readonly memoryListener: (level: number) => void = (_level: number): void => {
-    this.cancelRestoreTimer();
+    this.pageState.requestSafeReload();
   };
 
   aboutToAppear(): void {
+    if (!this.pageState.activate()) {
+      return;
+    }
     const runtime = AppRuntime.require();
-    this.visible = true;
     const restored = runtime.screenState.project(this.lifecycle);
     this.searchText = restored.searchText;
     this.savedFirstVisibleIndex = restored.firstVisibleIndex;
-    this.restorePending = true;
+    this.pageState.beginRestore();
     runtime.subscribe(this.refreshListener);
     runtime.uiMemory.register(this.memoryListener);
     this.load();
   }
 
   aboutToDisappear(): void {
-    this.visible = false;
-    this.saveProjectState();
-    this.cancelTimers();
-    this.loadGeneration += 1;
-    AppRuntime.current?.unsubscribe(this.refreshListener);
-    AppRuntime.current?.uiMemory.unregister(this.memoryListener);
+    this.deactivatePage();
   }
 
   aboutToBeDeleted(): void {
-    this.visible = false;
+    this.deactivatePage();
+  }
+
+  private deactivatePage(): void {
+    if (!this.pageState.deactivate()) {
+      return;
+    }
     this.saveProjectState();
     this.cancelTimers();
     this.loadGeneration += 1;
@@ -99,39 +102,44 @@ export struct ProjectListView {
   }
 
   private scheduleRestore(generation: number): void {
-    if (!this.restorePending || this.projectCount === 0) {
+    if (!this.pageState.isRestorePending() || this.projectCount === 0) {
       return;
     }
     this.cancelRestoreTimer();
     this.restoreTimer = setTimeout((): void => {
       this.restoreTimer = -1;
-      if (!this.visible || generation !== this.loadGeneration || !this.restorePending || this.projectCount === 0) {
+      if (!this.pageState.isActive() || generation !== this.loadGeneration ||
+        !this.pageState.isRestorePending() || this.projectCount === 0) {
         return;
       }
       const index = clampFirstVisibleIndex(this.savedFirstVisibleIndex, this.projectCount);
       this.savedFirstVisibleIndex = index;
       this.saveProjectState();
       this.projectScroller.scrollToIndex(index, false, ScrollAlign.START);
-      this.restorePending = false;
+      this.pageState.completeRestore();
     }, 0);
   }
 
   private async load(): Promise<void> {
+    if (!this.pageState.isActive()) {
+      return;
+    }
+    this.pageState.consumeSafeReloadRequest();
     const generation = ++this.loadGeneration;
     this.loading = true;
     try {
       const projects = await AppRuntime.require().database.listProjectSummaries(this.lifecycle, this.searchText);
-      if (!this.visible || generation !== this.loadGeneration) return;
+      if (!this.pageState.isActive() || generation !== this.loadGeneration) return;
       this.projectSource.replace(projects);
       this.projectCount = projects.length;
       this.message = '';
       this.scheduleRestore(generation);
     } catch (_) {
-      if (this.visible && generation === this.loadGeneration) {
+      if (this.pageState.isActive() && generation === this.loadGeneration) {
         this.message = tr('项目加载失败，请稍后重试', 'Projects could not be loaded. Try again.');
       }
     } finally {
-      if (this.visible && generation === this.loadGeneration) {
+      if (this.pageState.isActive() && generation === this.loadGeneration) {
         this.loading = false;
       }
     }
@@ -140,7 +148,7 @@ export struct ProjectListView {
   private scheduleSearch(): void {
     if (this.searchTimer >= 0) clearTimeout(this.searchTimer);
     this.savedFirstVisibleIndex = 0;
-    this.restorePending = true;
+    this.pageState.beginRestore();
     this.saveProjectState();
     this.searchTimer = setTimeout((): void => {
       this.searchTimer = -1;
@@ -167,7 +175,7 @@ export struct ProjectListView {
     const restored = AppRuntime.require().screenState.project(value);
     this.searchText = restored.searchText;
     this.savedFirstVisibleIndex = restored.firstVisibleIndex;
-    this.restorePending = true;
+    this.pageState.beginRestore();
     this.load();
   }
 
@@ -254,7 +262,7 @@ export struct ProjectListView {
         .cachedCount(4)
         .edgeEffect(EdgeEffect.Spring)
         .onScrollIndex((start: number, _end: number): void => {
-          if (this.restorePending) {
+          if (!this.pageState.canSaveScroll()) {
             return;
           }
           this.savedFirstVisibleIndex = Math.max(0, start);
@@ -406,18 +414,15 @@ export struct ProjectDetailScreen {
   private projectGeneration: number = 0;
   private contentGeneration: number = 0;
   private savedFirstVisibleIndex: number = 0;
-  private restorePending: boolean = true;
-  private visible: boolean = false;
+  private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
   private projectId: string = '';
   private readonly refreshListener: () => void = (): void => { this.refreshContent(); };
   private readonly memoryListener: (level: number) => void = (_level: number): void => {
-    this.cancelRestoreTimer();
-    this.restorePending = true;
+    this.pageState.requestSafeReload();
   };
 
   aboutToAppear(): void {
     const runtime = AppRuntime.require();
-    this.visible = true;
     this.projectId = runtime.selectedProjectId;
     const restored = runtime.screenState.projectDetail(this.projectId);
     this.searchText = restored.filter.searchText;
@@ -425,25 +430,34 @@ export struct ProjectDetailScreen {
     this.monthText = restored.filter.month > 0 ? restored.filter.month.toString() : '';
     this.dayText = restored.filter.day > 0 ? restored.filter.day.toString() : '';
     this.savedFirstVisibleIndex = restored.firstVisibleIndex;
-    this.restorePending = true;
+    this.pageState.beginRestore();
+    this.activatePage();
+  }
+
+  private activatePage(): void {
+    if (!this.pageState.activate()) {
+      return;
+    }
+    const runtime = AppRuntime.require();
+    this.pageState.beginRestore();
+    this.pageState.consumeSafeReloadRequest();
     runtime.subscribe(this.refreshListener);
     runtime.uiMemory.register(this.memoryListener);
     this.refreshContent();
   }
 
   aboutToDisappear(): void {
-    this.visible = false;
-    this.saveDetailState();
-    this.cancelTimers();
-    this.projectGeneration += 1;
-    this.contentGeneration += 1;
-    this.controller.invalidate();
-    AppRuntime.current?.unsubscribe(this.refreshListener);
-    AppRuntime.current?.uiMemory.unregister(this.memoryListener);
+    this.deactivatePage();
   }
 
   aboutToBeDeleted(): void {
-    this.visible = false;
+    this.deactivatePage();
+  }
+
+  private deactivatePage(): void {
+    if (!this.pageState.deactivate()) {
+      return;
+    }
     this.saveDetailState();
     this.cancelTimers();
     this.projectGeneration += 1;
@@ -512,7 +526,7 @@ export struct ProjectDetailScreen {
 
   private markFilterChanged(): void {
     this.savedFirstVisibleIndex = 0;
-    this.restorePending = true;
+    this.pageState.beginRestore();
     this.saveDetailState();
   }
 
@@ -526,18 +540,24 @@ export struct ProjectDetailScreen {
   }
 
   private refreshContent(): void {
+    if (!this.pageState.isActive()) {
+      return;
+    }
     this.loadProject();
     this.resetCaptures();
   }
 
   private async loadProject(): Promise<void> {
+    if (!this.pageState.isActive()) {
+      return;
+    }
     const generation = ++this.projectGeneration;
     if (this.project === null) {
       this.projectLoading = true;
     }
     try {
       const project = await AppRuntime.require().database.projectById(this.projectId);
-      if (!this.visible || generation !== this.projectGeneration) {
+      if (!this.pageState.isActive() || generation !== this.projectGeneration) {
         return;
       }
       this.project = project;
@@ -546,38 +566,47 @@ export struct ProjectDetailScreen {
       }
     } catch (_) {
     } finally {
-      if (this.visible && generation === this.projectGeneration) {
+      if (this.pageState.isActive() && generation === this.projectGeneration) {
         this.projectLoading = false;
       }
     }
   }
 
   private async resetCaptures(): Promise<void> {
+    if (!this.pageState.isActive()) {
+      return;
+    }
     const generation = ++this.contentGeneration;
     await this.controller.reset(this.currentFilter());
-    if (!this.visible || generation !== this.contentGeneration || this.controller.failed || this.project === null) {
+    if (!this.pageState.isActive() || generation !== this.contentGeneration || this.controller.failed ||
+      this.project === null) {
       return;
     }
     this.scheduleDetailRestore(generation);
   }
 
   private async retryCaptures(): Promise<void> {
+    if (!this.pageState.isActive()) {
+      return;
+    }
     const generation = ++this.contentGeneration;
     await this.controller.retry();
-    if (!this.visible || generation !== this.contentGeneration || this.controller.failed || this.project === null) {
+    if (!this.pageState.isActive() || generation !== this.contentGeneration || this.controller.failed ||
+      this.project === null) {
       return;
     }
     this.scheduleDetailRestore(generation);
   }
 
   private scheduleDetailRestore(generation: number): void {
-    if (!this.restorePending || this.captureCount() === 0) {
+    if (!this.pageState.isRestorePending() || this.captureCount() === 0) {
       return;
     }
     this.cancelRestoreTimer();
     this.restoreTimer = setTimeout((): void => {
       this.restoreTimer = -1;
-      if (!this.visible || generation !== this.contentGeneration || !this.restorePending ||
+      if (!this.pageState.isActive() || generation !== this.contentGeneration ||
+        !this.pageState.isRestorePending() ||
         this.captureCount() === 0) {
         return;
       }
@@ -585,7 +614,7 @@ export struct ProjectDetailScreen {
       this.savedFirstVisibleIndex = index;
       this.saveDetailState();
       this.detailScroller.scrollToIndex(index, false, ScrollAlign.START);
-      this.restorePending = false;
+      this.pageState.completeRestore();
     }, 0);
   }
 
@@ -977,7 +1006,7 @@ export struct ProjectDetailScreen {
             .cachedCount(4)
             .edgeEffect(EdgeEffect.Spring)
             .onScrollIndex((start: number, _end: number): void => {
-              if (this.restorePending) {
+              if (!this.pageState.canSaveScroll()) {
                 return;
               }
               this.savedFirstVisibleIndex = Math.max(0, start);
@@ -1005,6 +1034,8 @@ export struct ProjectDetailScreen {
       }.width('100%').height('100%')
     }
     .hideTitleBar(true)
+    .onShown((): void => { this.activatePage(); })
+    .onHidden((): void => { this.deactivatePage(); })
   }
 }
 
