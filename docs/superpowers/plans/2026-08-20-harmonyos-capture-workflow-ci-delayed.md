@@ -50,6 +50,6 @@
 - [x] **Step 2: Run the new widget test**（官方 3.44.6 `--no-pub`）
 - [x] **Step 3: Minimal implementation** — 生产 delayed 已有，未改表单语义；`ohos.yml` 增加 `test/workflow/capture_workflow_test.dart`
 - [x] **Step 4: Official tests green** — `capture_workflow_test` 17 绿；`capture_form_screen_test` 20 绿
-- [ ] **Step 5: Honest docs + commit + push origin/ohos**
+- [x] **Step 5: Honest docs + commit + push origin/ohos** — `bf0cb6c`
 
 不得写系统相册 / 拍成 / WorkScheduler / 杀进程 dump。写明 Task 46–54 Dart 未进 HAP。
