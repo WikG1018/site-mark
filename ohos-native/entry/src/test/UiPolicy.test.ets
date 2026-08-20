@@ -2,6 +2,7 @@ import { describe, expect, it } from '@ohos/hypium';
 import { CaptureFilter } from '../main/ets/domain/Models';
 import { ProjectLifecycleStatus } from '../main/ets/domain/StateMachine';
 import { ImageDecodePolicy, ImageRequestState } from '../main/ets/shared/AppImage';
+import { ListPageCoordinator } from '../main/ets/shared/ListPageCoordinator';
 import { MotionPolicy, ReduceMotionQueryPolicy } from '../main/ets/shared/MotionPolicy';
 import { clampFirstVisibleIndex, ScreenStateStore } from '../main/ets/shared/ScreenStateStore';
 import { forwardUiMemoryLevel, UiMemoryBroadcaster, UiMemoryCoordinator } from '../main/ets/shared/UiMemoryCoordinator';
@@ -170,6 +171,43 @@ export default function uiPolicyTest(): void {
       expect(clampFirstVisibleIndex(3.9, 10)).assertEqual(3);
       expect(clampFirstVisibleIndex(Number.NaN, 10)).assertEqual(0);
       expect(clampFirstVisibleIndex(4, 0)).assertEqual(0);
+    });
+
+    it('keeps scroll persistence enabled when memory pressure requests a later safe reload', 0, () => {
+      const coordinator = new ListPageCoordinator();
+      const memory = new UiMemoryCoordinator();
+      const store = new ScreenStateStore();
+      coordinator.activate();
+      coordinator.beginRestore();
+      coordinator.completeRestore();
+      memory.register((_level: number): void => { coordinator.requestSafeReload(); });
+
+      memory.broadcast(7);
+      if (coordinator.canSaveScroll()) {
+        store.saveProject(ProjectLifecycleStatus.ACTIVE, { searchText: '', firstVisibleIndex: 12 });
+      }
+
+      expect(coordinator.canSaveScroll()).assertTrue();
+      expect(store.project(ProjectLifecycleStatus.ACTIVE).firstVisibleIndex).assertEqual(12);
+      coordinator.deactivate();
+      coordinator.activate();
+      expect(coordinator.consumeSafeReloadRequest()).assertTrue();
+      expect(coordinator.consumeSafeReloadRequest()).assertFalse();
+      coordinator.beginRestore();
+      expect(coordinator.canSaveScroll()).assertFalse();
+      coordinator.completeRestore();
+      expect(coordinator.canSaveScroll()).assertTrue();
+    });
+
+    it('makes list page activation and deactivation idempotent', 0, () => {
+      const coordinator = new ListPageCoordinator();
+
+      expect(coordinator.activate()).assertTrue();
+      expect(coordinator.activate()).assertFalse();
+      expect(coordinator.deactivate()).assertTrue();
+      expect(coordinator.deactivate()).assertFalse();
+      expect(coordinator.isActive()).assertFalse();
+      expect(coordinator.canSaveScroll()).assertFalse();
     });
 
     it('keeps at most eight project detail states and refreshes LRU access', 0, () => {
