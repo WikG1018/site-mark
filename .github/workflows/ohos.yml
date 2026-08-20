@@ -31,6 +31,7 @@ jobs:
             test/features/capture/capture_failure_guidance_test.dart \
             test/workflow/capture_processor_test.dart \
             test/workflow/capture_workflow_test.dart \
+            test/workflow/capture_location_coordinator_test.dart \
             test/workflow/capture_media_service_test.dart \
             test/workflow/app_startup_recovery_test.dart \
             test/background/capture_background_scheduler_test.dart \

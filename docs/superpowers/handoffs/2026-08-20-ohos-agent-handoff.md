@@ -2,11 +2,11 @@
 
 > 交接对象：下一个负责 `ohos` 分支的 Agent（云端环境）。
 > 本文档自包含：只依赖本仓库与 GitHub，不依赖任何上一台机器的本地路径。
-> 事实基准：`ohos` 分支 `6484a86`（2026-08-20）。
+> 事实基准：`ohos` 分支本提交（2026-08-20）。
 
 ## 1. 一句话现状
 
-HarmonyOS NEXT 原生 HAP 适配已推进到 Task 56：产品主链路（隐私门 → 项目 → 拍摄表单 → 记录 → 备份/恢复 → 设置）在鸿蒙上可跑；启动恢复四窗 Dart 侧已并行开工；入队失败 delayed 后拍摄页仍可继续拍；水印引擎处于**降级模式**；相机/相册/分享/通知/外链/文件选择等系统通道均已接线，但**没有模拟器成功 dump 的一律不得宣称已通**。无杀进程 dump，队列仍是应用内内存串行。CI 已覆盖 UI / 降级引擎 / GPS / 通道 / 拍摄工作流 / 启动恢复 / widget / lifecycle / 备份导入 / 拍摄失败引导测试。取消拍照不占下一张当日编号。
+HarmonyOS NEXT 原生 HAP 适配已推进到 Task 57：产品主链路（隐私门 → 项目 → 拍摄表单 → 记录 → 备份/恢复 → 设置）在鸿蒙上可跑；启动恢复四窗 Dart 侧已并行开工；入队失败 delayed 后拍摄页仍可继续拍；水印引擎处于**降级模式**；相机/相册/分享/通知/外链/文件选择等系统通道均已接线，但**没有模拟器成功 dump 的一律不得宣称已通**。无杀进程 dump，队列仍是应用内内存串行。CI 已覆盖 UI / 降级引擎 / GPS / 通道 / 拍摄工作流 / 定位协调器 / 启动恢复 / widget / lifecycle / 备份导入 / 拍摄失败引导测试。取消拍照不占下一张当日编号；拒绝定位仍 queued 出片；连拍当日 `001` 然后 `002`。
 
 ## 2. 仓库与分支纪律
 
@@ -84,7 +84,8 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 56：产品主链路（隐私�
 | `test/features/capture/capture_form_screen_test.dart` | 20 绿（含 delayed 后仍可再拍） |
 | `test/features/capture/capture_failure_guidance_test.dart` | CI 覆盖；错误只显示稳定类别 |
 | `test/workflow/capture_processor_test.dart` | CI 覆盖 |
-| `test/workflow/capture_workflow_test.dart` | 18 绿；入队失败 delayed；取消拍照不占下一张 `001` |
+| `test/workflow/capture_workflow_test.dart` | 20 绿；入队失败 delayed；取消拍照不占下一张 `001`；拒绝定位仍 queued 出片；连拍当日 `001` 然后 `002` |
+| `test/workflow/capture_location_coordinator_test.dart` | 9 绿；无 EXIF + permissionDenied 仍 enqueue |
 | `test/workflow/capture_media_service_test.dart` | CI 覆盖；含恢复同编号删除锁；日记对账走独立 `recoverPublishJournals()` |
 | `test/workflow/app_startup_recovery_test.dart` | CI 覆盖；相机挂起时队列 / 日记 / 相册窗仍开工 |
 | `test/background/capture_background_scheduler_test.dart` | CI 覆盖 |
@@ -103,7 +104,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 56：产品主链路（隐私�
 - **HAP 构建**：需要 DevEco Studio + 社区 Flutter OH 3.44（gitcode `CPF-Flutter/flutter_flutter`，分支 oh-3.44.9-dev）+ 官方 Flutter 3.44.6 双 SDK。构建流程已固化在已跟踪脚本 `tool/ohos/build-product-hap.ps1`（assemble → 注入 NativeAssetsManifest → 编 sqlite → build hap → 替换 so → 校验 kernel → 安装启动），但脚本内写死了上一台机器的绝对路径，换机需替换为本地安装路径。
 - `libsqlite3.so` **不在 Git 里**也不需要在：`tool/ohos/compile-ohos-sqlite3.ps1` 会从 sqlite.org 下载 amalgamation 3500200，用 DevEco 自带 OHOS NDK clang 按 `x86_64-linux-ohos` / `aarch64-linux-ohos` 重编；`replace-ohos-sqlite3.ps1` 再塞进 HAP。`ohos/entry/libs/` 只是构建中间产物。
 - 社区插件版本覆盖在 `tool/ohos/community-overlay/`（两个 pubspec 覆盖文件）。
-- 已知 HAP 编译风险（下次重编时优先检查）：ETS 侧 `NotificationRequest.wantAgent` 写法、`EntryAbility` 对 `sitemark_system_api` 的 import。**Task 46–56 的 Dart 侧改动尚未重编进任何 HAP**。
+- 已知 HAP 编译风险（下次重编时优先检查）：ETS 侧 `NotificationRequest.wantAgent` 写法、`EntryAbility` 对 `sitemark_system_api` 的 import。**Task 46–57 的 Dart 侧改动尚未重编进任何 HAP**。
 - Rust 水印引擎 `ohos-arm64`：本机无 OHOS NDK clang sysroot，cargo 链接失败，所以走降级管线。编译尝试记录见 `tool/ohos/engine_status.md`。
 
 ## 7. 鸿蒙侧架构速览（改代码前必读）

@@ -288,6 +288,79 @@ void main() {
   );
 
   test(
+    'permission-denied location still queues a numbered capture',
+    () async {
+      platform.locationOverride = Future.value(
+        LocationResult(outcome: LocationOutcome.permissionDenied),
+      );
+
+      final result = await workflow.capture(
+        const CaptureDraft(
+          projectId: 'project-1',
+          projectName: '东区厂房改造',
+          workLocation: 'A 区三层',
+          workContent: '风管安装检查',
+          photographer: '张工',
+          watermarkLocaleCode: 'zh',
+        ),
+      );
+      await drainCoordinator();
+
+      expect(result.outcome, CaptureWorkflowOutcome.queued);
+      expect(result.failureCode, isNull);
+      final record = await database.captureById('capture-1');
+      expect(record?.status, CaptureStatus.captured);
+      expect(record?.photoNumber, '东区厂房改造-SM-20260716-001');
+      expect(record?.locationResolution, 'unavailable');
+      expect(record?.locationOutcome, 'permissionDenied');
+      expect(record?.latitude, isNull);
+      expect(record?.longitude, isNull);
+      expect(scheduler.enqueuedIds, ['capture-1', 'capture-1']);
+    },
+  );
+
+  test(
+    'two successful captures on the same day get 001 then 002',
+    () async {
+      var nextId = 1;
+      workflow = CaptureWorkflow(
+        database: database,
+        platform: platform,
+        images: images,
+        outputPaths: _FakeOutputPaths(),
+        fileStore: fileStore,
+        scheduler: scheduler,
+        locationCoordinator: coordinator,
+        idFactory: () => 'capture-${nextId++}',
+        now: () => DateTime(2026, 7, 16, 9, 32, 18),
+      );
+
+      const draft = CaptureDraft(
+        projectId: 'project-1',
+        projectName: '东区厂房改造',
+        workLocation: 'A 区三层',
+        workContent: '风管安装检查',
+        photographer: '张工',
+        watermarkLocaleCode: 'zh',
+      );
+      final first = await workflow.capture(draft);
+      final second = await workflow.capture(draft);
+      await drainCoordinator();
+
+      expect(first.outcome, CaptureWorkflowOutcome.queued);
+      expect(second.outcome, CaptureWorkflowOutcome.queued);
+      expect(
+        (await database.captureById('capture-1'))?.photoNumber,
+        '东区厂房改造-SM-20260716-001',
+      );
+      expect(
+        (await database.captureById('capture-2'))?.photoNumber,
+        '东区厂房改造-SM-20260716-002',
+      );
+    },
+  );
+
+  test(
     'camera failure persists a stable code instead of platform text',
     () async {
       platform.cameraOutcome = CameraOutcome.failed;

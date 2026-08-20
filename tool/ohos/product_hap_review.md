@@ -2,6 +2,16 @@
 
 包名 `io.github.wikg1018.sitemark`，版本 `1.0.8+23`。设备：DevEco 模拟器 `SiteMarkPhone602`，hdc `127.0.0.1:5555`。入口：全量 `lib/main.dart` 未签名 HAP。
 
+## 2026-08-20 Task 57
+
+云端闭环：拒绝定位仍 `queued` 出片且有当日编号；两张成功连拍当日 `001` 然后 `002`；`ohos.yml` 纳入 `capture_location_coordinator_test.dart`。生产路径已先 `markCaptured` 再解析定位，本刀未改编号或定位语义。官方测试闭环，未重编 HAP，无拍成 dump。队列仍是应用内内存串行。
+
+| 项 | 结果 |
+| --- | --- |
+| CI | `.github/workflows/ohos.yml` 纳入定位协调器 |
+| 官方测试 | `capture_workflow_test` **20 绿**；`capture_location_coordinator_test` **9 绿** |
+| 模拟器 dump | **无**。不得写相机已拍成；不得写定位出坐标；不得写 WorkScheduler 保活 |
+
 ## 2026-08-20 Task 56
 
 云端闭环：取消拍照后再拍，当日编号仍是 `001`；`ohos.yml` 纳入 `capture_failure_guidance_test.dart`。生产路径已删 pending 且不 `markCaptured`，本刀未改编号语义。官方测试闭环，未重编 HAP，无拍成 dump。队列仍是应用内内存串行。
