@@ -20,6 +20,9 @@ import { UiTokens } from '../shared/UiTokens';
 import { CompletionNotifications } from '../core/system/CompletionNotifications';
 import { AppText, tr } from '../shared/AppText';
 import { KeyedOperationGate } from '../core/concurrency/KeyedOperationGate';
+import { MotionPolicy } from '../shared/MotionPolicy';
+import { ScreenStateStore } from '../shared/ScreenStateStore';
+import { UiMemoryCoordinator } from '../shared/UiMemoryCoordinator';
 
 export type RuntimeListener = () => void;
 
@@ -73,6 +76,8 @@ export class AppRuntime {
   readonly startupRecovery: StartupRecovery;
   readonly restoreJournal: RestoreJournalStore;
   readonly notifications: CompletionNotifications;
+  readonly screenState: ScreenStateStore;
+  readonly uiMemory: UiMemoryCoordinator;
 
   selectedProjectId: string = '';
   selectedCaptureId: string = '';
@@ -98,6 +103,8 @@ export class AppRuntime {
     );
     this.privateFileCleanup = new PrivateFileCleanup(database, context.filesDir);
     this.restoreJournal = new RestoreJournalStore(new PreferencesRestoreJournalStorage(context));
+    this.screenState = new ScreenStateStore();
+    this.uiMemory = new UiMemoryCoordinator();
     this.startupRecovery = new StartupRecovery(database, this.services, this.captureWorkflow,
       this.queue, this.mediaCleanup, this.privateFileCleanup, this.restoreJournal, context.filesDir);
   }
@@ -110,6 +117,10 @@ export class AppRuntime {
     const runtime = new AppRuntime(context, database);
     await runtime.applyAppearance();
     await runtime.startupRecovery.run();
+    try {
+      await MotionPolicy.refresh();
+    } catch (_) {
+    }
     AppRuntime.current = runtime;
     return runtime;
   }
