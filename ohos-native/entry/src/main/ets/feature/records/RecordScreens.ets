@@ -946,6 +946,18 @@ export struct CaptureDetailScreen {
     this.media.invalidate();
     this.mediaRevision += 1;
   };
+  private readonly mediaSlotLoadedHandler = (generation: number, _auxiliaryGeneration: number,
+    _slot: string, uri: string): void => {
+    if (this.pageState.isActive()) {
+      this.mediaPendingLoaded(generation, uri);
+    }
+  };
+  private readonly mediaSlotFailedHandler = (generation: number, _auxiliaryGeneration: number,
+    _slot: string, uri: string): void => {
+    if (this.pageState.isActive()) {
+      this.mediaPendingFailed(generation, uri);
+    }
+  };
 
   aboutToAppear(): void {
     this.applyNavigationSeed();
@@ -1087,14 +1099,6 @@ export struct CaptureDetailScreen {
     }
   }
 
-  private mediaSlotLoadedCallback(generation: number, uri: string): () => void {
-    return (): void => { this.mediaPendingLoaded(generation, uri); };
-  }
-
-  private mediaSlotFailedCallback(generation: number, uri: string): () => void {
-    return (): void => { this.mediaPendingFailed(generation, uri); };
-  }
-
   private retryMedia(): void {
     this.media.retry();
     this.mediaRevision += 1;
@@ -1168,17 +1172,15 @@ export struct CaptureDetailScreen {
         if (this.mediaRevision >= 0 && this.media.slotUri('a').length > 0) {
           AppImage({ uri: this.media.slotUri('a'), requestVersion: this.media.slotVersion('a'),
             decodeEdge: ImageDecodePolicy.detail(), fit: ImageFit.Contain,
-            transparentPlaceholder: this.media.isPendingSlot('a'),
-            onLoaded: this.mediaSlotLoadedCallback(this.media.slotVersion('a'), this.media.slotUri('a')),
-            onFailed: this.mediaSlotFailedCallback(this.media.slotVersion('a'), this.media.slotUri('a')) })
+            transparentPlaceholder: this.media.isPendingSlot('a'), callbackToken: this.media.slotVersion('a'),
+            callbackKey: 'a', onLoaded: this.mediaSlotLoadedHandler, onFailed: this.mediaSlotFailedHandler })
             .width('100%').height(330)
         }
         if (this.media.slotUri('b').length > 0) {
           AppImage({ uri: this.media.slotUri('b'), requestVersion: this.media.slotVersion('b'),
             decodeEdge: ImageDecodePolicy.detail(), fit: ImageFit.Contain,
-            transparentPlaceholder: this.media.isPendingSlot('b'),
-            onLoaded: this.mediaSlotLoadedCallback(this.media.slotVersion('b'), this.media.slotUri('b')),
-            onFailed: this.mediaSlotFailedCallback(this.media.slotVersion('b'), this.media.slotUri('b')) })
+            transparentPlaceholder: this.media.isPendingSlot('b'), callbackToken: this.media.slotVersion('b'),
+            callbackKey: 'b', onLoaded: this.mediaSlotLoadedHandler, onFailed: this.mediaSlotFailedHandler })
             .width('100%').height(330)
         }
       }
