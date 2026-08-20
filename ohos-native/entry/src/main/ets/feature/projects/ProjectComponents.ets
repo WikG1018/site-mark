@@ -31,6 +31,25 @@ function projectSummaryText(item: ProjectSummary): string {
   return `${records} · ${tr('尚未拍摄', 'No captures yet')}`;
 }
 
+class ProjectPreviewItem {
+  readonly key: string;
+  readonly path: string;
+
+  constructor(key: string, path: string) {
+    this.key = key;
+    this.path = path;
+  }
+}
+
+function projectPreviewItems(projectId: string, paths: string[]): ProjectPreviewItem[] {
+  const previews: ProjectPreviewItem[] = [];
+  const limit = Math.min(3, paths.length);
+  for (let index = 0; index < limit; index += 1) {
+    previews.push(new ProjectPreviewItem(`${projectId}\u001F${index}\u001F${paths[index]}`, paths[index]));
+  }
+  return previews;
+}
+
 @Component
 export struct ProjectCard {
   @Prop summary: ProjectSummary = emptyProjectSummary();
@@ -79,23 +98,24 @@ export struct ProjectCard {
       }
       if (this.summary.recentRenderedPaths.length > 0) {
         Row({ space: 8 }) {
-          ForEach(this.summary.recentRenderedPaths.slice(0, 3), (path: string) => {
-            Stack() {
-              Row()
-                .width(56)
-                .height(56)
-                .backgroundColor(UiTokens.IMAGE_PLACEHOLDER)
-              Image(imageUri(path))
-                .width(56)
-                .height(56)
-                .sourceSize({ width: 112, height: 112 })
-                .objectFit(ImageFit.Cover)
-            }
-            .width(56)
-            .height(56)
-            .clip(true)
-            .borderRadius(UiTokens.CONTROL_RADIUS)
-          }, (path: string): string => path)
+          ForEach(projectPreviewItems(this.summary.project.id, this.summary.recentRenderedPaths),
+            (preview: ProjectPreviewItem) => {
+              Stack() {
+                Row()
+                  .width(56)
+                  .height(56)
+                  .backgroundColor(UiTokens.IMAGE_PLACEHOLDER)
+                Image(imageUri(preview.path))
+                  .width(56)
+                  .height(56)
+                  .sourceSize({ width: 112, height: 112 })
+                  .objectFit(ImageFit.Cover)
+              }
+              .width(56)
+              .height(56)
+              .clip(true)
+              .borderRadius(UiTokens.CONTROL_RADIUS)
+            }, (preview: ProjectPreviewItem): string => preview.key)
           Blank()
         }
         .width('100%')
