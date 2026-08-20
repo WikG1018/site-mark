@@ -5,6 +5,7 @@ param(
     'tool.test_verify_ohos_native_manifest',
     'tool.test_seed_ohos_performance_db',
     'tool.test_ohos_capture_database_contract',
+    'tool.test_ohos_back_wiring',
     'tool.test_ohos_host_test_gate'
   ),
   [string[]]$PowerShellTestScripts = @(

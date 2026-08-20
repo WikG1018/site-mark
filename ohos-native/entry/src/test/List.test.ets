@@ -24,6 +24,7 @@ import diagnosticsActionOutcomeTest from './DiagnosticsActionOutcome.test';
 import captureFormPolicyTest from './CaptureFormPolicy.test';
 import captureWorkflowValidationTest from './CaptureWorkflowValidation.test';
 import screenUiStabilityTest from './ScreenUiStability.test';
+import projectEditStabilityTest from './ProjectEditStability.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -52,4 +53,5 @@ export default function testsuite(): void {
   captureFormPolicyTest();
   captureWorkflowValidationTest();
   screenUiStabilityTest();
+  projectEditStabilityTest();
 }
