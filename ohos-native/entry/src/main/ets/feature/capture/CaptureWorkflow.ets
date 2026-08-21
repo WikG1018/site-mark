@@ -1,11 +1,12 @@
 import { util } from '@kit.ArkTS';
 import { SerialCaptureQueue } from '../../background/SerialCaptureQueue';
-import { AppDatabase } from '../../data/database/AppDatabase';
+import { CaptureWorkflowDatabase } from '../../data/database/AppDatabase';
 import { CaptureSessionStore, PendingCaptureSession } from '../../data/prefs/CaptureSessionStore';
 import { CaptureDraft } from '../../domain/Models';
 import { CameraOutcomeCode, LocationOutcomeCode, LocationSnapshot,
   SystemServices } from '../../core/system/SystemServices';
 import { tr } from '../../shared/AppText';
+import { validateCaptureDraft } from './CaptureFormPolicy';
 
 export interface CaptureFormInput {
   projectId: string;
@@ -33,12 +34,12 @@ export class CaptureWorkflowResult {
 }
 
 export class CaptureWorkflow {
-  private readonly database: AppDatabase;
+  private readonly database: CaptureWorkflowDatabase;
   private readonly services: SystemServices;
   private readonly sessions: CaptureSessionStore;
   private readonly queue: SerialCaptureQueue;
 
-  constructor(database: AppDatabase, services: SystemServices, sessions: CaptureSessionStore,
+  constructor(database: CaptureWorkflowDatabase, services: SystemServices, sessions: CaptureSessionStore,
     queue: SerialCaptureQueue) {
     this.database = database;
     this.services = services;
@@ -130,10 +131,7 @@ export class CaptureWorkflow {
   }
 
   private validate(input: CaptureFormInput): void {
-    if (input.workLocation.trim().length === 0 || input.workContent.trim().length === 0 ||
-      input.photographer.trim().length === 0) {
-      throw new Error(tr('请填写工程部位、工作内容和拍摄人',
-        'Complete the location, work, and photographer fields'));
-    }
+    const validation = validateCaptureDraft(input.workLocation, input.workContent, input.photographer, input.notes);
+    if (!validation.valid) throw new Error('capture_form_invalid');
   }
 }

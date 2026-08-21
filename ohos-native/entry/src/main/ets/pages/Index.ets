@@ -4,14 +4,20 @@ import { AppRuntime } from '../app/AppRuntime';
 import { Routes } from '../app/Routes';
 import { PreferencesConsentStorage } from '../data/prefs/PreferencesConsentStorage';
 import { PrivacyConsentStore } from '../data/prefs/PrivacyConsentStore';
-import { CaptureDetailScreen, CaptureEditorScreen, CaptureFormScreen, AllRecordsView,
-  PhotoViewerScreen } from '../feature/records/RecordScreens';
+import { CaptureDetailScreen, CaptureEditorScreen, CaptureFormScreen,
+  AllRecordsView } from '../feature/records/RecordScreens';
+import { PhotoViewerScreen } from '../feature/records/PhotoViewerScreen';
 import { ProjectDetailScreen, ProjectEditorScreen, ProjectListView,
   ProjectSettingsScreen } from '../feature/projects/ProjectScreens';
 import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, SettingsView,
   StorageScreen } from '../feature/settings/SettingsScreens';
 import { UiTokens } from '../shared/UiTokens';
 import { AppText, tr } from '../shared/AppText';
+import { MotionPolicy } from '../shared/MotionPolicy';
+import { ScreenActionCoordinator } from '../shared/ScreenActionCoordinator';
+import { RootBackDispatcher } from '../shared/ScreenUiStabilityCoordinator';
+import { RootLifecycleCoordinator, RootMotionRefreshResult, RootMotionSpec, RootShellPolicy,
+  RootTabAction, RootTabCoordinator } from '../shared/RootShellPolicy';
 
 @Entry
 @Component
@@ -19,15 +25,25 @@ struct Index {
   @Provide('pathStack') pathStack: NavPathStack = new NavPathStack();
   @State private consentChecked: boolean = false;
   @State private consentAccepted: boolean = false;
+  @State private consentBusy: boolean = false;
+  @State private consentError: string = '';
   @State private runtimeReady: boolean = false;
   @State private runtimeError: string = '';
   @State private activeTab: number = 0;
   @State private tabDirection: number = 1;
   @State private selectionMode: boolean = false;
   @State private appearanceRevision: number = 0;
+  @State private motionRevision: number = MotionPolicy.reduceMotion ? -1 : 1;
+  private readonly rootLifecycle: RootLifecycleCoordinator = new RootLifecycleCoordinator();
+  private readonly consentAction: ScreenActionCoordinator = new ScreenActionCoordinator();
+  private readonly tabCoordinator: RootTabCoordinator = new RootTabCoordinator(0);
+  private subscribedRuntime: AppRuntime | null = null;
   private consentStore: PrivacyConsentStore = new PrivacyConsentStore(
     new PreferencesConsentStorage(AbilityContextHolder.require()));
   private readonly runtimeListener: () => void = (): void => {
+    if (!this.rootLifecycle.isActive()) {
+      return;
+    }
     const runtime = AppRuntime.current;
     this.selectionMode = runtime?.rootSelectionMode ?? false;
     this.appearanceRevision += 1;
@@ -35,65 +51,221 @@ struct Index {
 
   aboutToAppear(): void {
     AppText.apply('', this.context().resourceManager.getConfigurationSync().locale);
-    this.checkConsent();
+    this.activateRootShell();
   }
 
   aboutToDisappear(): void {
-    AppRuntime.current?.unsubscribe(this.runtimeListener);
+    this.deactivateRootShell();
+  }
+
+  onPageShow(): void {
+    this.activateRootShell();
+  }
+
+  onPageHide(): void {
+    this.deactivateRootShell();
+  }
+
+  onBackPress(): boolean {
+    return RootBackDispatcher.handle();
   }
 
   private context(): common.UIAbilityContext {
     return AbilityContextHolder.require();
   }
 
-  private async checkConsent(): Promise<void> {
-    try {
-      this.consentAccepted = await this.consentStore.isAccepted();
-    } catch (_) {
-      this.consentAccepted = false;
+  private activateRootShell(): void {
+    const wasActive = this.rootLifecycle.isActive();
+    const generation = this.rootLifecycle.activate();
+    this.requestMotionPolicyRefresh(generation);
+    if (!wasActive) {
+      this.resumeStartup(generation);
     }
+  }
+
+  private resumeStartup(generation: number): void {
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
+    if (this.runtimeReady && AppRuntime.current !== null) {
+      this.subscribeRuntime(AppRuntime.current);
+      this.runtimeListener();
+      return;
+    }
+    if (!this.consentChecked || !this.consentAccepted) {
+      this.checkConsent(generation);
+    } else if (!this.runtimeReady && this.runtimeError.length === 0) {
+      this.initializeRuntime(generation);
+    }
+  }
+
+  private async checkConsent(generation: number): Promise<void> {
+    let accepted = false;
+    try {
+      accepted = await this.consentStore.isAccepted();
+    } catch (_) {
+    }
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
+    this.consentAccepted = accepted;
     this.consentChecked = true;
-    if (this.consentAccepted) {
-      await this.initializeRuntime();
+    if (accepted) {
+      await this.initializeRuntime(generation);
+      if (!this.rootLifecycle.isCurrent(generation)) {
+        return;
+      }
     }
   }
 
   private async acceptPrivacy(): Promise<void> {
-    await this.consentStore.accept();
-    this.consentAccepted = true;
-    await this.initializeRuntime();
+    const actionToken = this.consentAction.begin();
+    if (actionToken === null) {
+      return;
+    }
+    const generation = this.rootLifecycle.generation();
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      this.consentAction.finish(actionToken);
+      return;
+    }
+    this.consentBusy = true;
+    this.consentError = '';
+    try {
+      await this.consentStore.accept();
+      if (!this.rootLifecycle.isCurrent(generation) || !this.consentAction.isCurrent(actionToken)) {
+        return;
+      }
+      this.consentAccepted = true;
+      await this.initializeRuntime(generation);
+    } catch (_) {
+      if (this.rootLifecycle.isCurrent(generation) && this.consentAction.isCurrent(actionToken)) {
+        this.consentError = tr('无法保存你的选择，请检查存储空间后重试。',
+          'Your choice could not be saved. Check available storage and try again.');
+      }
+    } finally {
+      if (this.consentAction.finish(actionToken) && this.rootLifecycle.isCurrent(generation)) {
+        this.consentBusy = false;
+      }
+    }
   }
 
-  private async initializeRuntime(): Promise<void> {
+  private async initializeRuntime(generation: number): Promise<void> {
+    if (!this.rootLifecycle.isCurrent(generation)) {
+      return;
+    }
     this.runtimeError = '';
     try {
       const runtime = await AppRuntime.initialize(this.context());
-      runtime.subscribe(this.runtimeListener);
+      if (!this.rootLifecycle.isCurrent(generation)) {
+        return;
+      }
+      this.subscribeRuntime(runtime);
       this.runtimeReady = true;
       this.runtimeListener();
+      this.requestMotionPolicyRefresh(generation);
     } catch (_) {
+      if (!this.rootLifecycle.isCurrent(generation)) {
+        return;
+      }
       this.runtimeError = tr('本机数据初始化失败。请释放存储空间后重试；现有数据不会被自动删除。',
         'Local data could not be initialized. Free some storage and try again; existing data will not be deleted.');
     }
   }
 
-  private switchTab(index: number): void {
-    if (index === this.activeTab) {
+  private subscribeRuntime(runtime: AppRuntime): void {
+    if (this.subscribedRuntime === runtime) {
       return;
     }
-    this.tabDirection = index > this.activeTab ? 1 : -1;
-    this.getUIContext().animateTo({ duration: 260, curve: Curve.Friction }, (): void => {
-      this.activeTab = index;
+    this.subscribedRuntime?.unsubscribe(this.runtimeListener);
+    runtime.subscribe(this.runtimeListener);
+    this.subscribedRuntime = runtime;
+  }
+
+  private unsubscribeRuntime(): void {
+    this.subscribedRuntime?.unsubscribe(this.runtimeListener);
+    this.subscribedRuntime = null;
+  }
+
+  private requestMotionPolicyRefresh(generation: number): void {
+    if (!this.rootLifecycle.beginMotionRefresh(generation)) {
+      return;
+    }
+    this.readMotionPolicy(generation);
+  }
+
+  private async readMotionPolicy(generation: number): Promise<void> {
+    let reduceMotion = false;
+    try {
+      reduceMotion = await MotionPolicy.read();
+    } catch (_) {
+    }
+    const current = this.rootLifecycle.isCurrent(generation);
+    const completion: RootMotionRefreshResult = this.rootLifecycle.finishMotionRefresh(generation);
+    if (current && completion.commit) {
+      MotionPolicy.commit(reduceMotion);
+      try {
+        this.pathStack.disableAnimation(reduceMotion);
+      } catch (_) {
+      }
+      const nextRevision = Math.abs(this.motionRevision) + 1;
+      this.motionRevision = reduceMotion ? -nextRevision : nextRevision;
+    }
+    if (completion.restartGeneration !== 0) {
+      this.requestMotionPolicyRefresh(completion.restartGeneration);
+    }
+  }
+
+  private deactivateRootShell(): void {
+    if (this.rootLifecycle.deactivate()) {
+      this.consentAction.invalidate();
+      this.consentBusy = false;
+      this.tabCoordinator.deactivate();
+    }
+    this.unsubscribeRuntime();
+  }
+
+  private switchTab(index: number): void {
+    this.runTabAction(this.tabCoordinator.request(index));
+  }
+
+  private runTabAction(action: RootTabAction): void {
+    if (!action.started) {
+      return;
+    }
+    const motion: RootMotionSpec = RootShellPolicy.motion(action.direction);
+    if (motion.dockDuration === 0) {
+      this.tabDirection = action.direction;
+      this.activeTab = action.targetIndex;
+      this.runTabAction(this.tabCoordinator.finish(action.generation));
+      return;
+    }
+    this.getUIContext().animateTo({
+      duration: motion.dockDuration,
+      curve: Curve.EaseOut,
+      onFinish: (): void => {
+        const next = this.tabCoordinator.finish(action.generation);
+        if (this.rootLifecycle.isActive()) {
+          this.runTabAction(next);
+        }
+      },
+    }, (): void => {
+      this.tabDirection = action.direction;
+      this.activeTab = action.targetIndex;
     });
   }
 
   private contentTransition(): TransitionEffect {
-    const enterX = this.tabDirection > 0 ? 34 : -34;
-    const exitX = this.tabDirection > 0 ? -22 : 22;
+    const motion: RootMotionSpec = RootShellPolicy.motion(this.tabDirection);
     return TransitionEffect.asymmetric(
-      TransitionEffect.translate({ x: enterX, y: 0 }).combine(TransitionEffect.opacity(0)),
-      TransitionEffect.translate({ x: exitX, y: 0 }).combine(TransitionEffect.opacity(0))
-    ).animation({ duration: 220, curve: Curve.Friction });
+      TransitionEffect.translate({ x: motion.enterX, y: 0 })
+        .animation({ duration: motion.pageDuration, curve: Curve.EaseOut })
+        .combine(TransitionEffect.opacity(0)
+          .animation({ duration: motion.fadeDuration, curve: Curve.EaseOut })),
+      TransitionEffect.translate({ x: motion.exitX, y: 0 })
+        .animation({ duration: motion.pageDuration, curve: Curve.EaseOut })
+        .combine(TransitionEffect.opacity(0)
+          .animation({ duration: motion.fadeDuration, curve: Curve.EaseOut }))
+    );
   }
 
   @Builder
@@ -126,47 +298,58 @@ struct Index {
   }
 
   @Builder
-  private dockItem(index: number, icon: Resource, label: string) {
-    Column({ space: 3 }) {
-      Image(icon).width(24).height(24)
-        .fillColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
-      Text(label).fontSize(12).fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Medium)
-        .fontColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+  private dockItem(index: number, icon: Resource, label: string, selectedLabel: string) {
+    Button() {
+      Column({ space: 3 }) {
+        Image(icon).width(23).height(23)
+          .fillColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+          .accessibilityLevel('no')
+        Text(label).fontSize(12).fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+          .accessibilityLevel('no')
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
     }
     .layoutWeight(1)
-    .height(58)
-    .justifyContent(FlexAlign.Center)
+    .height(RootShellPolicy.dockHeight())
     .backgroundColor(Color.Transparent)
+    .borderRadius(UiTokens.CONTROL_RADIUS)
+    .accessibilityGroup(true)
+    .accessibilityText(this.activeTab === index ? selectedLabel : label)
     .onClick((): void => this.switchTab(index))
   }
 
   @Builder
   private floatingDock() {
-    Stack() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Row()
+        .width(`${RootShellPolicy.dockSelectedOffset(100, 1)}%`)
+        .height(RootShellPolicy.dockHeight() - 8)
+        .position({ x: `${RootShellPolicy.dockSelectedOffset(100, this.activeTab)}%`, y: 4 })
+        .backgroundColor(this.motionRevision < 0 ? UiTokens.PRIMARY_CONTAINER : UiTokens.DOCK_SELECTED)
+        .backdropBlur(this.motionRevision < 0 ? 0 : RootShellPolicy.motion(this.tabDirection).selectionBlur)
+        .borderRadius(UiTokens.CARD_RADIUS + 4)
+        .hitTestBehavior(HitTestMode.None)
+        .accessibilityLevel('no')
       Row() {
-        if (this.activeTab > 0) {
-          Blank().layoutWeight(this.activeTab)
-        }
-        Row().height(58).layoutWeight(1)
-          .backgroundColor(UiTokens.DOCK_SELECTED).backdropBlur(16).borderRadius(22)
-        if (this.activeTab < 2) {
-          Blank().layoutWeight(2 - this.activeTab)
-        }
-      }.width('100%').height('100%').padding(6)
-      Row() {
-        this.dockItem(0, $r('app.media.ic_projects'), tr('项目', 'Projects'))
-        this.dockItem(1, $r('app.media.ic_records'), tr('全部记录', 'Records'))
-        this.dockItem(2, $r('app.media.ic_settings'), tr('设置', 'Settings'))
-      }.width('100%').height('100%').padding(6)
+        this.dockItem(0, $r('app.media.ic_projects'), tr('项目', 'Projects'),
+          tr('项目，已选择', 'Projects, selected'))
+        this.dockItem(1, $r('app.media.ic_records'), tr('全部记录', 'Records'),
+          tr('全部记录，已选择', 'Records, selected'))
+        this.dockItem(2, $r('app.media.ic_settings'), tr('设置', 'Settings'),
+          tr('设置，已选择', 'Settings, selected'))
+      }.width('100%').height('100%')
     }
-    .height(70)
-    .margin({ left: 16, right: 16, bottom: 12 })
-    .width('100%')
-    .backgroundColor(UiTokens.DOCK)
-    .backdropBlur(28)
-    .border({ width: 1, color: UiTokens.OUTLINE })
-    .borderRadius(28)
-    .shadow({ radius: 20, color: '#30000000', offsetY: 7 })
+    .height(RootShellPolicy.dockHeight())
+    .margin({ bottom: RootShellPolicy.dockBottomMargin() })
+    .width(`calc(100% - ${RootShellPolicy.dockHorizontalMargin() * 2}vp)`)
+    .backgroundColor(this.motionRevision < 0 ? UiTokens.SURFACE : UiTokens.DOCK)
+    .backdropBlur(this.motionRevision < 0 ? 0 : RootShellPolicy.motion(this.tabDirection).dockBlur)
+    .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+    .borderRadius(UiTokens.CARD_RADIUS + 8)
+    .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
   }
 
   @Builder
@@ -222,12 +405,19 @@ struct Index {
               .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
           }
           .padding(20).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
-          Button(tr('同意并继续', 'Agree and continue')).height(54).width('100%').fontSize(17)
+          if (this.consentError.length > 0) {
+            Text(this.consentError).fontSize(14).fontColor(UiTokens.DANGER).width('100%')
+              .textAlign(TextAlign.Center).accessibilityText(this.consentError)
+          }
+          Button(this.consentBusy ? tr('正在保存…', 'Saving…') : tr('同意并继续', 'Agree and continue'))
+            .height(54).width('100%').fontSize(17)
             .fontWeight(FontWeight.Bold)
             .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
+            .enabled(!this.consentBusy)
             .onClick((): void => { this.acceptPrivacy(); })
           Button(tr('退出应用', 'Exit app')).height(44).width('100%').fontColor(UiTokens.TEXT_SECONDARY)
-            .backgroundColor(Color.Transparent).onClick((): void => { this.context().terminateSelf(); })
+            .backgroundColor(Color.Transparent).enabled(!this.consentBusy)
+            .onClick((): void => { this.context().terminateSelf(); })
         }
         .padding({ left: 24, right: 24, top: 52, bottom: 34 })
         .width('100%')
@@ -252,7 +442,7 @@ struct Index {
         Text(this.runtimeError).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
           .lineHeight(22).textAlign(TextAlign.Center).padding({ left: 32, right: 32 })
         Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
-          .onClick((): void => { this.initializeRuntime(); })
+          .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
       }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
     } else if (!this.runtimeReady) {
       Column({ space: 14 }) {

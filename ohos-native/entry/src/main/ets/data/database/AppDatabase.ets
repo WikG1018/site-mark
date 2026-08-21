@@ -1,13 +1,24 @@
 import { common } from '@kit.AbilityKit';
 import { relationalStore } from '@kit.ArkData';
 import { util } from '@kit.ArkTS';
-import { formatPhotoNumber, normalizeCaptureSearchTerms, normalizedProjectNameKey,
-  safeProjectFileNameKey } from '../../domain/DomainRules';
+import { CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH, CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH,
+  CAPTURE_TEMPLATE_NAME_MAX_LENGTH, CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH, formatPhotoNumber,
+  captureTemplateNameKey, inspectCaptureFields, normalizeCaptureSearchTerms, normalizeCaptureTemplateName,
+  normalizedProjectNameKey, safeProjectFileNameKey, validateTemplateField } from '../../domain/DomainRules';
 import { AppSettingsRecord, CaptureDraft, CaptureFilter, CapturePage, CapturePageCursor,
-  CaptureRecord, CaptureTemplateRecord, ProjectRecord, ProjectSummary } from '../../domain/Models';
+  CaptureRecord, CaptureTemplateRecord, CaptureViewerWindow, ProjectRecord, ProjectSummary } from
+  '../../domain/Models';
 import { canCaptureTransition, canProjectTransition, CaptureStatus,
   ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { RestoredProjectInput } from '../../domain/RestoreModels';
+import { CaptureViewerQueryExecutor, CaptureViewerQueryResultSet, CaptureViewerWindowQuery } from
+  './CaptureViewerWindowQuery';
+
+export interface CaptureWorkflowDatabase {
+  projectById(id: string): Promise<ProjectRecord | null>;
+  createCaptured(draft: CaptureDraft): Promise<CaptureRecord>;
+  captureById(id: string): Promise<CaptureRecord | null>;
+}
 
 const DATABASE_NAME: string = 'sitemark_native.db';
 const DATABASE_SCHEMA_VERSION: number = 14;
@@ -60,6 +71,19 @@ const SCHEMA_STATEMENTS: string[] = [
     original_deleted_at INTEGER
   )`,
   'CREATE INDEX IF NOT EXISTS captures_status_idx ON captures(status)',
+  `CREATE TRIGGER IF NOT EXISTS captures_fields_validate_insert BEFORE INSERT ON captures
+   WHEN instr(NEW.work_location,char(0))>0 OR length(trim(NEW.work_location)) NOT BETWEEN 1 AND 160
+     OR instr(NEW.work_content,char(0))>0 OR length(trim(NEW.work_content)) NOT BETWEEN 1 AND 240
+     OR instr(NEW.photographer,char(0))>0 OR length(trim(NEW.photographer)) NOT BETWEEN 1 AND 80
+     OR instr(NEW.notes,char(0))>0
+   BEGIN SELECT RAISE(ABORT,'capture_form_invalid'); END`,
+  `CREATE TRIGGER IF NOT EXISTS captures_fields_validate_update BEFORE UPDATE OF
+   work_location,work_content,photographer,notes ON captures
+   WHEN instr(NEW.work_location,char(0))>0 OR length(trim(NEW.work_location)) NOT BETWEEN 1 AND 160
+     OR instr(NEW.work_content,char(0))>0 OR length(trim(NEW.work_content)) NOT BETWEEN 1 AND 240
+     OR instr(NEW.photographer,char(0))>0 OR length(trim(NEW.photographer)) NOT BETWEEN 1 AND 80
+     OR instr(NEW.notes,char(0))>0
+   BEGIN SELECT RAISE(ABORT,'capture_form_invalid'); END`,
   'CREATE INDEX IF NOT EXISTS captures_sort_cursor_idx ON captures(COALESCE(captured_at, created_at) DESC, id DESC)',
   'CREATE INDEX IF NOT EXISTS captures_project_sort_cursor_idx ON captures(project_id, COALESCE(captured_at, created_at) DESC, id DESC)',
   `CREATE TABLE IF NOT EXISTS capture_templates (
@@ -208,7 +232,38 @@ function captureFromRow(rows: relationalStore.ResultSet): CaptureRecord {
   });
 }
 
-export class AppDatabase {
+class RdbCaptureViewerQueryResultSet implements CaptureViewerQueryResultSet {
+  private readonly rows: relationalStore.ResultSet;
+
+  constructor(rows: relationalStore.ResultSet) {
+    this.rows = rows;
+  }
+
+  goToFirstRow(): boolean { return this.rows.goToFirstRow(); }
+  goToNextRow(): boolean { return this.rows.goToNextRow(); }
+  getColumnIndex(column: string): number { return this.rows.getColumnIndex(column); }
+  isColumnNull(columnIndex: number): boolean { return this.rows.isColumnNull(columnIndex); }
+  getString(columnIndex: number): string { return this.rows.getString(columnIndex); }
+  getLong(columnIndex: number): number { return this.rows.getLong(columnIndex); }
+  getDouble(columnIndex: number): number { return this.rows.getDouble(columnIndex); }
+  close(): void { this.rows.close(); }
+}
+
+class RdbCaptureViewerQueryExecutor implements CaptureViewerQueryExecutor {
+  private readonly transaction: relationalStore.Transaction;
+
+  constructor(transaction: relationalStore.Transaction) {
+    this.transaction = transaction;
+  }
+
+  async querySql(sql: string,
+    args: relationalStore.ValueType[] = []): Promise<CaptureViewerQueryResultSet> {
+    const rows = await this.transaction.querySql(sql, args);
+    return new RdbCaptureViewerQueryResultSet(rows);
+  }
+}
+
+export class AppDatabase implements CaptureWorkflowDatabase {
   private readonly store: relationalStore.RdbStore;
 
   private constructor(store: relationalStore.RdbStore) {
@@ -280,17 +335,42 @@ export class AppDatabase {
     }
   }
 
-  async updateProject(id: string, description: string, watermarkPosition: string,
+  async updateProjectDescription(id: string, description: string): Promise<void> {
+    const transaction = await this.store.createTransaction();
+    try {
+      const changedValue = await transaction.execute(
+        `UPDATE projects SET description=?,updated_at=? WHERE id=?`,
+        [description.trim(), Date.now(), id]
+      );
+      const changed = typeof changedValue === 'number' ? changedValue : 0;
+      if (changed < 1) throw new Error('project_not_found');
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw new Error((error as Error).message);
+    }
+  }
+
+  async updateProjectWatermark(id: string, watermarkPosition: string,
     watermarkOpacity: number, watermarkAccentColorArgb: number,
     watermarkFontScale: number): Promise<void> {
     const position = watermarkPosition === 'bottomRight' ? 'bottomRight' : 'bottomLeft';
     const opacity = Math.max(0.35, Math.min(1, watermarkOpacity));
     const fontScale = Math.max(0.75, Math.min(1.6, watermarkFontScale));
-    await this.store.executeSql(
-      `UPDATE projects SET description=?,watermark_position=?,watermark_opacity=?,
+    const transaction = await this.store.createTransaction();
+    try {
+      const changedValue = await transaction.execute(
+        `UPDATE projects SET watermark_position=?,watermark_opacity=?,
        watermark_accent_color_argb=?,watermark_font_scale=?,updated_at=? WHERE id=?`,
-      [description.trim(), position, opacity, watermarkAccentColorArgb, fontScale, Date.now(), id]
-    );
+        [position, opacity, watermarkAccentColorArgb, fontScale, Date.now(), id]
+      );
+      const changed = typeof changedValue === 'number' ? changedValue : 0;
+      if (changed < 1) throw new Error('project_not_found');
+      await transaction.commit();
+    } catch (error) {
+      await transaction.rollback();
+      throw new Error((error as Error).message);
+    }
   }
 
   async projectById(id: string): Promise<ProjectRecord | null> {
@@ -334,24 +414,35 @@ export class AppDatabase {
             project.isPinned ? 1 : 0, project.watermarkPosition, project.watermarkOpacity,
             project.watermarkAccentColorArgb, project.watermarkFontScale, project.createdAt, now]);
         for (const capture of project.captures) {
+          const fields = inspectCaptureFields(capture.workLocation, capture.workContent,
+            capture.photographer, capture.notes);
+          if (!fields.valid) {
+            throw new Error(`restore_capture_fields_invalid:${capture.photoNumber}`);
+          }
           await transaction.execute(
             `INSERT INTO captures(id,project_id,photo_number,work_location,work_content,photographer,
              notes,original_path,rendered_path,published_uri,original_sha256,status,failure_reason,
              created_at,captured_at,latitude,longitude,accuracy_meters,address,location_outcome,
              processing_attempts,watermark_locale_code,location_resolution,original_deleted_at)
              VALUES(?,?,?,?,?,?,?,?,?,NULL,?,'ready',NULL,?,?,?,?,?,?,?,?,?,'resolved',?)`,
-            [capture.id, project.id, capture.photoNumber, capture.workLocation, capture.workContent,
-              capture.photographer, capture.notes, capture.originalPath, capture.renderedPath,
+            [capture.id, project.id, capture.photoNumber, fields.location, fields.work,
+              fields.photographer, fields.notes, capture.originalPath, capture.renderedPath,
               capture.originalSha256, capture.capturedAt, capture.capturedAt, capture.latitude,
               capture.longitude, capture.accuracyMeters, capture.address, 'restored', 0,
               capture.watermarkLocaleCode, capture.originalMissing ? now : null]);
         }
         for (const template of project.templates) {
+          const name = normalizeCaptureTemplateName(template.name);
+          const fields = inspectCaptureFields(template.workLocation, template.workContent,
+            template.photographer, '');
+          if (!validateTemplateField(name, CAPTURE_TEMPLATE_NAME_MAX_LENGTH) || !fields.valid) {
+            throw new Error(`restore_template_fields_invalid:${template.name}`);
+          }
           await transaction.execute(
             `INSERT INTO capture_templates(id,project_id,name,name_key,work_location,work_content,
              photographer,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
-            [template.id, project.id, template.name, template.nameKey, template.workLocation,
-              template.workContent, template.photographer, template.createdAt, template.updatedAt]);
+            [template.id, project.id, name, captureTemplateNameKey(name), fields.location,
+              fields.work, fields.photographer, template.createdAt, template.updatedAt]);
         }
       }
       await transaction.commit();
@@ -488,6 +579,8 @@ export class AppDatabase {
     if (project === null || project.lifecycleStatus !== ProjectLifecycleStatus.ACTIVE) {
       throw new Error('project_read_only');
     }
+    const fields = inspectCaptureFields(draft.workLocation, draft.workContent, draft.photographer, draft.notes);
+    if (!fields.valid) throw new Error('capture_form_invalid');
     const capturedDate = new Date(draft.capturedAt);
     const dateKey = `${capturedDate.getFullYear().toString().padStart(4, '0')}${
       (capturedDate.getMonth() + 1).toString().padStart(2, '0')}${capturedDate.getDate().toString().padStart(2, '0')}`;
@@ -516,8 +609,8 @@ export class AppDatabase {
           original_path,status,created_at,captured_at,latitude,longitude,accuracy_meters,location_outcome,
           address,watermark_locale_code)
          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [draft.id, draft.projectId, photoNumber, draft.workLocation.trim(), draft.workContent.trim(),
-          draft.photographer.trim(), draft.notes.trim(), draft.originalPath, CaptureStatus.CAPTURED,
+        [draft.id, draft.projectId, photoNumber, fields.location, fields.work,
+          fields.photographer, fields.notes, draft.originalPath, CaptureStatus.CAPTURED,
           Date.now(), draft.capturedAt, draft.latitude, draft.longitude, draft.accuracyMeters,
           draft.locationOutcome, draft.address, draft.watermarkLocaleCode]
       );
@@ -545,6 +638,21 @@ export class AppDatabase {
       return captureFromRow(rows);
     } finally {
       rows.close();
+    }
+  }
+
+  async captureViewerWindow(captureId: string, radius: number = 2): Promise<CaptureViewerWindow> {
+    const transaction = await this.store.createTransaction({
+      transactionType: relationalStore.TransactionType.DEFERRED
+    });
+    try {
+      const executor = new RdbCaptureViewerQueryExecutor(transaction);
+      const window = await new CaptureViewerWindowQuery().load(executor, captureId, radius);
+      await transaction.commit();
+      return window;
+    } catch (error) {
+      await transaction.rollback();
+      throw new Error((error as Error).message);
     }
   }
 
@@ -730,10 +838,15 @@ export class AppDatabase {
 
   async updateCaptureFields(id: string, workLocation: string, workContent: string,
     photographer: string, notes: string): Promise<void> {
+    const fields = inspectCaptureFields(workLocation, workContent, photographer, notes);
+    if (!fields.valid) throw new Error('capture_form_invalid');
     const changedValue = await this.store.execute(
       `UPDATE captures SET work_location=?, work_content=?, photographer=?, notes=?,
-       status='captured', failure_reason=NULL WHERE id=? AND status IN ('ready','failed')`,
-      [workLocation.trim(), workContent.trim(), photographer.trim(), notes.trim(), id]
+       status='captured', failure_reason=NULL WHERE id=? AND status IN ('ready','failed')
+       AND original_deleted_at IS NULL AND original_path<>''
+       AND EXISTS(SELECT 1 FROM projects WHERE projects.id=captures.project_id
+         AND projects.lifecycle_status='active')`,
+      [fields.location, fields.work, fields.photographer, fields.notes, id]
     );
     const changed = typeof changedValue === 'number' ? changedValue : 0;
     if (changed < 1) {
@@ -1010,22 +1123,37 @@ export class AppDatabase {
   }
 
   async saveTemplate(template: CaptureTemplateRecord): Promise<void> {
+    const name = normalizeCaptureTemplateName(template.name);
+    const nameKey = captureTemplateNameKey(name);
+    const location = template.workLocation.trim();
+    const content = template.workContent.trim();
+    const photographer = template.photographer.trim();
+    if (!validateTemplateField(name, CAPTURE_TEMPLATE_NAME_MAX_LENGTH) ||
+      !validateTemplateField(nameKey, CAPTURE_TEMPLATE_NAME_MAX_LENGTH) ||
+      !validateTemplateField(location, CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH) ||
+      !validateTemplateField(content, CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH) ||
+      !validateTemplateField(photographer, CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH)) {
+      throw new Error('capture_template_invalid');
+    }
     await this.store.executeSql(
       `INSERT INTO capture_templates(id,project_id,name,name_key,work_location,work_content,photographer,
-       created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)
-       ON CONFLICT(project_id,name_key) DO UPDATE SET name=excluded.name,
-       work_location=excluded.work_location,work_content=excluded.work_content,
-       photographer=excluded.photographer,updated_at=excluded.updated_at`,
-      [template.id, template.projectId, template.name, template.nameKey, template.workLocation,
-        template.workContent, template.photographer, template.createdAt, template.updatedAt]
+       created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+      [template.id, template.projectId, name, nameKey, location,
+        content, photographer, template.createdAt, template.updatedAt]
     );
   }
 
-  async renameTemplate(id: string, name: string, nameKey: string): Promise<void> {
-    await this.store.executeSql(
+  async renameTemplate(id: string, name: string, _nameKey: string): Promise<void> {
+    const normalized = normalizeCaptureTemplateName(name);
+    if (!validateTemplateField(normalized, CAPTURE_TEMPLATE_NAME_MAX_LENGTH)) {
+      throw new Error('capture_template_invalid');
+    }
+    const changedValue = await this.store.execute(
       'UPDATE capture_templates SET name=?,name_key=?,updated_at=? WHERE id=?',
-      [name, nameKey, Date.now(), id]
+      [normalized, captureTemplateNameKey(normalized), Date.now(), id]
     );
+    const changed = typeof changedValue === 'number' ? changedValue : 0;
+    if (changed < 1) throw new Error('capture_template_missing');
   }
 
   async deleteTemplate(id: string): Promise<void> {
@@ -1037,10 +1165,14 @@ export class AppDatabase {
     if (!allowed) {
       return [];
     }
+    const boundedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
     const rows = await this.store.querySql(
-      `SELECT ${field} AS value, MAX(COALESCE(captured_at,created_at)) AS latest
-       FROM captures WHERE project_id=? AND ${field}<>'' GROUP BY ${field}
-       ORDER BY latest DESC LIMIT ?`, [projectId, limit]);
+      `SELECT value FROM (
+         SELECT TRIM(${field}) AS value, COALESCE(captured_at,created_at) AS latest,
+           ROW_NUMBER() OVER (PARTITION BY LOWER(TRIM(${field}))
+             ORDER BY COALESCE(captured_at,created_at) DESC,id DESC) AS suggestion_rank
+         FROM captures WHERE project_id=? AND status<>'pendingCamera' AND TRIM(${field})<>''
+       ) WHERE suggestion_rank=1 ORDER BY latest DESC LIMIT ?`, [projectId, boundedLimit]);
     const result: string[] = [];
     try {
       if (rows.goToFirstRow()) {

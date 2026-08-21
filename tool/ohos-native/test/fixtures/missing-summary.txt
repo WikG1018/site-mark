@@ -1,0 +1,3 @@
+class=Example
+test=looks-successful-without-a-summary
+result=Success

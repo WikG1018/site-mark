@@ -3,13 +3,8 @@ import { CaptureStatus } from '../../domain/StateMachine';
 import { formatDay, imageUri, statusLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { tr } from '../../shared/AppText';
-
-export function captureCardKey(capture: CaptureRecord): string {
-  return `${capture.id}\u001F${capture.status}\u001F${capture.workLocation}\u001F${capture.workContent}` +
-    `\u001F${capture.photographer}\u001F${capture.renderedPath}\u001F${capture.publishedUri}` +
-    `\u001F${capture.originalDeletedAt === null ? '' : capture.originalDeletedAt.toString()}` +
-    `\u001F${capture.failureReason}`;
-}
+import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
+import { MotionPolicy } from '../../shared/MotionPolicy';
 
 @Component
 export struct CaptureInfoRow {
@@ -41,25 +36,30 @@ export struct CaptureCard {
   onOpen: () => void = (): void => {};
   onToggle: () => void = (): void => {};
 
+  private cardAccessibilityText(): string {
+    const details = tr(`照片 ${this.capture.photoNumber}，${this.capture.workLocation}，${this.capture.workContent}`,
+      `Photo ${this.capture.photoNumber}, ${this.capture.workLocation}, ${this.capture.workContent}`);
+    if (!this.selectionMode) {
+      return details;
+    }
+    return this.selected ? tr(`${details}，已选择`, `${details}, selected`) :
+      tr(`${details}，未选择`, `${details}, not selected`);
+  }
+
   @Builder
   private thumbnail() {
     Stack({ alignContent: Alignment.TopStart }) {
-      if (this.capture.renderedPath.length > 0 || this.capture.originalPath.length > 0) {
-        Image(imageUri(this.capture.renderedPath.length > 0 ? this.capture.renderedPath :
-          this.capture.originalPath))
-          .width(112)
-          .height(112)
-          .sourceSize({ width: 224, height: 224 })
-          .objectFit(ImageFit.Cover)
-          .borderRadius(18)
-          .sharedTransition(`capture-photo-${this.capture.id}`,
-            { duration: 260, curve: Curve.Friction })
-      } else {
+      AppImage({ uri: this.capture.renderedPath.length > 0 ? imageUri(this.capture.renderedPath) :
+        (this.capture.originalPath.length > 0 ? imageUri(this.capture.originalPath) : ''),
+        decodeEdge: ImageDecodePolicy.thumbnail(112, this.getUIContext().vp2px(1)) })
+        .width(112)
+        .height(112)
+      if (this.capture.renderedPath.length === 0 && this.capture.originalPath.length === 0) {
         Column() {
           Text('▣').fontSize(30).fontColor(UiTokens.TEXT_SECONDARY)
         }
-        .justifyContent(FlexAlign.Center)
-        .width(112).height(112).backgroundColor('#E2ECE6').borderRadius(18)
+        .justifyContent(FlexAlign.Center).width(112).height(112)
+        .backgroundColor(UiTokens.IMAGE_PLACEHOLDER).borderRadius(18)
       }
       if (this.selectionMode) {
         Text(this.selected ? '✓' : '')
@@ -82,6 +82,11 @@ export struct CaptureCard {
     }
     .width(112)
     .height(112)
+    .clip(true)
+    .borderRadius(18)
+    .sharedTransition(`capture-photo-${this.capture.id}`,
+      { duration: MotionPolicy.duration(260), curve: Curve.Friction })
+    .accessibilityText(tr(`照片 ${this.capture.photoNumber}`, `Photo ${this.capture.photoNumber}`))
   }
 
   build() {
@@ -117,10 +122,11 @@ export struct CaptureCard {
     .padding(14)
     .width('100%')
     .backgroundColor(UiTokens.GLASS)
-    .backdropBlur(16)
+    .backdropBlur(MotionPolicy.blur(16))
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: this.selected ? UiTokens.PRIMARY : '#DCE8E0' })
     .shadow({ radius: 12, color: '#12000000', offsetY: 4 })
+    .accessibilityText(this.cardAccessibilityText())
     .onClick((): void => this.selectionMode ? this.onToggle() : this.onOpen())
   }
 }

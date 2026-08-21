@@ -10,6 +10,21 @@ import albumPublishPolicyTest from './AlbumPublishPolicy.test';
 import mediaCleanupTest from './MediaCleanup.test';
 import appTextTest from './AppText.test';
 import keyedOperationGateTest from './KeyedOperationGate.test';
+import asyncOnceTest from './AsyncOnce.test';
+import uiPolicyTest from './UiPolicy.test';
+import lazyListDataSourceTest from './LazyListDataSource.test';
+import capturePagedControllerTest from './CapturePagedController.test';
+import photoViewerWindowTest from './PhotoViewerWindow.test';
+import settingsProjectSelectionTest from './SettingsProjectSelection.test';
+import projectFormPolicyTest from './ProjectFormPolicy.test';
+import rootShellPolicyTest from './RootShellPolicy.test';
+import recordUiCoordinatorTest from './RecordUiCoordinator.test';
+import screenActionCoordinatorTest from './ScreenActionCoordinator.test';
+import diagnosticsActionOutcomeTest from './DiagnosticsActionOutcome.test';
+import captureFormPolicyTest from './CaptureFormPolicy.test';
+import captureWorkflowValidationTest from './CaptureWorkflowValidation.test';
+import screenUiStabilityTest from './ScreenUiStability.test';
+import projectEditStabilityTest from './ProjectEditStability.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -24,4 +39,19 @@ export default function testsuite(): void {
   mediaCleanupTest();
   appTextTest();
   keyedOperationGateTest();
+  asyncOnceTest();
+  uiPolicyTest();
+  lazyListDataSourceTest();
+  capturePagedControllerTest();
+  photoViewerWindowTest();
+  settingsProjectSelectionTest();
+  projectFormPolicyTest();
+  rootShellPolicyTest();
+  recordUiCoordinatorTest();
+  screenActionCoordinatorTest();
+  diagnosticsActionOutcomeTest();
+  captureFormPolicyTest();
+  captureWorkflowValidationTest();
+  screenUiStabilityTest();
+  projectEditStabilityTest();
 }

@@ -176,6 +176,20 @@ export class CapturePage {
   }
 }
 
+export class CaptureViewerWindow {
+  rows: CaptureRecord[];
+  currentIndex: number;
+  absoluteIndex: number;
+  totalCount: number;
+
+  constructor(rows: CaptureRecord[], currentIndex: number, absoluteIndex: number, totalCount: number) {
+    this.rows = rows;
+    this.currentIndex = currentIndex;
+    this.absoluteIndex = absoluteIndex;
+    this.totalCount = totalCount;
+  }
+}
+
 export interface CaptureTemplateInit {
   id: string;
   projectId: string;

@@ -6,7 +6,7 @@
 >
 > **状态：** 已落地鸿蒙原生模拟器验证版（2026-08-20）。Stage + ArkTS/ArkUI、RelationalStore、系统适配、共享 Rust N-API、备份恢复与主要页面已实现；33 项 ArkTS 测试与 debug HAP 构建通过。未配置发布签名，HarmonyOS NEXT 真机相机、相册授权与性能仍是挂起项，不宣称真机全量对等。
 >
-> **分支结论：** 实现在 `agent/ohos-native` 隔离分支完成并通过 PR 合入 `main`；独立的 `ohos` 分支保持不动。本文中“长期 `ohos-native` 分支”的早期设想由该结论取代，原生工程以 `main/ohos-native/` 为维护入口。
+> **分支结论：** 实现在 `agent/ohos-native` 隔离分支完成，PR #73 已合入长期 `ohos-native` 分支；`main` 与独立的 `ohos` 分支均未改动。后续原生鸿蒙 PR 继续以 `ohos-native` 为目标分支。
 
 ## 目标
 
@@ -30,7 +30,7 @@
 | 交付物 | HarmonyOS 原生 HAP（Stage + ArkTS），目标华为应用市场；第一期验收环境是 DevEco NEXT 模拟器 |
 | 对等范围 | 与 Android v1.0.8 对齐到模拟器验证级；真机全量对等挂起 |
 | 基线提交 | `origin/main` v1.0.8 / `abc0164` |
-| 仓库 | `ohos-native/` 原生工程与 Android 同仓维护；实现分支合入 `main`，历史 `ohos` 分支不动 |
+| 仓库 | `ohos-native/` 原生工程与 Android 同仓维护；原生鸿蒙 PR 合入长期 `ohos-native` 分支，`main` 与历史 `ohos` 分支不动 |
 | 规范锚点 | HarmonyOS 6.1.1（API 24）+ DevEco 6.1.1.300；`targetSdkVersion 6.1.1(24)`；`compatibleSdkVersion` 初值 `5.0.5(17)` |
 | 相册 | 后台只生成应用私有水印成片；用户在详情页主动保存时调用 `PhotoAccessHelper.showAssetsCreationDialog`，不声明广泛媒体读写权限 |
 | Android 主线 | 不改 `lib/`、`android/`、`pigeons/`、`release.yml`；只扩展共享 Rust feature 与 CI 静态/回归门禁 |
@@ -41,7 +41,7 @@
 
 ### 包含
 
-- 从 `abc0164` 拉出的隔离实现分支与 Stage 工程（`ohos-native/`、签名占位、`module.json5`），验收后通过 PR 合入 `main`。
+- 从 `abc0164` 拉出的隔离实现分支与 Stage 工程（`ohos-native/`、签名占位、`module.json5`），验收后通过 PR 合入长期 `ohos-native` 分支。
 - 单 entry 模块化分层：`domain`（纯逻辑 / 实体）、`data`（RDB + preferences）、`core`（系统桥 + 图像管线）、`feature`（页面与工作流）。
 - ArkTS 版 `SystemServices`：方法集与 `lib/platform/platform_services.dart` 的 `PlatformServices` **同名同义**（相机 / 定位 / publishJpeg / 日记 / 删除 / 设置页 / inspectImage）。
 - 应用内存活期串行队列 + 启动 `reconcilePending`；`workScheduler` 仅延迟拉起，不承诺被杀后继续。
@@ -79,8 +79,8 @@
 
 ### 仓库
 
-1. **同仓隔离实现分支，完成后 PR 合入 `main`（实际采用）**
-   从 `abc0164` 拉出 `agent/ohos-native`，所有原生代码位于 `ohos-native/`；验收后合入 `main` 共享 Rust 与产品文档。独立 `ohos` 分支不参与本 PR。
+1. **同仓隔离实现分支，完成后 PR 合入长期 `ohos-native`（实际采用）**
+   从 `abc0164` 拉出 `agent/ohos-native`，所有原生代码位于 `ohos-native/`；PR #73 验收后合入长期 `ohos-native` 分支。`main` 与独立 `ohos` 分支不参与本 PR。
 
 2. 直接在 `main` 开发
    难以隔离大规模新增代码，否决；最终合入不等于直接开发。
