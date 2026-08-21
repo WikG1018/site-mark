@@ -2,6 +2,16 @@
 
 包名 `io.github.wikg1018.sitemark`，版本 `1.0.8+23`。设备：DevEco 模拟器 `SiteMarkPhone602`，hdc `127.0.0.1:5555`。入口：全量 `lib/main.dart` 未签名 HAP。
 
+## 2026-08-21 Task 59
+
+云端闭环：相册保存对话框取消 / 空 destinations / 其它相册错误回退沙箱，不把拍摄打成 `failed`。宿主 `writeAlbumOrSandboxJpeg` 对齐 `saveArchive` 取消托底。官方测试闭环，未重编 HAP，无相册 dump。队列仍是应用内内存串行。Task 46–59 Dart 未进 HAP。
+
+| 项 | 结果 |
+| --- | --- |
+| CI | 新测试在 `packages/sitemark_system_api/test/`，已在 `ohos.yml`，本刀未改清单 |
+| 官方测试 | `publish_fallback_policy_test` **4 绿**；`gallery_store_test` **8 绿** |
+| 模拟器 dump | **无**。不得写系统相册已通；不得写 WorkScheduler 保活 |
+
 ## 2026-08-20 Task 58
 
 云端闭环：pending 空文件恢复为 cancelled 且不占下一张当日编号；live `launchCamera` 空 `resultUri` / materialize 后无内容走 `cameraCancelled`，不再留下失败行。权限拒绝 / 无 Ability / picker 抛错 / 拷贝失败仍 `cameraFailed`。官方测试闭环，未重编 HAP，无拍成 dump。队列仍是应用内内存串行。Task 46–58 Dart 未进 HAP。

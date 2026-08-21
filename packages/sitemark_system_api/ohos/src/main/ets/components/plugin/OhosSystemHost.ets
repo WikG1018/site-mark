@@ -435,10 +435,7 @@ export default class OhosSystemHost {
   ): Promise<string> {
     try {
       return await this.writeAlbumJpeg(sourcePath, displayName);
-    } catch (error) {
-      if (this.isUserCancelledPublish(error)) {
-        throw error;
-      }
+    } catch (_error) {
       return await this.writeSandboxJpeg(sourcePath, captureId);
     }
   }
@@ -460,11 +457,6 @@ export default class OhosSystemHost {
     const destination = this.stringAt(destinations, 0);
     await this.copyFileToUri(sourcePath, destination);
     return destination;
-  }
-
-  private isUserCancelledPublish(error: Object): boolean {
-    const message = `${error}`;
-    return message.indexOf('cancelled') >= 0 || message.indexOf('Canceled') >= 0;
   }
 
   private async writeSandboxJpeg(sourcePath: string, captureId: string): Promise<string> {

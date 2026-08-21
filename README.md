@@ -46,7 +46,7 @@
 - 鸿蒙拍成落盘：`CameraPicker` 不再把沙箱路径当 `saveUri`；`file://media/` 等媒体 URI 用 `fs.openSync(uri)` 拷进 `files/originals/{captureId}.jpg`；无拍成 dump
 - 鸿蒙降级水印：`DegradedImagePipeline.render` 用 `dart:ui` 半透明卡片叠现场记录 / 位置 / 内容 / 拍摄人 / 时间及非空地址、坐标、备注；叠图前 `bakeOrientation`；照片编号不画；存储页 / 拍摄详情 / 拍摄表单在 `isDegraded` 时显示「降级水印引擎」；无拍成 dump，不是 `ohos-arm64` 像素对等
 - 鸿蒙外观：`supportsDynamicColorProvider` 在鸿蒙为 false；外观页隐藏「跟随系统取色」开关，始终露出应用主题色，并显示「鸿蒙暂不支持壁纸动态取色」。不得写 Material You 已对等
-- 鸿蒙发布相册：无 ACL 时 `publishJpeg` 走 `showAssetsCreationDialog`，不再落到文档选择器；`detectGalleryAccess` 无 ACL 证明不得返回 `acl`；删除按 URI 身份（沙箱 `file://` → picker，其余 → ACL），同编号恢复副本不得串 URI；无相册 dump
+- 鸿蒙发布相册：无 ACL 时 `publishJpeg` 走 `showAssetsCreationDialog`，不再落到文档选择器；对话框取消 / 空 destinations / 其它相册错误回退沙箱，不把拍摄打成 `failed`；`detectGalleryAccess` 无 ACL 证明不得返回 `acl`；删除按 URI 身份（沙箱 `file://` → picker，其余 → ACL），同编号恢复副本不得串 URI；无相册 dump
 - 鸿蒙启动恢复：规格四窗（相机半截 / Drift 队列对账 / 发布日记 / 相册待清理）在 `AppStartupRecovery.run()` 里并行开工；一窗挂起或抛错不得跳过其余窗。日记按 `captureById`，永不按照片编号。无杀进程 dump；进程被杀后队列只靠冷启动对账，不是 WorkScheduler 保活
 - 鸿蒙拍摄入队失败：`CaptureWorkflow` 返回 `delayed`，Drift captured 行保留；拍摄页显示 delayed snackbar 后按钮仍可再拍。官方 `capture_workflow_test` / `capture_form_screen_test` 已锁并进 `ohos.yml`。无拍成 dump
 - 鸿蒙 CI：`ohos.yml` 已纳入 widget / lifecycle / 备份导入（`project_import` / `project_export` / 备份设置页）、拍摄失败引导与定位协调器。取消拍照不占下一张当日编号；pending 空文件恢复不占号；live 空 URI / 无内容走 cancelled；拒绝定位仍 queued 出片；连拍当日 `001` 然后 `002`。无拍成 dump，不得写备份已进系统文件管理
