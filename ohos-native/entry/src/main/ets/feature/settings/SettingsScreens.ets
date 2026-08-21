@@ -275,7 +275,7 @@ export struct AppearanceScreen {
       defaultWatermarkFontScale: this.fontScale,
       locationPermissionPromptDismissed: this.settings.locationPermissionPromptDismissed,
       completionNotificationsEnabled: this.settings.completionNotificationsEnabled,
-      appSeedColorArgb: this.accent
+      appSeedColorArgb: this.settings.appSeedColorArgb
     });
     try {
       await AppRuntime.require().database.updateSettings(value);

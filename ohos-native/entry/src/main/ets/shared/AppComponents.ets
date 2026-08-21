@@ -133,7 +133,6 @@ export struct EmptyPanel {
     .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 34 })
     .width(`calc(100% - ${UiTokens.PAGE_PADDING * 2}vp)`)
     .backgroundColor(UiTokens.GLASS)
-    .backdropBlur(MotionPolicy.blur(18))
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
   }
@@ -391,7 +390,7 @@ export struct BatchActionBar {
     .width('100%')
     .padding({ left: 10, right: 10, top: 4, bottom: 4 })
     .backgroundColor(UiTokens.GLASS_STRONG)
-    .backdropBlur(MotionPolicy.blur(18))
+    .backdropBlur(MotionPolicy.blur(12))
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS)
   }
