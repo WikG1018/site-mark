@@ -49,6 +49,11 @@ export struct AllRecordsView {
   @State private selectedProjectId: string = '';
   @State private batchBusy: boolean = false;
   @State private message: string = '';
+  @State private messageError: boolean = false;
+  private setMessage(text: string, isError: boolean = false): void {
+    this.message = text;
+    this.messageError = isError;
+  }
   private readonly controller: CapturePagedController = new CapturePagedController(new RuntimeRecordPageLoader(),
     (): void => { this.controllerRevision += 1; });
   private readonly recordsScroller: Scroller = new Scroller();
@@ -330,7 +335,7 @@ export struct AllRecordsView {
     } catch (_) {
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken) &&
         this.selection.isSelectAllCurrent(token, this.currentFilter())) {
-        this.message = tr('无法全选当前筛选结果，请重试', 'Could not select all filtered results. Try again.');
+        this.setMessage(tr('无法全选当前筛选结果，请重试', 'Could not select all filtered results. Try again.'), true);
       }
     } finally {
       this.batchAction.finish(actionToken);
@@ -354,7 +359,7 @@ export struct AllRecordsView {
 
   private async batchExport(): Promise<void> {
     if (this.selection.selectedIds.length === 0) {
-      this.message = tr('请先选择照片', 'Select photos first');
+      this.setMessage(tr('请先选择照片', 'Select photos first'), false);
       return;
     }
     const actionToken = this.batchAction.begin();
@@ -366,13 +371,13 @@ export struct AllRecordsView {
       const result = await service.exportSelection(ids, false);
       const saved = await service.saveAs(result);
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
-        this.message = saved ? tr('所选照片已导出到你选择的位置',
+        this.setMessage(saved ? tr('所选照片已导出到你选择的位置',
           'Selected photos were exported to your chosen location') :
-          tr('已取消保存导出文件', 'Export save was cancelled');
+          tr('已取消保存导出文件', 'Export save was cancelled'), false);
       }
     } catch (error) {
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
-        this.message = (error as Error).message;
+        this.setMessage((error as Error).message, true);
       }
     } finally {
       this.batchAction.finish(actionToken);
@@ -387,13 +392,13 @@ export struct AllRecordsView {
 
   private async batchDelete(): Promise<void> {
     if (this.selection.selectedIds.length === 0) {
-      this.message = tr('请先选择照片', 'Select photos first');
+      this.setMessage(tr('请先选择照片', 'Select photos first'), false);
       return;
     }
     if (!this.selection.requestPermanentDelete()) {
       this.touchSelection();
-      this.message = tr(`再次点击“删除”将永久删除已选 ${this.selection.selectedIds.length} 条记录`,
-        `Tap “Delete” again to permanently delete ${this.selection.selectedIds.length} selected records`);
+      this.setMessage(tr(`再次点击“删除”将永久删除已选 ${this.selection.selectedIds.length} 条记录`,
+        `Tap “Delete” again to permanently delete ${this.selection.selectedIds.length} selected records`), false);
       return;
     }
     await this.runBatch(async (id: string): Promise<void> => AppRuntime.require().deleteCapture(id),
@@ -403,7 +408,7 @@ export struct AllRecordsView {
   private async runBatch(action: (id: string) => Promise<void>, success: string): Promise<void> {
     const ids = this.selection.selectedIds.slice();
     if (ids.length === 0) {
-      this.message = tr('请先选择照片', 'Select photos first');
+      this.setMessage(tr('请先选择照片', 'Select photos first'), false);
       return;
     }
     const actionToken = this.batchAction.begin();
@@ -419,9 +424,9 @@ export struct AllRecordsView {
         }
       }
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
-        this.message = succeeded === ids.length ? success :
+        this.setMessage(succeeded === ids.length ? success :
         tr(`已完成 ${succeeded}/${ids.length} 项，其余记录当前不可操作`,
-          `Completed ${succeeded}/${ids.length}; the remaining records are not currently available`);
+          `Completed ${succeeded}/${ids.length}; the remaining records are not currently available`), false);
         this.exitSelectionAfterBatch();
         await this.resetCaptures();
       }
@@ -599,8 +604,7 @@ export struct AllRecordsView {
           this.filterPanel()
         }
         if (this.message.length > 0) {
-          Text(this.message).fontSize(13).fontColor((this.message.startsWith('无法') ||
-            this.message.startsWith('Could')) ? UiTokens.DANGER :
+          Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER :
             UiTokens.PRIMARY).padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 6 })
             .width('100%')
         }
@@ -673,6 +677,11 @@ export struct CaptureFormScreen {
   @State private photographerSuggestions: string[] = [];
   @State private busy: boolean = false;
   @State private message: string = '';
+  @State private messageError: boolean = false;
+  private setMessage(text: string, isError: boolean = false): void {
+    this.message = text;
+    this.messageError = isError;
+  }
   @State private locationGranted: boolean = false;
   @State private locationPromptDismissed: boolean = false;
   @State private templates: CaptureTemplateRecord[] = [];
@@ -730,8 +739,8 @@ export struct CaptureFormScreen {
     } catch (_) {
       if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) {
         this.loadFailed = true;
-        this.message = tr('项目与拍摄表单暂时无法读取，请重试',
-          'The project and capture form could not be loaded. Try again.');
+        this.setMessage(tr('项目与拍摄表单暂时无法读取，请重试',
+          'The project and capture form could not be loaded. Try again.'), true);
       }
       this.loadRequest.finish(request);
       return;
@@ -777,12 +786,12 @@ export struct CaptureFormScreen {
       if (!this.lifecycle.accept(generation) || !this.templateRequest.accept(request)) return;
       this.templates = templates;
       this.templateLoadFailed = false;
-      this.message = '';
+      this.setMessage('', false);
     } catch (_) {
       if (this.lifecycle.accept(generation) && this.templateRequest.accept(request)) {
         this.templateLoadFailed = true;
-        this.message = tr('拍摄模板仍无法读取，请稍后再试',
-          'Capture templates still could not be loaded. Try again later.');
+        this.setMessage(tr('拍摄模板仍无法读取，请稍后再试',
+          'Capture templates still could not be loaded. Try again later.'), true);
       }
     } finally {
       this.templateRequest.finish(request);
@@ -857,7 +866,7 @@ export struct CaptureFormScreen {
     this.photographer = restored.photographer;
     this.notes = restored.notes;
     this.undoAvailable = false;
-    this.message = tr('已撤销上一次应用', 'The last application was undone');
+    this.setMessage(tr('已撤销上一次应用', 'The last application was undone'), false);
   }
 
   private async dismissLocationPrompt(): Promise<void> {
@@ -869,8 +878,8 @@ export struct CaptureFormScreen {
       await runtime.database.updateSettings(settings);
       if (this.lifecycle.accept(generation)) this.locationPromptDismissed = true;
     } catch (_) {
-      if (this.lifecycle.accept(generation)) this.message = tr('暂时无法保存位置提示设置，请稍后重试',
-        'The location prompt setting could not be saved. Try again later.');
+      if (this.lifecycle.accept(generation)) this.setMessage(tr('暂时无法保存位置提示设置，请稍后重试',
+        'The location prompt setting could not be saved. Try again later.'), true);
     }
   }
 
@@ -887,12 +896,12 @@ export struct CaptureFormScreen {
         await runtime.database.updateSettings(settings);
         if (!this.lifecycle.accept(generation)) return;
         this.locationPromptDismissed = true;
-        this.message = tr('未授予位置权限，仍可正常拍摄；以后可在设置中重新开启',
-          'Location permission was not granted. You can keep shooting and enable it later in Settings.');
+        this.setMessage(tr('未授予位置权限，仍可正常拍摄；以后可在设置中重新开启',
+          'Location permission was not granted. You can keep shooting and enable it later in Settings.'), false);
       }
     } catch (_) {
-      if (this.lifecycle.accept(generation)) this.message = tr('暂时无法请求位置权限，仍可继续拍摄',
-        'Location permission could not be requested. You can still capture.');
+      if (this.lifecycle.accept(generation)) this.setMessage(tr('暂时无法请求位置权限，仍可继续拍摄',
+        'Location permission could not be requested. You can still capture.'), false);
     }
   }
 
@@ -905,7 +914,7 @@ export struct CaptureFormScreen {
     this.templateOpen = false;
     this.lifecycle.closeTransient();
     this.applyValidation(validateCaptureDraft(this.workLocation, this.workContent, this.photographer, this.notes));
-    this.message = tr(`已应用模板“${template.name}”`, `Template “${template.name}” applied`);
+    this.setMessage(tr(`已应用模板“${template.name}”`, `Template “${template.name}” applied`), false);
   }
 
   private beginRename(template: CaptureTemplateRecord): void {
@@ -936,8 +945,8 @@ export struct CaptureFormScreen {
       this.contentError = validation.workError;
       this.photographerError = validation.photographerError;
       this.templateNameError = validation.nameError;
-      this.message = validation.nameError.length > 0 ? '' :
-        tr('请先修正表单中的必填信息', 'Fix the required form fields first');
+      this.setMessage(validation.nameError.length > 0 ? '' :
+        tr('请先修正表单中的必填信息', 'Fix the required form fields first'), false);
       this.lifecycle.finishSave(generation);
       return;
     }
@@ -948,7 +957,7 @@ export struct CaptureFormScreen {
         await runtime.database.renameTemplate(this.renamingTemplateId, name, captureTemplateNameKey(name));
       } else {
         if (this.templates.length >= CAPTURE_TEMPLATE_LIMIT_PER_PROJECT) {
-          this.message = tr('每个项目最多保存 100 个拍摄模板', 'Each project can store up to 100 capture templates');
+          this.setMessage(tr('每个项目最多保存 100 个拍摄模板', 'Each project can store up to 100 capture templates'), false);
           return;
         }
         const now = Date.now();
@@ -965,15 +974,15 @@ export struct CaptureFormScreen {
       this.templateName = '';
       this.templateNameError = '';
       this.renamingTemplateId = '';
-      this.message = tr('拍摄模板已保存', 'Capture template saved');
+      this.setMessage(tr('拍摄模板已保存', 'Capture template saved'), false);
     } catch (error) {
       if (this.lifecycle.accept(generation)) {
         const text = (error as Error).message.toLowerCase();
         if (text.includes('unique') || text.includes('constraint')) {
           this.templateNameError = tr('已有同名模板，请换一个名称', 'A template with this name already exists');
         } else {
-          this.message = tr('模板暂时无法保存，请稍后重试',
-            'The template could not be saved. Try again later.');
+          this.setMessage(tr('模板暂时无法保存，请稍后重试',
+            'The template could not be saved. Try again later.'), true);
         }
       }
     } finally {
@@ -984,8 +993,8 @@ export struct CaptureFormScreen {
   private async deleteTemplate(template: CaptureTemplateRecord): Promise<void> {
     if (this.deleteTemplateId !== template.id) {
       this.deleteTemplateId = template.id;
-      this.message = tr(`再次点击“确认删除”即可删除模板“${template.name}”`,
-        `Tap “Confirm delete” again to delete template “${template.name}”`);
+      this.setMessage(tr(`再次点击“确认删除”即可删除模板“${template.name}”`,
+        `Tap “Confirm delete” again to delete template “${template.name}”`), false);
       return;
     }
     const generation = this.lifecycle.snapshot();
@@ -995,10 +1004,10 @@ export struct CaptureFormScreen {
       if (!this.lifecycle.accept(generation)) return;
       this.templates = templates;
       this.deleteTemplateId = '';
-      this.message = tr('拍摄模板已删除', 'Capture template deleted');
+      this.setMessage(tr('拍摄模板已删除', 'Capture template deleted'), false);
     } catch (_) {
-      if (this.lifecycle.accept(generation)) this.message = tr('模板暂时无法删除，请稍后重试',
-        'The template could not be deleted. Try again later.');
+      if (this.lifecycle.accept(generation)) this.setMessage(tr('模板暂时无法删除，请稍后重试',
+        'The template could not be deleted. Try again later.'), true);
     }
   }
 
@@ -1009,13 +1018,13 @@ export struct CaptureFormScreen {
     const validation = validateCaptureDraft(this.workLocation, this.workContent, this.photographer, this.notes);
     this.applyValidation(validation);
     if (!validation.valid) {
-      this.message = tr('请修正表单中标出的内容后再拍摄',
-        'Fix the highlighted form fields before capturing');
+      this.setMessage(tr('请修正表单中标出的内容后再拍摄',
+        'Fix the highlighted form fields before capturing'), true);
       return;
     }
     const generation = ++this.captureGeneration;
     this.busy = true;
-    this.message = tr('正在打开系统相机…', 'Opening the system camera…');
+    this.setMessage(tr('正在打开系统相机…', 'Opening the system camera…'), false);
     try {
       const result = await AppRuntime.require().captureWorkflow.capture({
         projectId: this.project.id,
@@ -1030,11 +1039,11 @@ export struct CaptureFormScreen {
       if (result.captured) {
         const next = applyCaptureOutcome(this.currentSnapshot(), true);
         this.notes = next.notes;
-        this.message = result.debugInjected ? tr(
+        this.setMessage(result.debugInjected ? tr(
           '模拟器已用测试样图完成拍摄，水印正在后台处理；完成后可从详情保存到系统相册',
           'The emulator used a test image. Its watermark is processing; save it to the system gallery from Details when complete.') :
           tr('已拍摄，水印正在后台处理；完成后可从详情保存到系统相册，可以继续拍摄下一张',
-            'Captured. The watermark is processing; save it to the gallery from Details when complete. You can keep shooting.');
+            'Captured. The watermark is processing; save it to the gallery from Details when complete. You can keep shooting.'), false);
         AppRuntime.require().notifyDataChanged();
       } else {
         const next = applyCaptureOutcome(this.currentSnapshot(), false);
@@ -1042,7 +1051,7 @@ export struct CaptureFormScreen {
         this.workContent = next.work;
         this.photographer = next.photographer;
         this.notes = next.notes;
-        this.message = result.message.length > 0 ? result.message : tr('已取消拍摄', 'Capture cancelled');
+        this.setMessage(result.message.length > 0 ? result.message : tr('已取消拍摄', 'Capture cancelled'), false);
       }
       try {
         const granted = await AppRuntime.require().services.getLocationPermissionState();
@@ -1053,10 +1062,10 @@ export struct CaptureFormScreen {
     } catch (error) {
       if (generation === this.captureGeneration) {
         const text = (error as Error).message;
-        this.message = text === 'capture_form_invalid' ? tr('请修正表单中标出的内容后再拍摄',
+        this.setMessage(text === 'capture_form_invalid' ? tr('请修正表单中标出的内容后再拍摄',
           'Fix the highlighted form fields before capturing') :
           tr('无法完成拍摄，请检查项目状态后重试',
-            'Capture could not be completed. Check the project status and try again.');
+            'Capture could not be completed. Check the project status and try again.'), true);
       }
     } finally {
       if (generation === this.captureGeneration) this.busy = false;
@@ -1294,8 +1303,7 @@ export struct CaptureFormScreen {
             }
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
-              .fontColor((this.message.includes('无法') || this.message.toLowerCase().includes('could not')) ?
-                UiTokens.DANGER : UiTokens.PRIMARY)
+              .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY)
                 .lineHeight(19).width('100%')
             }
             Button(this.busy ? tr('正在打开系统相机…', 'Opening the system camera…') : tr('拍摄', 'Capture'))
@@ -1330,6 +1338,11 @@ export struct CaptureDetailScreen {
   @State private showingOriginal: boolean = false;
   @State private fileSize: number = 0;
   @State private message: string = '';
+  @State private messageError: boolean = false;
+  private setMessage(text: string, isError: boolean = false): void {
+    this.message = text;
+    this.messageError = isError;
+  }
   @State private confirmDelete: boolean = false;
   @State private mediaRevision: number = 0;
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
@@ -1453,7 +1466,7 @@ export struct CaptureDetailScreen {
     } catch (_) {
       if (this.pageState.isActive() && generation === this.loadGeneration) {
         this.loadingRecord = false;
-        this.message = tr('记录详情暂时无法读取，请重试', 'Record details could not be loaded. Try again.');
+        this.setMessage(tr('记录详情暂时无法读取，请重试', 'Record details could not be loaded. Try again.'), true);
       }
     }
   }
@@ -1475,7 +1488,7 @@ export struct CaptureDetailScreen {
 
   private switchPhoto(original: boolean): void {
     if (original && (this.capture === null || !this.capture.hasOriginal())) {
-      this.message = tr('原图已清理或不可用', 'The original was cleared or is unavailable');
+      this.setMessage(tr('原图已清理或不可用', 'The original was cleared or is unavailable'), true);
       return;
     }
     this.showingOriginal = original;
@@ -1519,9 +1532,9 @@ export struct CaptureDetailScreen {
     if (this.capture === null) return;
     try {
       await AppRuntime.require().republishCapture(this.capture.id);
-      this.message = tr('已再次保存到系统相册', 'Saved to the system gallery');
+      this.setMessage(tr('已再次保存到系统相册', 'Saved to the system gallery'), false);
     } catch (_) {
-      this.message = tr('保存失败或已取消，请稍后重试', 'Save failed or was cancelled. Try again later.');
+      this.setMessage(tr('保存失败或已取消，请稍后重试', 'Save failed or was cancelled. Try again later.'), true);
     }
   }
 
@@ -1530,11 +1543,11 @@ export struct CaptureDetailScreen {
     try {
       await AppRuntime.require().clearOriginal(this.capture.id);
       this.showingOriginal = false;
-      this.message = tr('原图已清理，水印成片和记录已保留',
-        'Original cleared; the watermarked image and record were retained');
+      this.setMessage(tr('原图已清理，水印成片和记录已保留',
+        'Original cleared; the watermarked image and record were retained'), false);
       await this.loadRecord();
     } catch (_) {
-      this.message = tr('当前记录不能清理原图', 'The original cannot be cleared for this record');
+      this.setMessage(tr('当前记录不能清理原图', 'The original cannot be cleared for this record'), true);
     }
   }
 
@@ -1544,9 +1557,9 @@ export struct CaptureDetailScreen {
       await AppRuntime.require().database.retryCapture(this.capture.id);
       AppRuntime.require().queue.enqueue(this.capture.id);
       AppRuntime.require().notifyDataChanged();
-      this.message = tr('已重新加入后台处理队列', 'Added back to the processing queue');
+      this.setMessage(tr('已重新加入后台处理队列', 'Added back to the processing queue'), false);
     } catch (_) {
-      this.message = tr('当前记录无法重新处理', 'This record cannot be reprocessed');
+      this.setMessage(tr('当前记录无法重新处理', 'This record cannot be reprocessed'), true);
     }
   }
 
@@ -1556,7 +1569,7 @@ export struct CaptureDetailScreen {
       await AppRuntime.require().deleteCapture(this.capture.id);
       this.pathStack.pop();
     } catch (_) {
-      this.message = tr('处理中记录暂时不能删除', 'A processing record cannot be deleted yet');
+      this.setMessage(tr('处理中记录暂时不能删除', 'A processing record cannot be deleted yet'), true);
     }
   }
 
@@ -1678,7 +1691,7 @@ export struct CaptureDetailScreen {
               }
               .padding(18).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
               if (this.message.length > 0) {
-                Text(this.message).fontSize(13).fontColor(UiTokens.PRIMARY).width('100%')
+                Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY).width('100%')
               }
               Row({ space: 8 }) {
                 if (this.capture!.status === CaptureStatus.READY) {
@@ -1747,6 +1760,11 @@ export struct CaptureEditorScreen {
   @State private photographer: string = '';
   @State private notes: string = '';
   @State private message: string = '';
+  @State private messageError: boolean = false;
+  private setMessage(text: string, isError: boolean = false): void {
+    this.message = text;
+    this.messageError = isError;
+  }
   @State private project: ProjectRecord | null = null;
   @State private locationError: string = '';
   @State private contentError: string = '';
@@ -1774,7 +1792,7 @@ export struct CaptureEditorScreen {
     const generation = this.lifecycle.snapshot();
     this.loading = true;
     this.loadFailed = false;
-    this.message = '';
+    this.setMessage('', false);
     try {
       const capture = await AppRuntime.require().database.captureById(AppRuntime.require().selectedCaptureId);
       if (!this.lifecycle.accept(generation) || !this.loadRequest.accept(request)) return;
@@ -1789,20 +1807,20 @@ export struct CaptureEditorScreen {
         this.photographer = capture.photographer;
         this.notes = capture.notes;
         if (!capture.hasOriginal()) {
-          this.message = tr('原图已清理，无法重新生成水印成片',
-            'The original was cleared, so the watermarked image cannot be regenerated');
+          this.setMessage(tr('原图已清理，无法重新生成水印成片',
+            'The original was cleared, so the watermarked image cannot be regenerated'), true);
         } else if (project === null || project.lifecycleStatus !== ProjectLifecycleStatus.ACTIVE) {
-          this.message = tr('项目当前为只读状态，不能编辑记录',
-            'This project is read-only; the record cannot be edited');
+          this.setMessage(tr('项目当前为只读状态，不能编辑记录',
+            'This project is read-only; the record cannot be edited'), true);
         }
       } else {
-        this.message = tr('记录不存在或已被删除', 'The record does not exist or was deleted');
+        this.setMessage(tr('记录不存在或已被删除', 'The record does not exist or was deleted'), true);
       }
     } catch (_) {
       if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) {
         this.loadFailed = true;
-        this.message = tr('记录暂时无法读取，请在此重试',
-          'The record could not be loaded. Retry here.');
+        this.setMessage(tr('记录暂时无法读取，请在此重试',
+          'The record could not be loaded. Retry here.'), true);
       }
     } finally {
       if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) this.loading = false;
@@ -1828,8 +1846,8 @@ export struct CaptureEditorScreen {
     const validation = validateCaptureDraft(this.location, this.content, this.photographer, this.notes);
     this.applyValidation(validation);
     if (!validation.valid) {
-      this.message = tr('请修正表单中标出的内容后再保存',
-        'Fix the highlighted form fields before saving');
+      this.setMessage(tr('请修正表单中标出的内容后再保存',
+        'Fix the highlighted form fields before saving'), true);
       this.lifecycle.finishSave(generation);
       return;
     }
@@ -1841,11 +1859,11 @@ export struct CaptureEditorScreen {
       if (!this.lifecycle.accept(generation)) return;
       if (project === null || current === null ||
         !canEditCapture(project.lifecycleStatus, current.status, current.hasOriginal())) {
-        this.message = current !== null && !current.hasOriginal() ?
+        this.setMessage(current !== null && !current.hasOriginal() ?
           tr('原图已清理，无法保存并重新处理',
             'The original was cleared, so this edit cannot be saved and reprocessed') :
           tr('项目或记录状态已变化，请返回后重新打开',
-            'The project or record changed. Go back and open it again.');
+            'The project or record changed. Go back and open it again.'), true);
         return;
       }
       await AppRuntime.require().database.updateCaptureFields(current.id, validation.location,
@@ -1854,8 +1872,8 @@ export struct CaptureEditorScreen {
       AppRuntime.require().notifyDataChanged();
       if (this.lifecycle.accept(generation)) this.pathStack.pop();
     } catch (_) {
-      if (this.lifecycle.accept(generation)) this.message = tr('记录状态已变化，请返回后重新打开',
-        'The record changed. Go back and open it again.');
+      if (this.lifecycle.accept(generation)) this.setMessage(tr('记录状态已变化，请返回后重新打开',
+        'The record changed. Go back and open it again.'), true);
     } finally {
       if (this.lifecycle.accept(generation)) this.saving = false;
       this.lifecycle.finishSave(generation);

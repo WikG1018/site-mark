@@ -504,6 +504,11 @@ export struct ProjectDetailScreen {
   @State private controllerRevision: number = 0;
   @State private confirmDelete: boolean = false;
   @State private message: string = '';
+  @State private messageError: boolean = false;
+  private setMessage(text: string, isError: boolean = false): void {
+    this.message = text;
+    this.messageError = isError;
+  }
   @State private selectionMode: boolean = false;
   @State private selectedIds: string[] = [];
   @State private allSelected: boolean = false;
@@ -839,7 +844,7 @@ export struct ProjectDetailScreen {
     } catch (_) {
       if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken) &&
         this.selection.isSelectAllCurrent(token, this.currentFilter())) {
-        this.message = tr('无法全选项目记录，请重试', 'Could not select every project record. Try again.');
+        this.setMessage(tr('无法全选项目记录，请重试', 'Could not select every project record. Try again.'), true);
       }
     } finally {
       this.projectOperations.finish(actionToken);
@@ -849,7 +854,7 @@ export struct ProjectDetailScreen {
 
   private async batchExport(): Promise<void> {
     if (this.selectedIds.length === 0) {
-      this.message = tr('请先选择照片', 'Select photos first');
+      this.setMessage(tr('请先选择照片', 'Select photos first'), false);
       return;
     }
     const actionToken = this.projectOperations.begin(ProjectOperationKind.BATCH);
@@ -861,14 +866,14 @@ export struct ProjectDetailScreen {
       const result = await service.exportSelection(ids, false);
       const saved = await service.saveAs(result);
       if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken)) {
-        this.message = saved ? tr('所选照片已导出到你选择的位置',
+        this.setMessage(saved ? tr('所选照片已导出到你选择的位置',
           'Selected photos were exported to your chosen location') :
-          tr('已取消保存导出文件', 'Export save was cancelled');
+          tr('已取消保存导出文件', 'Export save was cancelled'), false);
       }
     } catch (_) {
       if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken)) {
-        this.message = tr('所选照片暂时无法导出，请检查记录状态和存储空间',
-          'Selected photos could not be exported. Check their status and available storage.');
+        this.setMessage(tr('所选照片暂时无法导出，请检查记录状态和存储空间',
+          'Selected photos could not be exported. Check their status and available storage.'), true);
       }
     } finally {
       this.projectOperations.finish(actionToken);
@@ -879,7 +884,7 @@ export struct ProjectDetailScreen {
   private async runBatch(action: (id: string) => Promise<void>, success: string): Promise<void> {
     const ids = this.selectedIds.slice();
     if (ids.length === 0) {
-      this.message = tr('请先选择照片', 'Select photos first');
+      this.setMessage(tr('请先选择照片', 'Select photos first'), false);
       return;
     }
     const actionToken = this.projectOperations.begin(ProjectOperationKind.BATCH);
@@ -895,8 +900,8 @@ export struct ProjectDetailScreen {
         }
       }
       if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken)) {
-        this.message = succeeded === ids.length ? success :
-        tr(`已完成 ${succeeded}/${ids.length} 项`, `Completed ${succeeded}/${ids.length}`);
+        this.setMessage(succeeded === ids.length ? success :
+        tr(`已完成 ${succeeded}/${ids.length} 项`, `Completed ${succeeded}/${ids.length}`), false);
         this.exitSelectionAfterBatch();
         await this.resetCaptures();
       }
@@ -959,13 +964,13 @@ export struct ProjectDetailScreen {
 
   private async batchDelete(): Promise<void> {
     if (this.selectedIds.length === 0) {
-      this.message = tr('请先选择照片', 'Select photos first');
+      this.setMessage(tr('请先选择照片', 'Select photos first'), false);
       return;
     }
     if (!this.selection.requestPermanentDelete()) {
       this.syncSelection();
-      this.message = tr(`再次点击“确认删除”将永久删除已选 ${this.selectedIds.length} 条记录`,
-        `Tap “Confirm delete” again to permanently delete ${this.selectedIds.length} selected records`);
+      this.setMessage(tr(`再次点击“确认删除”将永久删除已选 ${this.selectedIds.length} 条记录`,
+        `Tap “Confirm delete” again to permanently delete ${this.selectedIds.length} selected records`), false);
       return;
     }
     await this.runBatch((id: string): Promise<void> => AppRuntime.require().deleteCapture(id),
@@ -1062,8 +1067,8 @@ export struct ProjectDetailScreen {
       }
     } catch (_) {
       if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
-        this.message = tr('有照片仍在处理中，暂时不能更改项目状态',
-          'Project status cannot change while photos are processing');
+        this.setMessage(tr('有照片仍在处理中，暂时不能更改项目状态',
+          'Project status cannot change while photos are processing'), true);
       }
     } finally {
       this.finishProjectMutation(operationToken);
@@ -1087,7 +1092,7 @@ export struct ProjectDetailScreen {
       }
     } catch (_) {
       if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
-        this.message = tr('暂时无法更改置顶状态，请重试', 'Could not change the pinned state. Try again.');
+        this.setMessage(tr('暂时无法更改置顶状态，请重试', 'Could not change the pinned state. Try again.'), true);
       }
     } finally {
       this.finishProjectMutation(operationToken);
@@ -1104,8 +1109,8 @@ export struct ProjectDetailScreen {
       if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) this.pathStack.pop();
     } catch (_) {
       if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
-        this.message = tr('有照片仍在处理中，项目暂时不能删除',
-          'The project cannot be deleted while photos are processing');
+        this.setMessage(tr('有照片仍在处理中，项目暂时不能删除',
+          'The project cannot be deleted while photos are processing'), true);
       }
     } finally {
       this.finishProjectMutation(operationToken);
@@ -1230,7 +1235,7 @@ export struct ProjectDetailScreen {
               }
               if (this.message.length > 0) {
                 ListItem() {
-                  Text(this.message).fontSize(13).fontColor(UiTokens.PRIMARY)
+                  Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY)
                     .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
                     .width('100%')
                 }
