@@ -322,6 +322,70 @@ void main() {
     });
   });
 
+  test('OhosShareFileService swallows cancelled share panel', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          throw PlatformException(
+            code: 'share_cancelled',
+            message: 'User cancelled the share panel',
+          );
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await OhosShareFileService().shareFile(
+      '/tmp/exports/sitemark-backup-1.zip',
+    );
+  });
+
+  test('OhosShareFileService swallows Canceled share panel', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          throw PlatformException(
+            code: 'share_cancelled',
+            message: 'Operation Canceled',
+          );
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await OhosShareFileService().shareFile(
+      '/tmp/exports/sitemark-backup-1.zip',
+    );
+  });
+
+  test('OhosShareFileService still throws other share errors', () async {
+    const channel = MethodChannel('sitemark.system.ohos');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          throw PlatformException(
+            code: 'share_failed',
+            message: 'ability context unavailable',
+          );
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    await expectLater(
+      OhosShareFileService().shareFile('/tmp/exports/sitemark-backup-1.zip'),
+      throwsA(
+        isA<PlatformException>().having(
+          (error) => error.message,
+          'message',
+          'ability context unavailable',
+        ),
+      ),
+    );
+  });
+
   test('requestEnableNotification uses the ohos channel', () async {
     late String method;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

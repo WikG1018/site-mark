@@ -2,6 +2,16 @@
 
 包名 `io.github.wikg1018.sitemark`，版本 `1.0.8+23`。设备：DevEco 模拟器 `SiteMarkPhone602`，hdc `127.0.0.1:5555`。入口：全量 `lib/main.dart` 未签名 HAP。
 
+## 2026-08-21 Task 60
+
+云端闭环：ShareKit 分享面板用户取消不报失败。`OhosShareFileService` 与宿主 `shareFile` 吞掉 `cancelled`/`Canceled`；空源 / `ohos_not_ready` / 其它真实错误仍失败。官方测试闭环，未重编 HAP，无分享面板 dump。队列仍是应用内内存串行。Task 46–60 Dart 未进 HAP。
+
+| 项 | 结果 |
+| --- | --- |
+| CI | 新测试在 `packages/sitemark_system_api/test/` 与已在清单的 `ohos_platform_services_test`，本刀未改 workflow |
+| 官方测试 | `share_cancel_policy_test` **2 绿**；`publish_fallback_policy_test` **4 绿**；`ohos_platform_services_test` **33 绿**（合计 39） |
+| 模拟器 dump | **无**。不得写系统分享已通；不得写 WorkScheduler 保活 |
+
 ## 2026-08-21 Task 59
 
 云端闭环：相册保存对话框取消 / 空 destinations / 其它相册错误回退沙箱，不把拍摄打成 `failed`。宿主 `writeAlbumOrSandboxJpeg` 对齐 `saveArchive` 取消托底。官方测试闭环，未重编 HAP，无相册 dump。队列仍是应用内内存串行。Task 46–59 Dart 未进 HAP。

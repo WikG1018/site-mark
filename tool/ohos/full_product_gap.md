@@ -20,7 +20,7 @@
 - 相册探测诚实化：`detectGalleryAccess` 无 ACL 证明返回 `pickerFallback`，不再把 READ+WRITE 媒体权限当成 ACL。存储页和拍摄页显示「未进入系统相册」。发布路径在有媒体写权限时仍先尝试 `createAsset`。官方 `storage_section_screen_test` **5 绿**。无相册 dump。
 - 动态取色诚实化：鸿蒙 `supportsDynamicColorProvider` 为 false；外观页隐藏「跟随系统取色」开关，始终露出应用主题色，并显示「鸿蒙暂不支持壁纸动态取色」。官方 `appearance_section_screen_test` **9 绿**。不得写 Material You 已对等。
 - 宿主 `launchCamera`：`CameraPicker` 省略沙箱 `saveUri`；`file://media/` 用 `fs.openSync(uri)` 拷进 `files/originals`。无拍成 dump。
-- `OhosShareFileService` + 宿主 `shareFile`：ShareKit `ShareController.show`，zip/jpeg/png 走对应 UTD。`main.dart` 鸿蒙入口不再覆盖成 `NoopShareFileService`。官方通道测试绿灯。无分享面板 dump。
+- `OhosShareFileService` + 宿主 `shareFile`：ShareKit `ShareController.show`，zip/jpeg/png 走对应 UTD。`main.dart` 鸿蒙入口不再覆盖成 `NoopShareFileService`。分享面板用户取消不报失败（Dart `ShareCancelPolicy` + ETS catch 已锁）。官方通道测试绿灯。无分享面板 dump。
 - `OhosCompletionNotificationService` + 宿主 NotificationKit：`requestEnableNotification` / `publishCaptureReady`；点击经 WantAgent 参数 `sitemarkDeepLink` 回 Dart。官方通道测试绿灯。无通知 dump。
 
 ## 未接通 / 不得宣称

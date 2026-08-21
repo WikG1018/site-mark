@@ -2,7 +2,7 @@
 
 > 交接对象：下一个负责 `ohos` 分支的 Agent（云端环境）。
 > 本文档自包含：只依赖本仓库与 GitHub，不依赖任何上一台机器的本地路径。
-> 事实基准：`ohos` 分支 Task 58 功能 `2f1a058`（2026-08-20）。Task 59 已在本仓库落地，提交哈希以 `git log origin/ohos -3` 为准。
+> 事实基准：`ohos` 分支 Task 60 功能以 `git log origin/ohos -3` 为准（前序 Task 59 `ccf39ec`，2026-08-21）。
 
 ## 1. 一句话现状
 
@@ -43,7 +43,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 59：产品主链路（隐私�
 
 已验证过、可以写的事实（模拟器 DevEco `SiteMarkPhone602` x86_64）：隐私门 → 新建项目 → 项目详情 → 拍摄表单 → 全部记录 → 设置/关于 → 备份沙箱 `files/exports/*.zip` + Document picker 弹出。逐任务记录见 `tool/ohos/product_hap_review.md`，总账见 `tool/ohos/full_product_gap.md`。
 
-## 4. 已落地里程碑（Tasks 0–59）
+## 4. 已落地里程碑（Tasks 0–60）
 
 完整计划链见 `README.md` 顶部「后续实施计划」段。近期任务：
 
@@ -65,7 +65,7 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 59：产品主链路（隐私�
 | 56 | 取消拍照不占号 + 失败引导进 CI | `6484a86` | `2026-08-20-harmonyos-cancel-no-photo-number.md` |
 | 57 | 拒绝定位仍出片 + 连拍 001→002 | `7b82a42` | `2026-08-20-harmonyos-denied-location-burst-numbers.md` |
 | 58 | 空相机文件不占号 + live 空内容当取消 | `2f1a058` | `2026-08-20-harmonyos-empty-camera-no-photo-number.md` |
-| 59 | 相册保存取消托底沙箱，不 markFailed | 见 `git log origin/ohos` | `2026-08-20-harmonyos-album-cancel-sandbox.md` |
+| 59 | 相册保存取消托底沙箱，不 markFailed | `ccf39ec` | `2026-08-20-harmonyos-album-cancel-sandbox.md` |
 
 早期任务（0–38）：系统宿主与通道、隐私同意、串行队列、HAP 工程与全量 `lib/main.dart` 编译、备份导出/读回、原生 Document picker 选档、ImageKit 读图、ShareKit、NotificationKit、startAbility 外链——链路与证据见 `README.md` 与 `tool/ohos/product_hap_review.md`。
 
@@ -73,15 +73,15 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 59：产品主链路（隐私�
 
 - CI：`.github/workflows/ohos.yml`，push 到 `ohos` 即触发；ubuntu-latest + 官方 Flutter **3.44.6**，`flutter pub get` + 指定测试子集。
 - 云端跑测试就是标准命令：`flutter test <文件或目录>`。无需任何本机技巧（此前 Windows 本机的沙箱终端问题属机器特例，云端不复现）。
-- 官方 Flutter 3.44.6 全绿的测试文件（Tasks 51–59 起已全部进 `ohos.yml`；Task 59 新测试在 `packages/sitemark_system_api/test/`，本刀未改 workflow）：
+- 官方 Flutter 3.44.6 全绿的测试文件（Tasks 51–60 起已全部进 `ohos.yml`；Task 60 新测试在 `packages/sitemark_system_api/test/`，本刀未改 workflow）：
 
 | 测试文件 | 计数 |
 | --- | --- |
 | `test/platform/degraded_image_pipeline_test.dart` | 19 绿 |
 | `test/platform/ohos_background_work_client_test.dart` | 6 绿 |
 | `test/platform/jpeg_gps_test.dart` | 6 绿 |
-| `test/platform/ohos_platform_services_test.dart` | 30 绿 |
-| `packages/sitemark_system_api/test/`（7 个文件） | CI 覆盖；`gallery_store_test` 8 绿；`publish_fallback_policy_test` 4 绿；`capture_session_store_test` 3 绿（含空文件 `hasContent: false`） |
+| `test/platform/ohos_platform_services_test.dart` | 33 绿（含分享取消不 throw） |
+| `packages/sitemark_system_api/test/` | CI 覆盖；`gallery_store_test` 8 绿；`publish_fallback_policy_test` 4 绿；`share_cancel_policy_test` 2 绿；`capture_session_store_test` 3 绿（含空文件 `hasContent: false`） |
 | `test/features/settings/sections/storage_section_screen_test.dart` | 5 绿 |
 | `test/features/settings/sections/appearance_section_screen_test.dart` | 9 绿 |
 | `test/features/capture/capture_form_screen_test.dart` | 20 绿（含 delayed 后仍可再拍） |
@@ -139,14 +139,14 @@ HarmonyOS NEXT 原生 HAP 适配已推进到 Task 59：产品主链路（隐私�
 - 不提交：HAP、`ohos/entry/libs/`、构建缓存、一次性模拟器脚本、社区 pubspec lock、测试日志、审查 dump 临时文件。
 - 用户没有真机；此前的模拟器验证全部在上一台本地 Windows 环境完成。云端 Agent 若要 dump 类证据，需要用户提供本地环境配合。
 
-## 9. 下一步建议（Task 60 起）
+## 9. 下一步建议（Task 61 起）
 
 优先做**不依赖 dump** 的体验/诚实缺口（云端可闭环）：
 
-1. 对照规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 剩余「必须/不得」项，继续找可 TDD 的缺口（相册 ACL 精确替换仍无 dump）。不要再把「四窗串行阻塞」「CI 缺 widget/lifecycle/备份导入」「取消拍照不占号」「空相机文件不占号 / live 空内容当取消」「拒绝定位仍出片 / 连拍编号」或「相册保存取消再 throw 打成 failed」当缺口——已锁。
-2. 若用户能提供本地环境：按第 6 节重编 HAP（注意 wantAgent / EntryAbility import 风险；**Task 46–59 的 Dart 侧改动尚未重编进任何 HAP**），做拍成 / 坐标 / 相册 / 分享 / 通知 / 外链 dump 走查，逐项解除第 3 节的门控。杀进程四窗没有模拟器 dump，不得写进程被杀后四窗已在真机/模拟器验证。
+1. 对照规格 `docs/superpowers/specs/2026-08-17-harmonyos-next-adaptation-design.md` 剩余「必须/不得」项，继续找可 TDD 的缺口（相册 ACL 精确替换仍无 dump）。不要再把「四窗串行阻塞」「CI 缺 widget/lifecycle/备份导入」「取消拍照不占号」「空相机文件不占号 / live 空内容当取消」「拒绝定位仍出片 / 连拍编号」「相册保存取消再 throw 打成 failed」或「分享取消再 throw 打成失败」当缺口——已锁。
+2. 若用户能提供本地环境：按第 6 节重编 HAP（注意 wantAgent / EntryAbility import 风险；**Task 46–60 的 Dart 侧改动尚未重编进任何 HAP**），做拍成 / 坐标 / 相册 / 分享 / 通知 / 外链 dump 走查，逐项解除第 3 节的门控。杀进程四窗没有模拟器 dump，不得写进程被杀后四窗已在真机/模拟器验证。
 
-**已完成、不要重做：** Task 51 CI 扩容；Task 52 备份恢复同编号不得串 URI、删除按 URI/`captureId`；Task 53 启动四窗并行开工（回调 API，日记已抽出）；Task 54 delayed 继续拍 + `capture_workflow_test` 进 CI；Task 55 widget / lifecycle / 备份导入进 CI；Task 56 取消拍照不占号 + `capture_failure_guidance_test` 进 CI；Task 57 拒绝定位仍出片 + 连拍 `001` 然后 `002` + `capture_location_coordinator_test` 进 CI；Task 58 pending 空文件恢复不占号 + live 空 URI / materialize 无内容走 `cameraCancelled`；Task 59 相册保存对话框取消 / 空 destinations 回退沙箱，不 markFailed。
+**已完成、不要重做：** Task 51 CI 扩容；Task 52 备份恢复同编号不得串 URI、删除按 URI/`captureId`；Task 53 启动四窗并行开工（回调 API，日记已抽出）；Task 54 delayed 继续拍 + `capture_workflow_test` 进 CI；Task 55 widget / lifecycle / 备份导入进 CI；Task 56 取消拍照不占号 + `capture_failure_guidance_test` 进 CI；Task 57 拒绝定位仍出片 + 连拍 `001` 然后 `002` + `capture_location_coordinator_test` 进 CI；Task 58 pending 空文件恢复不占号 + live 空 URI / materialize 无内容走 `cameraCancelled`；Task 59 相册保存对话框取消 / 空 destinations 回退沙箱，不 markFailed；Task 60 分享面板用户取消不报失败（Dart `ShareCancelPolicy` + ETS catch；空源 / `ohos_not_ready` / 其它错误仍 throw）。
 
 **明确放弃的假缺口（不要重做）**：last-known 定位（Android 也没有）、逆地理（Android `address` 也是 null）、叠水印后 JPEG 写回 GPS（Rust 也不写）、通知点击接线（`deliverNotificationTap` 已有）、照片编号入水印（Rust `labels()` 也不画）、WorkScheduler / `startBackgroundRunning` 当 WorkManager 对等。
 

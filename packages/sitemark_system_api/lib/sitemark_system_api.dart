@@ -13,3 +13,4 @@ export 'src/ohos/gallery_store.dart';
 export 'src/ohos/ohos_system_api.dart';
 export 'src/ohos/publish_fallback_policy.dart';
 export 'src/ohos/publish_journal_store.dart';
+export 'src/ohos/share_cancel_policy.dart';

@@ -147,8 +147,15 @@ class OhosShareFileService implements ShareFileService {
   final OhosSystemApi _api;
 
   @override
-  Future<void> shareFile(String path) {
-    return _api.shareFile(path);
+  Future<void> shareFile(String path) async {
+    try {
+      await _api.shareFile(path);
+    } catch (error) {
+      if (ShareCancelPolicy.isUserCancelled(error)) {
+        return;
+      }
+      rethrow;
+    }
   }
 }
 

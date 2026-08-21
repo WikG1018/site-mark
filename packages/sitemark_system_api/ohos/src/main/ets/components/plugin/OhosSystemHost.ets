@@ -550,10 +550,18 @@ export default class OhosSystemHost {
       label: 'SiteMark',
     };
     const controller = new systemShare.ShareController(new systemShare.SharedData(record));
-    await controller.show(abilityContext, {
-      previewMode: systemShare.SharePreviewMode.DEFAULT,
-      selectionMode: systemShare.SelectionMode.SINGLE,
-    });
+    try {
+      await controller.show(abilityContext, {
+        previewMode: systemShare.SharePreviewMode.DEFAULT,
+        selectionMode: systemShare.SelectionMode.SINGLE,
+      });
+    } catch (error) {
+      const message = `${error}`;
+      if (message.includes('cancelled') || message.includes('Canceled')) {
+        return;
+      }
+      throw error;
+    }
   }
 
   private shareUtdForPath(path: string): string {

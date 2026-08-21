@@ -113,7 +113,7 @@ dart.exe --disable-dart-dev C:\Users\Administrator\Development\flutter\bin\cache
 
 Expected: FAIL because `publish_fallback_policy.dart` is missing (`PublishFallbackPolicy` not defined).
 
-- [ ] **Step 3: GREEN** — 新增策略，ETS 取消不再 rethrow。
+- [x] **Step 3: GREEN** — 新增策略，ETS 取消不再 rethrow。
 
 `packages/sitemark_system_api/lib/src/ohos/publish_fallback_policy.dart`:
 
@@ -191,10 +191,10 @@ Expected: 新测试 4 绿；`gallery_store_test` 仍 8 绿。不要宣称相册�
 - 交接文档：事实基准 Task 59；表行 59；第 9 节不要再把「相册保存取消再 throw」当缺口。Task 58 行提交列已是 `2f1a058`。
 - `NEXT_AGENT_PROMPT.md`：已完成 Tasks 0–59。
 
-- [ ] **Step 6: Commit and push `ohos`**
+- [x] **Step 6: Commit and push `ohos`**
 
 ```text
 feat(ohos): fall back to sandbox when album save is cancelled
 ```
 
-只暂存本刀源码 / 测试 / 文档。不要提交 `ohos/entry/libs/`、HAP、一次性 ps1。不合 `main`。
+已推 `ccf39ec`。只暂存本刀源码 / 测试 / 文档。不要提交 `ohos/entry/libs/`、HAP、一次性 ps1。不合 `main`。
