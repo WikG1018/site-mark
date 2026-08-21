@@ -1,5 +1,5 @@
 import { UiTokens } from './UiTokens';
-import { choiceAccessibilityText, joinAccessibilityText, lifecycleAccessibilityText } from './AccessibilityText';
+import { choiceAccessibilityText, joinAccessibilityText } from './AccessibilityText';
 import { MotionPolicy } from './MotionPolicy';
 
 /**
@@ -175,24 +175,6 @@ export struct SectionHeader {
 }
 
 @Component
-export struct ChoiceButton {
-  @Prop label: string = '';
-  @Prop selected: boolean = false;
-  @Prop controlEnabled: boolean = true;
-  onSelect: () => void = (): void => {};
-
-  build() {
-    Button(this.label).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(13)
-      .backgroundColor(this.selected ? UiTokens.PRIMARY_CONTAINER : UiTokens.CONTROL)
-      .fontColor(this.selected ? UiTokens.PRIMARY : UiTokens.TEXT)
-      .borderRadius(UiTokens.CONTROL_RADIUS)
-      .enabled(this.controlEnabled)
-      .accessibilityText(choiceAccessibilityText(this.label, this.selected))
-      .onClick(this.onSelect)
-  }
-}
-
-@Component
 export struct ValueTextRow {
   @Prop label: string = '';
   @Prop value: string = '';
@@ -300,27 +282,47 @@ export struct AppSearchField {
 export struct LifecycleSegment {
   @Prop options: SegmentOption[] = [];
   @Prop selectedValue: string = '';
+  // pill 复现原 statusChip 全圆胶囊；默认 segment 为圆角容器分段形态（原 ChoiceButton 行）
+  @Prop pill: boolean = false;
+  @Prop controlEnabled: boolean = true;
   onSelect: (value: string) => void = (_value: string): void => {};
 
+  private chipSpace(): number {
+    return this.pill ? 6 : 7;
+  }
+
+  private chipPadding(): number {
+    return this.pill ? 4 : 3;
+  }
+
+  private chipRadius(): number {
+    return this.pill ? UiTokens.TOUCH_TARGET / 2 : UiTokens.CONTROL_RADIUS;
+  }
+
+  private chipFontSize(): number {
+    return this.pill ? 14 : 13;
+  }
+
   build() {
-    Row({ space: 4 }) {
+    Row({ space: this.chipSpace() }) {
       ForEach(this.options, (option: SegmentOption) => {
         Button(option.label)
           .layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
-          .fontSize(14)
+          .fontSize(this.chipFontSize())
           .fontWeight(this.selectedValue === option.value ? FontWeight.Bold : FontWeight.Regular)
           .fontColor(this.selectedValue === option.value ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
           .backgroundColor(this.selectedValue === option.value ? UiTokens.PRIMARY_CONTAINER : Color.Transparent)
-          .borderRadius(UiTokens.CONTROL_RADIUS)
-          .accessibilityText(lifecycleAccessibilityText(option.label, this.selectedValue === option.value))
+          .borderRadius(this.chipRadius())
+          .enabled(this.controlEnabled)
+          .accessibilityText(choiceAccessibilityText(option.label, this.selectedValue === option.value))
           .onClick((): void => this.onSelect(option.value))
       }, (option: SegmentOption): string => option.value)
     }
     .width('100%')
-    .padding(3)
-    .backgroundColor(UiTokens.SURFACE_MUTED)
-    .borderRadius(UiTokens.CONTROL_RADIUS + 3)
+    .padding(this.chipPadding())
+    .backgroundColor(this.pill ? UiTokens.CONTROL : UiTokens.SURFACE_MUTED)
+    .borderRadius(this.chipRadius() + (this.pill ? 2 : 3))
   }
 }
 

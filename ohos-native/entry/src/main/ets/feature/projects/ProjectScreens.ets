@@ -6,8 +6,8 @@ import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { CaptureCard } from '../records/RecordComponents';
 import { RecordBatchLayoutPolicy, RecordNavigationSeedStore,
   RecordSelectionCoordinator } from '../records/RecordUiCoordinator';
-import { AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, InlineErrorPanel, ListSkeleton,
-  SectionHeader, panelTransition } from '../../shared/AppComponents';
+import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, InlineErrorPanel,
+  LifecycleSegment, ListSkeleton, SectionHeader, SegmentOption, panelTransition } from '../../shared/AppComponents';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
@@ -225,45 +225,24 @@ export struct ProjectListView {
     this.load();
   }
 
-  @Builder
-  private statusChip(label: string, value: ProjectLifecycleStatus) {
-    Button(label)
-      .height(UiTokens.TOUCH_TARGET)
-      .layoutWeight(1)
-      .fontSize(14)
-      .fontWeight(this.lifecycle === value ? FontWeight.Bold : FontWeight.Regular)
-      .fontColor(this.lifecycle === value ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
-      .backgroundColor(this.lifecycle === value ? UiTokens.PRIMARY_CONTAINER : Color.Transparent)
-      .borderRadius(UiTokens.TOUCH_TARGET / 2)
-      .onClick((): void => {
-        this.switchLifecycle(value);
-      })
-  }
-
   build() {
     Column() {
       AppTopBar({ title: tr('项目', 'Projects'), subtitle: tr('工程现场按项目归档',
         'Organize site records by project'), actionLabel: tr('＋ 新建', '＋ New'),
         onAction: (): void => this.createProject() })
       Column({ space: 12 }) {
-        TextInput({ text: this.searchText, placeholder: tr('搜索项目名称', 'Search project names') })
-          .height(44)
-          .fontSize(15)
-          .backgroundColor(UiTokens.GLASS_STRONG)
-          .borderRadius(22)
-          .onChange((value: string): void => {
+        AppSearchField({ value: this.searchText, placeholder: tr('搜索项目名称', 'Search project names'),
+          accessibilityLabel: tr('搜索项目名称', 'Search project names'),
+          onChange: (value: string): void => {
             this.searchText = value;
             this.scheduleSearch();
-          })
-        Row({ space: 6 }) {
-          this.statusChip(tr('进行中', 'Active'), ProjectLifecycleStatus.ACTIVE)
-          this.statusChip(tr('已完成', 'Completed'), ProjectLifecycleStatus.COMPLETED)
-          this.statusChip(tr('已归档', 'Archived'), ProjectLifecycleStatus.ARCHIVED)
-        }
-        .padding(4)
-        .width('100%')
-        .backgroundColor(UiTokens.CONTROL)
-        .borderRadius(24)
+          } })
+        LifecycleSegment({ options: [
+          new SegmentOption(ProjectLifecycleStatus.ACTIVE, tr('进行中', 'Active')),
+          new SegmentOption(ProjectLifecycleStatus.COMPLETED, tr('已完成', 'Completed')),
+          new SegmentOption(ProjectLifecycleStatus.ARCHIVED, tr('已归档', 'Archived'))
+        ], selectedValue: this.lifecycle, pill: true,
+          onSelect: (value: string): void => { this.switchLifecycle(value as ProjectLifecycleStatus); } })
       }
       .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 8 })
       .width('100%')
@@ -1266,11 +1245,11 @@ export struct ProjectDetailScreen {
               }
               ListItem() {
                 Column({ space: 8 }) {
-                  TextInput({ text: this.searchText, placeholder: tr('搜索部位、内容、拍摄人或编号',
-                    'Search location, work, photographer, or number') })
-                    .height(44).fontSize(14).backgroundColor(UiTokens.GLASS_STRONG).borderRadius(22)
+                  AppSearchField({ value: this.searchText, placeholder: tr('搜索部位、内容、拍摄人或编号',
+                    'Search location, work, photographer, or number'),
+                    accessibilityLabel: tr('搜索拍摄记录', 'Search capture records'),
+                    onChange: (value: string): void => { this.searchText = value; this.scheduleSearch(); } })
                     .enabled(!this.pageBusy())
-                    .onChange((value: string): void => { this.searchText = value; this.scheduleSearch(); })
                   Row({ space: 8 }) {
                     Button(this.filterOpen ? tr('收起筛选', 'Hide filters') : tr('筛选', 'Filter'))
                       .height(RecordBatchLayoutPolicy.filterControlHeight()).fontSize(13).fontColor(UiTokens.PRIMARY)
