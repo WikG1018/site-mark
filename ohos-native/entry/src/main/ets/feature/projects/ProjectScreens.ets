@@ -1177,30 +1177,42 @@ export struct ProjectDetailScreen {
               ListItem() {
                 Row({ space: 8 }) {
                   if (this.project!.lifecycleStatus !== ProjectLifecycleStatus.ACTIVE) {
-                    Button(tr('恢复进行中', 'Reopen')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
-                      .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
-                      .enabled(this.canMutateProject())
-                      .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ACTIVE); })
+                    Button() {
+                      Text(tr('恢复进行中', 'Reopen')).fontSize(12).fontColor(UiTokens.PRIMARY)
+                        .maxLines(2).textAlign(TextAlign.Center)
+                    }
+                    .layoutWeight(1).height(UiTokens.TOUCH_TARGET).backgroundColor(UiTokens.ACCENT_SURFACE)
+                    .enabled(this.canMutateProject())
+                    .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ACTIVE); })
                   } else {
-                    Button(tr('标记完成', 'Mark completed')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
-                      .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
-                      .enabled(this.canMutateProject())
-                      .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.COMPLETED); })
+                    Button() {
+                      Text(tr('标记完成', 'Mark completed')).fontSize(12).fontColor(UiTokens.PRIMARY)
+                        .maxLines(2).textAlign(TextAlign.Center)
+                    }
+                    .layoutWeight(1).height(UiTokens.TOUCH_TARGET).backgroundColor(UiTokens.ACCENT_SURFACE)
+                    .enabled(this.canMutateProject())
+                    .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.COMPLETED); })
                   }
                   if (this.project!.lifecycleStatus !== ProjectLifecycleStatus.ARCHIVED) {
-                    Button(tr('归档', 'Archive')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
-                      .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.ACCENT_SURFACE)
-                      .enabled(this.canMutateProject())
-                      .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ARCHIVED); })
-                  }
-                  Button(tr('删除项目', 'Delete project')).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(12)
-                    .fontColor(UiTokens.DANGER).backgroundColor(UiTokens.DANGER_CONTAINER)
+                    Button() {
+                      Text(tr('归档', 'Archive')).fontSize(12).fontColor(UiTokens.PRIMARY)
+                        .maxLines(2).textAlign(TextAlign.Center)
+                    }
+                    .layoutWeight(1).height(UiTokens.TOUCH_TARGET).backgroundColor(UiTokens.ACCENT_SURFACE)
                     .enabled(this.canMutateProject())
-                    .accessibilityText(tr('删除项目，永久删除本机项目记录',
-                      'Delete project, permanently delete on-device project records'))
-                    .onClick((): void => {
-                      if (this.canMutateProject()) this.confirmDelete = !this.confirmDelete;
-                    })
+                    .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ARCHIVED); })
+                  }
+                  Button() {
+                    Text(tr('删除项目', 'Delete project')).fontSize(12).fontColor(UiTokens.DANGER)
+                      .maxLines(2).textAlign(TextAlign.Center)
+                  }
+                  .layoutWeight(1).height(UiTokens.TOUCH_TARGET).backgroundColor(UiTokens.DANGER_CONTAINER)
+                  .enabled(this.canMutateProject())
+                  .accessibilityText(tr('删除项目，永久删除本机项目记录',
+                    'Delete project, permanently delete on-device project records'))
+                  .onClick((): void => {
+                    if (this.canMutateProject()) this.confirmDelete = !this.confirmDelete;
+                  })
                 }
                 .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
                 .width('100%')

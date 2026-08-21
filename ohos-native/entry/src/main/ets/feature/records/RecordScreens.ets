@@ -1566,25 +1566,25 @@ export struct CaptureDetailScreen {
       Stack() {
         Row()
           .width('100%')
-          .height(330)
+          .height('100%')
           .backgroundColor(UiTokens.IMAGE_PLACEHOLDER)
         if (this.mediaRevision >= 0 && this.media.slotUri('a').length > 0) {
           AppImage({ uri: this.media.slotUri('a'), requestVersion: this.media.slotVersion('a'),
             decodeEdge: ImageDecodePolicy.detail(), fit: ImageFit.Contain,
             transparentPlaceholder: this.media.isPendingSlot('a'), callbackToken: this.media.slotVersion('a'),
             callbackKey: 'a', onLoaded: this.mediaSlotLoadedHandler, onFailed: this.mediaSlotFailedHandler })
-            .width('100%').height(330)
+            .width('100%').height('100%')
         }
         if (this.media.slotUri('b').length > 0) {
           AppImage({ uri: this.media.slotUri('b'), requestVersion: this.media.slotVersion('b'),
             decodeEdge: ImageDecodePolicy.detail(), fit: ImageFit.Contain,
             transparentPlaceholder: this.media.isPendingSlot('b'), callbackToken: this.media.slotVersion('b'),
             callbackKey: 'b', onLoaded: this.mediaSlotLoadedHandler, onFailed: this.mediaSlotFailedHandler })
-            .width('100%').height(330)
+            .width('100%').height('100%')
         }
       }
       .width('100%')
-      .height(330)
+      .height('100%')
       .clip(true)
       .borderRadius(UiTokens.CARD_RADIUS)
       .sharedTransition(`capture-photo-${this.capture?.id ?? ''}`,
@@ -1620,7 +1620,7 @@ export struct CaptureDetailScreen {
       }.padding(10).backdropBlur(MotionPolicy.blur(12))
     }
     .width('100%')
-    .height(330)
+    .aspectRatio(4 / 3)
     .clip(true)
     .borderRadius(UiTokens.CARD_RADIUS)
   }
@@ -1682,28 +1682,39 @@ export struct CaptureDetailScreen {
               }
               Row({ space: 8 }) {
                 if (this.capture!.status === CaptureStatus.READY) {
-                  Button(this.capture!.publishedUri.length > 0 ? tr('再次保存', 'Save again') :
-                    tr('保存到相册', 'Save to gallery'))
-                    .layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(13).fontColor(Color.White)
-                    .backgroundColor(UiTokens.PRIMARY).borderRadius(16)
-                    .onClick((): void => { this.republish(); })
+                  Button() {
+                    Text(this.capture!.publishedUri.length > 0 ? tr('再次保存', 'Save again') :
+                      tr('保存到相册', 'Save to gallery'))
+                      .fontSize(13).fontColor(Color.White).maxLines(2).textAlign(TextAlign.Center)
+                  }
+                  .layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                  .backgroundColor(UiTokens.PRIMARY).borderRadius(16)
+                  .onClick((): void => { this.republish(); })
                 } else if (this.capture!.status === CaptureStatus.FAILED && this.capture!.hasOriginal()) {
-                  Button(tr('重新处理', 'Reprocess')).layoutWeight(1)
-                    .height(UiTokens.TOUCH_TARGET).fontSize(13)
-                    .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(16)
-                    .onClick((): void => { this.retry(); })
+                  Button() {
+                    Text(tr('重新处理', 'Reprocess'))
+                      .fontSize(13).fontColor(Color.White).maxLines(2).textAlign(TextAlign.Center)
+                  }
+                  .layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                  .backgroundColor(UiTokens.PRIMARY).borderRadius(16)
+                  .onClick((): void => { this.retry(); })
                 }
-                Button(tr('清理原图', 'Clear original')).layoutWeight(1)
-                  .height(UiTokens.TOUCH_TARGET).fontSize(13)
-                  .fontColor(UiTokens.PRIMARY).backgroundColor(UiTokens.CONTROL).borderRadius(16)
-                  .enabled(this.capture!.hasOriginal() && (this.capture!.status === CaptureStatus.READY ||
-                    this.capture!.status === CaptureStatus.FAILED))
-                  .onClick((): void => { this.clearOriginal(); })
-                Button(tr('删除记录', 'Delete record')).layoutWeight(1)
-                  .height(UiTokens.TOUCH_TARGET).fontSize(13)
-                  .fontColor(UiTokens.DANGER).backgroundColor(UiTokens.DANGER_CONTAINER)
-                  .borderRadius(16)
-                  .onClick((): void => { this.confirmDelete = !this.confirmDelete; })
+                Button() {
+                  Text(tr('清理原图', 'Clear original'))
+                    .fontSize(13).fontColor(UiTokens.PRIMARY).maxLines(2).textAlign(TextAlign.Center)
+                }
+                .layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                .backgroundColor(UiTokens.CONTROL).borderRadius(16)
+                .enabled(this.capture!.hasOriginal() && (this.capture!.status === CaptureStatus.READY ||
+                  this.capture!.status === CaptureStatus.FAILED))
+                .onClick((): void => { this.clearOriginal(); })
+                Button() {
+                  Text(tr('删除记录', 'Delete record'))
+                    .fontSize(13).fontColor(UiTokens.DANGER).maxLines(2).textAlign(TextAlign.Center)
+                }
+                .layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                .backgroundColor(UiTokens.DANGER_CONTAINER).borderRadius(16)
+                .onClick((): void => { this.confirmDelete = !this.confirmDelete; })
               }.width('100%')
               if (this.confirmDelete) {
                 Column({ space: 9 }) {
