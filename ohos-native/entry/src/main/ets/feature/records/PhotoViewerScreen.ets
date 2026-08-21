@@ -1,3 +1,4 @@
+import { window } from '@kit.ArkUI';
 import { AppRuntime } from '../../app/AppRuntime';
 import { CaptureRecord, CaptureViewerWindow } from '../../domain/Models';
 import { AppImage } from '../../shared/AppImage';
@@ -22,13 +23,24 @@ class RuntimePhotoViewerWindowLoader implements PhotoViewerWindowLoader {
 export struct PhotoViewerScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @State private viewerRevision: number = 0;
-  @State private gestureRevision: number = 0;
+  @State private viewerScale: number = 1;
+  @State private panOffsetX: number = 0;
+  @State private panOffsetY: number = 0;
   @State private fullImageRevision: number = 0;
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
   private readonly gestureState: PhotoViewerGestureState = new PhotoViewerGestureState();
   private readonly renderedVersion: ViewerRenderedVersionTracker = new ViewerRenderedVersionTracker();
   private readonly navigationSeed: ViewerNavigationSeedCoordinator = new ViewerNavigationSeedCoordinator();
   private readonly fullImage: ViewerFullImageCoordinator = new ViewerFullImageCoordinator();
+  private panBaseX: number = 0;
+  private panBaseY: number = 0;
+  private panTouchId: number = -1;
+  private panTouchStartX: number = 0;
+  private panTouchStartY: number = 0;
+  private viewportWidth: number = 0;
+  private viewportHeight: number = 0;
+  private topInsetVp: number = 0;
+  private bottomInsetVp: number = 0;
   private readonly controller: PhotoViewerWindowController = new PhotoViewerWindowController(
     new RuntimePhotoViewerWindowLoader(), (): void => { this.controllerChanged(); });
   private readonly refreshListener: () => void = (): void => { this.reloadCurrent(); };
@@ -82,6 +94,7 @@ export struct PhotoViewerScreen {
     if (!this.pageState.activate()) {
       return;
     }
+    this.applyViewerSystemBar(true);
     this.applyNavigationSeed();
     const runtime = AppRuntime.require();
     runtime.subscribe(this.refreshListener);
@@ -93,6 +106,7 @@ export struct PhotoViewerScreen {
     if (!this.pageState.deactivate()) {
       return;
     }
+    this.applyViewerSystemBar(false);
     this.navigationSeed.invalidateCallbacks();
     this.fullImage.invalidate();
     this.controller.invalidate();
@@ -183,12 +197,92 @@ export struct PhotoViewerScreen {
 
   private updatePinch(scale: number): void {
     this.gestureState.updatePinch(scale);
-    this.gestureRevision += 1;
+    this.viewerScale = this.gestureState.scale;
+    this.clampPan();
+  }
+
+  private settleZoom(): void {
+    if (this.viewerScale < 1.05) {
+      this.gestureState.resetAfterMove();
+      this.viewerScale = 1;
+      this.panOffsetX = 0;
+      this.panOffsetY = 0;
+    }
+    this.clampPan();
+  }
+
+  private toggleZoom(): void {
+    if (this.viewerScale > 1) {
+      this.resetScale();
+    } else {
+      this.gestureState.zoomTo(2.5);
+      this.viewerScale = this.gestureState.scale;
+      this.panOffsetX = 0;
+      this.panOffsetY = 0;
+    }
   }
 
   private resetScale(): void {
     this.gestureState.resetAfterMove();
-    this.gestureRevision += 1;
+    this.viewerScale = 1;
+    this.panOffsetX = 0;
+    this.panOffsetY = 0;
+  }
+
+  private beginPan(): void {
+    this.panBaseX = this.panOffsetX;
+    this.panBaseY = this.panOffsetY;
+  }
+
+  private handleViewerTouch(event: TouchEvent): void {
+    if (this.viewerScale <= 1 || event.touches.length !== 1) {
+      this.panTouchId = -1;
+      return;
+    }
+    const touch = event.touches[0];
+    if (event.type === TouchType.Down) {
+      this.panTouchId = touch.id;
+      this.panTouchStartX = touch.x;
+      this.panTouchStartY = touch.y;
+      this.beginPan();
+    } else if (event.type === TouchType.Move && touch.id === this.panTouchId) {
+      this.updatePan(touch.x - this.panTouchStartX, touch.y - this.panTouchStartY);
+    } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.panTouchId = -1;
+    }
+  }
+
+  private updatePan(x: number, y: number): void {
+    if (this.viewerScale <= 1) {
+      return;
+    }
+    this.panOffsetX = this.clampAxis(this.panBaseX + x, this.viewportWidth);
+    this.panOffsetY = this.clampAxis(this.panBaseY + y, this.viewportHeight);
+  }
+
+  private clampPan(): void {
+    this.panOffsetX = this.clampAxis(this.panOffsetX, this.viewportWidth);
+    this.panOffsetY = this.clampAxis(this.panOffsetY, this.viewportHeight);
+  }
+
+  private clampAxis(offset: number, viewportEdge: number): number {
+    const maxOffset = Math.max(0, (this.viewerScale - 1) * viewportEdge / 2);
+    return Math.max(-maxOffset, Math.min(maxOffset, Number.isFinite(offset) ? offset : 0));
+  }
+
+  private async applyViewerSystemBar(lightContent: boolean): Promise<void> {
+    try {
+      const win = await window.getLastWindow(AppRuntime.require().context);
+      const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      this.topInsetVp = Math.max(0, this.getUIContext().px2vp(area.topRect.height));
+      this.bottomInsetVp = Math.max(0, this.getUIContext().px2vp(area.bottomRect.height));
+      const color = lightContent ? '#FFFFFF' : UiTokens.TEXT;
+      await win.setWindowSystemBarProperties({
+        statusBarContentColor: color,
+        navigationBarContentColor: color
+      });
+    } catch (_) {
+    }
   }
 
   private moveTo(index: number): void {
@@ -236,7 +330,7 @@ export struct PhotoViewerScreen {
           .height(UiTokens.TOUCH_TARGET)
           .fontSize(13)
           .fontColor(Color.White)
-          .backgroundColor('#66000000')
+          .backgroundColor(UiTokens.OVERLAY)
           .borderRadius(UiTokens.CONTROL_RADIUS)
           .margin({ right: 16, top: 18 })
           .align(Alignment.TopEnd)
@@ -246,16 +340,26 @@ export struct PhotoViewerScreen {
     }
     .width('100%')
     .height('100%')
-    .scale({ x: this.gestureRevision >= 0 ? this.gestureState.scale : 1,
-      y: this.gestureState.scale })
+    .scale({ x: this.viewerScale, y: this.viewerScale })
+    .translate({ x: this.panOffsetX, y: this.panOffsetY })
+    .onAreaChange((_oldValue: Area, newValue: Area): void => {
+      this.viewportWidth = typeof newValue.width === 'number' ? newValue.width : 0;
+      this.viewportHeight = typeof newValue.height === 'number' ? newValue.height : 0;
+    })
     .sharedTransition(`capture-photo-${capture.id}`,
-      { duration: ViewerNodePolicy.transitionDuration(MotionPolicy.reduceMotion), curve: Curve.Friction })
+      { duration: MotionPolicy.duration(ViewerNodePolicy.SHARED_TRANSITION_DURATION), curve: Curve.Friction })
     .accessibilityText(tr(`全屏照片 ${capture.photoNumber}`, `Full-screen photo ${capture.photoNumber}`))
-    .gesture(PinchGesture()
-      .onActionStart((): void => { this.beginPinch(); })
-      .onActionUpdate((event: GestureEvent): void => { this.updatePinch(event.scale); }))
+    .gesture(GestureGroup(GestureMode.Parallel,
+      PinchGesture()
+        .onActionStart((): void => { this.beginPinch(); })
+        .onActionUpdate((event: GestureEvent): void => { this.updatePinch(event.scale); })
+        .onActionEnd((): void => { this.settleZoom(); }),
+      TapGesture({ count: 2 })
+        .onAction((): void => { this.toggleZoom(); })
+    ))
+    .onTouch((event: TouchEvent): void => { this.handleViewerTouch(event); })
     .onClick((): void => {
-      if (this.gestureState.scale > 1) {
+      if (this.viewerScale > 1) {
         this.resetScale();
       }
     })
@@ -321,19 +425,19 @@ export struct PhotoViewerScreen {
           .height(46)
           .fontSize(32)
           .fontColor(Color.White)
-          .backgroundColor('#66000000')
+          .backgroundColor(UiTokens.OVERLAY)
           .borderRadius(23)
-          .margin({ left: 16, top: 18 })
+          .margin({ left: 16, top: 18 + this.topInsetVp })
           .accessibilityText(tr('返回记录详情', 'Back to record details'))
           .onClick((): void => { this.pathStack.pop(); })
         if (this.controller.rows.length > 0) {
           Text(`${this.controller.absoluteIndex + 1} / ${this.controller.totalCount}`)
             .fontSize(13)
             .fontColor(Color.White)
-            .backgroundColor('#66000000')
+            .backgroundColor(UiTokens.OVERLAY)
             .padding({ left: 12, right: 12, top: 7, bottom: 7 })
             .borderRadius(16)
-            .margin({ top: 26 })
+            .margin({ top: 26 + this.topInsetVp })
             .align(Alignment.Top)
             .accessibilityText(tr(`第 ${this.controller.absoluteIndex + 1} 张，共 ${this.controller.totalCount} 张`,
               `Photo ${this.controller.absoluteIndex + 1} of ${this.controller.totalCount}`))
@@ -343,9 +447,9 @@ export struct PhotoViewerScreen {
             .height(UiTokens.TOUCH_TARGET)
             .fontSize(13)
             .fontColor(Color.White)
-            .backgroundColor('#66000000')
+            .backgroundColor(UiTokens.OVERLAY)
             .borderRadius(UiTokens.CONTROL_RADIUS)
-            .margin({ bottom: 24 })
+            .margin({ bottom: 24 + this.bottomInsetVp })
             .align(Alignment.Bottom)
             .accessibilityText(tr('重试加载附近照片', 'Retry loading nearby photos'))
             .onClick((): void => { this.retry(); })
@@ -356,9 +460,9 @@ export struct PhotoViewerScreen {
             .height(UiTokens.TOUCH_TARGET)
             .fontSize(13)
             .fontColor(Color.White)
-            .backgroundColor('#66000000')
+            .backgroundColor(UiTokens.OVERLAY)
             .borderRadius(UiTokens.CONTROL_RADIUS)
-            .margin({ bottom: 24 })
+            .margin({ bottom: 24 + this.bottomInsetVp })
             .align(Alignment.Bottom)
             .accessibilityText(tr('加载当前照片附近的照片', 'Load photos near the current photo'))
             .onClick((): void => { this.controller.refill(); })
@@ -367,6 +471,7 @@ export struct PhotoViewerScreen {
       .width('100%')
       .height('100%')
       .backgroundColor(Color.Black)
+      .expandSafeArea([SafeAreaType.SYSTEM])
     }
     .hideTitleBar(true)
     .onShown((): void => { this.activatePage(); })

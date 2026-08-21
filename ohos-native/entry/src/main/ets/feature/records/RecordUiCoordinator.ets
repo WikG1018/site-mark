@@ -469,6 +469,11 @@ export class PhotoViewerGestureState {
     return this.scale <= 1;
   }
 
+  zoomTo(scale: number): void {
+    this.scale = Math.max(1, Math.min(5, Number.isFinite(scale) ? scale : 1));
+    this.baseScale = this.scale;
+  }
+
   resetAfterMove(): void {
     this.scale = 1;
     this.baseScale = 1;
@@ -686,6 +691,8 @@ export class ViewerFullImageCoordinator {
 }
 
 export class ViewerNodePolicy {
+  static readonly SHARED_TRANSITION_DURATION: number = 220;
+
   static decodeEdge(current: boolean): number {
     return current ? 2048 : 1024;
   }
@@ -695,6 +702,6 @@ export class ViewerNodePolicy {
   }
 
   static transitionDuration(reduceMotion: boolean): number {
-    return reduceMotion ? 0 : 180;
+    return reduceMotion ? 0 : ViewerNodePolicy.SHARED_TRANSITION_DURATION;
   }
 }

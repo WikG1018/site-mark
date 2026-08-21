@@ -5,6 +5,7 @@ import { UiTokens } from '../../shared/UiTokens';
 import { tr } from '../../shared/AppText';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 import { MotionPolicy } from '../../shared/MotionPolicy';
+import { ViewerNodePolicy } from './RecordUiCoordinator';
 
 @Component
 export struct CaptureInfoRow {
@@ -68,7 +69,7 @@ export struct CaptureCard {
           .fontColor(Color.White)
           .textAlign(TextAlign.Center)
           .width(32).height(32)
-          .backgroundColor(this.selected ? UiTokens.PRIMARY : '#66000000')
+          .backgroundColor(this.selected ? UiTokens.PRIMARY : UiTokens.OVERLAY)
           .border({ width: 2, color: Color.White })
           .borderRadius(16)
           .margin(7)
@@ -85,7 +86,7 @@ export struct CaptureCard {
     .clip(true)
     .borderRadius(18)
     .sharedTransition(`capture-photo-${this.capture.id}`,
-      { duration: MotionPolicy.duration(260), curve: Curve.Friction })
+      { duration: MotionPolicy.duration(ViewerNodePolicy.SHARED_TRANSITION_DURATION), curve: Curve.Friction })
     .accessibilityText(tr(`照片 ${this.capture.photoNumber}`, `Photo ${this.capture.photoNumber}`))
   }
 
@@ -122,10 +123,9 @@ export struct CaptureCard {
     .padding(14)
     .width('100%')
     .backgroundColor(UiTokens.GLASS)
-    .backdropBlur(MotionPolicy.blur(16))
     .borderRadius(UiTokens.CARD_RADIUS)
-    .border({ width: 1, color: this.selected ? UiTokens.PRIMARY : '#DCE8E0' })
-    .shadow({ radius: 12, color: '#12000000', offsetY: 4 })
+    .border({ width: 1, color: this.selected ? UiTokens.PRIMARY : UiTokens.OUTLINE_SUBTLE })
+    .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
     .accessibilityText(this.cardAccessibilityText())
     .onClick((): void => this.selectionMode ? this.onToggle() : this.onOpen())
   }

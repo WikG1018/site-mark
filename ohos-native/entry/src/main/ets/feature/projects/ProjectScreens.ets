@@ -17,6 +17,7 @@ import { LazyListDataSource } from '../../shared/LazyListDataSource';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
+import { MotionPolicy } from '../../shared/MotionPolicy';
 import { ProjectCard } from './ProjectComponents';
 import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
 import {
@@ -1003,6 +1004,11 @@ export struct ProjectDetailScreen {
     }
     .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
     .width('100%')
+    .transition(TransitionEffect.asymmetric(
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 24 }))
+        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 24 }))
+        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn })))
   }
 
   @Builder
@@ -1013,16 +1019,25 @@ export struct ProjectDetailScreen {
           .height(RecordBatchLayoutPolicy.filterControlHeight())
           .enabled(!this.pageBusy())
           .type(InputType.Number)
+          .backgroundColor(UiTokens.SURFACE_MUTED)
+          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          .borderRadius(UiTokens.CONTROL_RADIUS)
           .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
         TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
           .height(RecordBatchLayoutPolicy.filterControlHeight())
           .enabled(!this.pageBusy())
           .type(InputType.Number)
+          .backgroundColor(UiTokens.SURFACE_MUTED)
+          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          .borderRadius(UiTokens.CONTROL_RADIUS)
           .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
         TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
           .height(RecordBatchLayoutPolicy.filterControlHeight())
           .enabled(!this.pageBusy())
           .type(InputType.Number)
+          .backgroundColor(UiTokens.SURFACE_MUTED)
+          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          .borderRadius(UiTokens.CONTROL_RADIUS)
           .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
       }.width('100%')
       Row({ space: 8 }) {
@@ -1355,7 +1370,7 @@ export struct ProjectDetailScreen {
           !this.selectionMode) {
           Button(tr('拍摄', 'Capture')).height(54).fontSize(17).fontWeight(FontWeight.Bold)
             .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
-            .shadow({ radius: 18, color: '#40176B55', offsetY: 7 })
+            .shadow({ radius: 18, color: `#66${UiTokens.PRIMARY.substring(1)}`, offsetY: 7 })
             .margin({ right: 18, bottom: 18 }).align(Alignment.BottomEnd)
             .enabled(this.canMutateProject())
             .onClick((): void => { this.beginCapture(); })

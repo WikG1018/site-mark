@@ -26,7 +26,7 @@ import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, Cap
   validateTemplateName } from '../capture/CaptureFormPolicy';
 import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolicy, RecordSearchCoordinator,
   RecordNavigationSeedStore, RecordRefreshGate, RecordSelectionCoordinator, RenderedRefreshTracker,
-  SystemRecordTimerScheduler } from './RecordUiCoordinator';
+  SystemRecordTimerScheduler, ViewerNodePolicy } from './RecordUiCoordinator';
 import { ScreenLifecycleActionCoordinator } from '../../shared/ScreenActionCoordinator';
 import { BackAction, BackCoordinator, RootBackDispatcher } from '../../shared/ScreenUiStabilityCoordinator';
 
@@ -490,6 +490,11 @@ export struct AllRecordsView {
     }
     .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
     .width('100%')
+    .transition(TransitionEffect.asymmetric(
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 24 }))
+        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 24 }))
+        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn })))
   }
 
   @Builder
@@ -524,16 +529,25 @@ export struct AllRecordsView {
           .height(UiTokens.TOUCH_TARGET)
           .enabled(!this.batchBusy)
           .type(InputType.Number)
+          .backgroundColor(UiTokens.SURFACE_MUTED)
+          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          .borderRadius(UiTokens.CONTROL_RADIUS)
           .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
         TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
           .enabled(!this.batchBusy)
           .type(InputType.Number)
+          .backgroundColor(UiTokens.SURFACE_MUTED)
+          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          .borderRadius(UiTokens.CONTROL_RADIUS)
           .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
         TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
           .enabled(!this.batchBusy)
           .type(InputType.Number)
+          .backgroundColor(UiTokens.SURFACE_MUTED)
+          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+          .borderRadius(UiTokens.CONTROL_RADIUS)
           .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
       }.width('100%')
       Row({ space: 8 }) {
@@ -1224,7 +1238,7 @@ export struct CaptureFormScreen {
             }.width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
               .backgroundColor(UiTokens.DANGER_CONTAINER).fontColor(UiTokens.DANGER)
               .onClick((): void => { this.deleteTemplate(template); })
-          }.padding(10).width('100%').backgroundColor(Color.White).borderRadius(15)
+          }.padding(10).width('100%').backgroundColor(UiTokens.SURFACE).borderRadius(15)
         }, (template: CaptureTemplateRecord) => template.id)
       }
     }
@@ -1252,10 +1266,10 @@ export struct CaptureFormScreen {
                   Button(tr('启用位置', 'Enable location')).layoutWeight(1)
                     .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(11)
                     .fontColor(UiTokens.PRIMARY)
-                    .backgroundColor(Color.White).onClick((): void => { this.enableLocation(); })
+                    .backgroundColor(UiTokens.SURFACE).onClick((): void => { this.enableLocation(); })
                 }.width('100%')
               }
-              .padding(14).width('100%').backgroundColor('#EAF4EE').borderRadius(16)
+              .padding(14).width('100%').backgroundColor(UiTokens.ACCENT_SURFACE).borderRadius(16)
             }
             Button(this.templateOpen ? tr('收起拍摄模板', 'Hide capture templates') :
               tr(`拍摄模板（${this.templates.length}）`, `Capture templates (${this.templates.length})`))
@@ -1588,7 +1602,7 @@ export struct CaptureDetailScreen {
       .clip(true)
       .borderRadius(UiTokens.CARD_RADIUS)
       .sharedTransition(`capture-photo-${this.capture?.id ?? ''}`,
-        { duration: MotionPolicy.duration(260), curve: Curve.Friction })
+        { duration: MotionPolicy.duration(ViewerNodePolicy.SHARED_TRANSITION_DURATION), curve: Curve.Friction })
       .accessibilityText(this.capture === null ? tr('照片', 'Photo') :
         tr(`照片 ${this.capture!.photoNumber}`, `Photo ${this.capture!.photoNumber}`))
       .onClick((): void => { this.openViewer(); })

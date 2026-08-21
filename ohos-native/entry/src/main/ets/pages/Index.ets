@@ -262,9 +262,9 @@ struct Index {
         .combine(TransitionEffect.opacity(0)
           .animation({ duration: motion.fadeDuration, curve: Curve.EaseOut })),
       TransitionEffect.translate({ x: motion.exitX, y: 0 })
-        .animation({ duration: motion.pageDuration, curve: Curve.EaseOut })
+        .animation({ duration: motion.pageDuration, curve: Curve.EaseIn })
         .combine(TransitionEffect.opacity(0)
-          .animation({ duration: motion.fadeDuration, curve: Curve.EaseOut }))
+          .animation({ duration: motion.fadeDuration, curve: Curve.EaseIn }))
     );
   }
 
@@ -350,6 +350,11 @@ struct Index {
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS + 8)
     .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
+    .transition(TransitionEffect.asymmetric(
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 28 }))
+        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
+      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 28 }))
+        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn })))
   }
 
   @Builder

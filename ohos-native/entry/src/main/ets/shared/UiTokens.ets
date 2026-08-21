@@ -21,6 +21,7 @@ export class UiTokens {
   static SURFACE_MUTED: string = '#EEF4F0';
   static OUTLINE_SUBTLE: string = '#D9E3DC';
   static CARD_SHADOW: string = '#14000000';
+  static OVERLAY: string = '#66000000';
   static readonly PAGE_PADDING: number = 16;
   static readonly CARD_RADIUS: number = 18;
   static readonly CONTROL_RADIUS: number = 12;
@@ -55,6 +56,7 @@ export class UiTokens {
       UiTokens.SURFACE_MUTED = '#1F2823';
       UiTokens.OUTLINE_SUBTLE = '#38453E';
       UiTokens.CARD_SHADOW = '#3D000000';
+      UiTokens.OVERLAY = '#66000000';
     } else {
       UiTokens.BACKGROUND = '#F5FAF6';
       UiTokens.SURFACE = '#F9FCF9';
@@ -77,6 +79,7 @@ export class UiTokens {
       UiTokens.SURFACE_MUTED = '#EEF4F0';
       UiTokens.OUTLINE_SUBTLE = '#D9E3DC';
       UiTokens.CARD_SHADOW = '#14000000';
+      UiTokens.OVERLAY = '#66000000';
     }
   }
 }
