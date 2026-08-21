@@ -479,6 +479,10 @@ export default function recordUiCoordinatorTest(): void {
       expect(gesture.canSwipe()).assertTrue();
     });
 
+    it('gives the viewer swipe a dedicated slower duration than generic UI motion', 0, () => {
+      expect(ViewerNodePolicy.SWIPE_DURATION > UiTokens.MOTION_STANDARD).assertTrue();
+    });
+
     it('creates one 2048 node and bounded 1024 neighbors with stable keys', 0, () => {
       const ids = ['a', 'b', 'c', 'd', 'e'];
       const edges = ids.map((id: string): number => ViewerNodePolicy.decodeEdge(id === 'c'));

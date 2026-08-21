@@ -2,6 +2,18 @@ import { UiTokens } from './UiTokens';
 import { choiceAccessibilityText, joinAccessibilityText, lifecycleAccessibilityText } from './AccessibilityText';
 import { MotionPolicy } from './MotionPolicy';
 
+/**
+ * 条件面板统一转场：出现时淡入并上移 distanceVp，消失时淡出并下移。
+ * 时长走 MotionPolicy，系统减少动画开启时归零。distanceVp 传 0 表示纯淡入淡出。
+ */
+export function panelTransition(distanceVp: number = 24): TransitionEffect {
+  return TransitionEffect.asymmetric(
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: distanceVp }))
+      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: distanceVp }))
+      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn }));
+}
+
 export class SegmentOption {
   value: string;
   label: string;
@@ -135,6 +147,7 @@ export struct EmptyPanel {
     .backgroundColor(UiTokens.GLASS)
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+    .transition(panelTransition(0))
   }
 }
 
@@ -234,6 +247,7 @@ export struct SettingRow {
       .constraintSize({ minHeight: 64 })
       .padding({ left: 16, right: 16, top: 9, bottom: 9 })
       .backgroundColor(this.pressed ? UiTokens.SURFACE_MUTED : Color.Transparent)
+      .animation({ duration: MotionPolicy.duration(100), curve: Curve.EaseOut })
       .onTouch((event: TouchEvent): void => {
         this.pressed = event.type === TouchType.Down || event.type === TouchType.Move;
       })
@@ -435,6 +449,7 @@ export struct InlineErrorPanel {
     .backgroundColor(UiTokens.SURFACE_MUTED)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CONTROL_RADIUS)
+    .transition(panelTransition(0))
   }
 }
 
@@ -472,5 +487,6 @@ export struct ListSkeleton {
     .opacity(this.shimmerActive ? 0.55 : 0.72)
     .animation({ duration: MotionPolicy.duration(1100), curve: Curve.EaseInOut, iterations: -1,
       playMode: PlayMode.Alternate })
+    .transition(panelTransition(0))
   }
 }

@@ -201,14 +201,24 @@ export struct PhotoViewerScreen {
     this.clampPan();
   }
 
+  private animateTransform(update: () => void): void {
+    this.getUIContext().animateTo({
+      duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD),
+      curve: Curve.EaseOut
+    }, update);
+  }
+
   private settleZoom(): void {
-    if (this.viewerScale < 1.05) {
+    const zoomedOut = this.viewerScale < 1.05;
+    if (zoomedOut) {
       this.gestureState.resetAfterMove();
-      this.viewerScale = 1;
-      this.panOffsetX = 0;
-      this.panOffsetY = 0;
     }
-    this.clampPan();
+    this.animateTransform((): void => {
+      if (zoomedOut) {
+        this.viewerScale = 1;
+      }
+      this.clampPan();
+    });
   }
 
   private toggleZoom(): void {
@@ -216,17 +226,27 @@ export struct PhotoViewerScreen {
       this.resetScale();
     } else {
       this.gestureState.zoomTo(2.5);
-      this.viewerScale = this.gestureState.scale;
-      this.panOffsetX = 0;
-      this.panOffsetY = 0;
+      this.animateTransform((): void => {
+        this.viewerScale = this.gestureState.scale;
+        this.panOffsetX = 0;
+        this.panOffsetY = 0;
+      });
     }
   }
 
-  private resetScale(): void {
+  private resetScale(animate: boolean = true): void {
     this.gestureState.resetAfterMove();
-    this.viewerScale = 1;
-    this.panOffsetX = 0;
-    this.panOffsetY = 0;
+    if (animate) {
+      this.animateTransform((): void => {
+        this.viewerScale = 1;
+        this.panOffsetX = 0;
+        this.panOffsetY = 0;
+      });
+    } else {
+      this.viewerScale = 1;
+      this.panOffsetX = 0;
+      this.panOffsetY = 0;
+    }
   }
 
   private beginPan(): void {
@@ -292,7 +312,7 @@ export struct PhotoViewerScreen {
     }
     const selected = this.controller.rows[index];
     AppRuntime.require().selectedCaptureId = selected.id;
-    this.resetScale();
+    this.resetScale(false);
     this.controller.moveTo(index);
   }
 
@@ -403,7 +423,7 @@ export struct PhotoViewerScreen {
           .cachedCount(1)
           .loop(false)
           .indicator(false)
-          .duration(MotionPolicy.duration(UiTokens.MOTION_STANDARD))
+          .duration(MotionPolicy.duration(ViewerNodePolicy.SWIPE_DURATION))
           .disableSwipe(!this.gestureState.canSwipe())
           .onChange((index: number): void => { this.moveTo(index); })
         } else if (this.controller.loading) {

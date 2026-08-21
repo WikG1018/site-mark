@@ -4,6 +4,8 @@ import { formatDay, imageUri, statusLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { tr } from '../../shared/AppText';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
+import { MotionPolicy } from '../../shared/MotionPolicy';
+import { panelTransition } from '../../shared/AppComponents';
 
 @Component
 export struct CaptureInfoRow {
@@ -71,6 +73,8 @@ export struct CaptureCard {
           .border({ width: 2, color: Color.White })
           .borderRadius(16)
           .margin(7)
+          .animation({ duration: MotionPolicy.duration(120), curve: Curve.EaseOut })
+          .transition(panelTransition(0))
       }
       if (this.capture.status === 'failed') {
         Text(tr('失败', 'Failed'))

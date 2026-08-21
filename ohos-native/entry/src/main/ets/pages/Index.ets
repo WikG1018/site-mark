@@ -13,6 +13,7 @@ import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, Setting
   StorageScreen } from '../feature/settings/SettingsScreens';
 import { UiTokens } from '../shared/UiTokens';
 import { AppText, tr } from '../shared/AppText';
+import { panelTransition } from '../shared/AppComponents';
 import { MotionPolicy } from '../shared/MotionPolicy';
 import { ScreenActionCoordinator } from '../shared/ScreenActionCoordinator';
 import { RootBackDispatcher } from '../shared/ScreenUiStabilityCoordinator';
@@ -355,11 +356,7 @@ struct Index {
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS + 8)
     .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
-    .transition(TransitionEffect.asymmetric(
-      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 28 }))
-        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
-      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 28 }))
-        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn })))
+    .transition(panelTransition(28))
   }
 
   @Builder

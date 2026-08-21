@@ -7,7 +7,7 @@ import { CaptureCard } from '../records/RecordComponents';
 import { RecordBatchLayoutPolicy, RecordNavigationSeedStore,
   RecordSelectionCoordinator } from '../records/RecordUiCoordinator';
 import { AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, InlineErrorPanel, ListSkeleton,
-  SectionHeader } from '../../shared/AppComponents';
+  SectionHeader, panelTransition } from '../../shared/AppComponents';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
@@ -17,7 +17,6 @@ import { LazyListDataSource } from '../../shared/LazyListDataSource';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
-import { MotionPolicy } from '../../shared/MotionPolicy';
 import { ProjectCard } from './ProjectComponents';
 import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
 import {
@@ -1009,11 +1008,7 @@ export struct ProjectDetailScreen {
     }
     .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
     .width('100%')
-    .transition(TransitionEffect.asymmetric(
-      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 24 }))
-        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
-      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 24 }))
-        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn })))
+    .transition(panelTransition(24))
   }
 
   @Builder
@@ -1259,6 +1254,7 @@ export struct ProjectDetailScreen {
                   .padding(14).margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
                   .backgroundColor(UiTokens.DELETE_PANEL).borderRadius(16)
                 }
+                .transition(panelTransition(24))
               }
               if (this.message.length > 0) {
                 ListItem() {
@@ -1266,6 +1262,7 @@ export struct ProjectDetailScreen {
                     .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
                     .width('100%')
                 }
+                .transition(panelTransition(0))
               }
               ListItem() {
                 Column({ space: 8 }) {
@@ -1292,6 +1289,7 @@ export struct ProjectDetailScreen {
               }
               if (this.filterOpen) {
                 ListItem() { this.recordFilterPanel() }
+                  .transition(panelTransition(24))
               }
               ListItem() {
                 Row({ space: 8 }) {
