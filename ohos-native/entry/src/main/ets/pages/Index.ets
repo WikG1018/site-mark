@@ -202,6 +202,7 @@ struct Index {
     const current = this.rootLifecycle.isCurrent(generation);
     const completion: RootMotionRefreshResult = this.rootLifecycle.finishMotionRefresh(generation);
     if (current && completion.commit) {
+      const changed = reduceMotion !== MotionPolicy.reduceMotion;
       MotionPolicy.commit(reduceMotion);
       try {
         this.pathStack.disableAnimation(reduceMotion);
@@ -209,6 +210,9 @@ struct Index {
       }
       const nextRevision = Math.abs(this.motionRevision) + 1;
       this.motionRevision = reduceMotion ? -nextRevision : nextRevision;
+      if (changed) {
+        AppRuntime.current?.notifyDataChanged();
+      }
     }
     if (completion.restartGeneration !== 0) {
       this.requestMotionPolicyRefresh(completion.restartGeneration);
