@@ -26,7 +26,7 @@ import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, Cap
   validateTemplateName } from '../capture/CaptureFormPolicy';
 import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolicy, RecordSearchCoordinator,
   RecordNavigationSeedStore, RecordRefreshGate, RecordSelectionCoordinator, RenderedRefreshTracker,
-  SystemRecordTimerScheduler, ViewerNodePolicy } from './RecordUiCoordinator';
+  SystemRecordTimerScheduler } from './RecordUiCoordinator';
 import { ScreenLifecycleActionCoordinator } from '../../shared/ScreenActionCoordinator';
 import { BackAction, BackCoordinator, RootBackDispatcher } from '../../shared/ScreenUiStabilityCoordinator';
 
@@ -1614,8 +1614,8 @@ export struct CaptureDetailScreen {
       .height('100%')
       .clip(true)
       .borderRadius(UiTokens.CARD_RADIUS)
-      .sharedTransition(`capture-photo-${this.capture?.id ?? ''}`,
-        { duration: MotionPolicy.duration(ViewerNodePolicy.SHARED_TRANSITION_DURATION), curve: Curve.Friction })
+      // Navigation 跨页面共享元素转场：列表卡片 → 详情 → 查看器同 id 匹配；系统控制插值，跟随系统减少动画
+      .geometryTransition(`capture-photo-${this.capture?.id ?? ''}`)
       .accessibilityText(this.capture === null ? tr('照片', 'Photo') :
         tr(`照片 ${this.capture!.photoNumber}`, `Photo ${this.capture!.photoNumber}`))
       .onClick((): void => { this.openViewer(); })

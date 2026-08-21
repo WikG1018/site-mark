@@ -486,8 +486,6 @@ export default function recordUiCoordinatorTest(): void {
       expect(edges.filter((edge: number): boolean => edge === 1024).length).assertEqual(4);
       expect(ViewerNodePolicy.key('c', true)).assertEqual('c-full');
       expect(ViewerNodePolicy.key('c', false)).assertEqual('c-preview');
-      expect(ViewerNodePolicy.transitionDuration(true)).assertEqual(0);
-      expect(ViewerNodePolicy.transitionDuration(false) > 0).assertTrue();
     });
 
     it('changes the viewer request version only when a new ready render is available', 0, () => {

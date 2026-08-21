@@ -691,17 +691,11 @@ export class ViewerFullImageCoordinator {
 }
 
 export class ViewerNodePolicy {
-  static readonly SHARED_TRANSITION_DURATION: number = 220;
-
   static decodeEdge(current: boolean): number {
     return current ? 2048 : 1024;
   }
 
   static key(captureId: string, current: boolean): string {
     return `${captureId}-${current ? 'full' : 'preview'}`;
-  }
-
-  static transitionDuration(reduceMotion: boolean): number {
-    return reduceMotion ? 0 : ViewerNodePolicy.SHARED_TRANSITION_DURATION;
   }
 }

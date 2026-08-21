@@ -346,8 +346,8 @@ export struct PhotoViewerScreen {
       this.viewportWidth = typeof newValue.width === 'number' ? newValue.width : 0;
       this.viewportHeight = typeof newValue.height === 'number' ? newValue.height : 0;
     })
-    .sharedTransition(`capture-photo-${capture.id}`,
-      { duration: MotionPolicy.duration(ViewerNodePolicy.SHARED_TRANSITION_DURATION), curve: Curve.Friction })
+    // Navigation 跨页面共享元素转场：列表卡片 → 详情 → 查看器同 id 匹配；系统控制插值，跟随系统减少动画
+    .geometryTransition(`capture-photo-${capture.id}`)
     .accessibilityText(tr(`全屏照片 ${capture.photoNumber}`, `Full-screen photo ${capture.photoNumber}`))
     .gesture(GestureGroup(GestureMode.Parallel,
       PinchGesture()
