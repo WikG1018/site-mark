@@ -199,6 +199,7 @@ export struct SettingRow {
   @Prop subtitle: string = '';
   @Prop trailing: string = '›';
   @Prop showDivider: boolean = false;
+  @State private pressed: boolean = false;
   action: () => void = (): void => {};
 
   build() {
@@ -232,6 +233,10 @@ export struct SettingRow {
       .width('100%')
       .constraintSize({ minHeight: 64 })
       .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+      .backgroundColor(this.pressed ? UiTokens.SURFACE_MUTED : Color.Transparent)
+      .onTouch((event: TouchEvent): void => {
+        this.pressed = event.type === TouchType.Down || event.type === TouchType.Move;
+      })
       .accessibilityText(this.subtitle.length > 0 ? joinAccessibilityText([this.title, this.subtitle]) : this.title)
       .onClick(this.action)
       if (this.showDivider) {
@@ -436,6 +441,15 @@ export struct InlineErrorPanel {
 @Component
 export struct ListSkeleton {
   @Prop rows: number = 3;
+  @State private shimmerActive: boolean = true;
+
+  aboutToAppear(): void {
+    this.shimmerActive = true;
+  }
+
+  aboutToDisappear(): void {
+    this.shimmerActive = false;
+  }
 
   build() {
     Column({ space: 12 }) {
@@ -454,6 +468,9 @@ export struct ListSkeleton {
         }, (_index: number): string => _index.toString())
     }
     .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6 })
-    .width('100%').opacity(0.72)
+    .width('100%')
+    .opacity(this.shimmerActive ? 0.55 : 0.72)
+    .animation({ duration: MotionPolicy.duration(1100), curve: Curve.EaseInOut, iterations: -1,
+      playMode: PlayMode.Alternate })
   }
 }

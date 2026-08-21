@@ -62,8 +62,8 @@ export struct FormField {
         .constraintSize({ minHeight: FormLayoutMetrics.SUPPORTING_TEXT_MIN_HEIGHT })
         .fontSize(12)
         .fontColor(this.error.length > 0 ? UiTokens.DANGER : UiTokens.TEXT_SECONDARY)
-        .lineHeight(16)
-        .maxLines(3)
+        .lineHeight(18)
+        .maxLines(5)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -144,8 +144,8 @@ export struct FormTextArea {
         .constraintSize({ minHeight: FormLayoutMetrics.SUPPORTING_TEXT_MIN_HEIGHT })
         .fontSize(12)
         .fontColor(this.error.length > 0 ? UiTokens.DANGER : UiTokens.TEXT_SECONDARY)
-        .lineHeight(16)
-        .maxLines(3)
+        .lineHeight(18)
+        .maxLines(5)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

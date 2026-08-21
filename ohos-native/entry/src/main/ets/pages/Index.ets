@@ -310,6 +310,7 @@ struct Index {
           .accessibilityLevel('no')
         Text(label).fontSize(12).fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Medium)
           .fontColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .accessibilityLevel('no')
       }
       .width('100%')
