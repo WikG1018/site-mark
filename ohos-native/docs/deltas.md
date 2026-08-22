@@ -26,6 +26,7 @@
 | 图片查看 | 列表限尺解码，详情上限 2048；查看器最多 5 条、相邻图上限 1024 | 图片失败保留稳定占位和重试，不闪原始异常文字 | 真机验证 12MP/50MP、连续切换、缩放、共享转场和内存压力 |
 | 视觉/无障碍 | 统一 token、悬浮 Dock、动态字体批量栏、44vp 热区和双语语义已实现 | 遵循减少动画；大字体通过策略计算布局 | 中文/英文、浅色/深色、大字体、减少动画四组设备走查 |
 | 安装包签名 | 本地可产出 debug unsigned HAP，项目未配置 `signingConfigs` | 仅作为可复现开发产物，不作为正式发行包 | 发布证书签名，并完成全新安装、覆盖安装和卸载边界测试 |
+| 触感反馈 | 进入选择模式 mediumImpact、勾选记录 selectionClick（`@kit.SensorServiceKit` vibrator，time 型短振动）；已声明 `VIBRATE` 权限 | 振动失败静默跳过，不阻塞点击 | 真机确认两类振动的强度与时机 |
 | 自动化 CI | 公用 runner 不预装可再分发的 DevEco/HarmonyOS SDK | CI 校验 manifest 与 Rust/Flutter；ArkTS/HAP 由本地 DevEco 门禁给证据 | 提供合规专用 runner 后补 HAP 远程构建 |
 
 ## 证据使用规则
