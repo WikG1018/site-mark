@@ -5,8 +5,11 @@ import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 
+// The store's default clock is the real system clock and readRecent applies
+// a 7-day retention cutoff, so the event must stay near "now" — a hardcoded
+// date silently falls out of the window a week after it was written.
 DiagnosticEvent _event() => DiagnosticEvent(
-  timestamp: DateTime.utc(2026, 8, 15),
+  timestamp: DateTime.now().toUtc().subtract(const Duration(hours: 1)),
   category: DiagnosticCategory.app,
   outcome: DiagnosticOutcome.success,
 );
