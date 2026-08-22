@@ -24,7 +24,8 @@ export class Haptics {
       vibrator.startVibration(
         { type: 'time', duration: durationMs },
         { usage: 'touch' },
-      );
+      ).catch((): void => {
+      });
     } catch (_) {
     }
   }

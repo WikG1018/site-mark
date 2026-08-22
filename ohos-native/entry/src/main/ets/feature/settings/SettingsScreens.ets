@@ -398,8 +398,11 @@ export struct StorageScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @State private snapshot: StorageSnapshot = new StorageSnapshot();
   @State private message: string = '';
+  private readonly messageClock = new ScreenMessageClock();
 
   aboutToAppear(): void { this.refresh(); }
+
+  aboutToDisappear(): void { this.messageClock.reset(); }
 
   private refresh(): void {
     this.snapshot = StorageInspector.inspect(AppRuntime.require().context.filesDir);
@@ -409,9 +412,9 @@ export struct StorageScreen {
     StorageInspector.clearExports(AppRuntime.require().context.filesDir);
     this.message = tr('本机私有导出 ZIP 已清理；照片、记录和已保存副本不受影响',
       'Private export ZIP files were cleared; photos, records, and saved copies are unchanged');
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
+    this.messageClock.schedule((): void => {
+      this.message = '';
+    }, ScreenMessageClock.AUTO_CLEAR_MS);
     this.refresh();
   }
 
@@ -474,7 +477,6 @@ export struct DiagnosticsScreen {
   @State private loadError: boolean = false;
   @State private messageError: boolean = false;
   private readonly messageClock = new ScreenMessageClock();
-  private readonly messageClock = new ScreenMessageClock();
 
   aboutToAppear(): void {
     this.loadCoordinator.activate();
@@ -486,7 +488,6 @@ export struct DiagnosticsScreen {
   }
 
   aboutToDisappear(): void {
-    this.messageClock.reset();
     this.messageClock.reset();
     this.loadCoordinator.deactivate();
     this.actionCoordinator.invalidate();
@@ -882,6 +883,9 @@ export struct BackupScreen {
             (restored.renamedCount > 0 ? `；${restored.renamedCount} 个同名项目已自动添加“恢复”后缀` : ''),
             `Restored ${restored.projectCount} project(s) and ${restored.photoCount} photo(s)` +
             (restored.renamedCount > 0 ? `; ${restored.renamedCount} duplicate name(s) received a Restore suffix` : ''));
+          this.messageClock.schedule((): void => {
+            this.message = '';
+          }, ScreenMessageClock.AUTO_CLEAR_MS);
           this.messageError = false;
         }
         await this.load();

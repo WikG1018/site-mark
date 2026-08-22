@@ -768,9 +768,12 @@ export struct ProjectDetailScreen {
 
   private setSelectionMode(enabled: boolean): void {
     if (this.pageBusy()) return;
-    if (enabled) this.selection.enter();
+    if (enabled) {
+      this.selection.enter();
       Haptics.mediumImpact();
-    else this.selection.exit();
+    } else {
+      this.selection.exit();
+    }
     this.syncSelection();
   }
 
