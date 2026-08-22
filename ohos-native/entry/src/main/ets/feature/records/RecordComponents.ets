@@ -59,6 +59,7 @@ export struct CaptureCard {
       if (this.capture.renderedPath.length === 0 && this.capture.originalPath.length === 0) {
         Column() {
           Text('▣').fontSize(30).fontColor(UiTokens.TEXT_SECONDARY)
+            .accessibilityLevel('no')
         }
         .justifyContent(FlexAlign.Center).width(112).height(112)
         .backgroundColor(UiTokens.IMAGE_PLACEHOLDER).borderRadius(18)
@@ -69,6 +70,7 @@ export struct CaptureCard {
           .fontWeight(FontWeight.Bold)
           .fontColor(Color.White)
           .textAlign(TextAlign.Center)
+          .accessibilityLevel('no')
           .width(32).height(32)
           .backgroundColor(this.selected ? UiTokens.PRIMARY : UiTokens.OVERLAY)
           .border({ width: 2, color: Color.White })
