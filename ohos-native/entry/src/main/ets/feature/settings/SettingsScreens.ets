@@ -677,6 +677,15 @@ export struct DiagnosticsScreen {
               .fontColor(UiTokens.DANGER)
               .backgroundColor(UiTokens.DANGER_CONTAINER).enabled(!this.busy)
               .onClick((): void => { this.clear(); })
+            if (this.busy) {
+              Row({ space: 10 }) {
+                LoadingProgress().width(22).height(22).color(UiTokens.PRIMARY)
+                Text(tr('正在处理，请稍候…', 'Working, please wait…')).fontSize(13)
+                  .fontColor(UiTokens.TEXT_SECONDARY)
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Center)
+            }
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
                 .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY).width('100%')
@@ -1008,6 +1017,17 @@ export struct BackupScreen {
               Button(tr('保存到其他位置', 'Save to another location')).height(46).width('100%')
                 .backgroundColor(UiTokens.PRIMARY_CONTAINER)
                 .fontColor(UiTokens.PRIMARY).enabled(!this.busy).onClick((): void => { this.saveBackup(); })
+            }
+          }
+          if (this.busy) {
+            ListItem() {
+              Row({ space: 10 }) {
+                LoadingProgress().width(22).height(22).color(UiTokens.PRIMARY)
+                Text(tr('正在处理，请稍候…', 'Working, please wait…')).fontSize(13)
+                  .fontColor(UiTokens.TEXT_SECONDARY)
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Center)
             }
           }
           if (this.message.length > 0) {

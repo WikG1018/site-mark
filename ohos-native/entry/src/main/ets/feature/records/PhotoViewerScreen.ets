@@ -438,6 +438,7 @@ export struct PhotoViewerScreen {
             .fontColor(Color.White)
             .width('100%')
             .textAlign(TextAlign.Center)
+            .accessibilityLevel('no')
         }
         .width(46)
         .height(46)
@@ -462,6 +463,7 @@ export struct PhotoViewerScreen {
           Button() {
             Row({ space: 6 }) {
               Text('↻').fontSize(15).fontColor(Color.White)
+                .accessibilityLevel('no')
               Text(tr('重试', 'Retry')).fontSize(13).fontColor(Color.White)
             }
             .alignItems(VerticalAlign.Center)

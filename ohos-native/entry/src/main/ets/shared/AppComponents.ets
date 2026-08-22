@@ -55,6 +55,7 @@ export struct AppTopBar {
             .fontColor(UiTokens.TEXT)
             .width('100%')
             .textAlign(TextAlign.Center)
+            .accessibilityLevel('no')
         }
         .width(UiTokens.TOUCH_TARGET)
         .height(UiTokens.TOUCH_TARGET)
@@ -116,6 +117,7 @@ export struct EmptyPanel {
       Text(this.icon)
         .fontSize(42)
         .fontColor(UiTokens.PRIMARY)
+        .accessibilityLevel('no')
       Text(this.title)
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
@@ -272,6 +274,7 @@ export struct AppSearchField {
         .fontSize(21)
         .fontColor(UiTokens.TEXT_SECONDARY)
         .textAlign(TextAlign.Center)
+        .accessibilityLevel('no')
       TextInput({ text: this.value, placeholder: this.placeholder })
         .layoutWeight(1)
         .height(UiTokens.TOUCH_TARGET)
@@ -364,6 +367,7 @@ export struct FilterToolbar {
       Button() {
         Row({ space: 6 }) {
           Text('≡').fontSize(16).fontColor(this.active ? UiTokens.PRIMARY : UiTokens.TEXT)
+            .accessibilityLevel('no')
           Text(this.label).fontSize(14).fontWeight(FontWeight.Medium)
             .fontColor(this.active ? UiTokens.PRIMARY : UiTokens.TEXT)
         }
@@ -462,6 +466,7 @@ export struct InlineErrorPanel {
         .fontWeight(FontWeight.Bold)
         .fontColor(UiTokens.DANGER)
         .textAlign(TextAlign.Center)
+        .accessibilityLevel('no')
       Text(this.message)
         .fontSize(13)
         .fontColor(UiTokens.TEXT_SECONDARY)
