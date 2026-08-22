@@ -512,16 +512,15 @@ export struct ProjectDetailScreen {
   private readonly messageClock = new ScreenMessageClock();
 
   private setMessage(text: string, isError: boolean = false): void {
-    this.messageClock.reset();
-    this.message = text;
     this.messageError = isError;
-    // Success/info status lines behave like Android's SnackBar and clear
-    // themselves; errors stay until replaced or the screen goes away.
-    if (!isError) {
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
+    if (isError) {
+      this.messageClock.reset();
+      this.message = text;
+      return;
     }
+    this.messageClock.show((next: string): void => {
+      this.message = next;
+    }, text);
   }
   @State private selectionMode: boolean = false;
   @State private selectedIds: string[] = [];
@@ -1508,11 +1507,10 @@ export struct ProjectSettingsScreen {
       await ProjectEditorSaveExecutor.persistWatermark(store, snapshot);
       AppRuntime.require().notifyDataChanged();
       if (this.saveAction.isCurrent(actionToken)) {
-        this.message = tr('已保存；新拍照片和重新生成的成片会使用这些设置',
-          'Saved. New photos and regenerated images will use these settings.');
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, tr('已保存；新拍照片和重新生成的成片会使用这些设置',
+          'Saved. New photos and regenerated images will use these settings.'));
       }
     } catch (_) {
       if (this.saveAction.isCurrent(actionToken)) {
