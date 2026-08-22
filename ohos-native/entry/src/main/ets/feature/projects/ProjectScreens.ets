@@ -18,6 +18,7 @@ import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { MotionPolicy } from '../../shared/MotionPolicy';
+import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { ProjectCard } from './ProjectComponents';
 import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
 import {
@@ -508,9 +509,19 @@ export struct ProjectDetailScreen {
   @State private confirmDelete: boolean = false;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
+    this.messageClock.reset();
     this.message = text;
     this.messageError = isError;
+    // Success/info status lines behave like Android's SnackBar and clear
+    // themselves; errors stay until replaced or the screen goes away.
+    if (!isError) {
+      this.messageClock.schedule((): void => {
+        this.message = '';
+      }, ScreenMessageClock.AUTO_CLEAR_MS);
+    }
   }
   @State private selectionMode: boolean = false;
   @State private selectedIds: string[] = [];
@@ -569,6 +580,7 @@ export struct ProjectDetailScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.deactivatePage();
   }
 
@@ -757,6 +769,7 @@ export struct ProjectDetailScreen {
   private setSelectionMode(enabled: boolean): void {
     if (this.pageBusy()) return;
     if (enabled) this.selection.enter();
+      Haptics.mediumImpact();
     else this.selection.exit();
     this.syncSelection();
   }
@@ -822,6 +835,7 @@ export struct ProjectDetailScreen {
   private toggleCapture(captureId: string): void {
     if (this.pageBusy()) return;
     this.selection.toggle(captureId);
+    Haptics.selectionClick();
     this.syncSelection();
   }
 

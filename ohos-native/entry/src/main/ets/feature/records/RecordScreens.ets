@@ -18,6 +18,7 @@ import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 import { MotionPolicy } from '../../shared/MotionPolicy';
+import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, CaptureFormMetrics,
   CaptureUndoCoordinator, SingleFlightRequestCoordinator,
@@ -50,9 +51,19 @@ export struct AllRecordsView {
   @State private batchBusy: boolean = false;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
+    this.messageClock.reset();
     this.message = text;
     this.messageError = isError;
+    // Success/info status lines behave like Android's SnackBar and clear
+    // themselves; errors stay until replaced or the screen goes away.
+    if (!isError) {
+      this.messageClock.schedule((): void => {
+        this.message = '';
+      }, ScreenMessageClock.AUTO_CLEAR_MS);
+    }
   }
   private readonly controller: CapturePagedController = new CapturePagedController(new RuntimeRecordPageLoader(),
     (): void => { this.controllerRevision += 1; });
@@ -91,6 +102,7 @@ export struct AllRecordsView {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.deactivatePage();
   }
 
@@ -289,8 +301,12 @@ export struct AllRecordsView {
 
   private setSelectionMode(enabled: boolean): void {
     if (this.batchBusy) return;
-    if (enabled) this.selection.enter();
-    else this.selection.exit();
+    if (enabled) {
+      this.selection.enter();
+      Haptics.mediumImpact();
+    } else {
+      this.selection.exit();
+    }
     this.touchSelection();
     this.refreshGate.runSuppressed((): void => {
       const runtime = AppRuntime.require();
@@ -312,6 +328,7 @@ export struct AllRecordsView {
   private toggle(captureId: string): void {
     if (this.batchBusy) return;
     this.selection.toggle(captureId);
+    Haptics.selectionClick();
     this.touchSelection();
   }
 
@@ -692,9 +709,19 @@ export struct CaptureFormScreen {
   @State private busy: boolean = false;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
+    this.messageClock.reset();
     this.message = text;
     this.messageError = isError;
+    // Success/info status lines behave like Android's SnackBar and clear
+    // themselves; errors stay until replaced or the screen goes away.
+    if (!isError) {
+      this.messageClock.schedule((): void => {
+        this.message = '';
+      }, ScreenMessageClock.AUTO_CLEAR_MS);
+    }
   }
   @State private locationGranted: boolean = false;
   @State private locationPromptDismissed: boolean = false;
@@ -727,6 +754,7 @@ export struct CaptureFormScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.lifecycle.deactivate();
     this.loadRequest.invalidate();
     this.templateRequest.invalidate();
@@ -1353,9 +1381,19 @@ export struct CaptureDetailScreen {
   @State private fileSize: number = 0;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
+    this.messageClock.reset();
     this.message = text;
     this.messageError = isError;
+    // Success/info status lines behave like Android's SnackBar and clear
+    // themselves; errors stay until replaced or the screen goes away.
+    if (!isError) {
+      this.messageClock.schedule((): void => {
+        this.message = '';
+      }, ScreenMessageClock.AUTO_CLEAR_MS);
+    }
   }
   @State private confirmDelete: boolean = false;
   @State private mediaRevision: number = 0;
@@ -1388,6 +1426,7 @@ export struct CaptureDetailScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.deactivatePage();
   }
 
@@ -1786,9 +1825,19 @@ export struct CaptureEditorScreen {
   @State private notes: string = '';
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
+    this.messageClock.reset();
     this.message = text;
     this.messageError = isError;
+    // Success/info status lines behave like Android's SnackBar and clear
+    // themselves; errors stay until replaced or the screen goes away.
+    if (!isError) {
+      this.messageClock.schedule((): void => {
+        this.message = '';
+      }, ScreenMessageClock.AUTO_CLEAR_MS);
+    }
   }
   @State private project: ProjectRecord | null = null;
   @State private locationError: string = '';
@@ -1807,6 +1856,7 @@ export struct CaptureEditorScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.lifecycle.deactivate();
     this.loadRequest.invalidate();
   }

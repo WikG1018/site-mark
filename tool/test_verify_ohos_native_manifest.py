@@ -7,16 +7,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class HarmonyNativeManifestTest(unittest.TestCase):
-    def test_manifest_requests_only_optional_foreground_location(self) -> None:
+    def test_manifest_requests_only_optional_location_and_vibrate(self) -> None:
         module = (ROOT / "ohos-native/entry/src/main/module.json5").read_text(
             encoding="utf-8"
         )
         permissions = set(re.findall(r'"name"\s*:\s*"(ohos\.permission\.[A-Z_]+)"', module))
+        # VIBRATE is a system-grant permission backing the selection haptics;
+        # the network/camera/media surface must stay empty.
         self.assertEqual(
             permissions,
             {
                 "ohos.permission.LOCATION",
                 "ohos.permission.APPROXIMATELY_LOCATION",
+                "ohos.permission.VIBRATE",
             },
         )
         for forbidden in (
