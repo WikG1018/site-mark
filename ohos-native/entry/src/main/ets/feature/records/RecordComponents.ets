@@ -34,6 +34,7 @@ export struct CaptureCard {
   @Prop selectionMode: boolean = false;
   @Prop selected: boolean = false;
   @Prop showProject: boolean = false;
+  @State private pressed: boolean = false;
   onOpen: () => void = (): void => {};
   onToggle: () => void = (): void => {};
 
@@ -77,7 +78,7 @@ export struct CaptureCard {
       if (this.capture.status === 'failed') {
         Text(tr('失败', 'Failed'))
           .fontSize(11).fontColor(Color.White).padding({ left: 9, right: 9, top: 4, bottom: 4 })
-          .backgroundColor('#CCB3261E').borderRadius({ bottomLeft: 12, topRight: 10 })
+          .backgroundColor('#CCB3261E').borderRadius({ bottomLeft: 12, topRight: 12 })
           .align(Alignment.BottomEnd)
       }
     }
@@ -122,11 +123,15 @@ export struct CaptureCard {
     }
     .padding(14)
     .width('100%')
-    .backgroundColor(UiTokens.GLASS)
+    .backgroundColor(this.pressed ? UiTokens.SURFACE_MUTED : UiTokens.GLASS)
+    .animation({ duration: MotionPolicy.duration(90), curve: Curve.EaseOut })
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: this.selected ? UiTokens.PRIMARY : UiTokens.OUTLINE_SUBTLE })
     .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
     .accessibilityText(this.cardAccessibilityText())
+    .onTouch((event: TouchEvent): void => {
+      this.pressed = event.type === TouchType.Down || event.type === TouchType.Move;
+    })
     .onClick((): void => this.selectionMode ? this.onToggle() : this.onOpen())
   }
 }
