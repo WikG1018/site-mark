@@ -232,7 +232,9 @@ export struct ProjectListView {
       .height(UiTokens.TOUCH_TARGET)
       .layoutWeight(1)
       .fontSize(14)
-      .fontWeight(this.lifecycle === value ? FontWeight.Bold : FontWeight.Regular)
+      // Fixed weight: state-driven Bold/Regular switching changes text width
+      // and jitters labels inside equal-width chips.
+      .fontWeight(FontWeight.Medium)
       .fontColor(this.lifecycle === value ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
       .backgroundColor(this.lifecycle === value ? UiTokens.PRIMARY_CONTAINER : Color.Transparent)
       .borderRadius(UiTokens.TOUCH_TARGET / 2)
@@ -1525,7 +1527,7 @@ export struct ProjectSettingsScreen {
       .layoutWeight(1)
       .height(ProjectFormMetrics.TOUCH_TARGET)
       .fontSize(14)
-      .fontWeight(choice.selected ? FontWeight.Bold : FontWeight.Medium)
+      .fontWeight(FontWeight.Medium)
       .backgroundColor(selectionVisual(choice.selected).backgroundColor)
       .fontColor(choice.selected ? UiTokens.PRIMARY : UiTokens.TEXT)
       .border({ width: selectionVisual(choice.selected).borderWidth,

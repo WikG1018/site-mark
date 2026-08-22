@@ -432,16 +432,20 @@ export struct PhotoViewerScreen {
           .padding({ left: 24, right: 24 })
           .justifyContent(FlexAlign.Center)
         }
-        Button('‹')
-          .width(46)
-          .height(46)
-          .fontSize(32)
-          .fontColor(Color.White)
-          .backgroundColor(UiTokens.OVERLAY)
-          .borderRadius(23)
-          .margin({ left: 16, top: 18 + this.topInsetVp })
-          .accessibilityText(tr('返回记录详情', 'Back to record details'))
-          .onClick((): void => { this.pathStack.pop(); })
+        Button() {
+          Text('‹')
+            .fontSize(26)
+            .fontColor(Color.White)
+            .width('100%')
+            .textAlign(TextAlign.Center)
+        }
+        .width(46)
+        .height(46)
+        .backgroundColor(UiTokens.OVERLAY)
+        .borderRadius(23)
+        .margin({ left: 16, top: 18 + this.topInsetVp })
+        .accessibilityText(tr('返回记录详情', 'Back to record details'))
+        .onClick((): void => { this.pathStack.pop(); })
         if (this.controller.rows.length > 0) {
           Text(`${this.controller.absoluteIndex + 1} / ${this.controller.totalCount}`)
             .fontSize(13)
@@ -455,16 +459,21 @@ export struct PhotoViewerScreen {
               `Photo ${this.controller.absoluteIndex + 1} of ${this.controller.totalCount}`))
         }
         if (this.controller.failed && this.controller.rows.length > 0) {
-          Button(`↻  ${tr('重试', 'Retry')}`)
-            .height(UiTokens.TOUCH_TARGET)
-            .fontSize(13)
-            .fontColor(Color.White)
-            .backgroundColor(UiTokens.OVERLAY)
-            .borderRadius(UiTokens.CONTROL_RADIUS)
-            .margin({ bottom: 24 + this.bottomInsetVp })
-            .align(Alignment.Bottom)
-            .accessibilityText(tr('重试加载附近照片', 'Retry loading nearby photos'))
-            .onClick((): void => { this.retry(); })
+          Button() {
+            Row({ space: 6 }) {
+              Text('↻').fontSize(15).fontColor(Color.White)
+              Text(tr('重试', 'Retry')).fontSize(13).fontColor(Color.White)
+            }
+            .alignItems(VerticalAlign.Center)
+          }
+          .height(UiTokens.TOUCH_TARGET)
+          .padding({ left: 12, right: 12 })
+          .backgroundColor(UiTokens.OVERLAY)
+          .borderRadius(UiTokens.CONTROL_RADIUS)
+          .margin({ bottom: 24 + this.bottomInsetVp })
+          .align(Alignment.Bottom)
+          .accessibilityText(tr('重试加载附近照片', 'Retry loading nearby photos'))
+          .onClick((): void => { this.retry(); })
         }
         if (this.controller.needsRefill && !this.controller.loading && !this.controller.failed &&
           this.controller.rows.length > 0) {

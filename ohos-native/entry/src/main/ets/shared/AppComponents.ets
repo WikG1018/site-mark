@@ -323,7 +323,10 @@ export struct LifecycleSegment {
           .hitTestBehavior(HitTestMode.None)
           .accessibilityLevel('no')
       }
-      Row({ space: 4 }) {
+      // No inter-button spacing: the sliding highlight is sized as an exact
+      // 1/N slice, so any gap would make it drift off the buttons. Visual
+      // separation comes from transparent unselected backgrounds.
+      Row() {
         ForEach(this.options, (option: SegmentOption) => {
           Button(option.label)
             .layoutWeight(1)
@@ -368,7 +371,6 @@ export struct FilterToolbar {
       }
       .height(UiTokens.TOUCH_TARGET)
       .padding({ left: 12, right: 12 })
-      .fontColor(this.active ? UiTokens.PRIMARY : UiTokens.TEXT)
       .backgroundColor(this.active ? UiTokens.PRIMARY_CONTAINER : UiTokens.SURFACE_MUTED)
       .border({ width: 1, color: this.active ? UiTokens.PRIMARY : UiTokens.OUTLINE_SUBTLE })
       .borderRadius(UiTokens.CONTROL_RADIUS)
