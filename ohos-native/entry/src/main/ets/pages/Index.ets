@@ -262,10 +262,10 @@ struct Index {
 
   private contentTransition(): TransitionEffect {
     const motion: RootMotionSpec = RootShellPolicy.motion(this.tabDirection);
-    const enterCurve: Object = MotionPolicy.reduceMotion
+    const enterCurve: AnimateParam = MotionPolicy.reduceMotion
       ? { duration: 0, curve: Curve.Linear }
       : { curve: curves.springMotion(0.34, 0.83) };
-    const exitCurve: Object = MotionPolicy.reduceMotion
+    const exitCurve: AnimateParam = MotionPolicy.reduceMotion
       ? { duration: 0, curve: Curve.Linear }
       : { curve: curves.springMotion(0.4, 0.9) };
     return TransitionEffect.asymmetric(
