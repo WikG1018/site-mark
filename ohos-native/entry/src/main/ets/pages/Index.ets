@@ -308,7 +308,7 @@ struct Index {
         Image(icon).width(23).height(23)
           .fillColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
           .accessibilityLevel('no')
-        Text(label).fontSize(12).fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Medium)
+        Text(label).fontSize(12).fontWeight(FontWeight.Medium)
           .fontColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .accessibilityLevel('no')
@@ -435,6 +435,8 @@ struct Index {
       .width('100%').height('100%')
     }
     .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
+.transition(TransitionEffect.opacity(0)
+  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
   }
 
   build() {
@@ -444,6 +446,8 @@ struct Index {
         Text(tr('正在准备工程印记…', 'Preparing SiteMark…')).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
       }
       .width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+.transition(TransitionEffect.opacity(0)
+  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
     } else if (!this.consentAccepted) {
       this.privacyGate()
     } else if (this.runtimeError.length > 0) {
@@ -454,12 +458,16 @@ struct Index {
         Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
           .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
       }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+.transition(TransitionEffect.opacity(0)
+  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
     } else if (!this.runtimeReady) {
       Column({ space: 14 }) {
         LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
         Text(tr('正在恢复本机记录…', 'Recovering local records…')).fontSize(14)
           .fontColor(UiTokens.TEXT_SECONDARY)
       }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+.transition(TransitionEffect.opacity(0)
+  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
     } else {
       Navigation(this.pathStack) {
         this.rootContent()

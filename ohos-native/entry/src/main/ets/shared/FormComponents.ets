@@ -4,7 +4,10 @@ import { tr } from './AppText';
 export class FormLayoutMetrics {
   static readonly SINGLE_LINE_HEIGHT: number = 50;
   static readonly TEXT_AREA_HEIGHT: number = 112;
-  static readonly SUPPORTING_TEXT_MIN_HEIGHT: number = 50;
+  // One line of 12sp/18lh supporting text. The old 50vp reserved ~3 blank
+  // lines under every field (≈150vp of dead space on the capture form);
+  // multi-line errors still grow naturally from here.
+  static readonly SUPPORTING_TEXT_MIN_HEIGHT: number = 18;
   static readonly TOUCH_TARGET: number = 44;
 }
 

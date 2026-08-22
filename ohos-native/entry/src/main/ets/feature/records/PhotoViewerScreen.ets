@@ -39,8 +39,8 @@ export struct PhotoViewerScreen {
   private panTouchStartY: number = 0;
   private viewportWidth: number = 0;
   private viewportHeight: number = 0;
-  private topInsetVp: number = 0;
-  private bottomInsetVp: number = 0;
+  @State private topInsetVp: number = 0;
+  @State private bottomInsetVp: number = 0;
   private readonly controller: PhotoViewerWindowController = new PhotoViewerWindowController(
     new RuntimePhotoViewerWindowLoader(), (): void => { this.controllerChanged(); });
   private readonly refreshListener: () => void = (): void => { this.reloadCurrent(); };
@@ -273,6 +273,18 @@ export struct PhotoViewerScreen {
   private async applyViewerSystemBar(lightContent: boolean): Promise<void> {
     try {
       const win = await window.getLastWindow(AppRuntime.require().context);
+      // True immersion while the viewer is on top: extend under the system
+      // bars and hide them (mirrors the Android viewer's immersive-sticky
+      // mode); restore both on exit. Avoid-area insets are re-read after the
+      // layout change so the chrome margins track whatever the platform now
+      // reports (zero-height once the bars are hidden).
+      if (lightContent) {
+        await win.setWindowLayoutFullScreen(true);
+        await win.setWindowSystemBarEnable([]);
+      } else {
+        await win.setWindowSystemBarEnable(['status', 'navigation']);
+        await win.setWindowLayoutFullScreen(false);
+      }
       const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
       this.topInsetVp = Math.max(0, this.getUIContext().px2vp(area.topRect.height));
       this.bottomInsetVp = Math.max(0, this.getUIContext().px2vp(area.bottomRect.height));
