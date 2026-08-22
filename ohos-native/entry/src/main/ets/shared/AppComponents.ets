@@ -1,3 +1,4 @@
+import { curves } from '@kit.ArkUI';
 import { UiTokens } from './UiTokens';
 import { choiceAccessibilityText, joinAccessibilityText, lifecycleAccessibilityText } from './AccessibilityText';
 import { MotionPolicy } from './MotionPolicy';
@@ -322,7 +323,10 @@ export struct LifecycleSegment {
           })
           .backgroundColor(UiTokens.PRIMARY_CONTAINER)
           .borderRadius(UiTokens.CONTROL_RADIUS)
-          .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+          // 与根 Dock 一致的弹性滑动;reduce-motion 时瞬时切换。
+          .animation(MotionPolicy.reduceMotion
+            ? { duration: 0, curve: Curve.Linear }
+            : { curve: curves.springMotion(0.34, 0.83) })
           .hitTestBehavior(HitTestMode.None)
           .accessibilityLevel('no')
       }

@@ -95,7 +95,7 @@ export struct AllRecordsView {
     this.yearText = restored.filter.year > 0 ? restored.filter.year.toString() : '';
     this.monthText = restored.filter.month > 0 ? restored.filter.month.toString() : '';
     this.dayText = restored.filter.day > 0 ? restored.filter.day.toString() : '';
-    this.filterOpen = restored.filterOpen;
+    this.filterOpen = false;
     this.savedFirstVisibleIndex = restored.firstVisibleIndex;
     this.pageState.beginRestore();
     this.activatePage();
@@ -588,10 +588,8 @@ export struct AllRecordsView {
           })
       }.width('100%')
     }
-    .padding(14)
-    .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 8 })
-    .backgroundColor(UiTokens.GLASS_STRONG)
-    .borderRadius(20)
+    .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+    .width('100%')
   }
 
   build() {
@@ -612,12 +610,11 @@ export struct AllRecordsView {
             .enabled(!this.batchBusy)
           Row({ space: 8 }) {
             Column() {
-              FilterToolbar({ label: this.filterOpen ? tr('收起筛选', 'Hide filters') : tr('筛选', 'Filter'),
-                summary: this.firstCaptureDate(), active: this.filterOpen,
-                onOpen: (): void => {
-                  this.filterOpen = !this.filterOpen;
-                  this.saveCaptureState();
-                } })
+              FilterToolbar({ label: tr('筛选', 'Filter'),
+                summary: this.firstCaptureDate(),
+                active: this.selectedProjectId.length > 0 || this.yearText !== '' ||
+                  this.monthText !== '' || this.dayText !== '',
+                onOpen: (): void => { this.filterOpen = true; } })
                 .enabled(!this.batchBusy)
             }.layoutWeight(1)
             if (this.isSelectionMode()) {
@@ -631,9 +628,6 @@ export struct AllRecordsView {
         }
         .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 8 })
         .width('100%')
-        if (this.filterOpen) {
-          this.filterPanel()
-        }
         if (this.message.length > 0) {
           Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER :
             UiTokens.PRIMARY).padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 6 })
@@ -692,6 +686,13 @@ export struct AllRecordsView {
       }
     }
     .width('100%').height('100%')
+    // 筛选面板使用系统半模态(HarmonyOS 规范形态):下拉可关、返回键联动
+    // (BackAction.CLOSE_FILTER 置 filterOpen=false 即关闭)。
+    .bindSheet(this.filterOpen, (): void => { this.filterPanel(); }, {
+      height: 460,
+      dragBar: true,
+      onDisappear: (): void => { this.filterOpen = false; },
+    })
   }
 }
 
