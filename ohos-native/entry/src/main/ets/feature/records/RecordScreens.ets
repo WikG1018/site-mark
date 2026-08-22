@@ -21,10 +21,11 @@ import { MotionPolicy } from '../../shared/MotionPolicy';
 import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, CaptureFormMetrics,
-  CaptureUndoCoordinator, SingleFlightRequestCoordinator,
-  applyCaptureOutcome, applyDraftSuggestion, canEditCapture, filterSuggestions,
+  CaptureUndoCoordinator, RecentCaptureSeed, SingleFlightRequestCoordinator,
+  applyCaptureOutcome, applyDraftSuggestion, canEditCapture, filterSuggestions, resolveFormSeed,
   validateCaptureDraft, validateTemplateDraft,
   validateTemplateName } from '../capture/CaptureFormPolicy';
+import { CaptureKillDraftSnapshot, CaptureKillDraftStore } from '../../data/prefs/CaptureKillDraftStore';
 import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolicy, RecordSearchCoordinator,
   RecordNavigationSeedStore, RecordRefreshGate, RecordSelectionCoordinator, RenderedRefreshTracker,
   SystemRecordTimerScheduler, ViewerNodePolicy } from './RecordUiCoordinator';
@@ -746,17 +747,51 @@ export struct CaptureFormScreen {
   private readonly loadRequest: SingleFlightRequestCoordinator = new SingleFlightRequestCoordinator();
   private readonly templateRequest: SingleFlightRequestCoordinator = new SingleFlightRequestCoordinator();
   private captureGeneration: number = 0;
+  private readonly killDraftListener: (level: number) => void = (_level: number): void => {
+    this.persistKillDraft();
+  };
+  private killDraftQueue: Promise<void> = Promise.resolve();
 
   aboutToAppear(): void {
     this.lifecycle.activate();
+    AppRuntime.require().uiMemory.register(this.killDraftListener);
     this.load();
   }
 
   aboutToDisappear(): void {
     this.messageClock.reset();
+    AppRuntime.current?.uiMemory.unregister(this.killDraftListener);
     this.lifecycle.deactivate();
     this.loadRequest.invalidate();
     this.templateRequest.invalidate();
+  }
+
+  private persistKillDraft(): void {
+    const runtime = AppRuntime.current;
+    if (runtime === null) return;
+    const projectId = this.project !== null ? this.project.id : runtime.selectedProjectId;
+    if (projectId.length === 0) return;
+    if (this.workLocation.length === 0 && this.workContent.length === 0 &&
+      this.photographer.length === 0 && this.notes.length === 0) {
+      return;
+    }
+    const snapshot = new CaptureKillDraftSnapshot({
+      projectId: projectId,
+      workLocation: this.workLocation,
+      workContent: this.workContent,
+      photographer: this.photographer,
+      notes: this.notes
+    });
+    this.killDraftQueue = this.killDraftQueue.then((): Promise<void> => runtime.captureKillDraft.save(snapshot))
+      .catch((): void => {});
+  }
+
+  private clearKillDraft(): void {
+    const runtime = AppRuntime.current;
+    const projectId = this.project !== null ? this.project.id : '';
+    if (runtime === null || projectId.length === 0) return;
+    this.killDraftQueue = this.killDraftQueue.then((): Promise<void> => runtime.captureKillDraft.clear(projectId))
+      .catch((): void => {});
   }
 
   private async load(): Promise<void> {
@@ -786,18 +821,40 @@ export struct CaptureFormScreen {
       this.loadRequest.finish(request);
       return;
     }
+    let killDraft: CaptureKillDraftSnapshot | null = null;
     try {
-      const recent = await runtime.database.listCaptures({
+      killDraft = await runtime.captureKillDraft.recover(runtime.selectedProjectId);
+    } catch (_) {
+      killDraft = null;
+    }
+    let recent: RecentCaptureSeed | null = null;
+    try {
+      const page = await runtime.database.listCaptures({
         projectId: runtime.selectedProjectId, year: 0, month: 0, day: 0, searchText: ''
       }, null, 1);
-      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request) && recent.rows.length > 0 &&
-        this.workLocation.length === 0 && this.workContent.length === 0 && this.photographer.length === 0) {
-        this.workLocation = recent.rows[0].workLocation;
-        this.workContent = recent.rows[0].workContent;
-        this.photographer = recent.rows[0].photographer;
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request) && page.rows.length > 0) {
+        recent = {
+          workLocation: page.rows[0].workLocation,
+          workContent: page.rows[0].workContent,
+          photographer: page.rows[0].photographer
+        };
       }
     } catch (_) {
-      // Previous values are an optional convenience; manual entry remains available.
+      recent = null;
+    }
+    if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) {
+      const seed = resolveFormSeed(killDraft, recent);
+      if (seed.fromKillDraft) {
+        this.workLocation = seed.workLocation;
+        this.workContent = seed.workContent;
+        this.photographer = seed.photographer;
+        this.notes = seed.notes;
+      } else if (this.workLocation.length === 0 && this.workContent.length === 0 &&
+        this.photographer.length === 0) {
+        this.workLocation = seed.workLocation;
+        this.workContent = seed.workContent;
+        this.photographer = seed.photographer;
+      }
     }
     try {
       const suggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
@@ -1086,6 +1143,7 @@ export struct CaptureFormScreen {
           tr('已拍摄，水印正在后台处理；完成后可从详情保存到系统相册，可以继续拍摄下一张',
             'Captured. The watermark is processing; save it to the gallery from Details when complete. You can keep shooting.'), false);
         AppRuntime.require().notifyDataChanged();
+        this.clearKillDraft();
       } else {
         const next = applyCaptureOutcome(this.currentSnapshot(), false);
         this.workLocation = next.location;
