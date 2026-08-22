@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# A new push to the same branch/PR cancels the stale in-flight run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest

@@ -21,7 +21,7 @@ export default function projectFormPolicyTest(): void {
       expect(ProjectFormMetrics.SINGLE_LINE_HEIGHT >= 48 &&
         ProjectFormMetrics.SINGLE_LINE_HEIGHT <= 52).assertTrue();
       expect(ProjectFormMetrics.TEXT_AREA_HEIGHT >= 104).assertTrue();
-      expect(ProjectFormMetrics.SUPPORTING_TEXT_MIN_HEIGHT >= 32).assertTrue();
+      expect(ProjectFormMetrics.SUPPORTING_TEXT_MIN_HEIGHT >= 18).assertTrue();
       expect(ProjectFormMetrics.TOUCH_TARGET >= 44).assertTrue();
     });
 

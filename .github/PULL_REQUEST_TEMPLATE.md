@@ -1,4 +1,4 @@
-<!-- 目标分支应为 ohos-native（鸿蒙原生主战场）。涉及 lib/、rust/、packages/ 的改动同样适用本模板。 -->
+<!-- 选择目标分支（base）：改动涉及 ohos-native/、lib/、rust/、packages/ 或两者共用的 CI/工具链 → base 选 ohos-native；仅 Android 稳定线的文档或发布类改动 → base 选 main。拿不准时选 ohos-native。 -->
 
 ## Summary
 

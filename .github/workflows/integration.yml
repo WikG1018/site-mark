@@ -13,6 +13,11 @@ on:
 permissions:
   contents: read
 
+# A manual dispatch during the nightly run supersedes it instead of running twice.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-integration:
     runs-on: ubuntu-latest

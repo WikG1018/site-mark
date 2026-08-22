@@ -12,6 +12,7 @@ import { BackupResult, ProjectBackupService } from '../backup/BackupService';
 import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr } from '../../shared/AppText';
+import { ScreenMessageClock } from '../../shared/Feedback';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { ScreenLifecycleActionCoordinator, ScreenRequestCoordinator } from '../../shared/ScreenActionCoordinator';
 import { StableSelectionList } from './SettingsProjectSelection';
@@ -284,11 +285,10 @@ export struct AppearanceScreen {
       await AppRuntime.require().applyAppearance();
       if (this.saveCoordinator.isCurrent(token)) {
         this.settings = value;
-        this.message = tr('设置已保存', 'Settings saved');
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
         this.messageError = false;
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, tr('设置已保存', 'Settings saved'));
       }
     } catch (_) {
       if (this.saveCoordinator.isCurrent(token)) {
@@ -398,8 +398,11 @@ export struct StorageScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @State private snapshot: StorageSnapshot = new StorageSnapshot();
   @State private message: string = '';
+  private readonly messageClock = new ScreenMessageClock();
 
   aboutToAppear(): void { this.refresh(); }
+
+  aboutToDisappear(): void { this.messageClock.reset(); }
 
   private refresh(): void {
     this.snapshot = StorageInspector.inspect(AppRuntime.require().context.filesDir);
@@ -407,11 +410,10 @@ export struct StorageScreen {
 
   private clearExports(): void {
     StorageInspector.clearExports(AppRuntime.require().context.filesDir);
-    this.message = tr('本机私有导出 ZIP 已清理；照片、记录和已保存副本不受影响',
-      'Private export ZIP files were cleared; photos, records, and saved copies are unchanged');
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
+    this.messageClock.show((next: string): void => {
+      this.message = next;
+    }, tr('本机私有导出 ZIP 已清理；照片、记录和已保存副本不受影响',
+      'Private export ZIP files were cleared; photos, records, and saved copies are unchanged'));
     this.refresh();
   }
 
@@ -474,7 +476,6 @@ export struct DiagnosticsScreen {
   @State private loadError: boolean = false;
   @State private messageError: boolean = false;
   private readonly messageClock = new ScreenMessageClock();
-  private readonly messageClock = new ScreenMessageClock();
 
   aboutToAppear(): void {
     this.loadCoordinator.activate();
@@ -486,7 +487,6 @@ export struct DiagnosticsScreen {
   }
 
   aboutToDisappear(): void {
-    this.messageClock.reset();
     this.messageClock.reset();
     this.loadCoordinator.deactivate();
     this.actionCoordinator.invalidate();
@@ -527,21 +527,19 @@ export struct DiagnosticsScreen {
       return;
     }
     if (outcome.status === DiagnosticsGenerationStatus.SAVED) {
-      this.message = tr(`诊断包已保存（${outcome.eventCount} 条事件）`,
-        `Diagnostic bundle saved (${outcome.eventCount} events)`);
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
       this.messageError = false;
+      this.messageClock.show((next: string): void => {
+        this.message = next;
+      }, tr(`诊断包已保存（${outcome.eventCount} 条事件）`,
+        `Diagnostic bundle saved (${outcome.eventCount} events)`));
       return;
     }
     if (outcome.status === DiagnosticsGenerationStatus.CANCELLED) {
-      this.message = tr('诊断包已生成，但你取消了保存；可以再次生成并选择位置',
-        'The bundle was generated, but saving was cancelled. Generate it again to choose a location.');
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
       this.messageError = false;
+      this.messageClock.show((next: string): void => {
+        this.message = next;
+      }, tr('诊断包已生成，但你取消了保存；可以再次生成并选择位置',
+        'The bundle was generated, but saving was cancelled. Generate it again to choose a location.'));
       return;
     }
     this.message = tr('诊断包生成失败，请检查存储空间后重试',
@@ -557,11 +555,10 @@ export struct DiagnosticsScreen {
     try {
       await AppRuntime.require().database.clearDiagnostics();
       if (this.actionCoordinator.isCurrent(token)) {
-        this.message = tr('本机诊断记录已清除', 'Local diagnostic records cleared');
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
         this.messageError = false;
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, tr('本机诊断记录已清除', 'Local diagnostic records cleared'));
       }
       await this.refresh();
     } catch (_) {
@@ -814,14 +811,13 @@ export struct BackupScreen {
         this.includeOriginals, this.skipFailed);
       if (this.actionCoordinator.isCurrent(token)) {
         this.result = result;
-        this.message = tr(`备份已生成：${result.projectCount} 个项目、${result.photoCount} 张照片` +
+        this.messageError = false;
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, tr(`备份已生成：${result.projectCount} 个项目、${result.photoCount} 张照片` +
           (result.omittedFailed > 0 ? `，已按你的选择跳过 ${result.omittedFailed} 条失败记录` : ''),
           `Backup generated: ${result.projectCount} project(s), ${result.photoCount} photo(s)` +
-          (result.omittedFailed > 0 ? `; skipped ${result.omittedFailed} failed record(s)` : ''));
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
-        this.messageError = false;
+          (result.omittedFailed > 0 ? `; skipped ${result.omittedFailed} failed record(s)` : '')));
       }
     } catch (error) {
       if (this.actionCoordinator.isCurrent(token)) {
@@ -852,13 +848,12 @@ export struct BackupScreen {
     try {
       const saved: boolean = await new ProjectBackupService(AppRuntime.require()).saveAs(result);
       if (this.actionCoordinator.isCurrent(token)) {
-        this.message = saved ? tr('备份已保存到你选择的位置', 'Backup saved to your chosen location') :
-          tr('已取消保存；应用内生成的备份仍可再次保存',
-            'Save cancelled; the generated backup can still be saved again');
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
         this.messageError = false;
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, saved ? tr('备份已保存到你选择的位置', 'Backup saved to your chosen location') :
+          tr('已取消保存；应用内生成的备份仍可再次保存',
+            'Save cancelled; the generated backup can still be saved again'));
       }
     } catch (_) {
       if (this.actionCoordinator.isCurrent(token)) this.message = tr('保存失败，请释放存储空间或改选其他位置',
@@ -879,19 +874,20 @@ export struct BackupScreen {
       const restored = await new ProjectRestoreService(AppRuntime.require()).chooseAndRestore();
       if (restored === null) {
         if (this.actionCoordinator.isCurrent(token)) {
-          this.message = tr('已取消恢复', 'Restore cancelled');
-      this.messageClock.schedule((): void => {
-        this.message = '';
-      }, ScreenMessageClock.AUTO_CLEAR_MS);
           this.messageError = false;
+          this.messageClock.show((next: string): void => {
+            this.message = next;
+          }, tr('已取消恢复', 'Restore cancelled'));
         }
       } else {
         if (this.actionCoordinator.isCurrent(token)) {
-          this.message = tr(`已恢复 ${restored.projectCount} 个项目、${restored.photoCount} 张照片` +
+          this.messageError = false;
+          this.messageClock.show((next: string): void => {
+            this.message = next;
+          }, tr(`已恢复 ${restored.projectCount} 个项目、${restored.photoCount} 张照片` +
             (restored.renamedCount > 0 ? `；${restored.renamedCount} 个同名项目已自动添加“恢复”后缀` : ''),
             `Restored ${restored.projectCount} project(s) and ${restored.photoCount} photo(s)` +
-            (restored.renamedCount > 0 ? `; ${restored.renamedCount} duplicate name(s) received a Restore suffix` : ''));
-          this.messageError = false;
+            (restored.renamedCount > 0 ? `; ${restored.renamedCount} duplicate name(s) received a Restore suffix` : '')));
         }
         await this.load();
       }
