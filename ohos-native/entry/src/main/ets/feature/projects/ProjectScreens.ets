@@ -1429,6 +1429,7 @@ export struct ProjectSettingsScreen {
   @State private watermarkPosition: string = 'bottomLeft';
   @State private accent: number = 0xFF2E7D61;
   @State private message: string = '';
+  private readonly messageClock = new ScreenMessageClock();
   @State private loading: boolean = true;
   @State private loadError: string = '';
   @State private saving: boolean = false;
@@ -1457,6 +1458,7 @@ export struct ProjectSettingsScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.loadCoordinator.deactivate();
     this.saveAction.invalidate();
   }
@@ -1505,6 +1507,9 @@ export struct ProjectSettingsScreen {
       if (this.saveAction.isCurrent(actionToken)) {
         this.message = tr('已保存；新拍照片和重新生成的成片会使用这些设置',
           'Saved. New photos and regenerated images will use these settings.');
+      this.messageClock.schedule((): void => {
+        this.message = '';
+      }, ScreenMessageClock.AUTO_CLEAR_MS);
       }
     } catch (_) {
       if (this.saveAction.isCurrent(actionToken)) {
