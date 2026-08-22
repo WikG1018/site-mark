@@ -6,8 +6,9 @@ import { MediaCleanup, MediaCleanupDatabase, MediaDeleteService } from '../core/
 import { PrivateFileCleanup } from '../core/system/PrivateFileCleanup';
 import { HarmonySystemServices, SystemServices } from '../core/system/SystemServices';
 import { AppDatabase, MediaCleanupTask } from '../data/database/AppDatabase';
+import { CaptureKillDraftStore } from '../data/prefs/CaptureKillDraftStore';
 import { CaptureSessionStore } from '../data/prefs/CaptureSessionStore';
-import { PreferencesCaptureSessionStorage,
+import { PreferencesCaptureKillDraftStorage, PreferencesCaptureSessionStorage,
   PreferencesPublishJournalStorage, PreferencesRestoreJournalStorage } from '../data/prefs/PreferencesStores';
 import { PublishJournalStore } from '../data/prefs/PublishJournalStore';
 import { RestoreJournalStore } from '../data/prefs/RestoreJournalStore';
@@ -79,6 +80,7 @@ export class AppRuntime {
   readonly notifications: CompletionNotifications;
   readonly screenState: ScreenStateStore;
   readonly uiMemory: UiMemoryCoordinator;
+  readonly captureKillDraft: CaptureKillDraftStore;
 
   selectedProjectId: string = '';
   selectedCaptureId: string = '';
@@ -93,6 +95,7 @@ export class AppRuntime {
     const journals = new PublishJournalStore(new PreferencesPublishJournalStorage(context));
     this.services = new HarmonySystemServices(context, journals);
     const sessions = new CaptureSessionStore(new PreferencesCaptureSessionStorage(context));
+    this.captureKillDraft = new CaptureKillDraftStore(new PreferencesCaptureKillDraftStorage(context));
     this.notifications = new CompletionNotifications(context);
     const processor = new CaptureProcessor(database, this.pipeline, this.services, context.filesDir,
       (_captureId: string, _succeeded: boolean): void => this.notifyDataChanged(), this.notifications);

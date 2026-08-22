@@ -1,3 +1,4 @@
+import { CaptureKillDraftSnapshot } from '../../data/prefs/CaptureKillDraftStore';
 import { inspectCaptureFields, normalizeCaptureTemplateName, unicodeScalarLength } from '../../domain/DomainRules';
 import { CaptureStatus, ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { tr } from '../../shared/AppText';
@@ -296,4 +297,39 @@ export function canEditCapture(projectStatus: ProjectLifecycleStatus, captureSta
   hasOriginal: boolean): boolean {
   return projectStatus === ProjectLifecycleStatus.ACTIVE && hasOriginal &&
     (captureStatus === CaptureStatus.READY || captureStatus === CaptureStatus.FAILED);
+}
+
+export interface RecentCaptureSeed {
+  workLocation: string;
+  workContent: string;
+  photographer: string;
+}
+
+export class FormSeed {
+  readonly workLocation: string;
+  readonly workContent: string;
+  readonly photographer: string;
+  readonly notes: string;
+  readonly fromKillDraft: boolean;
+
+  constructor(workLocation: string, workContent: string, photographer: string, notes: string,
+    fromKillDraft: boolean) {
+    this.workLocation = workLocation;
+    this.workContent = workContent;
+    this.photographer = photographer;
+    this.notes = notes;
+    this.fromKillDraft = fromKillDraft;
+  }
+}
+
+export function resolveFormSeed(draft: CaptureKillDraftSnapshot | null,
+  recent: RecentCaptureSeed | null): FormSeed {
+  if (draft !== null && (draft.workLocation.length > 0 || draft.workContent.length > 0 ||
+    draft.photographer.length > 0 || draft.notes.length > 0)) {
+    return new FormSeed(draft.workLocation, draft.workContent, draft.photographer, draft.notes, true);
+  }
+  if (recent !== null) {
+    return new FormSeed(recent.workLocation, recent.workContent, recent.photographer, '', false);
+  }
+  return new FormSeed('', '', '', '', false);
 }

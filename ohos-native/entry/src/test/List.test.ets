@@ -22,6 +22,7 @@ import recordUiCoordinatorTest from './RecordUiCoordinator.test';
 import screenActionCoordinatorTest from './ScreenActionCoordinator.test';
 import diagnosticsActionOutcomeTest from './DiagnosticsActionOutcome.test';
 import captureFormPolicyTest from './CaptureFormPolicy.test';
+import captureKillDraftTest from './CaptureKillDraft.test';
 import captureWorkflowValidationTest from './CaptureWorkflowValidation.test';
 import screenUiStabilityTest from './ScreenUiStability.test';
 import projectEditStabilityTest from './ProjectEditStability.test';
@@ -51,6 +52,7 @@ export default function testsuite(): void {
   screenActionCoordinatorTest();
   diagnosticsActionOutcomeTest();
   captureFormPolicyTest();
+  captureKillDraftTest();
   captureWorkflowValidationTest();
   screenUiStabilityTest();
   projectEditStabilityTest();
