@@ -6,8 +6,9 @@ import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { CaptureCard } from '../records/RecordComponents';
 import { RecordBatchLayoutPolicy, RecordNavigationSeedStore,
   RecordSelectionCoordinator } from '../records/RecordUiCoordinator';
-import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, InlineErrorPanel,
+import { AccentSwatchRow, AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, InlineErrorPanel,
   LifecycleSegment, ListSkeleton, SectionHeader, SegmentOption, panelTransition } from '../../shared/AppComponents';
+import { AccentSwatches } from '../../shared/AccentSwatches';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
@@ -30,8 +31,6 @@ import {
   projectSaveFeedback,
   selectionKey,
   selectionVisual,
-  WatermarkAccentChoice,
-  watermarkAccentChoices,
   WatermarkPreviewLayer,
   watermarkPreviewLayer,
   WatermarkPreviewLayout,
@@ -1411,7 +1410,7 @@ export struct ProjectSettingsScreen {
   @State private watermarkOpacity: number = 0.78;
   @State private fontScale: number = 1.0;
   @State private watermarkPosition: string = 'bottomLeft';
-  @State private accent: number = 0xFF2E7D61;
+  @State private accent: number = AccentSwatches.defaultArgb();
   @State private message: string = '';
   private readonly messageClock = new ScreenMessageClock();
   @State private loading: boolean = true;
@@ -1503,24 +1502,6 @@ export struct ProjectSettingsScreen {
       this.saveAction.finish(actionToken);
       if (this.saveAction.isActive() && !this.saveAction.isBusy()) this.saving = false;
     }
-  }
-
-  @Builder
-  private colorChoice(choice: WatermarkAccentChoice) {
-    Button(choice.selected ? '✓' : '')
-      .width(48)
-      .height(48)
-      .fontSize(20)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(Color.White)
-      .borderRadius(24)
-      .backgroundColor(choice.color)
-      .border({ width: choice.selected ? 3 : 1,
-        color: choice.selected ? UiTokens.TEXT : UiTokens.OUTLINE_SUBTLE })
-      .shadow({ radius: choice.selected ? 6 : 0, color: UiTokens.CARD_SHADOW })
-      .enabled(!this.saving)
-      .accessibilityText(choice.accessibilityText)
-      .onClick((): void => { this.accent = choice.value; })
   }
 
   @Builder
@@ -1627,13 +1608,12 @@ export struct ProjectSettingsScreen {
             Column({ space: 10 }) {
               Text(this.copy().accentLabel).fontSize(15).fontWeight(FontWeight.Bold)
                 .fontColor(UiTokens.TEXT).width('100%')
-              Row({ space: 12 }) {
-                ForEach(watermarkAccentChoices(AppText.isEnglish(), this.accent),
-                  (choice: WatermarkAccentChoice) => {
-                    this.colorChoice(choice)
-                  }, (choice: WatermarkAccentChoice): string =>
-                    selectionKey(choice.value.toString(), choice.selected))
-              }.width('100%')
+              AccentSwatchRow({
+                selectedArgb: this.accent,
+                controlEnabled: !this.saving,
+                accessibilityKind: 'watermark',
+                onSelect: (argb: number): void => { this.accent = argb; }
+              }).enabled(!this.saving)
             }
             .width('100%')
             .padding(16)

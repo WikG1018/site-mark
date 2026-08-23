@@ -1,6 +1,9 @@
 import { UiTokens } from './UiTokens';
 import { choiceAccessibilityText, joinAccessibilityText } from './AccessibilityText';
 import { MotionPolicy } from './MotionPolicy';
+import { AccentSwatch, AccentSwatches } from './AccentSwatches';
+import { themeSeedAccessibilityText, watermarkAccentAccessibilityText, WatermarkAccentOption }
+  from './AccentAccessibility';
 
 /**
  * 条件面板统一转场：出现时淡入并上移 distanceVp，消失时淡出并下移。
@@ -520,5 +523,45 @@ export struct ListSkeleton {
     .opacity(this.shimmerActive ? 1 : 0.55)
     .animation({ duration: MotionPolicy.duration(600), curve: Curve.EaseInOut })
     .transition(panelTransition(0))
+  }
+}
+
+@Component
+export struct AccentSwatchRow {
+  @Prop selectedArgb: number = 0xFF37C58B;
+  @Prop controlEnabled: boolean = true;
+  @Prop accessibilityKind: string = 'watermark';
+  onSelect: (argb: number) => void = (_argb: number): void => {};
+
+  build() {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(AccentSwatches.values(), (swatch: AccentSwatch) => {
+        Button()
+          .width(UiTokens.TOUCH_TARGET)
+          .height(UiTokens.TOUCH_TARGET)
+          .borderRadius(UiTokens.TOUCH_TARGET / 2)
+          .backgroundColor(swatch.argb)
+          .border({
+            width: AccentSwatches.nearest(this.selectedArgb) === swatch.argb ? 4 : 1,
+            color: Color.White
+          })
+          .margin({ right: 11, bottom: 11 })
+          .enabled(this.controlEnabled)
+          .accessibilityText(this.swatchText(swatch))
+          .onClick((): void => { this.onSelect(swatch.argb); })
+      }, (swatch: AccentSwatch): string => swatch.argb.toString())
+    }.width('100%')
+  }
+
+  private swatchText(swatch: AccentSwatch): string {
+    const option = new WatermarkAccentOption(
+      swatch.argb,
+      AccentSwatches.label(swatch.argb, false),
+      AccentSwatches.label(swatch.argb, true));
+    const selected: boolean = AccentSwatches.nearest(this.selectedArgb) === swatch.argb;
+    if (this.accessibilityKind === 'theme') {
+      return themeSeedAccessibilityText(option, selected);
+    }
+    return watermarkAccentAccessibilityText(option, selected);
   }
 }
