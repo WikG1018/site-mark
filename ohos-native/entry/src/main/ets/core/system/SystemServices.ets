@@ -2,10 +2,12 @@ import { common, Permissions } from '@kit.AbilityKit';
 import { abilityAccessCtrl } from '@kit.AbilityKit';
 import { camera, cameraPicker } from '@kit.CameraKit';
 import { fileIo, fileUri } from '@kit.CoreFileKit';
+import { image } from '@kit.ImageKit';
 import { geoLocationManager } from '@kit.LocationKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { PublishJournalEntry, PublishJournalStore } from '../../data/prefs/PublishJournalStore';
+import { ExifGpsReading, exifGpsReading } from '../../shared/ExifLocationPolicy';
 
 export enum CameraOutcomeCode {
   CAPTURED = 0,
@@ -97,6 +99,7 @@ export interface SystemServices {
   clearPublishJournal(captureId: string, expectedContentUri: string): Promise<boolean>;
   deletePublishedImage(uri: string): Promise<boolean>;
   inspectImage(path: string): Promise<ImageInspection>;
+  readExifGps(imagePath: string): Promise<ExifGpsReading | null>;
   openApplicationSettings(): Promise<void>;
   openRepository(): Promise<void>;
 }
@@ -381,6 +384,29 @@ export class HarmonySystemServices implements SystemServices {
       uri: 'application_info_entry',
       parameters: { 'pushParams': this.context.applicationInfo.name }
     });
+  }
+
+  async readExifGps(imagePath: string): Promise<ExifGpsReading | null> {
+    try {
+      const source: image.ImageSource = image.createImageSource(imagePath);
+      const properties = await source.getImageProperties([
+        image.PropertyKey.GPS_LATITUDE, image.PropertyKey.GPS_LATITUDE_REF,
+        image.PropertyKey.GPS_LONGITUDE, image.PropertyKey.GPS_LONGITUDE_REF]);
+      try {
+        await source.release();
+      } catch (_) {
+      }
+      return exifGpsReading(this.exifText(properties[image.PropertyKey.GPS_LATITUDE]),
+        this.exifText(properties[image.PropertyKey.GPS_LATITUDE_REF]),
+        this.exifText(properties[image.PropertyKey.GPS_LONGITUDE]),
+        this.exifText(properties[image.PropertyKey.GPS_LONGITUDE_REF]));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  private exifText(value: string | null): string {
+    return value === null ? '' : value;
   }
 
   openRepository(): Promise<void> {

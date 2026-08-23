@@ -28,6 +28,7 @@ import captureWorkflowValidationTest from './CaptureWorkflowValidation.test';
 import screenUiStabilityTest from './ScreenUiStability.test';
 import projectEditStabilityTest from './ProjectEditStability.test';
 import pendingNotificationLaunchTest from './PendingNotificationLaunch.test';
+import exifLocationPolicyTest from './ExifLocationPolicy.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -60,4 +61,5 @@ export default function testsuite(): void {
   screenUiStabilityTest();
   projectEditStabilityTest();
   pendingNotificationLaunchTest();
+  exifLocationPolicyTest();
 }

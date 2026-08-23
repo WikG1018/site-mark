@@ -7,6 +7,7 @@ import { CaptureSessionStore, InMemoryCaptureSessionStorage } from
 import { CaptureWorkflowDatabase } from '../main/ets/data/database/AppDatabase';
 import { PublishJournalEntry } from '../main/ets/data/prefs/PublishJournalStore';
 import { CaptureDraft, CaptureRecord, ProjectRecord } from '../main/ets/domain/Models';
+import { ExifGpsReading } from '../main/ets/shared/ExifLocationPolicy';
 import { CaptureWorkflow } from '../main/ets/feature/capture/CaptureWorkflow';
 
 class RejectingWorkflowDatabase implements CaptureWorkflowDatabase {
@@ -56,6 +57,7 @@ class CountingCameraServices implements SystemServices {
   }
   deletePublishedImage(_uri: string): Promise<boolean> { return Promise.resolve(true); }
   inspectImage(_path: string): Promise<ImageInspection> { return Promise.resolve(new ImageInspection(false)); }
+  readExifGps(_imagePath: string): Promise<ExifGpsReading | null> { return Promise.resolve(null); }
   openApplicationSettings(): Promise<void> { return Promise.resolve(); }
   openRepository(): Promise<void> { return Promise.resolve(); }
 }
