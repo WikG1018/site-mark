@@ -1,4 +1,4 @@
-import { common, Permissions } from '@kit.AbilityKit';
+import { common, Permissions, Want } from '@kit.AbilityKit';
 import { abilityAccessCtrl } from '@kit.AbilityKit';
 import { camera, cameraPicker } from '@kit.CameraKit';
 import { fileIo, fileUri } from '@kit.CoreFileKit';
@@ -8,6 +8,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { PublishJournalEntry, PublishJournalStore } from '../../data/prefs/PublishJournalStore';
 import { ExifGpsReading, exifGpsReading } from '../../shared/ExifLocationPolicy';
+import { AppSettingsLaunchPolicy, SettingsLaunchWant } from '../../shared/AppSettingsLaunchPolicy';
 
 export enum CameraOutcomeCode {
   CAPTURED = 0,
@@ -100,7 +101,7 @@ export interface SystemServices {
   deletePublishedImage(uri: string): Promise<boolean>;
   inspectImage(path: string): Promise<ImageInspection>;
   readExifGps(imagePath: string): Promise<ExifGpsReading | null>;
-  openApplicationSettings(): Promise<void>;
+  openApplicationSettings(): Promise<boolean>;
   openRepository(): Promise<void>;
 }
 
@@ -377,13 +378,36 @@ export class HarmonySystemServices implements SystemServices {
     }
   }
 
-  async openApplicationSettings(): Promise<void> {
-    await this.context.startAbility({
-      bundleName: 'com.huawei.hmos.settings',
-      abilityName: 'com.huawei.hmos.settings.MainAbility',
-      uri: 'application_info_entry',
-      parameters: { 'pushParams': this.context.applicationInfo.name }
-    });
+  async openApplicationSettings(): Promise<boolean> {
+    const policy = new AppSettingsLaunchPolicy((want: SettingsLaunchWant): Promise<boolean> =>
+      this.startSettingsAbility(want));
+    return policy.openApplicationSettings('com.huawei.hmos.settings',
+      this.context.abilityInfo.bundleName);
+  }
+
+  private async startSettingsAbility(want: SettingsLaunchWant): Promise<boolean> {
+    const request: Want = {};
+    if (want.bundleName.length > 0) {
+      request.bundleName = want.bundleName;
+    }
+    if (want.abilityName.length > 0) {
+      request.abilityName = want.abilityName;
+    }
+    if (want.uri.length > 0) {
+      request.uri = want.uri;
+    }
+    if (want.action.length > 0) {
+      request.action = want.action;
+    }
+    if (want.parameters !== null) {
+      request.parameters = want.parameters;
+    }
+    try {
+      await this.context.startAbility(request);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   async readExifGps(imagePath: string): Promise<ExifGpsReading | null> {

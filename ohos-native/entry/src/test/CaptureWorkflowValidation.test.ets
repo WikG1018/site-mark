@@ -58,7 +58,7 @@ class CountingCameraServices implements SystemServices {
   deletePublishedImage(_uri: string): Promise<boolean> { return Promise.resolve(true); }
   inspectImage(_path: string): Promise<ImageInspection> { return Promise.resolve(new ImageInspection(false)); }
   readExifGps(_imagePath: string): Promise<ExifGpsReading | null> { return Promise.resolve(null); }
-  openApplicationSettings(): Promise<void> { return Promise.resolve(); }
+  openApplicationSettings(): Promise<boolean> { return Promise.resolve(true); }
   openRepository(): Promise<void> { return Promise.resolve(); }
 }
 

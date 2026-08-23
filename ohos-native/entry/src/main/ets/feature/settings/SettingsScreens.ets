@@ -131,7 +131,15 @@ export struct SettingsView {
             SettingRow({ icon: '⌖', title: tr('位置权限', 'Location permission'),
               subtitle: tr('拒绝定位也不会阻止拍摄', 'Declining location does not block capture'),
               showDivider: true,
-              action: (): void => { AppRuntime.require().services.openApplicationSettings(); } })
+              action: (): void => {
+                AppRuntime.require().services.openApplicationSettings().then((opened: boolean): void => {
+                  if (!opened) {
+                    this.notificationMessage = tr('无法打开系统设置，请在系统设置中手动授权定位',
+                      'Could not open system settings. Grant the location permission manually there.');
+                    this.notificationError = true;
+                  }
+                });
+              } })
             Row({ space: 14 }) {
               Text('◉').fontSize(22).fontColor(UiTokens.PRIMARY).width(36).textAlign(TextAlign.Center)
               Column({ space: 3 }) {
