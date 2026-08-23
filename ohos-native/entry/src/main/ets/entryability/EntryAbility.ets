@@ -4,6 +4,8 @@ import { window } from '@kit.ArkUI';
 import { AbilityContextHolder } from '../app/AbilityContextHolder';
 import { AppRuntime } from '../app/AppRuntime';
 import { forwardUiMemoryLevel } from '../shared/UiMemoryCoordinator';
+import { captureIdFromWantParameters, PendingNotificationLaunch }
+  from '../shared/PendingNotificationLaunch';
 
 const DOMAIN = 0x0000;
 const TAG = 'SiteMarkAbility';
@@ -12,7 +14,13 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     AbilityContextHolder.current = this.context;
     this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+    PendingNotificationLaunch.put(captureIdFromWantParameters(want.parameters));
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onCreate');
+  }
+
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    PendingNotificationLaunch.put(captureIdFromWantParameters(want.parameters));
+    hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onNewWant');
   }
 
   onDestroy(): void {
