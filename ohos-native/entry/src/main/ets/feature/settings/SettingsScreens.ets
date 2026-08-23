@@ -20,6 +20,7 @@ import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, waterm
   watermarkAccentOptions, WatermarkAccentOption, diagnosticsConfirmAccessibilityText } from './SettingsAccessibility';
 import { DiagnosticsGenerationOutcome, DiagnosticsGenerationOutcomeStore, DiagnosticsGenerationStatus }
   from './DiagnosticsActionOutcome';
+import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
 
 const notificationActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 const appearanceActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
@@ -530,8 +531,11 @@ export struct DiagnosticsScreen {
       this.messageError = false;
       this.messageClock.show((next: string): void => {
         this.message = next;
-      }, tr(`诊断包已保存（${outcome.eventCount} 条事件）`,
-        `Diagnostic bundle saved (${outcome.eventCount} events)`));
+      }, outcome.channel === ExportDeliveryChannel.SHARE_PANEL ?
+        tr(`诊断包已生成，系统分享面板已打开（${outcome.eventCount} 条事件）`,
+          `Diagnostic bundle ready in the system share sheet (${outcome.eventCount} events)`) :
+        tr(`诊断包已保存（${outcome.eventCount} 条事件）`,
+          `Diagnostic bundle saved (${outcome.eventCount} events)`));
       return;
     }
     if (outcome.status === DiagnosticsGenerationStatus.CANCELLED) {
@@ -583,9 +587,10 @@ export struct DiagnosticsScreen {
     try {
       const service = new DiagnosticBundleService(AppRuntime.require());
       const result = await service.generate();
-      const saved = await service.saveAs(result);
-      diagnosticsOutcomeStore.publish(new DiagnosticsGenerationOutcome(saved ? DiagnosticsGenerationStatus.SAVED :
-        DiagnosticsGenerationStatus.CANCELLED, result.eventCount));
+      const outcome = await service.saveAs(result);
+      diagnosticsOutcomeStore.publish(new DiagnosticsGenerationOutcome(
+        outcome.delivered ? DiagnosticsGenerationStatus.SAVED : DiagnosticsGenerationStatus.CANCELLED,
+        result.eventCount, outcome.channel));
       await this.refresh();
     } catch (_) {
       diagnosticsOutcomeStore.publish(new DiagnosticsGenerationOutcome(DiagnosticsGenerationStatus.FAILED, 0));
@@ -611,8 +616,8 @@ export struct DiagnosticsScreen {
               Text(tr('诊断记录只保存在本机，不会自动上传。诊断包不包含照片、项目名称、工程内容、拍摄人、位置坐标、文件路径、SHA-256、原始异常或堆栈。',
                 'Diagnostic records stay on this device and are never uploaded automatically. Bundles exclude photos, project names, work details, photographers, coordinates, file paths, SHA-256 values, raw exceptions, and stack traces.'))
                 .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).width('100%')
-              Text(tr('只有你主动确认并选择保存位置后，诊断 ZIP 才会离开应用私有目录。',
-                'A diagnostic ZIP leaves private storage only after you confirm and choose a save location.'))
+              Text(tr('只有你主动确认分享或选择保存位置后，诊断 ZIP 才会离开应用私有目录。',
+                'A diagnostic ZIP leaves private storage only after you confirm sharing or choose a save location.'))
                 .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20).width('100%')
             }
             .padding(16).width('100%').backgroundColor(UiTokens.PRIMARY_CONTAINER)
@@ -846,14 +851,17 @@ export struct BackupScreen {
     this.busy = true;
     const result: BackupResult = this.result;
     try {
-      const saved: boolean = await new ProjectBackupService(AppRuntime.require()).saveAs(result);
+      const outcome = await new ProjectBackupService(AppRuntime.require()).saveAs(result);
       if (this.actionCoordinator.isCurrent(token)) {
         this.messageError = false;
         this.messageClock.show((next: string): void => {
           this.message = next;
-        }, saved ? tr('备份已保存到你选择的位置', 'Backup saved to your chosen location') :
-          tr('已取消保存；应用内生成的备份仍可再次保存',
-            'Save cancelled; the generated backup can still be saved again'));
+        }, outcome.channel === ExportDeliveryChannel.SHARE_PANEL ?
+          tr('备份已在系统分享面板打开，可选择发送或保存',
+            'The backup opened in the system share sheet. Send or save it from there.') :
+          (outcome.delivered ? tr('备份已保存到你选择的位置', 'Backup saved to your chosen location') :
+            tr('已取消保存；应用内生成的备份仍可再次保存',
+              'Save cancelled; the generated backup can still be saved again')));
       }
     } catch (_) {
       if (this.actionCoordinator.isCurrent(token)) this.message = tr('保存失败，请释放存储空间或改选其他位置',
