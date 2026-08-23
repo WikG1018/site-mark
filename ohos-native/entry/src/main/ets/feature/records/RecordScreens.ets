@@ -12,6 +12,7 @@ import { formatBytes, formatDateTime, imageUri, statusLabel } from '../../shared
 import { UiTokens } from '../../shared/UiTokens';
 import { CaptureCard, CaptureInfoRow } from './RecordComponents';
 import { ProjectBackupService } from '../backup/BackupService';
+import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
 import { tr } from '../../shared/AppText';
 import { CapturePageLoader, CapturePagedController } from './CapturePagedController';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
@@ -386,11 +387,17 @@ export struct AllRecordsView {
     try {
       const service = new ProjectBackupService(AppRuntime.require());
       const result = await service.exportSelection(ids, false);
-      const saved = await service.saveAs(result);
+      const outcome = await service.saveAs(result);
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
-        this.setMessage(saved ? tr('所选照片已导出到你选择的位置',
-          'Selected photos were exported to your chosen location') :
-          tr('已取消保存导出文件', 'Export save was cancelled'), false);
+        if (outcome.channel === ExportDeliveryChannel.SHARE_PANEL) {
+          this.setMessage(tr('导出文件已在系统分享面板打开，可选择发送或保存',
+            'The export opened in the system share sheet. Send or save it from there.'), false);
+        } else if (outcome.delivered) {
+          this.setMessage(tr('所选照片已导出到你选择的位置',
+            'Selected photos were exported to your chosen location'), false);
+        } else {
+          this.setMessage(tr('已取消保存导出文件', 'Export save was cancelled'), false);
+        }
       }
     } catch (error) {
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {

@@ -2,6 +2,8 @@ import { deviceInfo } from '@kit.BasicServicesKit';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { AppRuntime } from '../../app/AppRuntime';
 import { DiagnosticEventRecord } from '../../data/database/AppDatabase';
+import { ArchiveDeliveryCoordinator, ExportDeliveryOutcome } from '../backup/ExportDeliveryPolicy';
+import { SystemSharePanel } from '../../core/system/SystemSharePanel';
 
 interface DiagnosticEnvironmentJson {
   app_version: string;
@@ -105,17 +107,22 @@ export class DiagnosticBundleService {
     }
   }
 
-  async saveAs(result: DiagnosticBundleResult): Promise<boolean> {
-    const documentPicker = new picker.DocumentViewPicker(this.runtime.context);
-    const options = new picker.DocumentSaveOptions();
-    options.newFileNames = [result.fileName];
-    options.fileSuffixChoices = ['ZIP|.zip'];
-    const uris = await documentPicker.save(options);
-    if (uris.length === 0) {
-      return false;
-    }
-    await fileIo.copyFile(result.path, uris[0]);
-    return true;
+  async saveAs(result: DiagnosticBundleResult): Promise<ExportDeliveryOutcome> {
+    const delivery = new ArchiveDeliveryCoordinator(
+      (): Promise<boolean> => new SystemSharePanel().show(this.runtime.context, result.path),
+      async (): Promise<boolean> => {
+        const documentPicker = new picker.DocumentViewPicker(this.runtime.context);
+        const options = new picker.DocumentSaveOptions();
+        options.newFileNames = [result.fileName];
+        options.fileSuffixChoices = ['ZIP|.zip'];
+        const uris = await documentPicker.save(options);
+        if (uris.length === 0) {
+          return false;
+        }
+        await fileIo.copyFile(result.path, uris[0]);
+        return true;
+      });
+    return delivery.deliver();
   }
 
   private eventJson(event: DiagnosticEventRecord): DiagnosticEventJson {
