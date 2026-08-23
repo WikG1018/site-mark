@@ -18,7 +18,6 @@ import { CapturePageLoader, CapturePagedController } from './CapturePagedControl
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
-import { MotionPolicy } from '../../shared/MotionPolicy';
 import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, CaptureFormMetrics,
@@ -1714,7 +1713,6 @@ export struct CaptureDetailScreen {
           .fontSize(13)
           .fontColor(UiTokens.TEXT)
           .backgroundColor(UiTokens.GLASS_STRONG)
-          .backdropBlur(MotionPolicy.blur(12))
           .borderRadius(UiTokens.CONTROL_RADIUS)
           .margin({ right: 10, top: 10 })
           .align(Alignment.TopEnd)
@@ -1733,7 +1731,7 @@ export struct CaptureDetailScreen {
           .enabled(this.capture?.hasOriginal() ?? false)
           .accessibilityText(tr('查看原图', 'View original photo'))
           .onClick((): void => this.switchPhoto(true))
-      }.padding(10).backdropBlur(MotionPolicy.blur(12))
+      }.padding(10)
     }
     .width('100%')
     .aspectRatio(4 / 3)

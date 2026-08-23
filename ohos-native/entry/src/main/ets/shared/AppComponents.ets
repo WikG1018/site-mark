@@ -433,7 +433,6 @@ export struct BatchActionBar {
     .width('100%')
     .padding({ left: 10, right: 10, top: 4, bottom: 4 })
     .backgroundColor(UiTokens.GLASS_STRONG)
-    .backdropBlur(MotionPolicy.blur(12))
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS)
   }
