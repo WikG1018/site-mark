@@ -1,6 +1,6 @@
 # 鸿蒙原生版差异与验证边界
 
-更新：2026-08-23。本表只记录 HarmonyOS 原生版相对 Android v1.0.8 的平台差异和当前未完成的设备级验证。业务规则、数据安全规则和用户可见结果不以“平台不同”为由静默降级。
+更新：2026-08-24。本表只记录 HarmonyOS 原生版相对 Android v1.0.8 的平台差异和当前未完成的设备级验证。业务规则、数据安全规则和用户可见结果不以“平台不同”为由静默降级。
 
 ## 本轮已确认
 
@@ -10,8 +10,12 @@
 - 拍摄/编辑字段校验、模板与建议、单步撤销、设置操作防重、恢复预检/事务/日记/暂存清理均有自动化回归。
 - ArkTS 全量测试、鸿蒙数据库契约测试、测试报告防假绿、debug unsigned HAP、共享 Rust 与 Flutter 门禁已通过。日期、命令和证据见[验证记录](verification-2026-08-20.md)。
 - 完成新一轮平台能力对齐审计（权限、生命周期、通知、位置来源与触感覆盖面），新发现差异已补入下表；其中通知点击直达、EXIF 位置源、退后台短时窗口与设置跳转兜底已在 ArkTS 源码和策略测试中落地，设备级验证待补。
+- 外观页独立「应用主题色」与「水印强调色」两排 9 色选择器；seed / accent 分字段保存；历史 0xFF176B55 / 0xFF2E7D61 选择器高亮新绿但不改写库值。
+- Index.build() 读取 appearanceRevision / motionRevision，保存主题色后栈内页跟根壳重绘。
+- 详情媒体 overlay 与 BatchActionBar 去掉 backdropBlur；Dock / 选中态仍走 MotionPolicy.blur()。
+- 记录页与项目页年月日筛选共用 DateFilterRow，高度与 TOUCH_TARGET / filterControlHeight() 对齐。
 
-当前 `hdc list targets` 为 `[Empty]`，所以本轮没有执行模拟器或真机视觉、相机、相册、RDB 和性能验收。源码约束与单元测试通过不能替代设备结果。
+本轮 `hdc list targets` 为 `127.0.0.1:5555`（模拟器，非真机）。已按五项冒烟走查，不把模拟器写成真机转正。项 1–2 dump 两排 9 点：未保存点蓝仍 `chrome-1-3`，保存后 `chrome-2-3` 且 AppBar「保存」PRIMARY 变蓝。项 3：外观橙保存后主题仍蓝（`chrome-3-3` / `chrome-4-3`）；新建项目表单无色点，`createProject` 从 settings 拷贝 `defaultWatermarkAccentColorArgb`，创建后项目水印设置可见 `#FFEF6C00`。项 4：项目详情内联年月日三框同高 155、底 `#FFEEF4F0`；记录页 `FilterToolbar` 点击 / longClick / `dumpLayout -i` / `-m false` 后 `bindSheet` 半模态未出现在 uitest dump，年月日三框未拍到，共用 `DateFilterRow` 仅源码确认。项 5：详情 overlay「水印成片」`#FF1565C0`、「原图」`#F4F6FBF8`，选择模式 BatchActionBar 四钮 +「已选 0 张」，dump 无非零 `blur`；Dock `backdropBlur` 源码仍在 Index L361/L378，uitest dump 全为 `0.00px`，不能当视觉证明。记录侧 sheet 与 Dock blur 的 UI 证据不足，故不写「模拟器五项冒烟已过」。真机验证待补。源码约束与单元测试通过不能替代真机结果。
 
 ## 平台差异表
 
