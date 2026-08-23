@@ -16,6 +16,7 @@ import { UiTokens } from '../shared/UiTokens';
 import { AppText, tr } from '../shared/AppText';
 import { panelTransition } from '../shared/AppComponents';
 import { MotionPolicy } from '../shared/MotionPolicy';
+import { PendingNotificationLaunch } from '../shared/PendingNotificationLaunch';
 import { ScreenActionCoordinator } from '../shared/ScreenActionCoordinator';
 import { RootBackDispatcher } from '../shared/ScreenUiStabilityCoordinator';
 import { RootLifecycleCoordinator, RootMotionRefreshResult, RootMotionSpec, RootShellPolicy,
@@ -92,6 +93,7 @@ struct Index {
     if (this.runtimeReady && AppRuntime.current !== null) {
       this.subscribeRuntime(AppRuntime.current);
       this.runtimeListener();
+      this.attachNotificationLaunches();
       return;
     }
     if (!this.consentChecked || !this.consentAccepted) {
@@ -164,6 +166,7 @@ struct Index {
       this.subscribeRuntime(runtime);
       this.runtimeReady = true;
       this.runtimeListener();
+      this.attachNotificationLaunches();
       this.requestMotionPolicyRefresh(generation);
     } catch (_) {
       if (!this.rootLifecycle.isCurrent(generation)) {
@@ -186,6 +189,20 @@ struct Index {
   private unsubscribeRuntime(): void {
     this.subscribedRuntime?.unsubscribe(this.runtimeListener);
     this.subscribedRuntime = null;
+  }
+
+  private attachNotificationLaunches(): void {
+    PendingNotificationLaunch.attach((captureId: string): void =>
+      this.openCapturedRecord(captureId));
+  }
+
+  private openCapturedRecord(captureId: string): void {
+    const runtime = AppRuntime.current;
+    if (runtime === null) {
+      return;
+    }
+    runtime.selectedCaptureId = captureId;
+    this.pathStack.pushPathByName(Routes.CAPTURE_DETAIL, null);
   }
 
   private requestMotionPolicyRefresh(generation: number): void {

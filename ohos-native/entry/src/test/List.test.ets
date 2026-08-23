@@ -27,6 +27,10 @@ import exportDeliveryPolicyTest from './ExportDeliveryPolicy.test';
 import captureWorkflowValidationTest from './CaptureWorkflowValidation.test';
 import screenUiStabilityTest from './ScreenUiStability.test';
 import projectEditStabilityTest from './ProjectEditStability.test';
+import pendingNotificationLaunchTest from './PendingNotificationLaunch.test';
+import exifLocationPolicyTest from './ExifLocationPolicy.test';
+import suspendDelayWindowTest from './SuspendDelayWindow.test';
+import appSettingsLaunchPolicyTest from './AppSettingsLaunchPolicy.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -58,4 +62,8 @@ export default function testsuite(): void {
   captureWorkflowValidationTest();
   screenUiStabilityTest();
   projectEditStabilityTest();
+  pendingNotificationLaunchTest();
+  exifLocationPolicyTest();
+  suspendDelayWindowTest();
+  appSettingsLaunchPolicyTest();
 }
