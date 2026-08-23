@@ -691,7 +691,8 @@ export class ViewerFullImageCoordinator {
 }
 
 export class ViewerNodePolicy {
-  static readonly SHARED_TRANSITION_DURATION: number = 220;
+  // 查看器左右切换比通用 UI 动效慢：图片切换需要更稳的过渡。
+  static readonly SWIPE_DURATION: number = 320;
 
   static decodeEdge(current: boolean): number {
     return current ? 2048 : 1024;
@@ -699,9 +700,5 @@ export class ViewerNodePolicy {
 
   static key(captureId: string, current: boolean): string {
     return `${captureId}-${current ? 'full' : 'preview'}`;
-  }
-
-  static transitionDuration(reduceMotion: boolean): number {
-    return reduceMotion ? 0 : ViewerNodePolicy.SHARED_TRANSITION_DURATION;
   }
 }

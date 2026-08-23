@@ -5,7 +5,7 @@ import { UiTokens } from '../../shared/UiTokens';
 import { tr } from '../../shared/AppText';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 import { MotionPolicy } from '../../shared/MotionPolicy';
-import { ViewerNodePolicy } from './RecordUiCoordinator';
+import { panelTransition } from '../../shared/AppComponents';
 
 @Component
 export struct CaptureInfoRow {
@@ -76,6 +76,8 @@ export struct CaptureCard {
           .border({ width: 2, color: Color.White })
           .borderRadius(16)
           .margin(7)
+          .animation({ duration: MotionPolicy.duration(120), curve: Curve.EaseOut })
+          .transition(panelTransition(0))
       }
       if (this.capture.status === 'failed') {
         Text(tr('失败', 'Failed'))
@@ -88,8 +90,8 @@ export struct CaptureCard {
     .height(112)
     .clip(true)
     .borderRadius(18)
-    .sharedTransition(`capture-photo-${this.capture.id}`,
-      { duration: MotionPolicy.duration(ViewerNodePolicy.SHARED_TRANSITION_DURATION), curve: Curve.Friction })
+    // Navigation 跨页面共享元素转场：列表卡片 → 详情 → 查看器同 id 匹配；系统控制插值，跟随系统减少动画
+    .geometryTransition(`capture-photo-${this.capture.id}`)
     .accessibilityText(tr(`照片 ${this.capture.photoNumber}`, `Photo ${this.capture.photoNumber}`))
   }
 

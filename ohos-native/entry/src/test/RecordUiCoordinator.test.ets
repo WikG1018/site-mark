@@ -479,6 +479,10 @@ export default function recordUiCoordinatorTest(): void {
       expect(gesture.canSwipe()).assertTrue();
     });
 
+    it('gives the viewer swipe a dedicated slower duration than generic UI motion', 0, () => {
+      expect(ViewerNodePolicy.SWIPE_DURATION > UiTokens.MOTION_STANDARD).assertTrue();
+    });
+
     it('creates one 2048 node and bounded 1024 neighbors with stable keys', 0, () => {
       const ids = ['a', 'b', 'c', 'd', 'e'];
       const edges = ids.map((id: string): number => ViewerNodePolicy.decodeEdge(id === 'c'));
@@ -486,8 +490,6 @@ export default function recordUiCoordinatorTest(): void {
       expect(edges.filter((edge: number): boolean => edge === 1024).length).assertEqual(4);
       expect(ViewerNodePolicy.key('c', true)).assertEqual('c-full');
       expect(ViewerNodePolicy.key('c', false)).assertEqual('c-preview');
-      expect(ViewerNodePolicy.transitionDuration(true)).assertEqual(0);
-      expect(ViewerNodePolicy.transitionDuration(false) > 0).assertTrue();
     });
 
     it('changes the viewer request version only when a new ready render is available', 0, () => {

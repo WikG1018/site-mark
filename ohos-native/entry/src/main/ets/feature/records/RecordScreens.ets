@@ -7,7 +7,7 @@ import { CAPTURE_TEMPLATE_LIMIT_PER_PROJECT, CAPTURE_TEMPLATE_NAME_MAX_LENGTH, c
   normalizeCaptureTemplateName, resolveWatermarkLocale } from '../../domain/DomainRules';
 import { CaptureStatus, ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, FilterToolbar,
-  InlineErrorPanel, ListSkeleton, SectionHeader } from '../../shared/AppComponents';
+  InlineErrorPanel, ListSkeleton, SectionHeader, panelTransition } from '../../shared/AppComponents';
 import { formatBytes, formatDateTime, imageUri, statusLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { CaptureCard, CaptureInfoRow } from './RecordComponents';
@@ -29,7 +29,7 @@ import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, Cap
 import { CaptureKillDraftSnapshot, CaptureKillDraftStore } from '../../data/prefs/CaptureKillDraftStore';
 import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolicy, RecordSearchCoordinator,
   RecordNavigationSeedStore, RecordRefreshGate, RecordSelectionCoordinator, RenderedRefreshTracker,
-  SystemRecordTimerScheduler, ViewerNodePolicy } from './RecordUiCoordinator';
+  SystemRecordTimerScheduler } from './RecordUiCoordinator';
 import { ScreenLifecycleActionCoordinator } from '../../shared/ScreenActionCoordinator';
 import { BackAction, BackCoordinator, RootBackDispatcher } from '../../shared/ScreenUiStabilityCoordinator';
 
@@ -519,11 +519,7 @@ export struct AllRecordsView {
     }
     .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
     .width('100%')
-    .transition(TransitionEffect.asymmetric(
-      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 24 }))
-        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
-      TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 24 }))
-        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn })))
+    .transition(panelTransition(24))
   }
 
   @Builder
@@ -638,7 +634,7 @@ export struct AllRecordsView {
         if (this.message.length > 0) {
           Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER :
             UiTokens.PRIMARY).padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 6 })
-            .width('100%')
+            .width('100%').transition(panelTransition(0))
         }
         if (this.controller.loadingInitial && this.captureCount() === 0) {
           ListSkeleton({ rows: 3 })
@@ -1206,6 +1202,7 @@ export struct CaptureFormScreen {
           }
         }
       }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
+        .transition(panelTransition(24))
       if (this.suggestionField === field) {
         Column({ space: 8 }) {
           TextInput({ text: this.suggestionFilter, placeholder: tr('筛选建议', 'Filter suggestions') })
@@ -1231,6 +1228,7 @@ export struct CaptureFormScreen {
             })
         }.padding(12).width('100%').backgroundColor(UiTokens.GLASS_STRONG)
           .borderRadius(UiTokens.CONTROL_RADIUS)
+          .transition(panelTransition(24))
       }
     }
   }
@@ -1344,6 +1342,7 @@ export struct CaptureFormScreen {
       }
     }
     .padding(14).width('100%').backgroundColor(UiTokens.GLASS_STRONG).borderRadius(20)
+    .transition(panelTransition(24))
   }
 
   build() {
@@ -1371,6 +1370,7 @@ export struct CaptureFormScreen {
                 }.width('100%')
               }
               .padding(14).width('100%').backgroundColor(UiTokens.ACCENT_SURFACE).borderRadius(16)
+                .transition(panelTransition(24))
             }
             Button(this.templateOpen ? tr('收起拍摄模板', 'Hide capture templates') :
               tr(`拍摄模板（${this.templates.length}）`, `Capture templates (${this.templates.length})`))
@@ -1401,6 +1401,7 @@ export struct CaptureFormScreen {
                 .backgroundColor(UiTokens.CONTROL).accessibilityText(tr('撤销上一次模板或建议应用',
                   'Undo the last template or suggestion application'))
                 .onClick((): void => { this.undoLastApplication(); })
+                .transition(panelTransition(0))
             }
             if (this.loadFailed) {
               InlineErrorPanel({ message: tr('项目或表单数据暂时无法读取',
@@ -1410,7 +1411,7 @@ export struct CaptureFormScreen {
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
               .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY)
-                .lineHeight(19).width('100%')
+                .lineHeight(19).width('100%').transition(panelTransition(0))
             }
             Button(this.busy ? tr('正在打开系统相机…', 'Opening the system camera…') : tr('拍摄', 'Capture'))
               .height(56).fontSize(17).fontWeight(FontWeight.Bold).fontColor(Color.White)
@@ -1716,8 +1717,8 @@ export struct CaptureDetailScreen {
       .height('100%')
       .clip(true)
       .borderRadius(UiTokens.CARD_RADIUS)
-      .sharedTransition(`capture-photo-${this.capture?.id ?? ''}`,
-        { duration: MotionPolicy.duration(ViewerNodePolicy.SHARED_TRANSITION_DURATION), curve: Curve.Friction })
+      // Navigation 跨页面共享元素转场：列表卡片 → 详情 → 查看器同 id 匹配；系统控制插值，跟随系统减少动画
+      .geometryTransition(`capture-photo-${this.capture?.id ?? ''}`)
       .accessibilityText(this.capture === null ? tr('照片', 'Photo') :
         tr(`照片 ${this.capture!.photoNumber}`, `Photo ${this.capture!.photoNumber}`))
       .onClick((): void => { this.openViewer(); })
@@ -1808,6 +1809,7 @@ export struct CaptureDetailScreen {
               .padding(18).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
               if (this.message.length > 0) {
                 Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY).width('100%')
+                  .transition(panelTransition(0))
               }
               Row({ space: 8 }) {
                 if (this.capture!.status === CaptureStatus.READY) {
@@ -1858,6 +1860,7 @@ export struct CaptureDetailScreen {
                       'Permanently delete the original, watermarked photo, and record. This cannot be undone.'))
                     .onClick((): void => { this.deleteRecord(); })
                 }.padding(14).backgroundColor(UiTokens.DELETE_PANEL).borderRadius(16).width('100%')
+                  .transition(panelTransition(24))
               }
             }
             .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 8, bottom: 40 })
@@ -2059,6 +2062,7 @@ export struct CaptureEditorScreen {
               .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20).width('100%')
             if (this.message.length > 0) {
               Text(this.message).fontSize(13).fontColor(UiTokens.DANGER).width('100%')
+                .transition(panelTransition(0))
             }
             }
             .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })

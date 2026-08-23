@@ -3,7 +3,8 @@ import { Routes } from '../../app/Routes';
 import { StorageInspector, StorageSnapshot } from '../../core/system/StorageInspector';
 import { DiagnosticSummary } from '../../data/database/AppDatabase';
 import { AppSettingsRecord } from '../../domain/Models';
-import { AppTopBar, ChoiceButton, SectionHeader, SettingRow, ValueTextRow } from '../../shared/AppComponents';
+import { AppTopBar, LifecycleSegment, SectionHeader, SegmentOption, SettingRow, ValueTextRow } from
+  '../../shared/AppComponents';
 import { formatBytes, formatDateTime, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { ProjectSummary } from '../../domain/Models';
@@ -326,42 +327,27 @@ export struct AppearanceScreen {
                 .fontColor(UiTokens.TEXT_SECONDARY).width('100%')
             }
             Text(tr('界面外观', 'Appearance')).fontSize(16).fontWeight(FontWeight.Bold).width('100%')
-            Row({ space: 7 }) {
-              ChoiceButton({ label: tr('跟随系统', 'System'), selected: this.theme === 'system',
-                controlEnabled: !this.loading && !this.saving,
-                onSelect: (): void => { this.theme = 'system'; } })
-              ChoiceButton({ label: tr('浅色', 'Light'), selected: this.theme === 'light',
-                controlEnabled: !this.loading && !this.saving,
-                onSelect: (): void => { this.theme = 'light'; } })
-              ChoiceButton({ label: tr('深色', 'Dark'), selected: this.theme === 'dark',
-                controlEnabled: !this.loading && !this.saving,
-                onSelect: (): void => { this.theme = 'dark'; } })
-            }.width('100%')
+            LifecycleSegment({ options: [
+              new SegmentOption('system', tr('跟随系统', 'System')),
+              new SegmentOption('light', tr('浅色', 'Light')),
+              new SegmentOption('dark', tr('深色', 'Dark'))
+            ], selectedValue: this.theme, controlEnabled: !this.loading && !this.saving,
+              onSelect: (value: string): void => { this.theme = value; } })
             Text(tr('应用语言', 'App language')).fontSize(16).fontWeight(FontWeight.Bold).width('100%')
-            Row({ space: 7 }) {
-              ChoiceButton({ label: tr('跟随系统', 'System'), selected: this.locale.length === 0,
-                controlEnabled: !this.loading && !this.saving,
-                onSelect: (): void => { this.locale = ''; } })
-              ChoiceButton({ label: tr('简体中文', '简体中文'), selected: this.locale === 'zh',
-                controlEnabled: !this.loading && !this.saving,
-                onSelect: (): void => { this.locale = 'zh'; } })
-              ChoiceButton({ label: 'English', selected: this.locale === 'en',
-                controlEnabled: !this.loading && !this.saving,
-                onSelect: (): void => { this.locale = 'en'; } })
-            }.width('100%')
+            LifecycleSegment({ options: [
+              new SegmentOption('', tr('跟随系统', 'System')),
+              new SegmentOption('zh', tr('简体中文', '简体中文')),
+              new SegmentOption('en', 'English')
+            ], selectedValue: this.locale, controlEnabled: !this.loading && !this.saving,
+              onSelect: (value: string): void => { this.locale = value; } })
             Divider().color(UiTokens.OUTLINE)
             Text(tr('新建项目水印默认值', 'New-project watermark defaults')).fontSize(16)
               .fontWeight(FontWeight.Bold).width('100%')
-            Row({ space: 7 }) {
-              ChoiceButton({ label: tr('左下', 'Bottom left'),
-                selected: this.watermarkPosition === 'bottomLeft',
-                controlEnabled: !this.loading && !this.saving,
-                onSelect: (): void => { this.watermarkPosition = 'bottomLeft'; } })
-              ChoiceButton({ label: tr('右下', 'Bottom right'),
-                selected: this.watermarkPosition === 'bottomRight',
-                controlEnabled: !this.loading && !this.saving,
-                onSelect: (): void => { this.watermarkPosition = 'bottomRight'; } })
-            }.width('100%')
+            LifecycleSegment({ options: [
+              new SegmentOption('bottomLeft', tr('左下', 'Bottom left')),
+              new SegmentOption('bottomRight', tr('右下', 'Bottom right'))
+            ], selectedValue: this.watermarkPosition, controlEnabled: !this.loading && !this.saving,
+              onSelect: (value: string): void => { this.watermarkPosition = value; } })
             Row() { Text(tr('透明度', 'Opacity')).layoutWeight(1); Text(`${Math.round(this.watermarkOpacity * 100)}%`) }
               .width('100%')
             Slider({ value: this.watermarkOpacity, min: 0.35, max: 1, step: 0.05 })

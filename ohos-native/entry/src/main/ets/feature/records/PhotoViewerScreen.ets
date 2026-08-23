@@ -204,14 +204,24 @@ export struct PhotoViewerScreen {
     this.clampPan();
   }
 
+  private animateTransform(update: () => void): void {
+    this.getUIContext().animateTo({
+      duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD),
+      curve: Curve.EaseOut
+    }, update);
+  }
+
   private settleZoom(): void {
-    if (this.viewerScale < 1.05) {
+    const zoomedOut = this.viewerScale < 1.05;
+    if (zoomedOut) {
       this.gestureState.resetAfterMove();
-      this.viewerScale = 1;
-      this.panOffsetX = 0;
-      this.panOffsetY = 0;
     }
-    this.clampPan();
+    this.animateTransform((): void => {
+      if (zoomedOut) {
+        this.viewerScale = 1;
+      }
+      this.clampPan();
+    });
   }
 
   private toggleZoom(): void {
@@ -219,17 +229,27 @@ export struct PhotoViewerScreen {
       this.resetScale();
     } else {
       this.gestureState.zoomTo(2.5);
-      this.viewerScale = this.gestureState.scale;
-      this.panOffsetX = 0;
-      this.panOffsetY = 0;
+      this.animateTransform((): void => {
+        this.viewerScale = this.gestureState.scale;
+        this.panOffsetX = 0;
+        this.panOffsetY = 0;
+      });
     }
   }
 
-  private resetScale(): void {
+  private resetScale(animate: boolean = true): void {
     this.gestureState.resetAfterMove();
-    this.viewerScale = 1;
-    this.panOffsetX = 0;
-    this.panOffsetY = 0;
+    if (animate) {
+      this.animateTransform((): void => {
+        this.viewerScale = 1;
+        this.panOffsetX = 0;
+        this.panOffsetY = 0;
+      });
+    } else {
+      this.viewerScale = 1;
+      this.panOffsetX = 0;
+      this.panOffsetY = 0;
+    }
   }
 
   private beginPan(): void {
@@ -317,7 +337,7 @@ export struct PhotoViewerScreen {
     }
     const selected = this.controller.rows[index];
     AppRuntime.require().selectedCaptureId = selected.id;
-    this.resetScale();
+    this.resetScale(false);
     this.controller.moveTo(index);
   }
 
@@ -371,8 +391,8 @@ export struct PhotoViewerScreen {
       this.viewportWidth = typeof newValue.width === 'number' ? newValue.width : 0;
       this.viewportHeight = typeof newValue.height === 'number' ? newValue.height : 0;
     })
-    .sharedTransition(`capture-photo-${capture.id}`,
-      { duration: MotionPolicy.duration(ViewerNodePolicy.SHARED_TRANSITION_DURATION), curve: Curve.Friction })
+    // Navigation 跨页面共享元素转场：列表卡片 → 详情 → 查看器同 id 匹配；系统控制插值，跟随系统减少动画
+    .geometryTransition(`capture-photo-${capture.id}`)
     .accessibilityText(tr(`全屏照片 ${capture.photoNumber}`, `Full-screen photo ${capture.photoNumber}`))
     .gesture(GestureGroup(GestureMode.Parallel,
       PinchGesture()
@@ -428,7 +448,7 @@ export struct PhotoViewerScreen {
           .cachedCount(1)
           .loop(false)
           .indicator(false)
-          .duration(MotionPolicy.duration(UiTokens.MOTION_STANDARD))
+          .duration(MotionPolicy.duration(ViewerNodePolicy.SWIPE_DURATION))
           .disableSwipe(!this.gestureState.canSwipe())
           .onChange((index: number): void => { this.moveTo(index); })
         } else if (this.controller.loading) {

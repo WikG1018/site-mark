@@ -1,7 +1,18 @@
-import { curves } from '@kit.ArkUI';
 import { UiTokens } from './UiTokens';
-import { choiceAccessibilityText, joinAccessibilityText, lifecycleAccessibilityText } from './AccessibilityText';
+import { choiceAccessibilityText, joinAccessibilityText } from './AccessibilityText';
 import { MotionPolicy } from './MotionPolicy';
+
+/**
+ * 条件面板统一转场：出现时淡入并上移 distanceVp，消失时淡出并下移。
+ * 时长走 MotionPolicy，系统减少动画开启时归零。distanceVp 传 0 表示纯淡入淡出。
+ */
+export function panelTransition(distanceVp: number = 24): TransitionEffect {
+  return TransitionEffect.asymmetric(
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: distanceVp }))
+      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: distanceVp }))
+      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn }));
+}
 
 export class SegmentOption {
   value: string;
@@ -145,6 +156,7 @@ export struct EmptyPanel {
     .backgroundColor(UiTokens.GLASS)
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+    .transition(panelTransition(0))
   }
 }
 
@@ -168,24 +180,6 @@ export struct SectionHeader {
     }
     .width('100%')
     .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 16, bottom: 8 })
-  }
-}
-
-@Component
-export struct ChoiceButton {
-  @Prop label: string = '';
-  @Prop selected: boolean = false;
-  @Prop controlEnabled: boolean = true;
-  onSelect: () => void = (): void => {};
-
-  build() {
-    Button(this.label).layoutWeight(1).height(UiTokens.TOUCH_TARGET).fontSize(13)
-      .backgroundColor(this.selected ? UiTokens.PRIMARY_CONTAINER : UiTokens.CONTROL)
-      .fontColor(this.selected ? UiTokens.PRIMARY : UiTokens.TEXT)
-      .borderRadius(UiTokens.CONTROL_RADIUS)
-      .enabled(this.controlEnabled)
-      .accessibilityText(choiceAccessibilityText(this.label, this.selected))
-      .onClick(this.onSelect)
   }
 }
 
@@ -298,64 +292,49 @@ export struct AppSearchField {
 export struct LifecycleSegment {
   @Prop options: SegmentOption[] = [];
   @Prop selectedValue: string = '';
+  // pill 复现原 statusChip 全圆胶囊；默认 segment 为圆角容器分段形态（原 ChoiceButton 行）
+  @Prop pill: boolean = false;
+  @Prop controlEnabled: boolean = true;
   onSelect: (value: string) => void = (_value: string): void => {};
 
-  private selectedIndex(): number {
-    for (let i = 0; i < this.options.length; i++) {
-      if (this.options[i].value === this.selectedValue) {
-        return i;
-      }
-    }
-    return -1;
+  private chipSpace(): number {
+    return this.pill ? 6 : 7;
+  }
+
+  private chipPadding(): number {
+    return this.pill ? 4 : 3;
+  }
+
+  private chipRadius(): number {
+    return this.pill ? UiTokens.TOUCH_TARGET / 2 : UiTokens.CONTROL_RADIUS;
+  }
+
+  private chipFontSize(): number {
+    return this.pill ? 14 : 13;
   }
 
   build() {
-    Stack({ alignContent: Alignment.TopStart }) {
-      // Sliding selection highlight — mirrors the root dock's animated pill
-      // instead of snapping the background per button.
-      if (this.selectedIndex() >= 0) {
-        Row()
-          .width(`${100 / Math.max(1, this.options.length)}%`)
-          .height('100%')
-          .position({
-            x: `${this.selectedIndex() * (100 / Math.max(1, this.options.length))}%`,
-            y: 0
-          })
-          .backgroundColor(UiTokens.PRIMARY_CONTAINER)
-          .borderRadius(UiTokens.CONTROL_RADIUS)
-          // 与根 Dock 一致的弹性滑动;reduce-motion 时瞬时切换。
-          .animation(MotionPolicy.reduceMotion
-            ? { duration: 0, curve: Curve.Linear }
-            : { curve: curves.springMotion(0.34, 0.83) })
-          .hitTestBehavior(HitTestMode.None)
-          .accessibilityLevel('no')
-      }
-      // No inter-button spacing: the sliding highlight is sized as an exact
-      // 1/N slice, so any gap would make it drift off the buttons. Visual
-      // separation comes from transparent unselected backgrounds.
-      Row() {
-        ForEach(this.options, (option: SegmentOption) => {
-          Button(option.label)
-            .layoutWeight(1)
-            .height(UiTokens.TOUCH_TARGET)
-            .fontSize(14)
-            // Fixed weight: switching Bold/Regular between states changes the
-            // text advance width and makes labels jitter inside equal-width
-            // segments. Selection is carried by color and the moving highlight.
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.selectedValue === option.value ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
-            .backgroundColor(Color.Transparent)
-            .borderRadius(UiTokens.CONTROL_RADIUS)
-            .accessibilityText(lifecycleAccessibilityText(option.label, this.selectedValue === option.value))
-            .onClick((): void => this.onSelect(option.value))
-        }, (option: SegmentOption): string => option.value)
-      }
-      .width('100%')
+    Row({ space: this.chipSpace() }) {
+      ForEach(this.options, (option: SegmentOption) => {
+        Button(option.label)
+          .layoutWeight(1)
+          .height(UiTokens.TOUCH_TARGET)
+          .fontSize(this.chipFontSize())
+          // Fixed weight: switching Bold/Regular between states changes the
+          // text advance width and makes labels jitter inside equal-width chips.
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.selectedValue === option.value ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
+          .backgroundColor(this.selectedValue === option.value ? UiTokens.PRIMARY_CONTAINER : Color.Transparent)
+          .borderRadius(this.chipRadius())
+          .enabled(this.controlEnabled)
+          .accessibilityText(choiceAccessibilityText(option.label, this.selectedValue === option.value))
+          .onClick((): void => this.onSelect(option.value))
+      }, (option: SegmentOption): string => option.value)
     }
     .width('100%')
-    .padding(3)
-    .backgroundColor(UiTokens.SURFACE_MUTED)
-    .borderRadius(UiTokens.CONTROL_RADIUS + 3)
+    .padding(this.chipPadding())
+    .backgroundColor(this.pill ? UiTokens.CONTROL : UiTokens.SURFACE_MUTED)
+    .borderRadius(this.chipRadius() + (this.pill ? 2 : 3))
   }
 }
 
@@ -491,6 +470,7 @@ export struct InlineErrorPanel {
     .backgroundColor(UiTokens.SURFACE_MUTED)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CONTROL_RADIUS)
+    .transition(panelTransition(0))
   }
 }
 
@@ -539,5 +519,6 @@ export struct ListSkeleton {
     .width('100%')
     .opacity(this.shimmerActive ? 1 : 0.55)
     .animation({ duration: MotionPolicy.duration(600), curve: Curve.EaseInOut })
+    .transition(panelTransition(0))
   }
 }
