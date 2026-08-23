@@ -23,17 +23,19 @@
 
 ## 修复状态（2026-08-21 第 2 轮，分支 `bionic/ohos-ui-animation-polish-2026-08-21`）
 
-本轮完成 **A1–A5、B1、B2**；**A6、A7、B3–B8 保留在 Backlog**。平台差异与验证边界按仓库规则先落入 [deltas.md](deltas.md)。
+本轮完成 **A1–A5、B1、B2**；**A6、A7、B3–B8 保留在 Backlog**（A6/A7 后由主线 PR #80/#86 承接，见下文状态标注）。平台差异与验证边界按仓库规则先落入 [deltas.md](deltas.md)。
+
+> 2026-08-23 合入主线 `ohos-native`（PR #79–#91）后的冲突处置：SettingRow 按压取主线 90ms；骨架脉冲取主线 600ms 并保留本轮挂载转场；`LifecycleSegment` 保留本轮参数化结构 + 主线固定 Medium 字重（主线弹性滑动高亮变体无调用方，未采纳）；筛选面板取主线系统半模态。
 
 | 项目 | 状态 | 实现要点 |
 | --- | --- | --- |
 | A1 跨页面 Hero | 已修复（待真机确认） | 三处 `sharedTransition` → `geometryTransition('capture-photo-${id}')`（API 11+，系统计时，跟随系统减少动画）；`isSelf` 省略走系统默认，最坏回退为默认页面转场、无功能回归；删除已失去作用对象的 `SHARED_TRANSITION_DURATION` / `transitionDuration()` 及对应测试 |
 | A2 查看器缩放动画 | 已修复 | `settleZoom` / `toggleZoom` / `resetScale` 走 `getUIContext().animateTo`（180ms EaseOut，reduce-motion 归零）；程序化切页 `resetScale(false)` 瞬时；pinch `onActionUpdate` 保持直接赋值保证跟手 |
-| A3 条件面板转场 | 已修复 | 抽共享 `panelTransition(distanceVp)`（180ms 入 EaseOut / 120ms 出 EaseIn，非对称 opacity+translate；0 = 纯淡入淡出），铺到筛选/模板/建议/定位提示/删除确认/消息/批量栏/根 Dock，并给 EmptyPanel / InlineErrorPanel / ListSkeleton 加挂载转场 |
+| A3 条件面板转场 | 已修复（1 处合并变更） | 抽共享 `panelTransition(distanceVp)`（180ms 入 EaseOut / 120ms 出 EaseIn，非对称 opacity+translate；0 = 纯淡入淡出），铺到模板/建议/定位提示/删除确认/消息/批量栏/根 Dock，并给 EmptyPanel / InlineErrorPanel / ListSkeleton 加挂载转场。**合并变更**：主线 PR #86 将筛选面板改为系统半模态（`bindSheet`，自带出现/消失动画与返回键联动），筛选项的 `panelTransition(24)` 移除 |
 | A4 Swiper 翻页时长 | 已修复 | 查看器专用 `ViewerNodePolicy.SWIPE_DURATION = 320ms`（新增“慢于通用 UI 动效”测试），全局 `MOTION_STANDARD` 不变；Swiper 的 `duration` 参数不接受曲线，保留系统默认曲线 |
-| A5 勾选/按压动画 | 已修复（1 处偏差） | SettingRow 按压高亮 100ms 淡入；卡片勾选徽章 120ms 颜色/透明度交叉淡化 + 挂载淡入。**偏差**：审查建议 opacity+scale(0.8)，但选择模式下徽章恒在，缩放会改变静止未选徽章尺寸，故只用 opacity/颜色 |
+| A5 勾选/按压动画 | 已修复（1 处偏差） | SettingRow 按压高亮 90ms 淡入（与主线 #80 取值对齐）；卡片勾选徽章 120ms 颜色/透明度交叉淡化 + 挂载淡入。**偏差**：审查建议 opacity+scale(0.8)，但选择模式下徽章恒在，缩放会改变静止未选徽章尺寸，故只用 opacity/颜色 |
 | B1 搜索框统一 | 已修复 | 项目 Tab 与项目详情的手写胶囊 TextInput（GLASS_STRONG/22vp）换成 `AppSearchField`，与记录 Tab 同一视觉语言；两处均带 accessibilityLabel，详情入口保留 pageBusy 禁用态 |
-| B2 分段控件收敛 | 已修复（1 处延后） | `LifecycleSegment` 参数化：`pill` 精确复现原 `statusChip`（CONTROL 底、24/22vp、14fp），默认 segment 复现原 ChoiceButton 行（SURFACE_MUTED 底、15/12vp、13fp、等宽）；新增 `controlEnabled`，统一 `choiceAccessibilityText` 播报；删除 `ChoiceButton`。**延后**：记录筛选的项目 chips 为不定长横向滚动，等宽分段控件无法表达，暂不改造 |
+| B2 分段控件收敛 | 已修复（1 处延后） | `LifecycleSegment` 参数化：`pill` 精确复现原 `statusChip`（CONTROL 底、24/22vp、14fp），默认 segment 复现原 ChoiceButton 行（SURFACE_MUTED 底、15/12vp、13fp、等宽）；新增 `controlEnabled`，统一 `choiceAccessibilityText` 播报；删除 `ChoiceButton`。**合并变更**：chip 文字改固定 `FontWeight.Medium`（主线 #80/#86 防抖动决定，与主线 statusChip 修复一致）。**延后**：记录筛选的项目 chips 为不定长横向滚动，等宽分段控件无法表达，暂不改造 |
 
 ## 二、动画问题
 
@@ -71,7 +73,7 @@
 
 ### A3（P1）条件面板全部硬切：筛选 / 模板 / 建议 / 删除确认 / 消息
 
-**状态：已修复。**共享 `panelTransition(distanceVp)` 统一上述面板，并铺到批量栏、根 Dock 与空态/错误/骨架节点。
+**状态：已修复（1 处合并变更）。**共享 `panelTransition(distanceVp)` 统一上述面板，并铺到批量栏、根 Dock 与空态/错误/骨架节点；合入主线 PR #86 后筛选面板改为系统半模态（`bindSheet`），筛选项的 `panelTransition(24)` 移除（系统 sheet 自带出现/消失动画）。
 
 以下"出现/消失"都没有 `.transition()`，直接 pop：
 
@@ -93,7 +95,7 @@
 
 ### A5（P2）选中勾选与按压反馈无动画
 
-**状态：已修复，1 处偏差。**勾选徽章不做 scale(0.8)（会改变静止徽章尺寸），改为 120ms 颜色/透明度交叉淡化 + 挂载淡入；SettingRow 按压 100ms 淡入。
+**状态：已修复，1 处偏差。**勾选徽章不做 scale(0.8)（会改变静止徽章尺寸），改为 120ms 颜色/透明度交叉淡化 + 挂载淡入；SettingRow 按压淡入初为 100ms，合入主线 #80 后对齐其 90ms 取值。
 
 - `RecordComponents.ets` 卡片选择圆标（✓/遮罩圈）在 `selected` 变化时瞬现瞬灭；
 - `AppComponents.ets` 的 `SettingRow` 按压高亮在 `onTouch` 里硬切背景色。
@@ -102,15 +104,15 @@
 
 ### A6（P2）启动/隐私页硬切
 
-**状态：Backlog。**
+**状态：主线已实现（PR #80）。**
 
-`Index.ets` 的 `spinner → privacyGate → 主界面` 三段都是硬切。可加 200ms 淡入（`Navigation` 出现时）。低优先级，属于第一印象打磨。
+`Index.ets` 的 `spinner → privacyGate → 主界面` 三段都是硬切。可加 200ms 淡入（`Navigation` 出现时）。低优先级，属于第一印象打磨。主线 PR #80 已给 spinner/隐私门/运行时错误/恢复四分支加 180ms 淡入，此项关闭，真机走查确认即可。
 
 ### A7（P2，仅走查）Tab 切换位移距离偏小
 
-**状态：Backlog。**并入真机走查项，不预设改动。
+**状态：Backlog（走查）。**并入真机走查项，不预设改动。
 
-根分支切换用 24/16vp 位移 + 整体 opacity，方向感很弱。是否"太弱"属于观感判断，建议并入真机走查项，不预设改动。
+根分支切换用 24/16vp 位移 + 整体 opacity，方向感很弱。是否"太弱"属于观感判断，建议并入真机走查项，不预设改动。主线 PR #86 已将 Tab 切换改为 `curves.springMotion` 弹性曲线（reduce-motion 瞬时切换），走查需确认弹性曲线下方向感是否仍然偏弱。
 
 ---
 

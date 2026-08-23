@@ -1,3 +1,4 @@
+import { curves } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
 import { AbilityContextHolder } from '../app/AbilityContextHolder';
 import { AppRuntime } from '../app/AppRuntime';
@@ -244,9 +245,10 @@ struct Index {
       this.runTabAction(this.tabCoordinator.finish(action.generation));
       return;
     }
+    // 弹性曲线为鸿蒙推荐动效语言;spring 忽略 duration,收尾由物理参数决定。
+    // reduce-motion 在上方 dockDuration === 0 分支已走无动画路径。
     this.getUIContext().animateTo({
-      duration: motion.dockDuration,
-      curve: Curve.EaseOut,
+      curve: curves.springMotion(0.34, 0.83),
       onFinish: (): void => {
         const next = this.tabCoordinator.finish(action.generation);
         if (this.rootLifecycle.isActive()) {
@@ -261,15 +263,19 @@ struct Index {
 
   private contentTransition(): TransitionEffect {
     const motion: RootMotionSpec = RootShellPolicy.motion(this.tabDirection);
+    const enterCurve: AnimateParam = MotionPolicy.reduceMotion
+      ? { duration: 0, curve: Curve.Linear }
+      : { curve: curves.springMotion(0.34, 0.83) };
+    const exitCurve: AnimateParam = MotionPolicy.reduceMotion
+      ? { duration: 0, curve: Curve.Linear }
+      : { curve: curves.springMotion(0.4, 0.9) };
     return TransitionEffect.asymmetric(
       TransitionEffect.translate({ x: motion.enterX, y: 0 })
-        .animation({ duration: motion.pageDuration, curve: Curve.EaseOut })
-        .combine(TransitionEffect.opacity(0)
-          .animation({ duration: motion.fadeDuration, curve: Curve.EaseOut })),
+        .animation(enterCurve)
+        .combine(TransitionEffect.opacity(0).animation(enterCurve)),
       TransitionEffect.translate({ x: motion.exitX, y: 0 })
-        .animation({ duration: motion.pageDuration, curve: Curve.EaseIn })
-        .combine(TransitionEffect.opacity(0)
-          .animation({ duration: motion.fadeDuration, curve: Curve.EaseIn }))
+        .animation(exitCurve)
+        .combine(TransitionEffect.opacity(0).animation(exitCurve))
     );
   }
 
@@ -309,7 +315,7 @@ struct Index {
         Image(icon).width(23).height(23)
           .fillColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
           .accessibilityLevel('no')
-        Text(label).fontSize(12).fontWeight(this.activeTab === index ? FontWeight.Bold : FontWeight.Medium)
+        Text(label).fontSize(12).fontWeight(FontWeight.Medium)
           .fontColor(this.activeTab === index ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .accessibilityLevel('no')
@@ -432,6 +438,8 @@ struct Index {
       .width('100%').height('100%')
     }
     .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
+.transition(TransitionEffect.opacity(0)
+  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
   }
 
   build() {
@@ -441,6 +449,8 @@ struct Index {
         Text(tr('正在准备工程印记…', 'Preparing SiteMark…')).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
       }
       .width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+.transition(TransitionEffect.opacity(0)
+  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
     } else if (!this.consentAccepted) {
       this.privacyGate()
     } else if (this.runtimeError.length > 0) {
@@ -451,12 +461,16 @@ struct Index {
         Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
           .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
       }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+.transition(TransitionEffect.opacity(0)
+  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
     } else if (!this.runtimeReady) {
       Column({ space: 14 }) {
         LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
         Text(tr('正在恢复本机记录…', 'Recovering local records…')).fontSize(14)
           .fontColor(UiTokens.TEXT_SECONDARY)
       }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+.transition(TransitionEffect.opacity(0)
+  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
     } else {
       Navigation(this.pathStack) {
         this.rootContent()

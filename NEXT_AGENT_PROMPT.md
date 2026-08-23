@@ -3,17 +3,31 @@
 > 把本文件交给负责后续实现的 Agent 作为默认入口。  
 > 它描述**当前仓库的事实、边界和工作方式**，不是某一版本的任务清单。
 
+## 0. 当前主战场：鸿蒙原生版（本分支）
+
+本分支 `ohos-native` 承载 HarmonyOS NEXT **原生**实现（Stage + ArkTS + ArkUI，位于 `ohos-native/`），不使用 Flutter 鸿蒙适配层。`main` 是独立的 Android 稳定线，两者各自演进，**不做跨平台自动同步**。接到任务时：
+
+- **事实源顺序：** [`ohos-native/README.md`](ohos-native/README.md) → [`ohos-native/docs/deltas.md`](ohos-native/docs/deltas.md)（平台差异与转正条件）→ 最新一篇 `ohos-native/docs/verification-*.md`。与本文件冲突时以上述文档和代码为准。
+- **构建与门禁（本地 DevEco）：** 公共 CI runner 没有 DevEco/HarmonyOS SDK，ArkTS 编译、全量测试和 HAP 构建**只能在本机完成**：
+  1. `pwsh -File ./tool/ohos-native/build-rust.ps1`（新工作树首次必须；生成 `arm64-v8a` / `x86_64` 原生库）
+  2. `pwsh -File ./tool/ohos-native/build-hap.ps1 -SkipRust -RunTests`（ArkTS 全量测试 + debug unsigned HAP）
+  3. `pwsh -File ./tool/ohos-native/run-host-tests.ps1`（数据库契约、返回接线等主机门禁）
+- **防假绿：** ArkTS 测试报告必须通过 `verify-test-result.Tests.ps1` 校验；缺失、畸形或失败数非零的汇总一律视为门禁失败，不得只看测试进程退出码。
+- **CI 覆盖边界：** GitHub Actions 只跑主机门禁 + Dart/Rust 回归，**不编译 HAP**。每个 PR 必须按模板附本地 `build-hap.ps1 -RunTests` 的证据，否则无法确认 ArkTS 可编译。
+- **设备结论红线：** `hdc list targets` 为 `[Empty]` 时不存在任何真机/模拟器验收。视觉走查、CameraPicker、相册交互、RDB 恢复和性能结论只能来自真实设备；不得用模拟器、单元测试或 debug 探针冒充设备结论。
+- **原生标识：** 包名 `io.github.wikg1018.sitemark.native`；目标 SDK HarmonyOS 6.1.1 / API 24（兼容 API 17）；版本号见 `ohos-native/AppScope/app.json5`（`versionName` / `versionCode`）。
+
 ## 1. 产品与仓库现状
 
 | 项 | 当前值 |
 | --- | --- |
-| 产品 | SiteMark（工程印记）：离线优先的 Android 工程水印相机 |
+| 产品 | SiteMark（工程印记）：离线优先的工程水印相机（Android 稳定 + HarmonyOS NEXT 原生开发中） |
 | 仓库 | https://github.com/WikG1018/site-mark |
-| 应用 ID | `io.github.wikg1018.sitemark` |
-| 默认基础分支 | `main` |
-| 当前版本 | 见 `pubspec.yaml`（撰写时为 `1.0.8+23`；GitHub `v1.0.8` **已发布并设为 Latest**） |
-| 平台 | Android 12+（API 31+） |
-| Drift schema | 见 `lib/data/app_database.dart` 的 `schemaVersion`（撰写时为 13） |
+| 应用 ID | Android `io.github.wikg1018.sitemark`；鸿蒙原生 `io.github.wikg1018.sitemark.native` |
+| 默认基础分支 | `ohos-native`（当前主战场，见第 0 节）；`main` 为 Android 独立稳定线 |
+| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`；Android 见 `pubspec.yaml`（`1.0.8+23`） |
+| 平台 | 本分支：HarmonyOS NEXT（ArkTS 原生）；Android 12+（API 31+）仅作参照 |
+| 数据库 | 鸿蒙 RDB 契约测试见 `tool/test_ohos_capture_database_contract*`；Android Drift schema 见 `lib/data/app_database.dart` |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
 
 **默认起点：** 以远端 `main` 的最新提交为准，不要假设本文件中的版本号永远正确——先读 `pubspec.yaml` 和 `git log origin/main -5`。
@@ -119,8 +133,8 @@ cargo test --manifest-path rust/Cargo.toml
 
 ## 6. 接到任务后的标准流程
 
-1. 读本文件 + 用户点名的 spec/plan（若有）+ 相关现有代码/测试。  
-2. `git status -sb`、当前分支、与 `origin/main` 的关系；工作区有不明改动则先停。  
+1. 读本文件（含第 0 节）+ 用户点名的 spec/plan（若有）+ 相关现有代码/测试。  
+2. `git status -sb`、当前分支、与 `origin/ohos-native` 的关系；工作区有不明改动则先停。  
 3. 用简短消息说明：理解的目标、将改的文件、验证方式；无冲突则直接开干。  
 4. 红—绿测试 → 最小实现 → analyze + 相关测试 → 审查 diff → 提交 → 推送/更新 PR。  
 5. 阻塞时报告：复现命令、完整错误、已验证事实、已尝试方案、推荐的最小选择。
@@ -144,7 +158,7 @@ cargo test --manifest-path rust/Cargo.toml
 
 ## 9. 立即开始
 
-1. 确认 `main` 与 `pubspec.yaml` 版本。  
+1. 确认 `ohos-native` 分支与 `ohos-native/AppScope/app.json5` 版本；读第 0 节的事实源。  
 2. 阅读用户当前任务与相关 spec/plan。  
 3. 建立简短任务清单并开始第一个可验证步骤。  
 4. 除第 2 节与第 3 节的阻塞条件外，自主推进到可审查的 PR 状态。

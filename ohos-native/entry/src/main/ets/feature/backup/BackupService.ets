@@ -5,6 +5,8 @@ import { CaptureFilter, CapturePage, CapturePageCursor, CaptureRecord, ProjectRe
 import { CaptureStatus } from '../../domain/StateMachine';
 import { tr } from '../../shared/AppText';
 import { safeProjectFileNameKey } from '../../domain/DomainRules';
+import { ArchiveDeliveryCoordinator, ExportDeliveryOutcome } from './ExportDeliveryPolicy';
+import { SystemSharePanel } from '../../core/system/SystemSharePanel';
 
 interface ExportPhotoRecordJson {
   photo_number: string;
@@ -177,17 +179,22 @@ export class ProjectBackupService {
     }
   }
 
-  async saveAs(result: BackupResult): Promise<boolean> {
-    const documentPicker = new picker.DocumentViewPicker(this.runtime.context);
-    const options = new picker.DocumentSaveOptions();
-    options.newFileNames = [result.fileName];
-    options.fileSuffixChoices = ['ZIP|.zip'];
-    const uris = await documentPicker.save(options);
-    if (uris.length === 0) {
-      return false;
-    }
-    await fileIo.copyFile(result.path, uris[0]);
-    return true;
+  async saveAs(result: BackupResult): Promise<ExportDeliveryOutcome> {
+    const delivery = new ArchiveDeliveryCoordinator(
+      (): Promise<boolean> => new SystemSharePanel().show(this.runtime.context, result.path),
+      async (): Promise<boolean> => {
+        const documentPicker = new picker.DocumentViewPicker(this.runtime.context);
+        const options = new picker.DocumentSaveOptions();
+        options.newFileNames = [result.fileName];
+        options.fileSuffixChoices = ['ZIP|.zip'];
+        const uris = await documentPicker.save(options);
+        if (uris.length === 0) {
+          return false;
+        }
+        await fileIo.copyFile(result.path, uris[0]);
+        return true;
+      });
+    return delivery.deliver();
   }
 
   async exportSelection(captureIds: string[], includeOriginals: boolean): Promise<BackupResult> {

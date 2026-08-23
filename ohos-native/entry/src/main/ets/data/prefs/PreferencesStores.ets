@@ -1,10 +1,12 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
+import { CaptureKillDraftStorage } from './CaptureKillDraftStore';
 import { CaptureSessionStorage } from './CaptureSessionStore';
 import { PublishJournalStorage } from './PublishJournalStore';
 import { RestoreJournalStorage } from './RestoreJournalStore';
 
 const PREFERENCES_NAME: string = 'sitemark_runtime';
+const CAPTURE_KILL_DRAFT_KEY: string = 'capture_kill_draft_v1';
 const CAPTURE_SESSION_KEY: string = 'capture_session_v1';
 const PUBLISH_JOURNAL_KEY: string = 'publish_journals_v1';
 const RESTORE_JOURNAL_KEY: string = 'restore_journal_v1';
@@ -49,5 +51,12 @@ export class PreferencesRestoreJournalStorage extends PreferencesStringStore
   implements RestoreJournalStorage {
   constructor(context: common.UIAbilityContext) {
     super(context, RESTORE_JOURNAL_KEY);
+  }
+}
+
+export class PreferencesCaptureKillDraftStorage extends PreferencesStringStore
+  implements CaptureKillDraftStorage {
+  constructor(context: common.UIAbilityContext) {
+    super(context, CAPTURE_KILL_DRAFT_KEY);
   }
 }

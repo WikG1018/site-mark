@@ -13,6 +13,7 @@ import { BackupResult, ProjectBackupService } from '../backup/BackupService';
 import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr } from '../../shared/AppText';
+import { ScreenMessageClock } from '../../shared/Feedback';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { ScreenLifecycleActionCoordinator, ScreenRequestCoordinator } from '../../shared/ScreenActionCoordinator';
 import { StableSelectionList } from './SettingsProjectSelection';
@@ -20,6 +21,7 @@ import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, waterm
   watermarkAccentOptions, WatermarkAccentOption, diagnosticsConfirmAccessibilityText } from './SettingsAccessibility';
 import { DiagnosticsGenerationOutcome, DiagnosticsGenerationOutcomeStore, DiagnosticsGenerationStatus }
   from './DiagnosticsActionOutcome';
+import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
 
 const notificationActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 const appearanceActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
@@ -215,6 +217,7 @@ export struct AppearanceScreen {
   @State private loading: boolean = true;
   @State private saving: boolean = false;
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
 
   aboutToAppear(): void {
     this.loadCoordinator.activate();
@@ -225,6 +228,7 @@ export struct AppearanceScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.loadCoordinator.deactivate();
     this.saveCoordinator.invalidate();
   }
@@ -283,8 +287,10 @@ export struct AppearanceScreen {
       await AppRuntime.require().applyAppearance();
       if (this.saveCoordinator.isCurrent(token)) {
         this.settings = value;
-        this.message = tr('设置已保存', 'Settings saved');
         this.messageError = false;
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, tr('设置已保存', 'Settings saved'));
       }
     } catch (_) {
       if (this.saveCoordinator.isCurrent(token)) {
@@ -379,8 +385,11 @@ export struct StorageScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @State private snapshot: StorageSnapshot = new StorageSnapshot();
   @State private message: string = '';
+  private readonly messageClock = new ScreenMessageClock();
 
   aboutToAppear(): void { this.refresh(); }
+
+  aboutToDisappear(): void { this.messageClock.reset(); }
 
   private refresh(): void {
     this.snapshot = StorageInspector.inspect(AppRuntime.require().context.filesDir);
@@ -388,8 +397,10 @@ export struct StorageScreen {
 
   private clearExports(): void {
     StorageInspector.clearExports(AppRuntime.require().context.filesDir);
-    this.message = tr('本机私有导出 ZIP 已清理；照片、记录和已保存副本不受影响',
-      'Private export ZIP files were cleared; photos, records, and saved copies are unchanged');
+    this.messageClock.show((next: string): void => {
+      this.message = next;
+    }, tr('本机私有导出 ZIP 已清理；照片、记录和已保存副本不受影响',
+      'Private export ZIP files were cleared; photos, records, and saved copies are unchanged'));
     this.refresh();
   }
 
@@ -451,6 +462,7 @@ export struct DiagnosticsScreen {
   @State private loading: boolean = true;
   @State private loadError: boolean = false;
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
 
   aboutToAppear(): void {
     this.loadCoordinator.activate();
@@ -462,6 +474,7 @@ export struct DiagnosticsScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.loadCoordinator.deactivate();
     this.actionCoordinator.invalidate();
   }
@@ -501,15 +514,22 @@ export struct DiagnosticsScreen {
       return;
     }
     if (outcome.status === DiagnosticsGenerationStatus.SAVED) {
-      this.message = tr(`诊断包已保存（${outcome.eventCount} 条事件）`,
-        `Diagnostic bundle saved (${outcome.eventCount} events)`);
       this.messageError = false;
+      this.messageClock.show((next: string): void => {
+        this.message = next;
+      }, outcome.channel === ExportDeliveryChannel.SHARE_PANEL ?
+        tr(`诊断包已生成，系统分享面板已打开（${outcome.eventCount} 条事件）`,
+          `Diagnostic bundle ready in the system share sheet (${outcome.eventCount} events)`) :
+        tr(`诊断包已保存（${outcome.eventCount} 条事件）`,
+          `Diagnostic bundle saved (${outcome.eventCount} events)`));
       return;
     }
     if (outcome.status === DiagnosticsGenerationStatus.CANCELLED) {
-      this.message = tr('诊断包已生成，但你取消了保存；可以再次生成并选择位置',
-        'The bundle was generated, but saving was cancelled. Generate it again to choose a location.');
       this.messageError = false;
+      this.messageClock.show((next: string): void => {
+        this.message = next;
+      }, tr('诊断包已生成，但你取消了保存；可以再次生成并选择位置',
+        'The bundle was generated, but saving was cancelled. Generate it again to choose a location.'));
       return;
     }
     this.message = tr('诊断包生成失败，请检查存储空间后重试',
@@ -525,8 +545,10 @@ export struct DiagnosticsScreen {
     try {
       await AppRuntime.require().database.clearDiagnostics();
       if (this.actionCoordinator.isCurrent(token)) {
-        this.message = tr('本机诊断记录已清除', 'Local diagnostic records cleared');
         this.messageError = false;
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, tr('本机诊断记录已清除', 'Local diagnostic records cleared'));
       }
       await this.refresh();
     } catch (_) {
@@ -551,9 +573,10 @@ export struct DiagnosticsScreen {
     try {
       const service = new DiagnosticBundleService(AppRuntime.require());
       const result = await service.generate();
-      const saved = await service.saveAs(result);
-      diagnosticsOutcomeStore.publish(new DiagnosticsGenerationOutcome(saved ? DiagnosticsGenerationStatus.SAVED :
-        DiagnosticsGenerationStatus.CANCELLED, result.eventCount));
+      const outcome = await service.saveAs(result);
+      diagnosticsOutcomeStore.publish(new DiagnosticsGenerationOutcome(
+        outcome.delivered ? DiagnosticsGenerationStatus.SAVED : DiagnosticsGenerationStatus.CANCELLED,
+        result.eventCount, outcome.channel));
       await this.refresh();
     } catch (_) {
       diagnosticsOutcomeStore.publish(new DiagnosticsGenerationOutcome(DiagnosticsGenerationStatus.FAILED, 0));
@@ -579,8 +602,8 @@ export struct DiagnosticsScreen {
               Text(tr('诊断记录只保存在本机，不会自动上传。诊断包不包含照片、项目名称、工程内容、拍摄人、位置坐标、文件路径、SHA-256、原始异常或堆栈。',
                 'Diagnostic records stay on this device and are never uploaded automatically. Bundles exclude photos, project names, work details, photographers, coordinates, file paths, SHA-256 values, raw exceptions, and stack traces.'))
                 .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).width('100%')
-              Text(tr('只有你主动确认并选择保存位置后，诊断 ZIP 才会离开应用私有目录。',
-                'A diagnostic ZIP leaves private storage only after you confirm and choose a save location.'))
+              Text(tr('只有你主动确认分享或选择保存位置后，诊断 ZIP 才会离开应用私有目录。',
+                'A diagnostic ZIP leaves private storage only after you confirm sharing or choose a save location.'))
                 .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20).width('100%')
             }
             .padding(16).width('100%').backgroundColor(UiTokens.PRIMARY_CONTAINER)
@@ -642,6 +665,15 @@ export struct DiagnosticsScreen {
               .fontColor(UiTokens.DANGER)
               .backgroundColor(UiTokens.DANGER_CONTAINER).enabled(!this.busy)
               .onClick((): void => { this.clear(); })
+            if (this.busy) {
+              Row({ space: 10 }) {
+                LoadingProgress().width(22).height(22).color(UiTokens.PRIMARY)
+                Text(tr('正在处理，请稍候…', 'Working, please wait…')).fontSize(13)
+                  .fontColor(UiTokens.TEXT_SECONDARY)
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Center)
+            }
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
                 .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY).width('100%')
@@ -711,6 +743,7 @@ export struct BackupScreen {
   @State private loadingProjects: boolean = true;
   @State private projectLoadError: boolean = false;
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
 
   aboutToAppear(): void {
     this.loadCoordinator.activate();
@@ -721,6 +754,7 @@ export struct BackupScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.loadCoordinator.deactivate();
     this.actionCoordinator.invalidate();
     this.projectSelection.invalidate();
@@ -768,11 +802,13 @@ export struct BackupScreen {
         this.includeOriginals, this.skipFailed);
       if (this.actionCoordinator.isCurrent(token)) {
         this.result = result;
-        this.message = tr(`备份已生成：${result.projectCount} 个项目、${result.photoCount} 张照片` +
+        this.messageError = false;
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, tr(`备份已生成：${result.projectCount} 个项目、${result.photoCount} 张照片` +
           (result.omittedFailed > 0 ? `，已按你的选择跳过 ${result.omittedFailed} 条失败记录` : ''),
           `Backup generated: ${result.projectCount} project(s), ${result.photoCount} photo(s)` +
-          (result.omittedFailed > 0 ? `; skipped ${result.omittedFailed} failed record(s)` : ''));
-        this.messageError = false;
+          (result.omittedFailed > 0 ? `; skipped ${result.omittedFailed} failed record(s)` : '')));
       }
     } catch (error) {
       if (this.actionCoordinator.isCurrent(token)) {
@@ -801,12 +837,17 @@ export struct BackupScreen {
     this.busy = true;
     const result: BackupResult = this.result;
     try {
-      const saved: boolean = await new ProjectBackupService(AppRuntime.require()).saveAs(result);
+      const outcome = await new ProjectBackupService(AppRuntime.require()).saveAs(result);
       if (this.actionCoordinator.isCurrent(token)) {
-        this.message = saved ? tr('备份已保存到你选择的位置', 'Backup saved to your chosen location') :
-          tr('已取消保存；应用内生成的备份仍可再次保存',
-            'Save cancelled; the generated backup can still be saved again');
         this.messageError = false;
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, outcome.channel === ExportDeliveryChannel.SHARE_PANEL ?
+          tr('备份已在系统分享面板打开，可选择发送或保存',
+            'The backup opened in the system share sheet. Send or save it from there.') :
+          (outcome.delivered ? tr('备份已保存到你选择的位置', 'Backup saved to your chosen location') :
+            tr('已取消保存；应用内生成的备份仍可再次保存',
+              'Save cancelled; the generated backup can still be saved again')));
       }
     } catch (_) {
       if (this.actionCoordinator.isCurrent(token)) this.message = tr('保存失败，请释放存储空间或改选其他位置',
@@ -827,16 +868,20 @@ export struct BackupScreen {
       const restored = await new ProjectRestoreService(AppRuntime.require()).chooseAndRestore();
       if (restored === null) {
         if (this.actionCoordinator.isCurrent(token)) {
-          this.message = tr('已取消恢复', 'Restore cancelled');
           this.messageError = false;
+          this.messageClock.show((next: string): void => {
+            this.message = next;
+          }, tr('已取消恢复', 'Restore cancelled'));
         }
       } else {
         if (this.actionCoordinator.isCurrent(token)) {
-          this.message = tr(`已恢复 ${restored.projectCount} 个项目、${restored.photoCount} 张照片` +
+          this.messageError = false;
+          this.messageClock.show((next: string): void => {
+            this.message = next;
+          }, tr(`已恢复 ${restored.projectCount} 个项目、${restored.photoCount} 张照片` +
             (restored.renamedCount > 0 ? `；${restored.renamedCount} 个同名项目已自动添加“恢复”后缀` : ''),
             `Restored ${restored.projectCount} project(s) and ${restored.photoCount} photo(s)` +
-            (restored.renamedCount > 0 ? `; ${restored.renamedCount} duplicate name(s) received a Restore suffix` : ''));
-          this.messageError = false;
+            (restored.renamedCount > 0 ? `; ${restored.renamedCount} duplicate name(s) received a Restore suffix` : '')));
         }
         await this.load();
       }
@@ -962,6 +1007,17 @@ export struct BackupScreen {
               Button(tr('保存到其他位置', 'Save to another location')).height(46).width('100%')
                 .backgroundColor(UiTokens.PRIMARY_CONTAINER)
                 .fontColor(UiTokens.PRIMARY).enabled(!this.busy).onClick((): void => { this.saveBackup(); })
+            }
+          }
+          if (this.busy) {
+            ListItem() {
+              Row({ space: 10 }) {
+                LoadingProgress().width(22).height(22).color(UiTokens.PRIMARY)
+                Text(tr('正在处理，请稍候…', 'Working, please wait…')).fontSize(13)
+                  .fontColor(UiTokens.TEXT_SECONDARY)
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Center)
             }
           }
           if (this.message.length > 0) {

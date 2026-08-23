@@ -21,6 +21,19 @@ foreach ($required in @($node, $hvigor, $ohpm)) {
 }
 $env:DEVECO_SDK_HOME = Join-Path $DevEcoRoot 'sdk'
 $env:NODE_HOME = Join-Path $DevEcoRoot 'tools\node'
+
+# ArkTS compiler warnings are tracked with a ratchet: this budget is the
+# committed baseline, and any build that introduces new warnings fails below.
+# Baseline composition (2026-08-23, 298 total):
+#   295x "Function may throw exceptions" - the data layer deliberately uses
+#        try/finally so relationalStore/resultSet errors propagate to callers
+#        that already catch them; the compiler asks for a local catch anyway.
+#     2x WRITE_IMAGEVIDEO notices - photoAccessHelper save/delete flows are
+#        user-consent based by design and declare no permission.
+#     1x SDK 23 isAnimationReduceEnabled notice - runtime-guarded via
+#        ReduceMotionQueryPolicy.read().
+# Lower this number whenever warnings are genuinely removed.
+$MaxArkTsWarnings = 298
 if (-not $SkipRust) {
   & (Join-Path $PSScriptRoot 'build-rust.ps1') `
     -NativeSdkRoot (Join-Path $env:DEVECO_SDK_HOME 'default\openharmony\native')
@@ -42,8 +55,20 @@ try {
     Write-Output ("ArkTS tests verified: {0} run, {1} passed, {2} ignored" -f
       $testSummary.TestsRun, $testSummary.Pass, $testSummary.Ignore)
   }
-  & $node $hvigor --mode module -p product=default -p "buildMode=$BuildMode" assembleHap --no-daemon
-  if ($LASTEXITCODE -ne 0) { throw 'HAP build failed' }
+  $buildLog = Join-Path $env:TEMP ("sitemark-hap-build-{0}.log" -f [guid]::NewGuid().ToString('N'))
+  $previousEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    & $node $hvigor --mode module -p product=default -p "buildMode=$BuildMode" assembleHap --no-daemon 2>&1 |
+      Tee-Object -FilePath $buildLog
+    $hvigorExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousEap
+  }
+  if ($hvigorExit -ne 0) { throw 'HAP build failed' }
+  $warnBudget = Assert-ArkTsWarnBudget -Path $buildLog -MaxWarnings $MaxArkTsWarnings
+  Write-Output ("ArkTS warnings within budget: {0}/{1}" -f $warnBudget.WarnCount, $MaxArkTsWarnings)
+  Remove-Item -LiteralPath $buildLog -Force -ErrorAction SilentlyContinue
   $hap = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'entry\build') -Recurse -Filter '*.hap' |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if ($null -eq $hap -or $hap.Length -lt 1) {

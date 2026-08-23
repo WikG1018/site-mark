@@ -42,3 +42,29 @@ function Assert-ArkTsTestResult {
     Path = (Resolve-Path -LiteralPath $Path).Path
   }
 }
+
+function Assert-ArkTsWarnBudget {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)]
+    [string]$Path,
+    [Parameter(Mandatory)]
+    [int]$MaxWarnings
+  )
+
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+    throw "ArkTS build log was not generated: $Path"
+  }
+
+  $warnCount = @(Select-String -LiteralPath $Path -Pattern 'ArkTS:WARN' -SimpleMatch).Count
+  if ($warnCount -gt $MaxWarnings) {
+    throw ("ArkTS warnings ({0}) exceed the tracked budget ({1}). Fix the new warnings, " +
+      'or knowingly raise the budget in tool/ohos-native/build-hap.ps1 after review.') -f $warnCount, $MaxWarnings
+  }
+
+  [pscustomobject]@{
+    WarnCount = $warnCount
+    MaxWarnings = $MaxWarnings
+    Path = (Resolve-Path -LiteralPath $Path).Path
+  }
+}

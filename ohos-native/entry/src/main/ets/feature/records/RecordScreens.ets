@@ -12,18 +12,21 @@ import { formatBytes, formatDateTime, imageUri, statusLabel } from '../../shared
 import { UiTokens } from '../../shared/UiTokens';
 import { CaptureCard, CaptureInfoRow } from './RecordComponents';
 import { ProjectBackupService } from '../backup/BackupService';
+import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
 import { tr } from '../../shared/AppText';
 import { CapturePageLoader, CapturePagedController } from './CapturePagedController';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 import { MotionPolicy } from '../../shared/MotionPolicy';
+import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, CaptureFormMetrics,
-  CaptureUndoCoordinator, SingleFlightRequestCoordinator,
-  applyCaptureOutcome, applyDraftSuggestion, canEditCapture, filterSuggestions,
+  CaptureUndoCoordinator, RecentCaptureSeed, SingleFlightRequestCoordinator,
+  applyCaptureOutcome, applyDraftSuggestion, canEditCapture, filterSuggestions, resolveFormSeed,
   validateCaptureDraft, validateTemplateDraft,
   validateTemplateName } from '../capture/CaptureFormPolicy';
+import { CaptureKillDraftSnapshot, CaptureKillDraftStore } from '../../data/prefs/CaptureKillDraftStore';
 import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolicy, RecordSearchCoordinator,
   RecordNavigationSeedStore, RecordRefreshGate, RecordSelectionCoordinator, RenderedRefreshTracker,
   SystemRecordTimerScheduler } from './RecordUiCoordinator';
@@ -50,9 +53,18 @@ export struct AllRecordsView {
   @State private batchBusy: boolean = false;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
-    this.message = text;
     this.messageError = isError;
+    if (isError) {
+      this.messageClock.reset();
+      this.message = text;
+      return;
+    }
+    this.messageClock.show((next: string): void => {
+      this.message = next;
+    }, text);
   }
   private readonly controller: CapturePagedController = new CapturePagedController(new RuntimeRecordPageLoader(),
     (): void => { this.controllerRevision += 1; });
@@ -84,13 +96,14 @@ export struct AllRecordsView {
     this.yearText = restored.filter.year > 0 ? restored.filter.year.toString() : '';
     this.monthText = restored.filter.month > 0 ? restored.filter.month.toString() : '';
     this.dayText = restored.filter.day > 0 ? restored.filter.day.toString() : '';
-    this.filterOpen = restored.filterOpen;
+    this.filterOpen = false;
     this.savedFirstVisibleIndex = restored.firstVisibleIndex;
     this.pageState.beginRestore();
     this.activatePage();
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.deactivatePage();
   }
 
@@ -289,8 +302,12 @@ export struct AllRecordsView {
 
   private setSelectionMode(enabled: boolean): void {
     if (this.batchBusy) return;
-    if (enabled) this.selection.enter();
-    else this.selection.exit();
+    if (enabled) {
+      this.selection.enter();
+      Haptics.mediumImpact();
+    } else {
+      this.selection.exit();
+    }
     this.touchSelection();
     this.refreshGate.runSuppressed((): void => {
       const runtime = AppRuntime.require();
@@ -312,6 +329,7 @@ export struct AllRecordsView {
   private toggle(captureId: string): void {
     if (this.batchBusy) return;
     this.selection.toggle(captureId);
+    Haptics.selectionClick();
     this.touchSelection();
   }
 
@@ -369,11 +387,17 @@ export struct AllRecordsView {
     try {
       const service = new ProjectBackupService(AppRuntime.require());
       const result = await service.exportSelection(ids, false);
-      const saved = await service.saveAs(result);
+      const outcome = await service.saveAs(result);
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
-        this.setMessage(saved ? tr('所选照片已导出到你选择的位置',
-          'Selected photos were exported to your chosen location') :
-          tr('已取消保存导出文件', 'Export save was cancelled'), false);
+        if (outcome.channel === ExportDeliveryChannel.SHARE_PANEL) {
+          this.setMessage(tr('导出文件已在系统分享面板打开，可选择发送或保存',
+            'The export opened in the system share sheet. Send or save it from there.'), false);
+        } else if (outcome.delivered) {
+          this.setMessage(tr('所选照片已导出到你选择的位置',
+            'Selected photos were exported to your chosen location'), false);
+        } else {
+          this.setMessage(tr('已取消保存导出文件', 'Export save was cancelled'), false);
+        }
       }
     } catch (error) {
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
@@ -567,11 +591,8 @@ export struct AllRecordsView {
           })
       }.width('100%')
     }
-    .padding(14)
-    .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 8 })
-    .backgroundColor(UiTokens.GLASS_STRONG)
-    .borderRadius(20)
-    .transition(panelTransition(24))
+    .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+    .width('100%')
   }
 
   build() {
@@ -592,12 +613,11 @@ export struct AllRecordsView {
             .enabled(!this.batchBusy)
           Row({ space: 8 }) {
             Column() {
-              FilterToolbar({ label: this.filterOpen ? tr('收起筛选', 'Hide filters') : tr('筛选', 'Filter'),
-                summary: this.firstCaptureDate(), active: this.filterOpen,
-                onOpen: (): void => {
-                  this.filterOpen = !this.filterOpen;
-                  this.saveCaptureState();
-                } })
+              FilterToolbar({ label: tr('筛选', 'Filter'),
+                summary: this.firstCaptureDate(),
+                active: this.selectedProjectId.length > 0 || this.yearText !== '' ||
+                  this.monthText !== '' || this.dayText !== '',
+                onOpen: (): void => { this.filterOpen = true; } })
                 .enabled(!this.batchBusy)
             }.layoutWeight(1)
             if (this.isSelectionMode()) {
@@ -611,9 +631,6 @@ export struct AllRecordsView {
         }
         .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 8 })
         .width('100%')
-        if (this.filterOpen) {
-          this.filterPanel()
-        }
         if (this.message.length > 0) {
           Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER :
             UiTokens.PRIMARY).padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 6 })
@@ -672,6 +689,13 @@ export struct AllRecordsView {
       }
     }
     .width('100%').height('100%')
+    // 筛选面板使用系统半模态(HarmonyOS 规范形态):下拉可关、返回键联动
+    // (BackAction.CLOSE_FILTER 置 filterOpen=false 即关闭)。
+    .bindSheet(this.filterOpen, (): void => { this.filterPanel(); }, {
+      height: 460,
+      dragBar: true,
+      onDisappear: (): void => { this.filterOpen = false; },
+    })
   }
 }
 
@@ -689,9 +713,18 @@ export struct CaptureFormScreen {
   @State private busy: boolean = false;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
-    this.message = text;
     this.messageError = isError;
+    if (isError) {
+      this.messageClock.reset();
+      this.message = text;
+      return;
+    }
+    this.messageClock.show((next: string): void => {
+      this.message = next;
+    }, text);
   }
   @State private locationGranted: boolean = false;
   @State private locationPromptDismissed: boolean = false;
@@ -717,16 +750,51 @@ export struct CaptureFormScreen {
   private readonly loadRequest: SingleFlightRequestCoordinator = new SingleFlightRequestCoordinator();
   private readonly templateRequest: SingleFlightRequestCoordinator = new SingleFlightRequestCoordinator();
   private captureGeneration: number = 0;
+  private readonly killDraftListener: (level: number) => void = (_level: number): void => {
+    this.persistKillDraft();
+  };
+  private killDraftQueue: Promise<void> = Promise.resolve();
 
   aboutToAppear(): void {
     this.lifecycle.activate();
+    AppRuntime.require().uiMemory.register(this.killDraftListener);
     this.load();
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
+    AppRuntime.current?.uiMemory.unregister(this.killDraftListener);
     this.lifecycle.deactivate();
     this.loadRequest.invalidate();
     this.templateRequest.invalidate();
+  }
+
+  private persistKillDraft(): void {
+    const runtime = AppRuntime.current;
+    if (runtime === null) return;
+    const projectId = this.project !== null ? this.project.id : runtime.selectedProjectId;
+    if (projectId.length === 0) return;
+    if (this.workLocation.length === 0 && this.workContent.length === 0 &&
+      this.photographer.length === 0 && this.notes.length === 0) {
+      return;
+    }
+    const snapshot = new CaptureKillDraftSnapshot({
+      projectId: projectId,
+      workLocation: this.workLocation,
+      workContent: this.workContent,
+      photographer: this.photographer,
+      notes: this.notes
+    });
+    this.killDraftQueue = this.killDraftQueue.then((): Promise<void> => runtime.captureKillDraft.save(snapshot))
+      .catch((): void => {});
+  }
+
+  private clearKillDraft(): void {
+    const runtime = AppRuntime.current;
+    const projectId = this.project !== null ? this.project.id : '';
+    if (runtime === null || projectId.length === 0) return;
+    this.killDraftQueue = this.killDraftQueue.then((): Promise<void> => runtime.captureKillDraft.clear(projectId))
+      .catch((): void => {});
   }
 
   private async load(): Promise<void> {
@@ -756,18 +824,40 @@ export struct CaptureFormScreen {
       this.loadRequest.finish(request);
       return;
     }
+    let killDraft: CaptureKillDraftSnapshot | null = null;
     try {
-      const recent = await runtime.database.listCaptures({
+      killDraft = await runtime.captureKillDraft.recover(runtime.selectedProjectId);
+    } catch (_) {
+      killDraft = null;
+    }
+    let recent: RecentCaptureSeed | null = null;
+    try {
+      const page = await runtime.database.listCaptures({
         projectId: runtime.selectedProjectId, year: 0, month: 0, day: 0, searchText: ''
       }, null, 1);
-      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request) && recent.rows.length > 0 &&
-        this.workLocation.length === 0 && this.workContent.length === 0 && this.photographer.length === 0) {
-        this.workLocation = recent.rows[0].workLocation;
-        this.workContent = recent.rows[0].workContent;
-        this.photographer = recent.rows[0].photographer;
+      if (this.lifecycle.accept(generation) && this.loadRequest.accept(request) && page.rows.length > 0) {
+        recent = {
+          workLocation: page.rows[0].workLocation,
+          workContent: page.rows[0].workContent,
+          photographer: page.rows[0].photographer
+        };
       }
     } catch (_) {
-      // Previous values are an optional convenience; manual entry remains available.
+      recent = null;
+    }
+    if (this.lifecycle.accept(generation) && this.loadRequest.accept(request)) {
+      const seed = resolveFormSeed(killDraft, recent);
+      if (seed.fromKillDraft) {
+        this.workLocation = seed.workLocation;
+        this.workContent = seed.workContent;
+        this.photographer = seed.photographer;
+        this.notes = seed.notes;
+      } else if (this.workLocation.length === 0 && this.workContent.length === 0 &&
+        this.photographer.length === 0) {
+        this.workLocation = seed.workLocation;
+        this.workContent = seed.workContent;
+        this.photographer = seed.photographer;
+      }
     }
     try {
       const suggestions = await runtime.database.recentSuggestions(runtime.selectedProjectId,
@@ -1056,6 +1146,7 @@ export struct CaptureFormScreen {
           tr('已拍摄，水印正在后台处理；完成后可从详情保存到系统相册，可以继续拍摄下一张',
             'Captured. The watermark is processing; save it to the gallery from Details when complete. You can keep shooting.'), false);
         AppRuntime.require().notifyDataChanged();
+        this.clearKillDraft();
       } else {
         const next = applyCaptureOutcome(this.currentSnapshot(), false);
         this.workLocation = next.location;
@@ -1355,9 +1446,18 @@ export struct CaptureDetailScreen {
   @State private fileSize: number = 0;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
-    this.message = text;
     this.messageError = isError;
+    if (isError) {
+      this.messageClock.reset();
+      this.message = text;
+      return;
+    }
+    this.messageClock.show((next: string): void => {
+      this.message = next;
+    }, text);
   }
   @State private confirmDelete: boolean = false;
   @State private mediaRevision: number = 0;
@@ -1390,6 +1490,7 @@ export struct CaptureDetailScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.deactivatePage();
   }
 
@@ -1790,9 +1891,18 @@ export struct CaptureEditorScreen {
   @State private notes: string = '';
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
-    this.message = text;
     this.messageError = isError;
+    if (isError) {
+      this.messageClock.reset();
+      this.message = text;
+      return;
+    }
+    this.messageClock.show((next: string): void => {
+      this.message = next;
+    }, text);
   }
   @State private project: ProjectRecord | null = null;
   @State private locationError: string = '';
@@ -1811,6 +1921,7 @@ export struct CaptureEditorScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.lifecycle.deactivate();
     this.loadRequest.invalidate();
   }

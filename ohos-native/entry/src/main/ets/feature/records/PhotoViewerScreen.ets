@@ -39,8 +39,11 @@ export struct PhotoViewerScreen {
   private panTouchStartY: number = 0;
   private viewportWidth: number = 0;
   private viewportHeight: number = 0;
-  private topInsetVp: number = 0;
-  private bottomInsetVp: number = 0;
+  @State private topInsetVp: number = 0;
+  @State private bottomInsetVp: number = 0;
+  // Bumped on every applyViewerSystemBar entry so a slow in-flight call from a
+  // superseded page activation cannot overwrite the newer window state.
+  private systemBarGeneration: number = 0;
   private readonly controller: PhotoViewerWindowController = new PhotoViewerWindowController(
     new RuntimePhotoViewerWindowLoader(), (): void => { this.controllerChanged(); });
   private readonly refreshListener: () => void = (): void => { this.reloadCurrent(); };
@@ -291,12 +294,34 @@ export struct PhotoViewerScreen {
   }
 
   private async applyViewerSystemBar(lightContent: boolean): Promise<void> {
+    this.systemBarGeneration += 1;
+    const generation = this.systemBarGeneration;
+    const stale = (): boolean => generation !== this.systemBarGeneration;
     try {
       const win = await window.getLastWindow(AppRuntime.require().context);
+      if (stale()) return;
+      // True immersion while the viewer is on top: extend under the system
+      // bars and hide them (mirrors the Android viewer's immersive-sticky
+      // mode); restore both on exit. Avoid-area insets are re-read after the
+      // layout change so the chrome margins track whatever the platform now
+      // reports (zero-height once the bars are hidden).
+      if (lightContent) {
+        await win.setWindowLayoutFullScreen(true);
+        if (stale()) return;
+        await win.setWindowSystemBarEnable([]);
+        if (stale()) return;
+      } else {
+        await win.setWindowSystemBarEnable(['status', 'navigation']);
+        if (stale()) return;
+        await win.setWindowLayoutFullScreen(false);
+        if (stale()) return;
+      }
       const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      if (stale()) return;
       this.topInsetVp = Math.max(0, this.getUIContext().px2vp(area.topRect.height));
       this.bottomInsetVp = Math.max(0, this.getUIContext().px2vp(area.bottomRect.height));
       const color = lightContent ? '#FFFFFF' : UiTokens.TEXT;
+      if (stale()) return;
       await win.setWindowSystemBarProperties({
         statusBarContentColor: color,
         navigationBarContentColor: color
@@ -440,16 +465,21 @@ export struct PhotoViewerScreen {
           .padding({ left: 24, right: 24 })
           .justifyContent(FlexAlign.Center)
         }
-        Button('‹')
-          .width(46)
-          .height(46)
-          .fontSize(32)
-          .fontColor(Color.White)
-          .backgroundColor(UiTokens.OVERLAY)
-          .borderRadius(23)
-          .margin({ left: 16, top: 18 + this.topInsetVp })
-          .accessibilityText(tr('返回记录详情', 'Back to record details'))
-          .onClick((): void => { this.pathStack.pop(); })
+        Button() {
+          Text('‹')
+            .fontSize(26)
+            .fontColor(Color.White)
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .accessibilityLevel('no')
+        }
+        .width(46)
+        .height(46)
+        .backgroundColor(UiTokens.OVERLAY)
+        .borderRadius(23)
+        .margin({ left: 16, top: 18 + this.topInsetVp })
+        .accessibilityText(tr('返回记录详情', 'Back to record details'))
+        .onClick((): void => { this.pathStack.pop(); })
         if (this.controller.rows.length > 0) {
           Text(`${this.controller.absoluteIndex + 1} / ${this.controller.totalCount}`)
             .fontSize(13)
@@ -463,16 +493,22 @@ export struct PhotoViewerScreen {
               `Photo ${this.controller.absoluteIndex + 1} of ${this.controller.totalCount}`))
         }
         if (this.controller.failed && this.controller.rows.length > 0) {
-          Button(`↻  ${tr('重试', 'Retry')}`)
-            .height(UiTokens.TOUCH_TARGET)
-            .fontSize(13)
-            .fontColor(Color.White)
-            .backgroundColor(UiTokens.OVERLAY)
-            .borderRadius(UiTokens.CONTROL_RADIUS)
-            .margin({ bottom: 24 + this.bottomInsetVp })
-            .align(Alignment.Bottom)
-            .accessibilityText(tr('重试加载附近照片', 'Retry loading nearby photos'))
-            .onClick((): void => { this.retry(); })
+          Button() {
+            Row({ space: 6 }) {
+              Text('↻').fontSize(15).fontColor(Color.White)
+                .accessibilityLevel('no')
+              Text(tr('重试', 'Retry')).fontSize(13).fontColor(Color.White)
+            }
+            .alignItems(VerticalAlign.Center)
+          }
+          .height(UiTokens.TOUCH_TARGET)
+          .padding({ left: 12, right: 12 })
+          .backgroundColor(UiTokens.OVERLAY)
+          .borderRadius(UiTokens.CONTROL_RADIUS)
+          .margin({ bottom: 24 + this.bottomInsetVp })
+          .align(Alignment.Bottom)
+          .accessibilityText(tr('重试加载附近照片', 'Retry loading nearby photos'))
+          .onClick((): void => { this.retry(); })
         }
         if (this.controller.needsRefill && !this.controller.loading && !this.controller.failed &&
           this.controller.rows.length > 0) {

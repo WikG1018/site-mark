@@ -58,14 +58,22 @@ export struct AppTopBar {
   build() {
     Row({ space: 12 }) {
       if (this.showBack) {
-        Button('‹')
-          .width(UiTokens.TOUCH_TARGET)
-          .height(UiTokens.TOUCH_TARGET)
-          .fontSize(32)
-          .fontColor(UiTokens.TEXT)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText(this.backAccessibilityText)
-          .onClick(this.onBack)
+        Button() {
+          // Explicit full-width centering: the ‹ glyph's ink sits slightly
+          // off-center in most fonts, and a raw string label at fontSize 32
+          // could clip inside the 44vp target.
+          Text('‹')
+            .fontSize(26)
+            .fontColor(UiTokens.TEXT)
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .accessibilityLevel('no')
+        }
+        .width(UiTokens.TOUCH_TARGET)
+        .height(UiTokens.TOUCH_TARGET)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText(this.backAccessibilityText)
+        .onClick(this.onBack)
       }
       Column({ space: 2 }) {
         Text(this.title)
@@ -121,6 +129,7 @@ export struct EmptyPanel {
       Text(this.icon)
         .fontSize(42)
         .fontColor(UiTokens.PRIMARY)
+        .accessibilityLevel('no')
       Text(this.title)
         .fontSize(20)
         .fontWeight(FontWeight.Bold)
@@ -229,7 +238,7 @@ export struct SettingRow {
       .constraintSize({ minHeight: 64 })
       .padding({ left: 16, right: 16, top: 9, bottom: 9 })
       .backgroundColor(this.pressed ? UiTokens.SURFACE_MUTED : Color.Transparent)
-      .animation({ duration: MotionPolicy.duration(100), curve: Curve.EaseOut })
+      .animation({ duration: MotionPolicy.duration(90), curve: Curve.EaseOut })
       .onTouch((event: TouchEvent): void => {
         this.pressed = event.type === TouchType.Down || event.type === TouchType.Move;
       })
@@ -260,6 +269,7 @@ export struct AppSearchField {
         .fontSize(21)
         .fontColor(UiTokens.TEXT_SECONDARY)
         .textAlign(TextAlign.Center)
+        .accessibilityLevel('no')
       TextInput({ text: this.value, placeholder: this.placeholder })
         .layoutWeight(1)
         .height(UiTokens.TOUCH_TARGET)
@@ -310,7 +320,9 @@ export struct LifecycleSegment {
           .layoutWeight(1)
           .height(UiTokens.TOUCH_TARGET)
           .fontSize(this.chipFontSize())
-          .fontWeight(this.selectedValue === option.value ? FontWeight.Bold : FontWeight.Regular)
+          // Fixed weight: switching Bold/Regular between states changes the
+          // text advance width and makes labels jitter inside equal-width chips.
+          .fontWeight(FontWeight.Medium)
           .fontColor(this.selectedValue === option.value ? UiTokens.PRIMARY : UiTokens.TEXT_SECONDARY)
           .backgroundColor(this.selectedValue === option.value ? UiTokens.PRIMARY_CONTAINER : Color.Transparent)
           .borderRadius(this.chipRadius())
@@ -335,16 +347,22 @@ export struct FilterToolbar {
 
   build() {
     Row({ space: 10 }) {
-      Button(`≡  ${this.label}`)
-        .height(UiTokens.TOUCH_TARGET)
-        .fontSize(14)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.active ? UiTokens.PRIMARY : UiTokens.TEXT)
-        .backgroundColor(this.active ? UiTokens.PRIMARY_CONTAINER : UiTokens.SURFACE_MUTED)
-        .border({ width: 1, color: this.active ? UiTokens.PRIMARY : UiTokens.OUTLINE_SUBTLE })
-        .borderRadius(UiTokens.CONTROL_RADIUS)
-        .accessibilityText(this.label)
-        .onClick(this.onOpen)
+      Button() {
+        Row({ space: 6 }) {
+          Text('≡').fontSize(16).fontColor(this.active ? UiTokens.PRIMARY : UiTokens.TEXT)
+            .accessibilityLevel('no')
+          Text(this.label).fontSize(14).fontWeight(FontWeight.Medium)
+            .fontColor(this.active ? UiTokens.PRIMARY : UiTokens.TEXT)
+        }
+        .alignItems(VerticalAlign.Center)
+      }
+      .height(UiTokens.TOUCH_TARGET)
+      .padding({ left: 12, right: 12 })
+      .backgroundColor(this.active ? UiTokens.PRIMARY_CONTAINER : UiTokens.SURFACE_MUTED)
+      .border({ width: 1, color: this.active ? UiTokens.PRIMARY : UiTokens.OUTLINE_SUBTLE })
+      .borderRadius(UiTokens.CONTROL_RADIUS)
+      .accessibilityText(this.label)
+      .onClick(this.onOpen)
       if (this.summary.length > 0) {
         Text(this.summary)
           .fontSize(13)
@@ -431,6 +449,7 @@ export struct InlineErrorPanel {
         .fontWeight(FontWeight.Bold)
         .fontColor(UiTokens.DANGER)
         .textAlign(TextAlign.Center)
+        .accessibilityLevel('no')
       Text(this.message)
         .fontSize(13)
         .fontColor(UiTokens.TEXT_SECONDARY)
@@ -458,14 +477,26 @@ export struct InlineErrorPanel {
 @Component
 export struct ListSkeleton {
   @Prop rows: number = 3;
-  @State private shimmerActive: boolean = true;
+  @State private shimmerActive: boolean = false;
+  private shimmerTimer: number = -1;
 
   aboutToAppear(): void {
-    this.shimmerActive = true;
+    // Reduce-motion keeps the skeleton static — the pulse is decorative only.
+    if (MotionPolicy.reduceMotion) {
+      return;
+    }
+    // .animation() only plays on attribute *changes*, so the pulse needs a
+    // state flip; the initial build alone never animates.
+    this.shimmerTimer = setInterval((): void => {
+      this.shimmerActive = !this.shimmerActive;
+    }, 700);
   }
 
   aboutToDisappear(): void {
-    this.shimmerActive = false;
+    if (this.shimmerTimer >= 0) {
+      clearInterval(this.shimmerTimer);
+      this.shimmerTimer = -1;
+    }
   }
 
   build() {
@@ -486,9 +517,8 @@ export struct ListSkeleton {
     }
     .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6 })
     .width('100%')
-    .opacity(this.shimmerActive ? 0.55 : 0.72)
-    .animation({ duration: MotionPolicy.duration(1100), curve: Curve.EaseInOut, iterations: -1,
-      playMode: PlayMode.Alternate })
+    .opacity(this.shimmerActive ? 1 : 0.55)
+    .animation({ duration: MotionPolicy.duration(600), curve: Curve.EaseInOut })
     .transition(panelTransition(0))
   }
 }

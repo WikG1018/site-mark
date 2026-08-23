@@ -12,11 +12,13 @@ import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { ProjectBackupService } from '../backup/BackupService';
+import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
 import { AppText, tr } from '../../shared/AppText';
 import { LazyListDataSource } from '../../shared/LazyListDataSource';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
+import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { ProjectCard } from './ProjectComponents';
 import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
 import {
@@ -484,9 +486,18 @@ export struct ProjectDetailScreen {
   @State private confirmDelete: boolean = false;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  private readonly messageClock = new ScreenMessageClock();
+
   private setMessage(text: string, isError: boolean = false): void {
-    this.message = text;
     this.messageError = isError;
+    if (isError) {
+      this.messageClock.reset();
+      this.message = text;
+      return;
+    }
+    this.messageClock.show((next: string): void => {
+      this.message = next;
+    }, text);
   }
   @State private selectionMode: boolean = false;
   @State private selectedIds: string[] = [];
@@ -545,6 +556,7 @@ export struct ProjectDetailScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.deactivatePage();
   }
 
@@ -732,8 +744,12 @@ export struct ProjectDetailScreen {
 
   private setSelectionMode(enabled: boolean): void {
     if (this.pageBusy()) return;
-    if (enabled) this.selection.enter();
-    else this.selection.exit();
+    if (enabled) {
+      this.selection.enter();
+      Haptics.mediumImpact();
+    } else {
+      this.selection.exit();
+    }
     this.syncSelection();
   }
 
@@ -798,6 +814,7 @@ export struct ProjectDetailScreen {
   private toggleCapture(captureId: string): void {
     if (this.pageBusy()) return;
     this.selection.toggle(captureId);
+    Haptics.selectionClick();
     this.syncSelection();
   }
 
@@ -843,11 +860,17 @@ export struct ProjectDetailScreen {
     try {
       const service = new ProjectBackupService(AppRuntime.require());
       const result = await service.exportSelection(ids, false);
-      const saved = await service.saveAs(result);
+      const outcome = await service.saveAs(result);
       if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken)) {
-        this.setMessage(saved ? tr('所选照片已导出到你选择的位置',
-          'Selected photos were exported to your chosen location') :
-          tr('已取消保存导出文件', 'Export save was cancelled'), false);
+        if (outcome.channel === ExportDeliveryChannel.SHARE_PANEL) {
+          this.setMessage(tr('导出文件已在系统分享面板打开，可选择发送或保存',
+            'The export opened in the system share sheet. Send or save it from there.'), false);
+        } else if (outcome.delivered) {
+          this.setMessage(tr('所选照片已导出到你选择的位置',
+            'Selected photos were exported to your chosen location'), false);
+        } else {
+          this.setMessage(tr('已取消保存导出文件', 'Export save was cancelled'), false);
+        }
       }
     } catch (_) {
       if (this.pageState.isActive() && this.projectOperations.isCurrent(actionToken)) {
@@ -1390,6 +1413,7 @@ export struct ProjectSettingsScreen {
   @State private watermarkPosition: string = 'bottomLeft';
   @State private accent: number = 0xFF2E7D61;
   @State private message: string = '';
+  private readonly messageClock = new ScreenMessageClock();
   @State private loading: boolean = true;
   @State private loadError: string = '';
   @State private saving: boolean = false;
@@ -1418,6 +1442,7 @@ export struct ProjectSettingsScreen {
   }
 
   aboutToDisappear(): void {
+    this.messageClock.reset();
     this.loadCoordinator.deactivate();
     this.saveAction.invalidate();
   }
@@ -1464,8 +1489,10 @@ export struct ProjectSettingsScreen {
       await ProjectEditorSaveExecutor.persistWatermark(store, snapshot);
       AppRuntime.require().notifyDataChanged();
       if (this.saveAction.isCurrent(actionToken)) {
-        this.message = tr('已保存；新拍照片和重新生成的成片会使用这些设置',
-          'Saved. New photos and regenerated images will use these settings.');
+        this.messageClock.show((next: string): void => {
+          this.message = next;
+        }, tr('已保存；新拍照片和重新生成的成片会使用这些设置',
+          'Saved. New photos and regenerated images will use these settings.'));
       }
     } catch (_) {
       if (this.saveAction.isCurrent(actionToken)) {
@@ -1502,7 +1529,7 @@ export struct ProjectSettingsScreen {
       .layoutWeight(1)
       .height(ProjectFormMetrics.TOUCH_TARGET)
       .fontSize(14)
-      .fontWeight(choice.selected ? FontWeight.Bold : FontWeight.Medium)
+      .fontWeight(FontWeight.Medium)
       .backgroundColor(selectionVisual(choice.selected).backgroundColor)
       .fontColor(choice.selected ? UiTokens.PRIMARY : UiTokens.TEXT)
       .border({ width: selectionVisual(choice.selected).borderWidth,

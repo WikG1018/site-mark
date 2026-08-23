@@ -6,10 +6,12 @@ param(
     'tool.test_seed_ohos_performance_db',
     'tool.test_ohos_capture_database_contract',
     'tool.test_ohos_back_wiring',
-    'tool.test_ohos_host_test_gate'
+    'tool.test_ohos_host_test_gate',
+    'tool.test_ohos_arkts_static_checks'
   ),
   [string[]]$PowerShellTestScripts = @(
-    'tool/ohos-native/test/verify-test-result.Tests.ps1'
+    'tool/ohos-native/test/verify-test-result.Tests.ps1',
+    'tool/ohos-native/test/verify-warn-budget.Tests.ps1'
   )
 )
 

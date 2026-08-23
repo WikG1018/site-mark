@@ -1,3 +1,5 @@
+import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
+
 export enum DiagnosticsGenerationStatus {
   SAVED = 'saved',
   CANCELLED = 'cancelled',
@@ -7,10 +9,13 @@ export enum DiagnosticsGenerationStatus {
 export class DiagnosticsGenerationOutcome {
   readonly status: DiagnosticsGenerationStatus;
   readonly eventCount: number;
+  readonly channel: ExportDeliveryChannel;
 
-  constructor(status: DiagnosticsGenerationStatus, eventCount: number) {
+  constructor(status: DiagnosticsGenerationStatus, eventCount: number,
+    channel: ExportDeliveryChannel = ExportDeliveryChannel.DOCUMENT_SAVE) {
     this.status = status;
     this.eventCount = eventCount;
+    this.channel = channel;
   }
 }
 
