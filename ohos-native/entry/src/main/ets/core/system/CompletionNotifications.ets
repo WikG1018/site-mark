@@ -1,4 +1,4 @@
-import { common } from '@kit.AbilityKit';
+import { common, wantAgent } from '@kit.AbilityKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { tr } from '../../shared/AppText';
 
@@ -20,7 +20,7 @@ export class CompletionNotifications {
 
   async publish(captureId: string, succeeded: boolean): Promise<void> {
     try {
-      await notificationManager.publish({
+      const request: notificationManager.NotificationRequest = {
         id: this.notificationId(captureId),
         content: {
           notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
@@ -32,7 +32,21 @@ export class CompletionNotifications {
               tr('请打开拍摄记录查看原因并重试。', 'Open Capture Records to review the cause and retry.')
           }
         }
-      });
+      };
+      try {
+        request.wantAgent = await wantAgent.getWantAgent({
+          wants: [{
+            bundleName: this.context.abilityInfo.bundleName,
+            abilityName: 'EntryAbility',
+            parameters: { captureId }
+          }],
+          actionType: wantAgent.OperationType.START_ABILITY,
+          requestCode: 0,
+          actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+        });
+      } catch (_) {
+      }
+      await notificationManager.publish(request);
     } catch (_) {
       // Completion notifications are best-effort and never change processing state.
     }

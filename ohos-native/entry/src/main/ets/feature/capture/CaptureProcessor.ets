@@ -6,6 +6,7 @@ import { SystemServices } from '../../core/system/SystemServices';
 import { CompletionNotifications } from '../../core/system/CompletionNotifications';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { tr } from '../../shared/AppText';
+import { needsExifLookup, resolveFinalCaptureLocation } from '../../shared/ExifLocationPolicy';
 
 const LOG_DOMAIN: number = 0x0000;
 const LOG_TAG: string = 'SiteMarkCapture';
@@ -89,6 +90,9 @@ export class CaptureProcessor {
         throw new Error('原图不存在或为空');
       }
       const originalSha = await this.pipeline.sha256(capture.originalPath);
+      stage = 'prefer_exif_location';
+      hilog.info(LOG_DOMAIN, LOG_TAG, 'capture stage %{public}s', stage);
+      capture = await this.preferExifLocation(capture);
       const outputPath = `${this.filesDir}/renders/${capture.id}.jpg`;
       const request = this.renderRequest(capture, project, outputPath);
       stage = 'render';
@@ -142,6 +146,21 @@ export class CaptureProcessor {
       } catch (_) {
       }
     }
+  }
+
+  private async preferExifLocation(capture: CaptureRecord): Promise<CaptureRecord> {
+    if (!needsExifLookup(capture.locationResolution)) {
+      return capture;
+    }
+    const reading = await this.services.readExifGps(capture.originalPath);
+    const final = resolveFinalCaptureLocation(reading, capture.latitude, capture.longitude,
+      capture.accuracyMeters, capture.locationResolution);
+    if (final.resolution === capture.locationResolution) {
+      return capture;
+    }
+    await this.database.updateCaptureLocation(capture.id, final);
+    const updated = await this.database.captureById(capture.id);
+    return updated ?? capture;
   }
 
   private renderRequest(capture: CaptureRecord, project: ProjectRecord, outputPath: string): RenderPhotoRequest {

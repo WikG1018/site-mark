@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { relationalStore } from '@kit.ArkData';
 import { util } from '@kit.ArkTS';
+import { FinalCaptureLocation } from '../../shared/ExifLocationPolicy';
 import { CAPTURE_TEMPLATE_CONTENT_MAX_LENGTH, CAPTURE_TEMPLATE_LOCATION_MAX_LENGTH,
   CAPTURE_TEMPLATE_NAME_MAX_LENGTH, CAPTURE_TEMPLATE_PHOTOGRAPHER_MAX_LENGTH, formatPhotoNumber,
   captureTemplateNameKey, inspectCaptureFields, normalizeCaptureSearchTerms, normalizeCaptureTemplateName,
@@ -852,6 +853,14 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     if (changed < 1) {
       throw new Error('capture_state_conflict');
     }
+  }
+
+  async updateCaptureLocation(id: string, location: FinalCaptureLocation): Promise<void> {
+    await this.store.executeSql(
+      `UPDATE captures SET latitude=?, longitude=?, accuracy_meters=?, location_resolution=?
+       WHERE id=?`,
+      [location.latitude, location.longitude, location.accuracyMeters, location.resolution, id]
+    );
   }
 
   async setOriginalDeleted(id: string): Promise<void> {

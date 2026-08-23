@@ -6,6 +6,7 @@ export class SerialCaptureQueue {
   private running: boolean = false;
   private drainWaiters: Array<() => void> = [];
   private startWaiters: Array<() => void> = [];
+  private drainedListener: (() => void) | null = null;
 
   constructor(processor: CaptureProcessor) {
     this.processor = processor;
@@ -33,6 +34,10 @@ export class SerialCaptureQueue {
 
   pendingCount(): number {
     return this.pendingIds.length;
+  }
+
+  setDrainedListener(listener: (() => void) | null): void {
+    this.drainedListener = listener;
   }
 
   whenIdleStarted(): Promise<void> {
@@ -63,6 +68,10 @@ export class SerialCaptureQueue {
     this.drainWaiters = [];
     for (const resolve of waiters) {
       resolve();
+    }
+    const listener = this.drainedListener;
+    if (listener !== null) {
+      listener();
     }
   }
 

@@ -1,11 +1,14 @@
-import { common, Permissions } from '@kit.AbilityKit';
+import { common, Permissions, Want } from '@kit.AbilityKit';
 import { abilityAccessCtrl } from '@kit.AbilityKit';
 import { camera, cameraPicker } from '@kit.CameraKit';
 import { fileIo, fileUri } from '@kit.CoreFileKit';
+import { image } from '@kit.ImageKit';
 import { geoLocationManager } from '@kit.LocationKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { PublishJournalEntry, PublishJournalStore } from '../../data/prefs/PublishJournalStore';
+import { ExifGpsReading, exifGpsReading } from '../../shared/ExifLocationPolicy';
+import { AppSettingsLaunchPolicy, SettingsLaunchWant } from '../../shared/AppSettingsLaunchPolicy';
 
 export enum CameraOutcomeCode {
   CAPTURED = 0,
@@ -97,7 +100,8 @@ export interface SystemServices {
   clearPublishJournal(captureId: string, expectedContentUri: string): Promise<boolean>;
   deletePublishedImage(uri: string): Promise<boolean>;
   inspectImage(path: string): Promise<ImageInspection>;
-  openApplicationSettings(): Promise<void>;
+  readExifGps(imagePath: string): Promise<ExifGpsReading | null>;
+  openApplicationSettings(): Promise<boolean>;
   openRepository(): Promise<void>;
 }
 
@@ -374,13 +378,59 @@ export class HarmonySystemServices implements SystemServices {
     }
   }
 
-  async openApplicationSettings(): Promise<void> {
-    await this.context.startAbility({
-      bundleName: 'com.huawei.hmos.settings',
-      abilityName: 'com.huawei.hmos.settings.MainAbility',
-      uri: 'application_info_entry',
-      parameters: { 'pushParams': this.context.applicationInfo.name }
-    });
+  async openApplicationSettings(): Promise<boolean> {
+    const policy = new AppSettingsLaunchPolicy((want: SettingsLaunchWant): Promise<boolean> =>
+      this.startSettingsAbility(want));
+    return policy.openApplicationSettings('com.huawei.hmos.settings',
+      this.context.abilityInfo.bundleName);
+  }
+
+  private async startSettingsAbility(want: SettingsLaunchWant): Promise<boolean> {
+    const request: Want = {};
+    if (want.bundleName.length > 0) {
+      request.bundleName = want.bundleName;
+    }
+    if (want.abilityName.length > 0) {
+      request.abilityName = want.abilityName;
+    }
+    if (want.uri.length > 0) {
+      request.uri = want.uri;
+    }
+    if (want.action.length > 0) {
+      request.action = want.action;
+    }
+    if (want.parameters !== null) {
+      request.parameters = want.parameters;
+    }
+    try {
+      await this.context.startAbility(request);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async readExifGps(imagePath: string): Promise<ExifGpsReading | null> {
+    try {
+      const source: image.ImageSource = image.createImageSource(imagePath);
+      const properties = await source.getImageProperties([
+        image.PropertyKey.GPS_LATITUDE, image.PropertyKey.GPS_LATITUDE_REF,
+        image.PropertyKey.GPS_LONGITUDE, image.PropertyKey.GPS_LONGITUDE_REF]);
+      try {
+        await source.release();
+      } catch (_) {
+      }
+      return exifGpsReading(this.exifText(properties[image.PropertyKey.GPS_LATITUDE]),
+        this.exifText(properties[image.PropertyKey.GPS_LATITUDE_REF]),
+        this.exifText(properties[image.PropertyKey.GPS_LONGITUDE]),
+        this.exifText(properties[image.PropertyKey.GPS_LONGITUDE_REF]));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  private exifText(value: string | null): string {
+    return value === null ? '' : value;
   }
 
   openRepository(): Promise<void> {
