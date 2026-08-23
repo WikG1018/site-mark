@@ -45,10 +45,18 @@ export default class EntryAbility extends UIAbility {
   }
 
   onForeground(): void {
+    const runtime = AppRuntime.current;
+    if (runtime !== null) {
+      runtime.suspendWindow.release();
+    }
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onForeground');
   }
 
   onBackground(): void {
+    const runtime = AppRuntime.current;
+    if (runtime !== null) {
+      runtime.suspendWindow.acquire();
+    }
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onBackground');
   }
 

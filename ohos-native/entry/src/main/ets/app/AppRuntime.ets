@@ -24,6 +24,8 @@ import { KeyedOperationGate } from '../core/concurrency/KeyedOperationGate';
 import { AsyncOnce } from '../core/concurrency/AsyncOnce';
 import { ScreenStateStore } from '../shared/ScreenStateStore';
 import { UiMemoryCoordinator } from '../shared/UiMemoryCoordinator';
+import { cancelSystemSuspendDelay, requestSystemSuspendDelay, SuspendDelayWindow }
+  from '../shared/SuspendDelayWindow';
 
 export type RuntimeListener = () => void;
 
@@ -72,6 +74,7 @@ export class AppRuntime {
   readonly pipeline: ImagePipeline;
   readonly services: SystemServices;
   readonly queue: SerialCaptureQueue;
+  readonly suspendWindow: SuspendDelayWindow;
   readonly captureWorkflow: CaptureWorkflow;
   readonly mediaCleanup: MediaCleanup;
   readonly privateFileCleanup: PrivateFileCleanup;
@@ -100,6 +103,9 @@ export class AppRuntime {
     const processor = new CaptureProcessor(database, this.pipeline, this.services, context.filesDir,
       (_captureId: string, _succeeded: boolean): void => this.notifyDataChanged(), this.notifications);
     this.queue = new SerialCaptureQueue((captureId: string): Promise<void> => processor.process(captureId));
+    this.suspendWindow = new SuspendDelayWindow('process captured photos', requestSystemSuspendDelay,
+      cancelSystemSuspendDelay, (): boolean => this.queue.isBusy());
+    this.queue.setDrainedListener((): void => this.suspendWindow.release());
     this.captureWorkflow = new CaptureWorkflow(database, this.services, sessions, this.queue);
     this.mediaCleanup = new MediaCleanup(
       new AppDatabaseMediaCleanupAdapter(database),

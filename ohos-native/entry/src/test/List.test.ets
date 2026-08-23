@@ -29,6 +29,7 @@ import screenUiStabilityTest from './ScreenUiStability.test';
 import projectEditStabilityTest from './ProjectEditStability.test';
 import pendingNotificationLaunchTest from './PendingNotificationLaunch.test';
 import exifLocationPolicyTest from './ExifLocationPolicy.test';
+import suspendDelayWindowTest from './SuspendDelayWindow.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -62,4 +63,5 @@ export default function testsuite(): void {
   projectEditStabilityTest();
   pendingNotificationLaunchTest();
   exifLocationPolicyTest();
+  suspendDelayWindowTest();
 }
