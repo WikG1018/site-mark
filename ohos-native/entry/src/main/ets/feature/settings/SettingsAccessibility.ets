@@ -1,3 +1,4 @@
+import { AccentSwatch, AccentSwatches } from '../../shared/AccentSwatches';
 import { tr } from '../../shared/AppText';
 import { UiTokens } from '../../shared/UiTokens';
 
@@ -14,13 +15,17 @@ export class WatermarkAccentOption {
 }
 
 export function watermarkAccentOptions(): WatermarkAccentOption[] {
-  return [
-    new WatermarkAccentOption(0xFF2E7D61, '深绿色', 'Deep green'),
-    new WatermarkAccentOption(0xFF1565C0, '蓝色', 'Blue'),
-    new WatermarkAccentOption(0xFFC05A24, '橙色', 'Orange'),
-    new WatermarkAccentOption(0xFF7B4DA8, '紫色', 'Purple'),
-    new WatermarkAccentOption(0xFF37474F, '深灰色', 'Dark gray')
-  ];
+  return AccentSwatches.values().map((swatch: AccentSwatch): WatermarkAccentOption =>
+    new WatermarkAccentOption(
+      swatch.argb,
+      AccentSwatches.label(swatch.argb, false),
+      AccentSwatches.label(swatch.argb, true)));
+}
+
+export function themeSeedAccessibilityText(option: WatermarkAccentOption, selected: boolean): string {
+  return selected ?
+    tr(`应用主题色 ${option.chineseName}，已选择`, `App theme color ${option.englishName}, selected`) :
+    tr(`应用主题色 ${option.chineseName}，未选择`, `App theme color ${option.englishName}, not selected`);
 }
 
 export function settingsBackAccessibilityText(): string {

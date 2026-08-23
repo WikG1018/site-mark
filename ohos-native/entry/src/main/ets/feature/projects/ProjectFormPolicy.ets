@@ -1,3 +1,4 @@
+import { AccentSwatch, AccentSwatches } from '../../shared/AccentSwatches';
 import { UiTokens } from '../../shared/UiTokens';
 import { FormLayoutMetrics } from '../../shared/FormComponents';
 
@@ -156,18 +157,14 @@ export class WatermarkAccentChoice {
 }
 
 export function watermarkAccentChoices(english: boolean, selectedValue: number): WatermarkAccentChoice[] {
-  return [
-    new WatermarkAccentChoice(0xFF2E7D61, '#2E7D61', english ? 'Forest green' : '墨绿',
-      selectedValue === 0xFF2E7D61, english),
-    new WatermarkAccentChoice(0xFF1565C0, '#1565C0', english ? 'Blue' : '蓝色',
-      selectedValue === 0xFF1565C0, english),
-    new WatermarkAccentChoice(0xFFC05A24, '#C05A24', english ? 'Burnt orange' : '棕橙',
-      selectedValue === 0xFFC05A24, english),
-    new WatermarkAccentChoice(0xFF7B4DA8, '#7B4DA8', english ? 'Purple' : '紫色',
-      selectedValue === 0xFF7B4DA8, english),
-    new WatermarkAccentChoice(0xFF37474F, '#37474F', english ? 'Charcoal' : '深灰',
-      selectedValue === 0xFF37474F, english),
-  ];
+  const highlighted: number = AccentSwatches.nearest(selectedValue);
+  return AccentSwatches.values().map((swatch: AccentSwatch): WatermarkAccentChoice =>
+    new WatermarkAccentChoice(
+      swatch.argb,
+      AccentSwatches.toRgbHex(swatch.argb),
+      AccentSwatches.label(swatch.argb, english),
+      (swatch.argb >>> 0) === (highlighted >>> 0),
+      english));
 }
 
 export class SelectionVisual {

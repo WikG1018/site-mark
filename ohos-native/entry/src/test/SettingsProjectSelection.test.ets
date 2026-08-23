@@ -1,8 +1,9 @@
 import { describe, expect, it } from '@ohos/hypium';
 import { StableSelectionList } from '../main/ets/feature/settings/SettingsProjectSelection';
 import { AppText } from '../main/ets/shared/AppText';
-import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, watermarkAccentAccessibilityText,
-  watermarkAccentOptions, WatermarkAccentOption, diagnosticsConfirmAccessibilityText }
+import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, themeSeedAccessibilityText,
+  watermarkAccentAccessibilityText, watermarkAccentOptions, WatermarkAccentOption,
+  diagnosticsConfirmAccessibilityText }
   from '../main/ets/feature/settings/SettingsAccessibility';
 import { choiceAccessibilityText, joinAccessibilityText, lifecycleAccessibilityText }
   from '../main/ets/shared/AccessibilityText';
@@ -98,15 +99,43 @@ export default function settingsProjectSelectionTest(): void {
       expect(chineseBack.length > 0).assertTrue();
       expect(englishBack.length > 0).assertTrue();
       expect(chineseBack === englishBack).assertFalse();
-      expect(new Set<string>(chineseLabels).size).assertEqual(5);
-      expect(new Set<string>(chineseSelectedLabels).size).assertEqual(5);
-      expect(new Set<string>(englishLabels).size).assertEqual(5);
-      expect(new Set<string>(englishSelectedLabels).size).assertEqual(5);
+      expect(new Set<string>(chineseLabels).size).assertEqual(9);
+      expect(new Set<string>(chineseSelectedLabels).size).assertEqual(9);
+      expect(new Set<string>(englishLabels).size).assertEqual(9);
+      expect(new Set<string>(englishSelectedLabels).size).assertEqual(9);
+      expect(options[0].color).assertEqual(0xFF37C58B);
+      expect(chineseLabels[0].indexOf('绿色') >= 0).assertTrue();
+      expect(chineseLabels[0].indexOf('深绿色') >= 0).assertFalse();
+      expect(englishLabels[0].indexOf('Green') >= 0).assertTrue();
+      expect(englishLabels[0].indexOf('Deep green') >= 0).assertFalse();
       expect(chineseLabels.every((label: string): boolean => label.length > 0)).assertTrue();
       expect(chineseSelectedLabels.every((label: string): boolean => label.length > 0)).assertTrue();
       expect(englishLabels.every((label: string): boolean => label.length > 0)).assertTrue();
       expect(englishSelectedLabels.every((label: string): boolean => label.length > 0)).assertTrue();
       expect(englishSelectedLabels[0] === englishLabels[0]).assertFalse();
+      AppText.apply('', 'zh-CN');
+    });
+
+    it('prefixes theme-seed accessibility text in the active language', 0, () => {
+      const option = watermarkAccentOptions()[0];
+      AppText.apply('zh', 'en-US');
+      const zhOff = themeSeedAccessibilityText(option, false);
+      const zhOn = themeSeedAccessibilityText(option, true);
+      AppText.apply('en', 'zh-CN');
+      const enOff = themeSeedAccessibilityText(option, false);
+      const enOn = themeSeedAccessibilityText(option, true);
+
+      expect(zhOff.indexOf('应用主题色') >= 0).assertTrue();
+      expect(zhOff.indexOf('绿色') >= 0).assertTrue();
+      expect(zhOff.indexOf('未选择') >= 0).assertTrue();
+      expect(zhOn.indexOf('已选择') >= 0).assertTrue();
+      expect(zhOn === zhOff).assertFalse();
+      expect(enOff.indexOf('App theme color') >= 0).assertTrue();
+      expect(enOff.indexOf('Green') >= 0).assertTrue();
+      expect(enOff.indexOf('not selected') >= 0).assertTrue();
+      expect(enOn.indexOf(', selected') >= 0).assertTrue();
+      expect(enOn === enOff).assertFalse();
+      expect(zhOff === enOff).assertFalse();
       AppText.apply('', 'zh-CN');
     });
 
