@@ -4,6 +4,7 @@ import { MotionPolicy } from './MotionPolicy';
 import { AccentSwatch, AccentSwatches } from './AccentSwatches';
 import { themeSeedAccessibilityText, watermarkAccentAccessibilityText, WatermarkAccentOption }
   from './AccentAccessibility';
+import { tr } from './AppText';
 
 /**
  * 条件面板统一转场：出现时淡入并上移 distanceVp，消失时淡出并下移。
@@ -563,5 +564,44 @@ export struct AccentSwatchRow {
       return themeSeedAccessibilityText(option, selected);
     }
     return watermarkAccentAccessibilityText(option, selected);
+  }
+}
+
+@Component
+export struct DateFilterRow {
+  @Prop year: string = '';
+  @Prop month: string = '';
+  @Prop day: string = '';
+  @Prop controlEnabled: boolean = true;
+  onChange: (year: string, month: string, day: string) => void =
+    (_year: string, _month: string, _day: string): void => {};
+
+  build() {
+    Row({ space: 8 }) {
+      TextInput({ text: this.year, placeholder: tr('年', 'Year') }).layoutWeight(1)
+        .height(UiTokens.TOUCH_TARGET)
+        .enabled(this.controlEnabled)
+        .type(InputType.Number)
+        .backgroundColor(UiTokens.SURFACE_MUTED)
+        .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+        .borderRadius(UiTokens.CONTROL_RADIUS)
+        .onChange((value: string): void => { this.onChange(value, this.month, this.day); })
+      TextInput({ text: this.month, placeholder: tr('月', 'Month') }).layoutWeight(1)
+        .height(UiTokens.TOUCH_TARGET)
+        .enabled(this.controlEnabled)
+        .type(InputType.Number)
+        .backgroundColor(UiTokens.SURFACE_MUTED)
+        .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+        .borderRadius(UiTokens.CONTROL_RADIUS)
+        .onChange((value: string): void => { this.onChange(this.year, value, this.day); })
+      TextInput({ text: this.day, placeholder: tr('日', 'Day') }).layoutWeight(1)
+        .height(UiTokens.TOUCH_TARGET)
+        .enabled(this.controlEnabled)
+        .type(InputType.Number)
+        .backgroundColor(UiTokens.SURFACE_MUTED)
+        .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+        .borderRadius(UiTokens.CONTROL_RADIUS)
+        .onChange((value: string): void => { this.onChange(this.year, this.month, value); })
+    }.width('100%')
   }
 }

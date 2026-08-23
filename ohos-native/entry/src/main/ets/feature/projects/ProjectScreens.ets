@@ -6,7 +6,7 @@ import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { CaptureCard } from '../records/RecordComponents';
 import { RecordBatchLayoutPolicy, RecordNavigationSeedStore,
   RecordSelectionCoordinator } from '../records/RecordUiCoordinator';
-import { AccentSwatchRow, AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, InlineErrorPanel,
+import { AccentSwatchRow, AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, DateFilterRow, EmptyPanel, InlineErrorPanel,
   LifecycleSegment, ListSkeleton, SectionHeader, SegmentOption, panelTransition } from '../../shared/AppComponents';
 import { AccentSwatches } from '../../shared/AccentSwatches';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
@@ -1015,32 +1015,18 @@ export struct ProjectDetailScreen {
   @Builder
   private recordFilterPanel() {
     Column({ space: 10 }) {
-      Row({ space: 8 }) {
-        TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1)
-          .height(RecordBatchLayoutPolicy.filterControlHeight())
-          .enabled(!this.pageBusy())
-          .type(InputType.Number)
-          .backgroundColor(UiTokens.SURFACE_MUTED)
-          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
-          .borderRadius(UiTokens.CONTROL_RADIUS)
-          .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
-        TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
-          .height(RecordBatchLayoutPolicy.filterControlHeight())
-          .enabled(!this.pageBusy())
-          .type(InputType.Number)
-          .backgroundColor(UiTokens.SURFACE_MUTED)
-          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
-          .borderRadius(UiTokens.CONTROL_RADIUS)
-          .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
-        TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
-          .height(RecordBatchLayoutPolicy.filterControlHeight())
-          .enabled(!this.pageBusy())
-          .type(InputType.Number)
-          .backgroundColor(UiTokens.SURFACE_MUTED)
-          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
-          .borderRadius(UiTokens.CONTROL_RADIUS)
-          .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
-      }.width('100%')
+      DateFilterRow({
+        year: this.yearText,
+        month: this.monthText,
+        day: this.dayText,
+        controlEnabled: !this.pageBusy(),
+        onChange: (year: string, month: string, day: string): void => {
+          this.yearText = year;
+          this.monthText = month;
+          this.dayText = day;
+          this.markFilterChanged();
+        }
+      })
       Row({ space: 8 }) {
           Button(tr('清除日期', 'Clear date')).layoutWeight(1)
             .height(RecordBatchLayoutPolicy.filterControlHeight())
