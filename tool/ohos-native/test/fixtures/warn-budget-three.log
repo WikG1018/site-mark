@@ -1,0 +1,8 @@
+WARN: ArkTS:WARN File: C:/repo/ohos-native/entry/src/main/ets/data/database/AppDatabase.ets:1215:11
+ Function may throw exceptions. Special handling is required.
+WARN: ArkTS:WARN File: C:/repo/ohos-native/entry/src/main/ets/core/system/SystemServices.ets:338:57
+ To use this API, you need to apply for the permissions: ohos.permission.WRITE_IMAGEVIDEO
+WARN: ArkTS:WARN File: C:/repo/ohos-native/entry/src/main/ets/shared/MotionPolicy.ets:24:21
+ The 'isAnimationReduceEnabled' API is supported since SDK version 23. However, the current compatible SDK version is 5.0.5(17).
+> hvigor Finished :entry:default@CompileArkTS... after 7 s 251 ms
+> hvigor BUILD SUCCESSFUL in 10 s 698 ms

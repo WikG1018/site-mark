@@ -10,7 +10,8 @@ param(
     'tool.test_ohos_arkts_static_checks'
   ),
   [string[]]$PowerShellTestScripts = @(
-    'tool/ohos-native/test/verify-test-result.Tests.ps1'
+    'tool/ohos-native/test/verify-test-result.Tests.ps1',
+    'tool/ohos-native/test/verify-warn-budget.Tests.ps1'
   )
 )
 
