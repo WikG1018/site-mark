@@ -17,6 +17,8 @@ import { CaptureWorkflow } from '../feature/capture/CaptureWorkflow';
 import { StartupRecovery } from './StartupRecovery';
 import { CaptureStatus } from '../domain/StateMachine';
 import { ConfigurationConstant } from '@kit.AbilityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { window } from '@kit.ArkUI';
 import { UiTokens } from '../shared/UiTokens';
 import { CompletionNotifications } from '../core/system/CompletionNotifications';
 import { AppText, tr } from '../shared/AppText';
@@ -26,6 +28,9 @@ import { ScreenStateStore } from '../shared/ScreenStateStore';
 import { UiMemoryCoordinator } from '../shared/UiMemoryCoordinator';
 import { cancelSystemSuspendDelay, requestSystemSuspendDelay, SuspendDelayWindow }
   from '../shared/SuspendDelayWindow';
+
+const RUNTIME_DOMAIN = 0x0000;
+const RUNTIME_TAG = 'SiteMarkRuntime';
 
 export type RuntimeListener = () => void;
 
@@ -175,6 +180,19 @@ export class AppRuntime {
     const systemDark = this.context.resourceManager.getConfigurationSync().colorMode === 0;
     const dark = settings.themeMode === 'dark' || (settings.themeMode === 'system' && systemDark);
     UiTokens.apply(dark, settings.appSeedColorArgb);
+    try {
+      const win = await window.getLastWindow(this.context);
+      const contentColor = dark ? '#E7EEE9' : '#17201C';
+      await win.setWindowSystemBarProperties({
+        statusBarColor: '#00000000',
+        navigationBarColor: '#00000000',
+        statusBarContentColor: contentColor,
+        navigationBarContentColor: contentColor
+      });
+    } catch (error) {
+      hilog.error(RUNTIME_DOMAIN, RUNTIME_TAG, 'Failed to update system bar colors. Cause: %{public}s',
+        JSON.stringify(error));
+    }
     const mode = settings.themeMode === 'dark' ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK :
       (settings.themeMode === 'light' ? ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT :
         ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
