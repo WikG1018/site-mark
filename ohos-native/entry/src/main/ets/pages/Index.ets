@@ -21,6 +21,7 @@ import { ScreenActionCoordinator } from '../shared/ScreenActionCoordinator';
 import { RootBackDispatcher } from '../shared/ScreenUiStabilityCoordinator';
 import { RootLifecycleCoordinator, RootMotionRefreshResult, RootMotionSpec, RootShellPolicy,
   RootTabAction, RootTabCoordinator } from '../shared/RootShellPolicy';
+import { SAFE_AREA_BOTTOM_VP, SAFE_AREA_TOP_VP, topPaddingVp } from '../shared/SystemBars';
 
 @Entry
 @Component
@@ -37,6 +38,8 @@ struct Index {
   @State private selectionMode: boolean = false;
   @State private appearanceRevision: number = 0;
   @State private motionRevision: number = MotionPolicy.reduceMotion ? -1 : 1;
+  @StorageLink(SAFE_AREA_TOP_VP) safeAreaTopVp: number = 0;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   private readonly rootLifecycle: RootLifecycleCoordinator = new RootLifecycleCoordinator();
   private readonly consentAction: ScreenActionCoordinator = new ScreenActionCoordinator();
   private readonly tabCoordinator: RootTabCoordinator = new RootTabCoordinator(0);
@@ -372,7 +375,7 @@ struct Index {
       }.width('100%').height('100%')
     }
     .height(RootShellPolicy.dockHeight())
-    .margin({ bottom: RootShellPolicy.dockBottomMargin() })
+    .margin({ bottom: RootShellPolicy.dockBottomMargin() + this.safeAreaBottomVp })
     .width(`calc(100% - ${RootShellPolicy.dockHorizontalMargin() * 2}vp)`)
     .backgroundColor(this.motionRevision < 0 ? UiTokens.SURFACE : UiTokens.DOCK)
     .backdropBlur(this.motionRevision < 0 ? 0 : RootShellPolicy.motion(this.tabDirection).dockBlur)
@@ -449,7 +452,7 @@ struct Index {
             .backgroundColor(Color.Transparent).enabled(!this.consentBusy)
             .onClick((): void => { this.context().terminateSelf(); })
         }
-        .padding({ left: 24, right: 24, top: 52, bottom: 34 })
+        .padding({ left: 24, right: 24, top: topPaddingVp(this.safeAreaTopVp, 20), bottom: 34 })
         .width('100%')
       }
       .width('100%').height('100%')

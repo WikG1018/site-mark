@@ -5,6 +5,7 @@ import { AccentSwatch, AccentSwatches } from './AccentSwatches';
 import { themeSeedAccessibilityText, watermarkAccentAccessibilityText, WatermarkAccentOption }
   from './AccentAccessibility';
 import { tr } from './AppText';
+import { SAFE_AREA_TOP_VP, topPaddingVp } from './SystemBars';
 
 /**
  * 条件面板统一转场：出现时淡入并上移 distanceVp，消失时淡出并下移。
@@ -56,6 +57,7 @@ export struct AppTopBar {
   @Prop backAccessibilityText: string = '返回';
   @Prop actionAccessibilityText: string = '';
   @Prop actionEnabled: boolean = true;
+  @StorageLink(SAFE_AREA_TOP_VP) safeAreaTopVp: number = 0;
   onBack: () => void = (): void => {};
   onAction: () => void = (): void => {};
 
@@ -113,9 +115,9 @@ export struct AppTopBar {
       }
     }
     .width('100%')
-    .height(UiTokens.TOP_BAR_HEIGHT)
+    .height(UiTokens.TOP_BAR_HEIGHT + this.safeAreaTopVp)
     .padding({ left: this.showBack ? 4 : UiTokens.PAGE_PADDING,
-      right: UiTokens.PAGE_PADDING, top: 6, bottom: 6 })
+      right: UiTokens.PAGE_PADDING, top: topPaddingVp(this.safeAreaTopVp, 6), bottom: 6 })
     .alignItems(VerticalAlign.Center)
   }
 }
