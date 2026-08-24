@@ -1,6 +1,10 @@
 import { UiTokens } from './UiTokens';
 import { choiceAccessibilityText, joinAccessibilityText } from './AccessibilityText';
 import { MotionPolicy } from './MotionPolicy';
+import { AccentSwatch, AccentSwatches } from './AccentSwatches';
+import { themeSeedAccessibilityText, watermarkAccentAccessibilityText, WatermarkAccentOption }
+  from './AccentAccessibility';
+import { tr } from './AppText';
 
 /**
  * 条件面板统一转场：出现时淡入并上移 distanceVp，消失时淡出并下移。
@@ -429,7 +433,6 @@ export struct BatchActionBar {
     .width('100%')
     .padding({ left: 10, right: 10, top: 4, bottom: 4 })
     .backgroundColor(UiTokens.GLASS_STRONG)
-    .backdropBlur(MotionPolicy.blur(12))
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS)
   }
@@ -520,5 +523,84 @@ export struct ListSkeleton {
     .opacity(this.shimmerActive ? 1 : 0.55)
     .animation({ duration: MotionPolicy.duration(600), curve: Curve.EaseInOut })
     .transition(panelTransition(0))
+  }
+}
+
+@Component
+export struct AccentSwatchRow {
+  @Prop selectedArgb: number = 0xFF37C58B;
+  @Prop controlEnabled: boolean = true;
+  @Prop accessibilityKind: string = 'watermark';
+  onSelect: (argb: number) => void = (_argb: number): void => {};
+
+  build() {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(AccentSwatches.values(), (swatch: AccentSwatch) => {
+        Button()
+          .width(UiTokens.TOUCH_TARGET)
+          .height(UiTokens.TOUCH_TARGET)
+          .borderRadius(UiTokens.TOUCH_TARGET / 2)
+          .backgroundColor(swatch.argb)
+          .border({
+            width: AccentSwatches.nearest(this.selectedArgb) === swatch.argb ? 4 : 1,
+            color: Color.White
+          })
+          .margin({ right: 11, bottom: 11 })
+          .enabled(this.controlEnabled)
+          .accessibilityText(this.swatchText(swatch))
+          .onClick((): void => { this.onSelect(swatch.argb); })
+      }, (swatch: AccentSwatch): string => swatch.argb.toString())
+    }.width('100%')
+  }
+
+  private swatchText(swatch: AccentSwatch): string {
+    const option = new WatermarkAccentOption(
+      swatch.argb,
+      AccentSwatches.label(swatch.argb, false),
+      AccentSwatches.label(swatch.argb, true));
+    const selected: boolean = AccentSwatches.nearest(this.selectedArgb) === swatch.argb;
+    if (this.accessibilityKind === 'theme') {
+      return themeSeedAccessibilityText(option, selected);
+    }
+    return watermarkAccentAccessibilityText(option, selected);
+  }
+}
+
+@Component
+export struct DateFilterRow {
+  @Prop year: string = '';
+  @Prop month: string = '';
+  @Prop day: string = '';
+  @Prop controlEnabled: boolean = true;
+  onChange: (year: string, month: string, day: string) => void =
+    (_year: string, _month: string, _day: string): void => {};
+
+  build() {
+    Row({ space: 8 }) {
+      TextInput({ text: this.year, placeholder: tr('年', 'Year') }).layoutWeight(1)
+        .height(UiTokens.TOUCH_TARGET)
+        .enabled(this.controlEnabled)
+        .type(InputType.Number)
+        .backgroundColor(UiTokens.SURFACE_MUTED)
+        .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+        .borderRadius(UiTokens.CONTROL_RADIUS)
+        .onChange((value: string): void => { this.onChange(value, this.month, this.day); })
+      TextInput({ text: this.month, placeholder: tr('月', 'Month') }).layoutWeight(1)
+        .height(UiTokens.TOUCH_TARGET)
+        .enabled(this.controlEnabled)
+        .type(InputType.Number)
+        .backgroundColor(UiTokens.SURFACE_MUTED)
+        .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+        .borderRadius(UiTokens.CONTROL_RADIUS)
+        .onChange((value: string): void => { this.onChange(this.year, value, this.day); })
+      TextInput({ text: this.day, placeholder: tr('日', 'Day') }).layoutWeight(1)
+        .height(UiTokens.TOUCH_TARGET)
+        .enabled(this.controlEnabled)
+        .type(InputType.Number)
+        .backgroundColor(UiTokens.SURFACE_MUTED)
+        .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
+        .borderRadius(UiTokens.CONTROL_RADIUS)
+        .onChange((value: string): void => { this.onChange(this.year, this.month, value); })
+    }.width('100%')
   }
 }

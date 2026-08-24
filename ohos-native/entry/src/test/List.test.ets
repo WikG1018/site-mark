@@ -31,6 +31,8 @@ import pendingNotificationLaunchTest from './PendingNotificationLaunch.test';
 import exifLocationPolicyTest from './ExifLocationPolicy.test';
 import suspendDelayWindowTest from './SuspendDelayWindow.test';
 import appSettingsLaunchPolicyTest from './AppSettingsLaunchPolicy.test';
+import accentSwatchesTest from './AccentSwatches.test';
+import appearanceSettingsDraftTest from './AppearanceSettingsDraft.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -66,4 +68,6 @@ export default function testsuite(): void {
   exifLocationPolicyTest();
   suspendDelayWindowTest();
   appSettingsLaunchPolicyTest();
+  accentSwatchesTest();
+  appearanceSettingsDraftTest();
 }

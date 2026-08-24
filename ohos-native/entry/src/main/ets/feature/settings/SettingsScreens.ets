@@ -3,8 +3,9 @@ import { Routes } from '../../app/Routes';
 import { StorageInspector, StorageSnapshot } from '../../core/system/StorageInspector';
 import { DiagnosticSummary } from '../../data/database/AppDatabase';
 import { AppSettingsRecord } from '../../domain/Models';
-import { AppTopBar, LifecycleSegment, SectionHeader, SegmentOption, SettingRow, ValueTextRow } from
+import { AccentSwatchRow, AppTopBar, LifecycleSegment, SectionHeader, SegmentOption, SettingRow, ValueTextRow } from
   '../../shared/AppComponents';
+import { AccentSwatches } from '../../shared/AccentSwatches';
 import { formatBytes, formatDateTime, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
 import { ProjectSummary } from '../../domain/Models';
@@ -17,8 +18,9 @@ import { ScreenMessageClock } from '../../shared/Feedback';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { ScreenLifecycleActionCoordinator, ScreenRequestCoordinator } from '../../shared/ScreenActionCoordinator';
 import { StableSelectionList } from './SettingsProjectSelection';
-import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, watermarkAccentAccessibilityText,
-  watermarkAccentOptions, WatermarkAccentOption, diagnosticsConfirmAccessibilityText } from './SettingsAccessibility';
+import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, diagnosticsConfirmAccessibilityText }
+  from './SettingsAccessibility';
+import { AppearanceSettingsDraft } from './AppearanceSettingsDraft';
 import { DiagnosticsGenerationOutcome, DiagnosticsGenerationOutcomeStore, DiagnosticsGenerationStatus }
   from './DiagnosticsActionOutcome';
 import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
@@ -213,12 +215,12 @@ export struct AppearanceScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   private readonly loadCoordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
   private readonly saveCoordinator: ScreenLifecycleActionCoordinator = appearanceActionCoordinator;
-  private readonly accentOptions: WatermarkAccentOption[] = watermarkAccentOptions();
   @State private settings: AppSettingsRecord | null = null;
   @State private watermarkOpacity: number = 0.78;
   @State private fontScale: number = 1.0;
   @State private watermarkPosition: string = 'bottomLeft';
-  @State private accent: number = 0xFF2E7D61;
+  @State private appSeed: number = AccentSwatches.defaultArgb();
+  @State private accent: number = AccentSwatches.defaultArgb();
   @State private theme: string = 'system';
   @State private locale: string = '';
   @State private message: string = '';
@@ -252,6 +254,7 @@ export struct AppearanceScreen {
       this.watermarkOpacity = value.defaultWatermarkOpacity;
       this.fontScale = value.defaultWatermarkFontScale;
       this.watermarkPosition = value.defaultWatermarkPosition;
+      this.appSeed = value.appSeedColorArgb;
       this.accent = value.defaultWatermarkAccentColorArgb;
       this.theme = value.themeMode;
       this.locale = value.localeCode;
@@ -279,17 +282,15 @@ export struct AppearanceScreen {
     const token: number | null = this.saveCoordinator.begin();
     if (token === null) return;
     this.saving = true;
-    const value = new AppSettingsRecord({
-      themeMode: this.theme,
-      localeCode: this.locale,
-      defaultWatermarkPosition: this.watermarkPosition,
-      defaultWatermarkOpacity: this.watermarkOpacity,
-      defaultWatermarkAccentColorArgb: this.accent,
-      defaultWatermarkFontScale: this.fontScale,
-      locationPermissionPromptDismissed: this.settings.locationPermissionPromptDismissed,
-      completionNotificationsEnabled: this.settings.completionNotificationsEnabled,
-      appSeedColorArgb: this.settings.appSeedColorArgb
-    });
+    const draft = AppearanceSettingsDraft.fromSettings(this.settings);
+    draft.themeMode = this.theme;
+    draft.localeCode = this.locale;
+    draft.defaultWatermarkPosition = this.watermarkPosition;
+    draft.defaultWatermarkOpacity = this.watermarkOpacity;
+    draft.defaultWatermarkFontScale = this.fontScale;
+    draft.appSeed = this.appSeed;
+    draft.accent = this.accent;
+    const value = draft.toRecord();
     try {
       await AppRuntime.require().database.updateSettings(value);
       await AppRuntime.require().applyAppearance();
@@ -333,6 +334,13 @@ export struct AppearanceScreen {
               new SegmentOption('dark', tr('深色', 'Dark'))
             ], selectedValue: this.theme, controlEnabled: !this.loading && !this.saving,
               onSelect: (value: string): void => { this.theme = value; } })
+            Text(tr('应用主题色', 'App theme color')).fontSize(16).fontWeight(FontWeight.Bold).width('100%')
+            AccentSwatchRow({
+              selectedArgb: this.appSeed,
+              controlEnabled: !this.loading && !this.saving,
+              accessibilityKind: 'theme',
+              onSelect: (argb: number): void => { this.appSeed = argb; }
+            })
             Text(tr('应用语言', 'App language')).fontSize(16).fontWeight(FontWeight.Bold).width('100%')
             LifecycleSegment({ options: [
               new SegmentOption('', tr('跟随系统', 'System')),
@@ -362,15 +370,13 @@ export struct AppearanceScreen {
               .enabled(!this.loading && !this.saving)
               .accessibilityText(tr('水印字体大小', 'Watermark font size'))
               .onChange((value: number): void => { this.fontScale = value; })
-            Row({ space: 11 }) {
-              ForEach(this.accentOptions, (option: WatermarkAccentOption) => {
-                Button().width(44).height(44).borderRadius(22).backgroundColor(option.color)
-                  .border({ width: this.accent === option.color ? 4 : 1, color: Color.White })
-                  .enabled(!this.loading && !this.saving)
-                  .accessibilityText(watermarkAccentAccessibilityText(option, this.accent === option.color))
-                  .onClick((): void => { this.accent = option.color; })
-              }, (option: WatermarkAccentOption): string => option.color.toString())
-            }.width('100%')
+            Text(tr('水印强调色', 'Watermark accent')).fontSize(16).fontWeight(FontWeight.Bold).width('100%')
+            AccentSwatchRow({
+              selectedArgb: this.accent,
+              controlEnabled: !this.loading && !this.saving,
+              accessibilityKind: 'watermark',
+              onSelect: (argb: number): void => { this.accent = argb; }
+            })
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
                 .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.SUCCESS).width('100%')

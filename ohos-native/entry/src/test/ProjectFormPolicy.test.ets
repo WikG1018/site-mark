@@ -83,12 +83,18 @@ export default function projectFormPolicyTest(): void {
       const chinese = watermarkAccentChoices(false, 0xFF2E7D61);
       const english = watermarkAccentChoices(true, 0xFF1565C0);
 
-      expect(chinese.length).assertEqual(5);
-      expect(english.length).assertEqual(5);
+      expect(chinese.length).assertEqual(9);
+      expect(english.length).assertEqual(9);
       expect(chinese.map((choice): string => choice.label).join('|'))
-        .assertEqual('墨绿|蓝色|棕橙|紫色|深灰');
+        .assertEqual('绿色|蓝色|橙色|红色|紫色|青色|粉色|黄色|靛蓝');
       expect(english.map((choice): string => choice.label).join('|'))
-        .assertEqual('Forest green|Blue|Burnt orange|Purple|Charcoal');
+        .assertEqual('Green|Blue|Orange|Red|Purple|Teal|Pink|Yellow|Indigo');
+      expect(chinese[0].value).assertEqual(0xFF37C58B);
+      expect(chinese[0].color).assertEqual('#37C58B');
+      expect(chinese[0].selected).assertTrue();
+      expect(chinese[5].selected).assertFalse();
+      expect(english[1].selected).assertTrue();
+      expect(english[1].value).assertEqual(0xFF1565C0);
       expect(chinese[0].accessibilityText.includes('已选择')).assertTrue();
       expect(english[1].accessibilityText.includes('selected')).assertTrue();
     });

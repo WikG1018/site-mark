@@ -460,41 +460,46 @@ struct Index {
   }
 
   build() {
-    if (!this.consentChecked) {
-      Column({ space: 14 }) {
-        LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
-        Text(tr('正在准备工程印记…', 'Preparing SiteMark…')).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
+    Column() {
+      if (!this.consentChecked) {
+        Column({ space: 14 }) {
+          LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
+          Text(tr('正在准备工程印记…', 'Preparing SiteMark…')).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
+        }
+        .width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+        .transition(TransitionEffect.opacity(0)
+          .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
+      } else if (!this.consentAccepted) {
+        this.privacyGate()
+      } else if (this.runtimeError.length > 0) {
+        Column({ space: 16 }) {
+          Text(tr('无法启动', 'Unable to start')).fontSize(26).fontWeight(FontWeight.Bold).fontColor(UiTokens.TEXT)
+          Text(this.runtimeError).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
+            .lineHeight(22).textAlign(TextAlign.Center).padding({ left: 32, right: 32 })
+          Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+            .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
+        }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+        .transition(TransitionEffect.opacity(0)
+          .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
+      } else if (!this.runtimeReady) {
+        Column({ space: 14 }) {
+          LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
+          Text(tr('正在恢复本机记录…', 'Recovering local records…')).fontSize(14)
+            .fontColor(UiTokens.TEXT_SECONDARY)
+        }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
+        .transition(TransitionEffect.opacity(0)
+          .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
+      } else {
+        Navigation(this.pathStack) {
+          this.rootContent()
+        }
+        .hideTitleBar(true)
+        .navDestination(this.pathMap)
+        .mode(NavigationMode.Stack)
       }
-      .width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
-.transition(TransitionEffect.opacity(0)
-  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
-    } else if (!this.consentAccepted) {
-      this.privacyGate()
-    } else if (this.runtimeError.length > 0) {
-      Column({ space: 16 }) {
-        Text(tr('无法启动', 'Unable to start')).fontSize(26).fontWeight(FontWeight.Bold).fontColor(UiTokens.TEXT)
-        Text(this.runtimeError).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
-          .lineHeight(22).textAlign(TextAlign.Center).padding({ left: 32, right: 32 })
-        Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
-          .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
-      }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
-.transition(TransitionEffect.opacity(0)
-  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
-    } else if (!this.runtimeReady) {
-      Column({ space: 14 }) {
-        LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
-        Text(tr('正在恢复本机记录…', 'Recovering local records…')).fontSize(14)
-          .fontColor(UiTokens.TEXT_SECONDARY)
-      }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
-.transition(TransitionEffect.opacity(0)
-  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
-    } else {
-      Navigation(this.pathStack) {
-        this.rootContent()
-      }
-      .hideTitleBar(true)
-      .navDestination(this.pathMap)
-      .mode(NavigationMode.Stack)
     }
+    .width('100%')
+    .height('100%')
+    .id(`chrome-${this.appearanceRevision}-${this.motionRevision}`)
   }
 }

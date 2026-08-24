@@ -6,7 +6,7 @@ import { CaptureFilter, CapturePage, CapturePageCursor, CaptureRecord, CaptureTe
 import { CAPTURE_TEMPLATE_LIMIT_PER_PROJECT, CAPTURE_TEMPLATE_NAME_MAX_LENGTH, captureTemplateNameKey,
   normalizeCaptureTemplateName, resolveWatermarkLocale } from '../../domain/DomainRules';
 import { CaptureStatus, ProjectLifecycleStatus } from '../../domain/StateMachine';
-import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, EmptyPanel, FilterToolbar,
+import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, DateFilterRow, EmptyPanel, FilterToolbar,
   InlineErrorPanel, ListSkeleton, SectionHeader, panelTransition } from '../../shared/AppComponents';
 import { formatBytes, formatDateTime, imageUri, statusLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
@@ -18,7 +18,6 @@ import { CapturePageLoader, CapturePagedController } from './CapturePagedControl
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
-import { MotionPolicy } from '../../shared/MotionPolicy';
 import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, CaptureFormMetrics,
@@ -549,32 +548,18 @@ export struct AllRecordsView {
           }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%')
         }.width('100%')
       }
-      Row({ space: 8 }) {
-        TextInput({ text: this.yearText, placeholder: tr('年', 'Year') }).layoutWeight(1)
-          .height(UiTokens.TOUCH_TARGET)
-          .enabled(!this.batchBusy)
-          .type(InputType.Number)
-          .backgroundColor(UiTokens.SURFACE_MUTED)
-          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
-          .borderRadius(UiTokens.CONTROL_RADIUS)
-          .onChange((value: string): void => { this.yearText = value; this.markFilterChanged(); })
-        TextInput({ text: this.monthText, placeholder: tr('月', 'Month') }).layoutWeight(1)
-          .height(UiTokens.TOUCH_TARGET)
-          .enabled(!this.batchBusy)
-          .type(InputType.Number)
-          .backgroundColor(UiTokens.SURFACE_MUTED)
-          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
-          .borderRadius(UiTokens.CONTROL_RADIUS)
-          .onChange((value: string): void => { this.monthText = value; this.markFilterChanged(); })
-        TextInput({ text: this.dayText, placeholder: tr('日', 'Day') }).layoutWeight(1)
-          .height(UiTokens.TOUCH_TARGET)
-          .enabled(!this.batchBusy)
-          .type(InputType.Number)
-          .backgroundColor(UiTokens.SURFACE_MUTED)
-          .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
-          .borderRadius(UiTokens.CONTROL_RADIUS)
-          .onChange((value: string): void => { this.dayText = value; this.markFilterChanged(); })
-      }.width('100%')
+      DateFilterRow({
+        year: this.yearText,
+        month: this.monthText,
+        day: this.dayText,
+        controlEnabled: !this.batchBusy,
+        onChange: (year: string, month: string, day: string): void => {
+          this.yearText = year;
+          this.monthText = month;
+          this.dayText = day;
+          this.markFilterChanged();
+        }
+      })
       Row({ space: 8 }) {
         Button(tr('清除日期', 'Clear date')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
           .enabled(!this.batchBusy)
@@ -1728,7 +1713,6 @@ export struct CaptureDetailScreen {
           .fontSize(13)
           .fontColor(UiTokens.TEXT)
           .backgroundColor(UiTokens.GLASS_STRONG)
-          .backdropBlur(MotionPolicy.blur(12))
           .borderRadius(UiTokens.CONTROL_RADIUS)
           .margin({ right: 10, top: 10 })
           .align(Alignment.TopEnd)
@@ -1747,7 +1731,7 @@ export struct CaptureDetailScreen {
           .enabled(this.capture?.hasOriginal() ?? false)
           .accessibilityText(tr('查看原图', 'View original photo'))
           .onClick((): void => this.switchPhoto(true))
-      }.padding(10).backdropBlur(MotionPolicy.blur(12))
+      }.padding(10)
     }
     .width('100%')
     .aspectRatio(4 / 3)
