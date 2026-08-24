@@ -33,6 +33,7 @@ import suspendDelayWindowTest from './SuspendDelayWindow.test';
 import appSettingsLaunchPolicyTest from './AppSettingsLaunchPolicy.test';
 import accentSwatchesTest from './AccentSwatches.test';
 import appearanceSettingsDraftTest from './AppearanceSettingsDraft.test';
+import systemBarsTest from './SystemBars.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -70,4 +71,5 @@ export default function testsuite(): void {
   appSettingsLaunchPolicyTest();
   accentSwatchesTest();
   appearanceSettingsDraftTest();
+  systemBarsTest();
 }
