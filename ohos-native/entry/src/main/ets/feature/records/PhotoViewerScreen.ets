@@ -300,11 +300,12 @@ export struct PhotoViewerScreen {
     try {
       const win = await window.getLastWindow(AppRuntime.require().context);
       if (stale()) return;
-      // True immersion while the viewer is on top: extend under the system
-      // bars and hide them (mirrors the Android viewer's immersive-sticky
-      // mode); restore both on exit. Avoid-area insets are re-read after the
-      // layout change so the chrome margins track whatever the platform now
-      // reports (zero-height once the bars are hidden).
+      // True immersion while the viewer is on top: hide system bars
+      // (immersive-sticky, matching Android). The window stays layout-fullscreen
+      // for the rest of the process so the root shell can draw edge-to-edge.
+      // Exit only re-enables status and navigation bars. Avoid-area insets are
+      // re-read after the visibility change so chrome margins track whatever
+      // the platform now reports (zero-height once the bars are hidden).
       if (lightContent) {
         await win.setWindowLayoutFullScreen(true);
         if (stale()) return;
@@ -312,8 +313,6 @@ export struct PhotoViewerScreen {
         if (stale()) return;
       } else {
         await win.setWindowSystemBarEnable(['status', 'navigation']);
-        if (stale()) return;
-        await win.setWindowLayoutFullScreen(false);
         if (stale()) return;
       }
       const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);

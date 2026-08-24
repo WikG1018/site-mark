@@ -17,6 +17,8 @@
 
 本轮 `hdc list targets` 为 `127.0.0.1:5555`（模拟器，非真机）。已按五项冒烟走查，不把模拟器写成真机转正。项 1–2 dump 两排 9 点：未保存点蓝仍 `chrome-1-3`，保存后 `chrome-2-3` 且 AppBar「保存」PRIMARY 变蓝。项 3：外观橙保存后主题仍蓝（`chrome-3-3` / `chrome-4-3`）；新建项目表单无色点，`createProject` 从 settings 拷贝 `defaultWatermarkAccentColorArgb`，创建后项目水印设置可见 `#FFEF6C00`。项 4：项目详情内联年月日三框同高 155、底 `#FFEEF4F0`；记录页 `FilterToolbar` 点击 / longClick / `dumpLayout -i` / `-m false` 后 `bindSheet` 半模态未出现在 uitest dump，年月日三框未拍到，共用 `DateFilterRow` 仅源码确认。项 5：详情 overlay「水印成片」`#FF1565C0`、「原图」`#F4F6FBF8`，选择模式 BatchActionBar 四钮 +「已选 0 张」，dump 无非零 `blur`；Dock `backdropBlur` 源码仍在 Index L361/L378，uitest dump 全为 `0.00px`，不能当视觉证明。记录侧 sheet 与 Dock blur 的 UI 证据不足，故不写「模拟器五项冒烟已过」。真机验证待补。源码约束与单元测试通过不能替代真机结果。
 
+- 根壳窗口 edge-to-edge：EntryAbility `setWindowLayoutFullScreen` + 透明系统栏；AppTopBar / Dock / 批量栏 / 筛选 sheet / 拍摄钮按 AppStorage inset 避让。本轮 `hdc list targets` 为 `127.0.0.1:5555`（模拟器，手势导航，非真机）。dump 屏 `[0,0][1320,2856]`；EntryAbility root bounds `[0,137][1320,2856]`、origBounds `[0,0][1320,2856]`，相对表标准 y=0 为 FAIL；chrome orig 高度 2856（未缩回旧 2758）；StatusBar `[0,0][1320,136]`。hilog 无 `Failed to apply immersive layout`，SCB `immersive is false`。查看器进入后 root `[0,0][1320,2856]`、系统栏隐藏；hdc 点 ‹ 返回记录详情后 root 仍 `[0,137][1320,2856]`、系统栏重新可见，窗口未再缩回 2758。设置→外观与语言：深色+保存 chrome `#FF101512` / `#FF171D19`、深色段选中 `#FF314E42`；浅色+保存 chrome `#FFF5FAF6` / `#FFFFFFFF`、浅色段选中 `#FFC7F1DF`。uitest dump 无 `fontColor`，不能证明状态栏图标 `#E7EEE9` / `#17201C`。三键导航真机、折叠态、自由多窗未测，设备验证待补。
+
 ## 平台差异表
 
 | 能力 | 当前实现/结论 | 对用户的处理 | 转正条件 |
@@ -40,6 +42,7 @@
 | 首启隐私同意门 | 鸿蒙有首启同意门：同意前不初始化运行时，“退出应用”为显式选择；Android 无首启门（关于页静态隐私说明） | 同意前不读写任何用户数据；为上架合规新增，非能力缺失 | 真机验证首启同意、退出与再次启动流程 |
 | 触感反馈 | 进入选择模式 mediumImpact、勾选记录 selectionClick（`@kit.SensorServiceKit` vibrator，time 型短振动）；已声明 `VIBRATE` 权限；Android 批量操作 heavyImpact 与表单提交 lightImpact 场景未映射 | 振动失败静默跳过，不阻塞点击 | 真机确认两类振动的强度与时机；评估补齐批量与表单场景 |
 | 自动化 CI | 公用 runner 不预装可再分发的 DevEco/HarmonyOS SDK | CI 校验 manifest 与 Rust/Flutter；ArkTS/HAP 由本地 DevEco 门禁给证据 | 提供合规专用 runner 后补 HAP 远程构建 |
+| 窗口沉浸 / 系统栏 | 当前为尝试 edge-to-edge（`setWindowLayoutFullScreen` + 透明栏 + inset 避让）。模拟器 `127.0.0.1:5555` 手势导航 dump 仍见 EntryAbility root y=137 / StatusBar 136px，SCB `immersive is false` | 根壳系统栏保持显示；查看器 immersive-sticky 隐藏系统栏，退出只恢复栏可见性与图标色，窗口不关全屏 | 真机手势/三键/折叠/多窗 |
 
 ## 证据使用规则
 

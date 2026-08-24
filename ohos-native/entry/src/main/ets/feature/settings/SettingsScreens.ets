@@ -15,6 +15,7 @@ import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr } from '../../shared/AppText';
 import { ScreenMessageClock } from '../../shared/Feedback';
+import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { ScreenLifecycleActionCoordinator, ScreenRequestCoordinator } from '../../shared/ScreenActionCoordinator';
 import { StableSelectionList } from './SettingsProjectSelection';
@@ -34,6 +35,7 @@ const backupActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLife
 @Component
 export struct SettingsView {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   private readonly loadCoordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
   private readonly notificationCoordinator: ScreenLifecycleActionCoordinator = notificationActionCoordinator;
   @State private notificationsEnabled: boolean = false;
@@ -202,7 +204,7 @@ export struct SettingsView {
             .backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
             .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
         }
-        .padding({ bottom: RootShellPolicy.contentBottomInset() })
+        .padding({ bottom: RootShellPolicy.contentBottomInset() + this.safeAreaBottomVp })
         .width('100%')
       }.layoutWeight(1)
     }

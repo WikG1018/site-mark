@@ -276,9 +276,13 @@ export class RecordBatchLayoutPolicy {
     return UiTokens.TOUCH_TARGET;
   }
 
-  static listBottomPadding(selectionMode: boolean, fontScale: number = 1): number {
-    return selectionMode ? RecordBatchLayoutPolicy.barHeight(fontScale) + RecordBatchLayoutPolicy.bottomMargin() +
-      RecordBatchLayoutPolicy.contentGap() : RootShellPolicy.contentBottomInset();
+  static listBottomPadding(selectionMode: boolean, fontScale: number = 1,
+    safeAreaBottomVp: number = 0): number {
+    const inset = Number.isFinite(safeAreaBottomVp) && safeAreaBottomVp > 0 ? safeAreaBottomVp : 0;
+    const base = selectionMode ? RecordBatchLayoutPolicy.barHeight(fontScale) +
+      RecordBatchLayoutPolicy.bottomMargin() + RecordBatchLayoutPolicy.contentGap() :
+      RootShellPolicy.contentBottomInset();
+    return base + inset;
   }
 }
 
