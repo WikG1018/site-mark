@@ -327,6 +327,14 @@ export default function recordUiCoordinatorTest(): void {
       expect(RecordBatchLayoutPolicy.listBottomPadding(false)).assertEqual(RootShellPolicy.contentBottomInset());
       expect(RecordBatchLayoutPolicy.filterControlHeight()).assertEqual(UiTokens.TOUCH_TARGET);
       expect(RecordBatchLayoutPolicy.filterControlHeight() >= 44).assertTrue();
+      expect(RecordBatchLayoutPolicy.listBottomPadding(false, 1, 36))
+        .assertEqual(RootShellPolicy.contentBottomInset() + 36);
+      expect(RecordBatchLayoutPolicy.listBottomPadding(true, 1, 36)).assertEqual(168);
+      expect(RecordBatchLayoutPolicy.listBottomPadding(true, 1.6, 36)).assertEqual(188);
+      expect(RecordBatchLayoutPolicy.listBottomPadding(false, 1, Number.NaN))
+        .assertEqual(RootShellPolicy.contentBottomInset());
+      expect(RecordBatchLayoutPolicy.listBottomPadding(false, 1, -8))
+        .assertEqual(RootShellPolicy.contentBottomInset());
     });
 
     it('grows the shared batch bar and its exact list clearance for 160 percent fonts', 0, () => {

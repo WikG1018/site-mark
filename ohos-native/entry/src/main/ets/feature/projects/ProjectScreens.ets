@@ -18,6 +18,7 @@ import { AppText, tr } from '../../shared/AppText';
 import { LazyListDataSource } from '../../shared/LazyListDataSource';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
+import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { ProjectCard } from './ProjectComponents';
@@ -55,6 +56,7 @@ class RuntimeCapturePageLoader implements CapturePageLoader {
 @Component
 export struct ProjectListView {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private lifecycle: ProjectLifecycleStatus = ProjectLifecycleStatus.ACTIVE;
   @State private searchText: string = '';
   @State private loading: boolean = true;
@@ -285,7 +287,7 @@ export struct ProjectListView {
         .layoutWeight(1)
         .width('100%')
         .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6,
-          bottom: RootShellPolicy.contentBottomInset() })
+          bottom: RootShellPolicy.contentBottomInset() + this.safeAreaBottomVp })
         .cachedCount(4)
         .edgeEffect(EdgeEffect.Spring)
         .onScrollIndex((start: number, _end: number): void => {
@@ -478,6 +480,7 @@ export struct ProjectEditorScreen {
 @Component
 export struct ProjectDetailScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private project: ProjectRecord | null = null;
   @State private projectLoading: boolean = true;
   @State private projectLoadError: string = '';
@@ -1007,7 +1010,8 @@ export struct ProjectDetailScreen {
         } })
         .height(RecordBatchLayoutPolicy.barHeight(this.batchFontScale()))
     }
-    .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
+    .margin({ left: 16, right: 16,
+      bottom: RecordBatchLayoutPolicy.bottomMargin() + this.safeAreaBottomVp })
     .width('100%')
     .transition(panelTransition(24))
   }
@@ -1345,7 +1349,7 @@ export struct ProjectDetailScreen {
             }
             .layoutWeight(1).width('100%')
             .padding({ bottom: RecordBatchLayoutPolicy.listBottomPadding(this.selectionMode,
-              this.batchFontScale()) })
+              this.batchFontScale(), this.safeAreaBottomVp) })
             .cachedCount(4)
             .edgeEffect(EdgeEffect.Spring)
             .onScrollIndex((start: number, _end: number): void => {
@@ -1373,7 +1377,7 @@ export struct ProjectDetailScreen {
           Button(tr('拍摄', 'Capture')).height(54).fontSize(17).fontWeight(FontWeight.Bold)
             .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
             .shadow({ radius: 18, color: `#66${UiTokens.PRIMARY.substring(1)}`, offsetY: 7 })
-            .margin({ right: 18, bottom: 18 }).align(Alignment.BottomEnd)
+            .margin({ right: 18, bottom: 18 + this.safeAreaBottomVp }).align(Alignment.BottomEnd)
             .enabled(this.canMutateProject())
             .onClick((): void => { this.beginCapture(); })
         }

@@ -9,6 +9,7 @@ import { CaptureStatus, ProjectLifecycleStatus } from '../../domain/StateMachine
 import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, DateFilterRow, EmptyPanel, FilterToolbar,
   InlineErrorPanel, ListSkeleton, SectionHeader, panelTransition } from '../../shared/AppComponents';
 import { formatBytes, formatDateTime, imageUri, statusLabel } from '../../shared/Formatters';
+import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { UiTokens } from '../../shared/UiTokens';
 import { CaptureCard, CaptureInfoRow } from './RecordComponents';
 import { ProjectBackupService } from '../backup/BackupService';
@@ -40,6 +41,7 @@ class RuntimeRecordPageLoader implements CapturePageLoader {
 @Component
 export struct AllRecordsView {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private controllerRevision: number = 0;
   @State private selectionRevision: number = 0;
   @State private searchText: string = '';
@@ -516,7 +518,8 @@ export struct AllRecordsView {
         } })
         .height(RecordBatchLayoutPolicy.barHeight(this.batchFontScale()))
     }
-    .margin({ left: 16, right: 16, bottom: RecordBatchLayoutPolicy.bottomMargin() })
+    .margin({ left: 16, right: 16,
+      bottom: RecordBatchLayoutPolicy.bottomMargin() + this.safeAreaBottomVp })
     .width('100%')
     .transition(panelTransition(24))
   }
@@ -576,7 +579,7 @@ export struct AllRecordsView {
           })
       }.width('100%')
     }
-    .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+    .padding({ left: 16, right: 16, top: 8, bottom: 16 + this.safeAreaBottomVp })
     .width('100%')
   }
 
@@ -657,7 +660,7 @@ export struct AllRecordsView {
           .width('100%')
           .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING,
             top: 4, bottom: RecordBatchLayoutPolicy.listBottomPadding(this.isSelectionMode(),
-              this.batchFontScale()) })
+              this.batchFontScale(), this.safeAreaBottomVp) })
           .cachedCount(4)
           .edgeEffect(EdgeEffect.Spring)
           .onScrollIndex((start: number, _end: number): void => {
