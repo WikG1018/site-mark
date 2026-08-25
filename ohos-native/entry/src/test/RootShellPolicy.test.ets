@@ -76,6 +76,18 @@ export default function rootShellPolicyTest(): void {
       expect(RootShellPolicy.contentBottomInset()).assertEqual(UiTokens.DOCK_HEIGHT + 28);
     });
 
+    it('keeps overlay list viewport unpadded and puts dock clearance in content end offset', 0, () => {
+      expect(RootShellPolicy.overlayListViewportBottomPadding()).assertEqual(0);
+      expect(RootShellPolicy.overlayContentEndOffset())
+        .assertEqual(RootShellPolicy.contentBottomInset());
+      expect(RootShellPolicy.overlayContentEndOffset(36))
+        .assertEqual(RootShellPolicy.contentBottomInset() + 36);
+      expect(RootShellPolicy.overlayContentEndOffset(Number.NaN))
+        .assertEqual(RootShellPolicy.contentBottomInset());
+      expect(RootShellPolicy.overlayContentEndOffset(-8))
+        .assertEqual(RootShellPolicy.contentBottomInset());
+    });
+
     it('serializes rapid 0 to 1 to 2 requests and settles on the latest tab', 0, () => {
       const coordinator = new RootTabCoordinator(0);
       const first = coordinator.request(1);

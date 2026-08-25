@@ -284,6 +284,15 @@ export class RecordBatchLayoutPolicy {
       RootShellPolicy.contentBottomInset();
     return base + inset;
   }
+
+  static listViewportBottomPadding(): number {
+    return RootShellPolicy.overlayListViewportBottomPadding();
+  }
+
+  static listContentEndOffset(selectionMode: boolean, fontScale: number = 1,
+    safeAreaBottomVp: number = 0): number {
+    return RecordBatchLayoutPolicy.listBottomPadding(selectionMode, fontScale, safeAreaBottomVp);
+  }
 }
 
 export class RecordRestorePolicy {

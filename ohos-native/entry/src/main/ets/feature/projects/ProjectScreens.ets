@@ -1348,8 +1348,9 @@ export struct ProjectDetailScreen {
               }
             }
             .layoutWeight(1).width('100%')
-            .padding({ bottom: RecordBatchLayoutPolicy.listBottomPadding(this.selectionMode,
-              this.batchFontScale(), this.safeAreaBottomVp) })
+            .padding({ bottom: RecordBatchLayoutPolicy.listViewportBottomPadding() })
+            .contentEndOffset(RecordBatchLayoutPolicy.listContentEndOffset(this.selectionMode,
+              this.batchFontScale(), this.safeAreaBottomVp))
             .cachedCount(4)
             .edgeEffect(EdgeEffect.Spring)
             .onScrollIndex((start: number, _end: number): void => {

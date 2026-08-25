@@ -240,4 +240,13 @@ export class RootShellPolicy {
   static contentBottomInset(): number {
     return UiTokens.DOCK_HEIGHT + RootShellPolicy.ROOT_CONTENT_GAP;
   }
+
+  static overlayListViewportBottomPadding(): number {
+    return 0;
+  }
+
+  static overlayContentEndOffset(safeAreaBottomVp: number = 0): number {
+    const inset = Number.isFinite(safeAreaBottomVp) && safeAreaBottomVp > 0 ? safeAreaBottomVp : 0;
+    return RootShellPolicy.contentBottomInset() + inset;
+  }
 }
