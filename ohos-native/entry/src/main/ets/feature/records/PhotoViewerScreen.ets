@@ -464,6 +464,19 @@ export struct PhotoViewerScreen {
           .padding({ left: 24, right: 24 })
           .justifyContent(FlexAlign.Center)
         }
+        if (this.controller.rows.length > 0) {
+          Text(`${this.controller.absoluteIndex + 1} / ${this.controller.totalCount}`)
+            .fontSize(13)
+            .fontColor(Color.White)
+            .backgroundColor(UiTokens.OVERLAY)
+            .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+            .borderRadius(16)
+            .margin({ right: 16, top: 26 + this.topInsetVp })
+            .align(Alignment.TopEnd)
+            .hitTestBehavior(HitTestMode.None)
+            .accessibilityText(tr(`第 ${this.controller.absoluteIndex + 1} 张，共 ${this.controller.totalCount} 张`,
+              `Photo ${this.controller.absoluteIndex + 1} of ${this.controller.totalCount}`))
+        }
         Button() {
           Text('‹')
             .fontSize(26)
@@ -479,18 +492,6 @@ export struct PhotoViewerScreen {
         .margin({ left: 16, top: 18 + this.topInsetVp })
         .accessibilityText(tr('返回记录详情', 'Back to record details'))
         .onClick((): void => { this.pathStack.pop(); })
-        if (this.controller.rows.length > 0) {
-          Text(`${this.controller.absoluteIndex + 1} / ${this.controller.totalCount}`)
-            .fontSize(13)
-            .fontColor(Color.White)
-            .backgroundColor(UiTokens.OVERLAY)
-            .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-            .borderRadius(16)
-            .margin({ top: 26 + this.topInsetVp })
-            .align(Alignment.Top)
-            .accessibilityText(tr(`第 ${this.controller.absoluteIndex + 1} 张，共 ${this.controller.totalCount} 张`,
-              `Photo ${this.controller.absoluteIndex + 1} of ${this.controller.totalCount}`))
-        }
         if (this.controller.failed && this.controller.rows.length > 0) {
           Button() {
             Row({ space: 6 }) {
