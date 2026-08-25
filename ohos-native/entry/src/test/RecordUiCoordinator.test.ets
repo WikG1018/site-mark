@@ -337,6 +337,16 @@ export default function recordUiCoordinatorTest(): void {
         .assertEqual(RootShellPolicy.contentBottomInset());
     });
 
+    it('applies list clearance as content end offset not viewport padding', 0, () => {
+      expect(RecordBatchLayoutPolicy.listViewportBottomPadding()).assertEqual(0);
+      expect(RecordBatchLayoutPolicy.listContentEndOffset(false))
+        .assertEqual(RecordBatchLayoutPolicy.listBottomPadding(false));
+      expect(RecordBatchLayoutPolicy.listContentEndOffset(true, 1, 36))
+        .assertEqual(RecordBatchLayoutPolicy.listBottomPadding(true, 1, 36));
+      expect(RecordBatchLayoutPolicy.listContentEndOffset(false, 1, 36))
+        .assertEqual(RootShellPolicy.contentBottomInset() + 36);
+    });
+
     it('grows the shared batch bar and its exact list clearance for 160 percent fonts', 0, () => {
       expect(RecordBatchLayoutPolicy.actionHeight(1.6)).assertEqual(84);
       expect(RecordBatchLayoutPolicy.barHeight(1.6)).assertEqual(124);

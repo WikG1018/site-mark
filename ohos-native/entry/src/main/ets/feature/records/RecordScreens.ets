@@ -659,8 +659,9 @@ export struct AllRecordsView {
           .layoutWeight(1)
           .width('100%')
           .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING,
-            top: 4, bottom: RecordBatchLayoutPolicy.listBottomPadding(this.isSelectionMode(),
-              this.batchFontScale(), this.safeAreaBottomVp) })
+            top: 4, bottom: RecordBatchLayoutPolicy.listViewportBottomPadding() })
+          .contentEndOffset(RecordBatchLayoutPolicy.listContentEndOffset(this.isSelectionMode(),
+            this.batchFontScale(), this.safeAreaBottomVp))
           .cachedCount(4)
           .edgeEffect(EdgeEffect.Spring)
           .onScrollIndex((start: number, _end: number): void => {
