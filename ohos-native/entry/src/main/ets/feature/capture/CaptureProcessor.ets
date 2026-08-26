@@ -104,8 +104,7 @@ export class CaptureProcessor {
         capture.id, capture.publishedUri);
       stage = 'commit_ready';
       hilog.info(LOG_DOMAIN, LOG_TAG, 'capture stage %{public}s', stage);
-      await this.database.markReady(capture.id, outputPath, originalSha, published.contentUri,
-        published.supersededUris);
+      await this.database.markReady(capture.id, outputPath, originalSha, published.contentUri);
       // Older builds could be killed after the system album accepted a JPEG
       // but before the RDB commit. The new non-interactive background path
       // does not create another journal, so adopt any durable predecessor now
@@ -117,7 +116,7 @@ export class CaptureProcessor {
             continue;
           }
           const adopted = await this.database.adoptPublishedUriFromJournal(capture.id,
-            published.contentUri, entry.contentUri, entry.supersededUris);
+            published.contentUri, entry.contentUri);
           if (adopted) {
             await this.services.clearPublishJournal(capture.id, entry.contentUri);
           }

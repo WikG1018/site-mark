@@ -1,4 +1,4 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { UIContext, window } from '@kit.ArkUI';
 import { AbilityContextHolder } from '../app/AbilityContextHolder';
@@ -12,6 +12,9 @@ const DOMAIN = 0x0000;
 const TAG = 'SiteMarkAbility';
 
 export default class EntryAbility extends UIAbility {
+  private mainWindow: window.Window | null = null;
+  private avoidAreaListener: ((info: window.AvoidAreaOptions) => void) | null = null;
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     AbilityContextHolder.current = this.context;
     this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
@@ -38,45 +41,64 @@ export default class EntryAbility extends UIAbility {
         return;
       }
       hilog.info(DOMAIN, TAG, 'Succeeded in loading the content.');
-      this.applyImmersiveLayout(windowStage);
+      this.applyImmersiveLayout(windowStage).catch((error: Error): void => {
+        hilog.error(DOMAIN, TAG, 'Failed to apply immersive layout. Cause: %{public}s', JSON.stringify(error));
+      });
     });
   }
 
-  private applyImmersiveLayout(windowStage: window.WindowStage): void {
-    try {
-      const win = windowStage.getMainWindowSync();
-      win.setWindowLayoutFullScreen(true);
-      win.setWindowSystemBarProperties({
-        statusBarColor: '#00000000',
-        navigationBarColor: '#00000000',
-        statusBarContentColor: '#17201C',
-        navigationBarContentColor: '#17201C'
-      });
-      const uiContext: UIContext = win.getUIContext();
-      const publish = (): void => {
-        const systemArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
-        const indicatorArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
-        const topVp = finitePxToVp(uiContext, systemArea.topRect.height);
-        const navigationVp = finitePxToVp(uiContext, systemArea.bottomRect.height);
-        const indicatorVp = finitePxToVp(uiContext, indicatorArea.bottomRect.height);
-        AppStorage.setOrCreate(SAFE_AREA_TOP_VP, topVp);
-        AppStorage.setOrCreate(SAFE_AREA_BOTTOM_VP, bottomInsetVp(navigationVp, indicatorVp));
-      };
-      publish();
-      win.on('avoidAreaChange', (_info: window.AvoidAreaOptions): void => {
-        try {
-          publish();
-        } catch (error) {
-          hilog.error(DOMAIN, TAG, 'Failed to refresh avoid area. Cause: %{public}s', JSON.stringify(error));
-        }
-      });
-    } catch (error) {
-      hilog.error(DOMAIN, TAG, 'Failed to apply immersive layout. Cause: %{public}s', JSON.stringify(error));
-    }
+  private async applyImmersiveLayout(windowStage: window.WindowStage): Promise<void> {
+    const win = windowStage.getMainWindowSync();
+    await win.setWindowLayoutFullScreen(true);
+    await win.setWindowSystemBarProperties({
+      statusBarColor: '#00000000',
+      navigationBarColor: '#00000000',
+      statusBarContentColor: '#17201C',
+      navigationBarContentColor: '#17201C'
+    });
+    const uiContext: UIContext = win.getUIContext();
+    const publish = (): void => {
+      const systemArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+      const indicatorArea = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+      const topVp = finitePxToVp(uiContext, systemArea.topRect.height);
+      const navigationVp = finitePxToVp(uiContext, systemArea.bottomRect.height);
+      const indicatorVp = finitePxToVp(uiContext, indicatorArea.bottomRect.height);
+      AppStorage.setOrCreate(SAFE_AREA_TOP_VP, topVp);
+      AppStorage.setOrCreate(SAFE_AREA_BOTTOM_VP, bottomInsetVp(navigationVp, indicatorVp));
+    };
+    const listener = (_info: window.AvoidAreaOptions): void => {
+      try {
+        publish();
+      } catch (error) {
+        hilog.error(DOMAIN, TAG, 'Failed to refresh avoid area. Cause: %{public}s', JSON.stringify(error));
+      }
+    };
+    publish();
+    win.on('avoidAreaChange', listener);
+    this.mainWindow = win;
+    this.avoidAreaListener = listener;
   }
 
   onWindowStageDestroy(): void {
+    if (this.mainWindow !== null && this.avoidAreaListener !== null) {
+      try {
+        this.mainWindow.off('avoidAreaChange', this.avoidAreaListener);
+      } catch (_) {
+      }
+    }
+    this.mainWindow = null;
+    this.avoidAreaListener = null;
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onWindowStageDestroy');
+  }
+
+  onConfigurationUpdate(_newConfig: Configuration): void {
+    const runtime = AppRuntime.current;
+    if (runtime === null) {
+      return;
+    }
+    runtime.applyAppearance().catch((error: Error): void => {
+      hilog.error(DOMAIN, TAG, 'Failed to apply updated appearance. Cause: %{public}s', JSON.stringify(error));
+    });
   }
 
   onForeground(): void {

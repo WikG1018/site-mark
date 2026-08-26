@@ -7,7 +7,6 @@ import serialCaptureQueueTest from './SerialCaptureQueue.test';
 import captureSessionTest from './CaptureSession.test';
 import restoreJournalTest from './RestoreJournal.test';
 import albumPublishPolicyTest from './AlbumPublishPolicy.test';
-import mediaCleanupTest from './MediaCleanup.test';
 import appTextTest from './AppText.test';
 import keyedOperationGateTest from './KeyedOperationGate.test';
 import asyncOnceTest from './AsyncOnce.test';
@@ -45,7 +44,6 @@ export default function testsuite(): void {
   captureSessionTest();
   restoreJournalTest();
   albumPublishPolicyTest();
-  mediaCleanupTest();
   appTextTest();
   keyedOperationGateTest();
   asyncOnceTest();

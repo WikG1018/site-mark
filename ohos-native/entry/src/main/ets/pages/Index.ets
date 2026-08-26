@@ -56,7 +56,9 @@ struct Index {
   };
 
   aboutToAppear(): void {
-    AppText.apply('', this.context().resourceManager.getConfigurationSync().locale);
+    if (AppRuntime.current === null) {
+      AppText.apply('', this.context().resourceManager.getConfigurationSync().locale);
+    }
     this.activateRootShell();
   }
 
@@ -433,8 +435,8 @@ struct Index {
               .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
             Text(tr('相册与备份', 'Gallery and backups')).fontSize(17).fontWeight(FontWeight.Bold)
               .fontColor(UiTokens.PRIMARY).width('100%')
-            Text(tr('保存成片、删除相册照片和选择备份位置时，会使用鸿蒙系统确认界面。卸载前请把重要备份保存到应用目录之外。',
-              'HarmonyOS confirmation panels are used to save or delete gallery photos and choose backup locations. Save important backups outside the app before uninstalling.'))
+            Text(tr('保存成片和选择备份位置时，会使用鸿蒙系统确认界面。删除应用内记录不会删除系统相册副本；卸载前请把重要备份保存到应用目录之外。',
+              'HarmonyOS confirmation panels are used to save photos and choose backup locations. Deleting an app record never deletes its system-gallery copy. Save important backups outside the app before uninstalling.'))
               .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
           }
           .padding(20).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)

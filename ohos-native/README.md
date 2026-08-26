@@ -7,7 +7,7 @@
 - 原生包名为 `io.github.wikg1018.sitemark.native`，不会覆盖历史 Flutter `ohos` 试验包。
 - 目标 SDK 为 HarmonyOS 6.1.1 / API 24，兼容 API 17；Rust 原生库覆盖 `arm64-v8a` 与 `x86_64`。
 - 当前可复现构建产物是 debug unsigned HAP；未配置发布签名，不应作为应用市场安装包分发。
-- ArkTS 全量测试、鸿蒙数据库契约测试、共享 Rust 核心与 Flutter 回归门禁均已通过；产品文档不固定测试数量，日期、命令和本次计数见[验证记录](docs/verification-2026-08-20.md)。
+- ArkTS 全量测试、鸿蒙数据库契约测试、共享 Rust 核心与 Flutter 回归门禁均已通过；产品文档不固定测试数量，日期、命令和本次计数见[最新验证记录](docs/verification-2026-08-26.md)。
 - 当前 `hdc list targets` 返回 `[Empty]`。本轮没有可用模拟器或真机，因此视觉走查、系统相机、相册交互、RDB 导入恢复和设备性能均未完成设备级验收。
 
 平台差异和未验证边界见 [docs/deltas.md](docs/deltas.md)。[tool/ohos-native/probe.md](../tool/ohos-native/probe.md) 是早期环境探测记录，只能说明当时的工具链和模拟器现象，不能替代本轮设备验收。

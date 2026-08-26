@@ -58,18 +58,16 @@ export class LocationSnapshot {
 
 export class PublishJpegOutcome {
   contentUri: string;
-  supersededUris: string[];
   enteredSystemAlbum: boolean;
 
-  constructor(contentUri: string, supersededUris: string[], enteredSystemAlbum: boolean) {
+  constructor(contentUri: string, enteredSystemAlbum: boolean) {
     this.contentUri = contentUri;
-    this.supersededUris = supersededUris;
     this.enteredSystemAlbum = enteredSystemAlbum;
   }
 }
 
 export function backgroundPublishOutcome(publishedUri: string): PublishJpegOutcome {
-  return new PublishJpegOutcome(publishedUri, [], publishedUri.length > 0);
+  return new PublishJpegOutcome(publishedUri, publishedUri.length > 0);
 }
 
 export class ImageInspection {
@@ -98,7 +96,6 @@ export interface SystemServices {
     publishedUri: string): Promise<PublishJpegOutcome>;
   recoverPublishJournals(): Promise<PublishJournalEntry[]>;
   clearPublishJournal(captureId: string, expectedContentUri: string): Promise<boolean>;
-  deletePublishedImage(uri: string): Promise<boolean>;
   inspectImage(path: string): Promise<ImageInspection>;
   readExifGps(imagePath: string): Promise<ExifGpsReading | null>;
   openApplicationSettings(): Promise<boolean>;
@@ -307,7 +304,7 @@ export class HarmonySystemServices implements SystemServices {
   }
 
   async saveJpegToAlbum(sourcePath: string, displayName: string, captureId: string,
-    publishedUri: string): Promise<PublishJpegOutcome> {
+    _publishedUri: string): Promise<PublishJpegOutcome> {
     const sourceUri = fileUri.getUriFromPath(sourcePath);
     const helper = photoAccessHelper.getPhotoAccessHelper(this.context);
     const config: photoAccessHelper.PhotoCreationConfig = {
@@ -320,33 +317,37 @@ export class HarmonySystemServices implements SystemServices {
       throw new Error('album_save_cancelled');
     }
     const contentUri = uris[0];
-    const superseded: string[] = [];
-    const previousJournal = await this.journals.peek(captureId);
-    if (publishedUri.length > 0 && publishedUri !== contentUri) {
-      superseded.push(publishedUri);
-    }
-    if (previousJournal !== null) {
-      if (previousJournal.contentUri !== contentUri && superseded.indexOf(previousJournal.contentUri) < 0) {
-        superseded.push(previousJournal.contentUri);
+    let source: fileIo.File | null = null;
+    let destination: fileIo.File | null = null;
+    try {
+      source = fileIo.openSync(sourcePath, fileIo.OpenMode.READ_ONLY);
+      destination = fileIo.openSync(contentUri,
+        fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE);
+      fileIo.copyFileSync(source.fd, destination.fd);
+    } catch (_) {
+      throw new Error('album_copy_failed');
+    } finally {
+      if (source !== null) {
+        try {
+          fileIo.closeSync(source);
+        } catch (_) {
+        }
       }
-      for (const uri of previousJournal.supersededUris) {
-        if (uri !== contentUri && superseded.indexOf(uri) < 0) {
-          superseded.push(uri);
+      if (destination !== null) {
+        try {
+          fileIo.closeSync(destination);
+        } catch (_) {
         }
       }
     }
     try {
-      await this.journals.record(captureId, contentUri, superseded);
+      await this.journals.record(captureId, contentUri);
     } catch (_) {
-      try {
-        await photoAccessHelper.MediaAssetChangeRequest.deleteAssets(this.context, [contentUri]);
-      } catch (_) {
-        // The system may require user confirmation. Never report this publish
-        // as committed when its recovery journal was not durably flushed.
-      }
+      // The system-album copy belongs to the user once written. Keep it even
+      // when the recovery journal cannot be committed and report the failure.
       throw new Error('album_journal_failed');
     }
-    return new PublishJpegOutcome(contentUri, superseded, true);
+    return new PublishJpegOutcome(contentUri, true);
   }
 
   recoverPublishJournals(): Promise<PublishJournalEntry[]> {
@@ -355,18 +356,6 @@ export class HarmonySystemServices implements SystemServices {
 
   clearPublishJournal(captureId: string, expectedContentUri: string): Promise<boolean> {
     return this.journals.clear(captureId, expectedContentUri);
-  }
-
-  async deletePublishedImage(uri: string): Promise<boolean> {
-    if (uri.length === 0) {
-      return true;
-    }
-    try {
-      await photoAccessHelper.MediaAssetChangeRequest.deleteAssets(this.context, [uri]);
-      return true;
-    } catch (_) {
-      return false;
-    }
   }
 
   inspectImage(path: string): Promise<ImageInspection> {

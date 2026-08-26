@@ -41,7 +41,7 @@ export class CompletionNotifications {
             parameters: { captureId }
           }],
           actionType: wantAgent.OperationType.START_ABILITY,
-          requestCode: 0,
+          requestCode: this.notificationId(captureId),
           actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
         });
       } catch (_) {

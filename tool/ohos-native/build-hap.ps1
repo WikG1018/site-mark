@@ -24,19 +24,14 @@ $env:NODE_HOME = Join-Path $DevEcoRoot 'tools\node'
 
 # ArkTS compiler warnings are tracked with a ratchet: this budget is the
 # committed baseline, and any build that introduces new warnings fails below.
-# Baseline composition (2026-08-23, 300 total):
+# Baseline composition (2026-08-26, 296 total):
 #   295x "Function may throw exceptions" - the data layer deliberately uses
 #        try/finally so relationalStore/resultSet errors propagate to callers
 #        that already catch them; the compiler asks for a local catch anyway.
-#     2x WRITE_IMAGEVIDEO notices - photoAccessHelper save/delete flows are
-#        user-consent based by design and declare no permission.
 #     1x SDK 23 isAnimationReduceEnabled notice - runtime-guarded via
 #        ReduceMotionQueryPolicy.read().
-#     2x "Function may throw exceptions" in SuspendDelayWindow - the
-#        backgroundTaskManager request/cancel adapters intentionally surface
-#        errors to the caller, which catches them and degrades gracefully.
 # Lower this number whenever warnings are genuinely removed.
-$MaxArkTsWarnings = 300
+$MaxArkTsWarnings = 296
 if (-not $SkipRust) {
   & (Join-Path $PSScriptRoot 'build-rust.ps1') `
     -NativeSdkRoot (Join-Path $env:DEVECO_SDK_HOME 'default\openharmony\native')
