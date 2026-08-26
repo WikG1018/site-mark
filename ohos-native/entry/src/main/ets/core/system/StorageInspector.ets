@@ -36,10 +36,51 @@ export class StorageInspector {
         const stat = fileIo.statSync(path);
         if (stat.isFile() && name.toLowerCase().endsWith('.zip')) {
           fileIo.unlinkSync(path);
+        } else if (stat.isDirectory() && StorageInspector.isInterruptedWorkDirectory(name)) {
+          StorageInspector.removeDirectory(path);
         }
       } catch (_) {
       }
     }
+  }
+
+  static clearInterruptedExports(filesDir: string): void {
+    const exportDir = `${filesDir}/exports`;
+    if (!fileIo.accessSync(exportDir)) {
+      return;
+    }
+    for (const name of fileIo.listFileSync(exportDir)) {
+      if (!StorageInspector.isInterruptedWorkDirectory(name)) {
+        continue;
+      }
+      const path = `${exportDir}/${name}`;
+      try {
+        if (fileIo.statSync(path).isDirectory()) {
+          StorageInspector.removeDirectory(path);
+        }
+      } catch (_) {
+      }
+    }
+  }
+
+  private static isInterruptedWorkDirectory(name: string): boolean {
+    return /^work-[0-9a-fA-F-]{36}$/.test(name);
+  }
+
+  private static removeDirectory(path: string): void {
+    if (!fileIo.accessSync(path)) {
+      return;
+    }
+    for (const name of fileIo.listFileSync(path)) {
+      const child = `${path}/${name}`;
+      const stat = fileIo.statSync(child);
+      if (stat.isDirectory()) {
+        StorageInspector.removeDirectory(child);
+      } else {
+        fileIo.unlinkSync(child);
+      }
+    }
+    fileIo.rmdirSync(path);
   }
 
   private static walk(root: string, directory: string, result: StorageSnapshot): void {

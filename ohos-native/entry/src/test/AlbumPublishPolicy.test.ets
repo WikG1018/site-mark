@@ -8,7 +8,6 @@ export default function albumPublishPolicyTest(): void {
 
       expect(outcome.contentUri).assertEqual('');
       expect(outcome.enteredSystemAlbum).assertFalse();
-      expect(outcome.supersededUris.length).assertEqual(0);
     });
 
     it('preserves an existing album reference while a replacement awaits user action', 0, () => {
@@ -16,7 +15,6 @@ export default function albumPublishPolicyTest(): void {
 
       expect(outcome.contentUri).assertEqual('file://media/Photo/17');
       expect(outcome.enteredSystemAlbum).assertTrue();
-      expect(outcome.supersededUris.length).assertEqual(0);
     });
   });
 }

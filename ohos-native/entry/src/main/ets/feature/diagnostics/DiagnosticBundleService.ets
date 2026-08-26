@@ -4,6 +4,7 @@ import { AppRuntime } from '../../app/AppRuntime';
 import { DiagnosticEventRecord } from '../../data/database/AppDatabase';
 import { ArchiveDeliveryCoordinator, ExportDeliveryOutcome } from '../backup/ExportDeliveryPolicy';
 import { SystemSharePanel } from '../../core/system/SystemSharePanel';
+import { loadAppVersion } from '../../shared/AppVersion';
 
 interface DiagnosticEnvironmentJson {
   app_version: string;
@@ -60,9 +61,10 @@ export class DiagnosticBundleService {
   async generate(): Promise<DiagnosticBundleResult> {
     const events = await this.runtime.database.diagnosticEvents();
     const generatedAt = new Date().toISOString();
+    const version = await loadAppVersion();
     const environment: DiagnosticEnvironmentJson = {
-      app_version: '1.0.0',
-      build_number: '1',
+      app_version: version.versionName,
+      build_number: version.versionCode,
       operating_system: 'HarmonyOS',
       operating_system_version: deviceInfo.osFullName,
       sdk_api_version: deviceInfo.sdkApiVersion,

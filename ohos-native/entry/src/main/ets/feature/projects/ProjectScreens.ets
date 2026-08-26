@@ -287,7 +287,8 @@ export struct ProjectListView {
         .layoutWeight(1)
         .width('100%')
         .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 6,
-          bottom: RootShellPolicy.contentBottomInset() + this.safeAreaBottomVp })
+          bottom: RootShellPolicy.overlayListViewportBottomPadding() })
+        .contentEndOffset(RootShellPolicy.overlayContentEndOffset(this.safeAreaBottomVp))
         .cachedCount(4)
         .edgeEffect(EdgeEffect.Spring)
         .onScrollIndex((start: number, _end: number): void => {

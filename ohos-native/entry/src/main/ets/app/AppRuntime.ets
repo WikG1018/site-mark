@@ -2,10 +2,9 @@ import { common } from '@kit.AbilityKit';
 import { SerialCaptureQueue } from '../background/SerialCaptureQueue';
 import { ImagePipeline } from '../core/media/ImagePipeline';
 import { NativeImagePipeline } from '../core/media/NativeImagePipeline';
-import { MediaCleanup, MediaCleanupDatabase, MediaDeleteService } from '../core/system/MediaCleanup';
 import { PrivateFileCleanup } from '../core/system/PrivateFileCleanup';
 import { HarmonySystemServices, SystemServices } from '../core/system/SystemServices';
-import { AppDatabase, MediaCleanupTask } from '../data/database/AppDatabase';
+import { AppDatabase } from '../data/database/AppDatabase';
 import { CaptureKillDraftStore } from '../data/prefs/CaptureKillDraftStore';
 import { CaptureSessionStore } from '../data/prefs/CaptureSessionStore';
 import { PreferencesCaptureKillDraftStorage, PreferencesCaptureSessionStorage,
@@ -28,47 +27,12 @@ import { ScreenStateStore } from '../shared/ScreenStateStore';
 import { UiMemoryCoordinator } from '../shared/UiMemoryCoordinator';
 import { cancelSystemSuspendDelay, requestSystemSuspendDelay, SuspendDelayWindow }
   from '../shared/SuspendDelayWindow';
+import { StorageInspector } from '../core/system/StorageInspector';
 
 const RUNTIME_DOMAIN = 0x0000;
 const RUNTIME_TAG = 'SiteMarkRuntime';
 
 export type RuntimeListener = () => void;
-
-class AppDatabaseMediaCleanupAdapter implements MediaCleanupDatabase {
-  private readonly database: AppDatabase;
-
-  constructor(database: AppDatabase) {
-    this.database = database;
-  }
-
-  pendingMediaCleanups(): Promise<MediaCleanupTask[]> {
-    return this.database.pendingMediaCleanups();
-  }
-
-  isPublishedUriReferenced(uri: string): Promise<boolean> {
-    return this.database.isPublishedUriReferenced(uri);
-  }
-
-  completeMediaCleanup(uri: string): Promise<void> {
-    return this.database.completeMediaCleanup(uri);
-  }
-
-  failMediaCleanup(uri: string): Promise<void> {
-    return this.database.failMediaCleanup(uri);
-  }
-}
-
-class SystemMediaDeleteAdapter implements MediaDeleteService {
-  private readonly services: SystemServices;
-
-  constructor(services: SystemServices) {
-    this.services = services;
-  }
-
-  deletePublishedImage(uri: string): Promise<boolean> {
-    return this.services.deletePublishedImage(uri);
-  }
-}
 
 export class AppRuntime {
   static current: AppRuntime | null = null;
@@ -81,7 +45,6 @@ export class AppRuntime {
   readonly queue: SerialCaptureQueue;
   readonly suspendWindow: SuspendDelayWindow;
   readonly captureWorkflow: CaptureWorkflow;
-  readonly mediaCleanup: MediaCleanup;
   readonly privateFileCleanup: PrivateFileCleanup;
   readonly startupRecovery: StartupRecovery;
   readonly restoreJournal: RestoreJournalStore;
@@ -112,16 +75,12 @@ export class AppRuntime {
       cancelSystemSuspendDelay, (): boolean => this.queue.isBusy());
     this.queue.setDrainedListener((): void => this.suspendWindow.release());
     this.captureWorkflow = new CaptureWorkflow(database, this.services, sessions, this.queue);
-    this.mediaCleanup = new MediaCleanup(
-      new AppDatabaseMediaCleanupAdapter(database),
-      new SystemMediaDeleteAdapter(this.services),
-    );
     this.privateFileCleanup = new PrivateFileCleanup(database, context.filesDir);
     this.restoreJournal = new RestoreJournalStore(new PreferencesRestoreJournalStorage(context));
     this.screenState = new ScreenStateStore();
     this.uiMemory = new UiMemoryCoordinator();
     this.startupRecovery = new StartupRecovery(database, this.services, this.captureWorkflow,
-      this.queue, this.mediaCleanup, this.privateFileCleanup, this.restoreJournal, context.filesDir);
+      this.queue, this.privateFileCleanup, this.restoreJournal, context.filesDir);
   }
 
   static initialize(context: common.UIAbilityContext): Promise<AppRuntime> {
@@ -135,6 +94,7 @@ export class AppRuntime {
     if (AppRuntime.current !== null) {
       return AppRuntime.current;
     }
+    StorageInspector.clearInterruptedExports(context.filesDir);
     const database = await AppDatabase.open(context);
     const runtime = new AppRuntime(context, database);
     await runtime.applyAppearance();
@@ -218,7 +178,6 @@ export class AppRuntime {
     try {
       await this.database.scheduleCaptureDeletion(captureId);
       await this.privateFileCleanup.reconcile();
-      await this.mediaCleanup.reconcile();
       await this.recordDiagnosticBestEffort('capture_delete', 'success', Date.now() - started);
       this.notifyDataChanged();
     } catch (error) {
@@ -253,7 +212,7 @@ export class AppRuntime {
       const outcome = await this.services.saveJpegToAlbum(capture.renderedPath,
         `${capture.photoNumber}.jpg`, capture.id, capture.publishedUri);
       const adopted = await this.database.adoptPublishedUriFromJournal(capture.id,
-        capture.publishedUri, outcome.contentUri, outcome.supersededUris);
+        capture.publishedUri, outcome.contentUri);
       if (!adopted) {
         throw new Error(tr('记录已发生变化，请重新打开后再试',
           'The record changed. Reopen it and try again.'));
@@ -262,7 +221,6 @@ export class AppRuntime {
         await this.services.clearPublishJournal(capture.id, outcome.contentUri);
       } catch (_) {
       }
-      await this.mediaCleanup.reconcile();
       await this.recordDiagnosticBestEffort('republish', 'success', 0);
       this.notifyDataChanged();
     } finally {

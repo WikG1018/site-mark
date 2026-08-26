@@ -299,21 +299,20 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     if (displayName.length === 0 || displayName.length > 120) {
       throw new Error('project_name_invalid');
     }
+    if (!await this.projectNameAvailableExcept(displayName, '')) {
+      throw new Error('project_name_conflict');
+    }
     const id = util.generateRandomUUID();
     const now = Date.now();
     const defaults = await this.settings();
-    try {
-      await this.store.executeSql(
-        `INSERT INTO projects(id,name,name_key,safe_name_key,description,watermark_position,
-         watermark_opacity,watermark_accent_color_argb,watermark_font_scale,created_at,updated_at)
-         VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-        [id, displayName, normalizedProjectNameKey(displayName), safeProjectFileNameKey(displayName),
-          description.trim(), defaults.defaultWatermarkPosition, defaults.defaultWatermarkOpacity,
-          defaults.defaultWatermarkAccentColorArgb, defaults.defaultWatermarkFontScale, now, now]
-      );
-    } catch (_) {
-      throw new Error('project_name_conflict');
-    }
+    await this.store.executeSql(
+      `INSERT INTO projects(id,name,name_key,safe_name_key,description,watermark_position,
+       watermark_opacity,watermark_accent_color_argb,watermark_font_scale,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, displayName, normalizedProjectNameKey(displayName), safeProjectFileNameKey(displayName),
+        description.trim(), defaults.defaultWatermarkPosition, defaults.defaultWatermarkOpacity,
+        defaults.defaultWatermarkAccentColorArgb, defaults.defaultWatermarkFontScale, now, now]
+    );
     const created = await this.projectById(id);
     if (created === null) {
       throw new Error('project_create_failed');
@@ -326,14 +325,13 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     if (displayName.length === 0 || displayName.length > 120) {
       throw new Error('project_name_invalid');
     }
-    try {
-      await this.store.executeSql(
-        `UPDATE projects SET name=?, name_key=?, safe_name_key=?, updated_at=? WHERE id=?`,
-        [displayName, normalizedProjectNameKey(displayName), safeProjectFileNameKey(displayName), Date.now(), id]
-      );
-    } catch (_) {
+    if (!await this.projectNameAvailableExcept(displayName, id)) {
       throw new Error('project_name_conflict');
     }
+    await this.store.executeSql(
+      `UPDATE projects SET name=?, name_key=?, safe_name_key=?, updated_at=? WHERE id=?`,
+      [displayName, normalizedProjectNameKey(displayName), safeProjectFileNameKey(displayName), Date.now(), id]
+    );
   }
 
   async updateProjectDescription(id: string, description: string): Promise<void> {
@@ -387,9 +385,14 @@ export class AppDatabase implements CaptureWorkflowDatabase {
   }
 
   async projectNameAvailable(name: string): Promise<boolean> {
+    return this.projectNameAvailableExcept(name, '');
+  }
+
+  private async projectNameAvailableExcept(name: string, excludedId: string): Promise<boolean> {
     const rows = await this.store.querySql(
-      'SELECT 1 FROM projects WHERE name_key=? OR safe_name_key=? LIMIT 1',
-      [normalizedProjectNameKey(name), safeProjectFileNameKey(name)]);
+      `SELECT 1 FROM projects WHERE (name_key=? OR safe_name_key=?)
+       AND (?='' OR id<>?) LIMIT 1`,
+      [normalizedProjectNameKey(name), safeProjectFileNameKey(name), excludedId, excludedId]);
     try {
       return !rows.goToFirstRow();
     } finally {
@@ -796,8 +799,7 @@ export class AppDatabase implements CaptureWorkflowDatabase {
        failure_reason=NULL WHERE id=? AND status=?`, [id, capture.status]);
   }
 
-  async markReady(id: string, renderedPath: string, sha256: string, publishedUri: string,
-    supersededUris: string[]): Promise<void> {
+  async markReady(id: string, renderedPath: string, sha256: string, publishedUri: string): Promise<void> {
     const capture = await this.captureById(id);
     if (capture === null || !canCaptureTransition(capture.status, CaptureStatus.READY)) {
       throw new Error('capture_state_conflict');
@@ -808,15 +810,6 @@ export class AppDatabase implements CaptureWorkflowDatabase {
         `UPDATE captures SET status='ready', rendered_path=?, original_sha256=?, published_uri=?,
          failure_reason=NULL WHERE id=? AND status=?`,
         [renderedPath, sha256, publishedUri.length === 0 ? null : publishedUri, id, capture.status]);
-      for (const uri of supersededUris) {
-        if (uri.length > 0 && uri !== publishedUri) {
-          await transaction.execute(
-            `INSERT INTO capture_media_cleanups(published_uri,capture_id,created_at,retry_count,last_attempt_at,stalled_at)
-             VALUES(?,?,?,0,NULL,NULL) ON CONFLICT(published_uri) DO UPDATE SET
-             capture_id=excluded.capture_id, created_at=excluded.created_at, retry_count=0,
-             last_attempt_at=NULL, stalled_at=NULL`, [uri, id, Date.now()]);
-        }
-      }
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();
@@ -916,19 +909,16 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     try {
       await this.insertFileCleanup(transaction, capture.originalPath, id, 'original');
       await this.insertFileCleanup(transaction, capture.renderedPath, id, 'rendered');
-      if (capture.publishedUri.length > 0) {
-        await transaction.execute(
-          `INSERT INTO capture_media_cleanups(published_uri,capture_id,created_at,retry_count,last_attempt_at,stalled_at)
-           VALUES(?,?,?,0,NULL,NULL) ON CONFLICT(published_uri) DO UPDATE SET
-           capture_id=excluded.capture_id,created_at=excluded.created_at,retry_count=0,
-           last_attempt_at=NULL,stalled_at=NULL`, [capture.publishedUri, id, Date.now()]);
-      }
       await transaction.execute('DELETE FROM captures WHERE id=?', [id]);
       await transaction.commit();
     } catch (error) {
       await transaction.rollback();
       throw new Error((error as Error).message);
     }
+  }
+
+  async discardMediaCleanups(): Promise<void> {
+    await this.store.executeSql('DELETE FROM capture_media_cleanups');
   }
 
   async scheduleProjectDeletion(id: string): Promise<void> {
@@ -1009,62 +999,8 @@ export class AppDatabase implements CaptureWorkflowDatabase {
        retry_count=0,stalled_at=NULL`, [path, captureId, kind, Date.now()]);
   }
 
-  async isPublishedUriReferenced(uri: string): Promise<boolean> {
-    const rows = await this.store.querySql('SELECT 1 FROM captures WHERE published_uri=? LIMIT 1', [uri]);
-    try {
-      return rows.goToFirstRow();
-    } finally {
-      rows.close();
-    }
-  }
-
-  async pendingMediaCleanups(limit: number = 20): Promise<MediaCleanupTask[]> {
-    const rows = await this.store.querySql(
-      `SELECT published_uri,capture_id,retry_count FROM capture_media_cleanups
-       WHERE stalled_at IS NULL ORDER BY created_at LIMIT ?`, [limit]);
-    const result: MediaCleanupTask[] = [];
-    try {
-      if (rows.goToFirstRow()) {
-        do {
-          result.push(new MediaCleanupTask(
-            rows.getString(rows.getColumnIndex('published_uri')),
-            rows.getString(rows.getColumnIndex('capture_id')),
-            rows.getLong(rows.getColumnIndex('retry_count'))
-          ));
-        } while (rows.goToNextRow());
-      }
-      return result;
-    } finally {
-      rows.close();
-    }
-  }
-
-  async completeMediaCleanup(uri: string): Promise<void> {
-    await this.store.executeSql('DELETE FROM capture_media_cleanups WHERE published_uri=?', [uri]);
-  }
-
-  async queueMediaCleanups(captureId: string, uris: string[]): Promise<void> {
-    const transaction = await this.store.createTransaction();
-    try {
-      for (const uri of uris) {
-        if (uri.length === 0) {
-          continue;
-        }
-        await transaction.execute(
-          `INSERT INTO capture_media_cleanups(published_uri,capture_id,created_at,retry_count,last_attempt_at,stalled_at)
-           VALUES(?,?,?,0,NULL,NULL) ON CONFLICT(published_uri) DO UPDATE SET
-           capture_id=excluded.capture_id,created_at=excluded.created_at,retry_count=0,
-           last_attempt_at=NULL,stalled_at=NULL`, [uri, captureId, Date.now()]);
-      }
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      throw new Error((error as Error).message);
-    }
-  }
-
   async adoptPublishedUriFromJournal(captureId: string, expectedPreviousUri: string,
-    newUri: string, supersededUris: string[]): Promise<boolean> {
+    newUri: string): Promise<boolean> {
     const transaction = await this.store.createTransaction();
     try {
       const changedValue = await transaction.execute(
@@ -1075,34 +1011,12 @@ export class AppDatabase implements CaptureWorkflowDatabase {
         await transaction.rollback();
         return false;
       }
-      const cleanupUris = supersededUris.slice();
-      if (expectedPreviousUri.length > 0 && expectedPreviousUri !== newUri &&
-        cleanupUris.indexOf(expectedPreviousUri) < 0) {
-        cleanupUris.push(expectedPreviousUri);
-      }
-      for (const uri of cleanupUris) {
-        if (uri.length > 0 && uri !== newUri) {
-          await transaction.execute(
-            `INSERT INTO capture_media_cleanups(published_uri,capture_id,created_at,retry_count,last_attempt_at,stalled_at)
-             VALUES(?,?,?,0,NULL,NULL) ON CONFLICT(published_uri) DO UPDATE SET
-             capture_id=excluded.capture_id,created_at=excluded.created_at,retry_count=0,
-             last_attempt_at=NULL,stalled_at=NULL`, [uri, captureId, Date.now()]);
-        }
-      }
       await transaction.commit();
       return true;
     } catch (error) {
       await transaction.rollback();
       throw new Error((error as Error).message);
     }
-  }
-
-  async failMediaCleanup(uri: string, maxAttempts: number = 3): Promise<void> {
-    await this.store.executeSql(
-      `UPDATE capture_media_cleanups SET retry_count=retry_count+1,last_attempt_at=?,
-       stalled_at=CASE WHEN retry_count+1>=? THEN ? ELSE NULL END WHERE published_uri=?`,
-      [Date.now(), maxAttempts, Date.now(), uri]
-    );
   }
 
   async listTemplates(projectId: string): Promise<CaptureTemplateRecord[]> {
@@ -1300,18 +1214,6 @@ class DateRange {
   constructor(start: number, end: number) {
     this.start = start;
     this.end = end;
-  }
-}
-
-export class MediaCleanupTask {
-  publishedUri: string;
-  captureId: string;
-  retryCount: number;
-
-  constructor(publishedUri: string, captureId: string, retryCount: number) {
-    this.publishedUri = publishedUri;
-    this.captureId = captureId;
-    this.retryCount = retryCount;
   }
 }
 

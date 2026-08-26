@@ -45,17 +45,16 @@ class CountingCameraServices implements SystemServices {
   }
   publishJpegInBackground(_sourcePath: string, _displayName: string, _captureId: string,
     _publishedUri: string): Promise<PublishJpegOutcome> {
-    return Promise.resolve(new PublishJpegOutcome('', [], false));
+    return Promise.resolve(new PublishJpegOutcome('', false));
   }
   saveJpegToAlbum(_sourcePath: string, _displayName: string, _captureId: string,
     _publishedUri: string): Promise<PublishJpegOutcome> {
-    return Promise.resolve(new PublishJpegOutcome('', [], false));
+    return Promise.resolve(new PublishJpegOutcome('', false));
   }
   recoverPublishJournals(): Promise<PublishJournalEntry[]> { return Promise.resolve([]); }
   clearPublishJournal(_captureId: string, _expectedContentUri: string): Promise<boolean> {
     return Promise.resolve(true);
   }
-  deletePublishedImage(_uri: string): Promise<boolean> { return Promise.resolve(true); }
   inspectImage(_path: string): Promise<ImageInspection> { return Promise.resolve(new ImageInspection(false)); }
   readExifGps(_imagePath: string): Promise<ExifGpsReading | null> { return Promise.resolve(null); }
   openApplicationSettings(): Promise<boolean> { return Promise.resolve(true); }

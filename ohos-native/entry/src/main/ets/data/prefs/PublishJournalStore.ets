@@ -1,20 +1,17 @@
 export interface PublishJournalEntryInit {
   captureId: string;
   contentUri: string;
-  supersededUris: string[];
   recordedAt: number;
 }
 
 export class PublishJournalEntry {
   captureId: string;
   contentUri: string;
-  supersededUris: string[];
   recordedAt: number;
 
   constructor(value: PublishJournalEntryInit) {
     this.captureId = value.captureId;
     this.contentUri = value.contentUri;
-    this.supersededUris = value.supersededUris;
     this.recordedAt = value.recordedAt;
   }
 }
@@ -42,17 +39,6 @@ export class InMemoryPublishJournalStorage implements PublishJournalStorage {
   }
 }
 
-function uniqueUris(values: string[], excluded: string): string[] {
-  const result: string[] = [];
-  for (const value of values) {
-    const uri = value.trim();
-    if (uri.length > 0 && uri !== excluded && result.indexOf(uri) < 0) {
-      result.push(uri);
-    }
-  }
-  return result;
-}
-
 export class PublishJournalStore {
   private readonly storage: PublishJournalStorage;
   private mutationTail: Promise<void> = Promise.resolve();
@@ -61,14 +47,13 @@ export class PublishJournalStore {
     this.storage = storage;
   }
 
-  async record(captureId: string, contentUri: string, supersededUris: string[]): Promise<void> {
+  async record(captureId: string, contentUri: string): Promise<void> {
     await this.withMutation(async (): Promise<void> => {
       const entries = await this.readEntries();
       const next = entries.filter((entry: PublishJournalEntry): boolean => entry.captureId !== captureId);
       next.push(new PublishJournalEntry({
         captureId: captureId,
         contentUri: contentUri,
-        supersededUris: uniqueUris(supersededUris, contentUri),
         recordedAt: Date.now()
       }));
       await this.writeEntries(next);
@@ -78,12 +63,6 @@ export class PublishJournalStore {
   async recover(): Promise<PublishJournalEntry[]> {
     await this.mutationTail;
     return this.readEntries();
-  }
-
-  async peek(captureId: string): Promise<PublishJournalEntry | null> {
-    const entries = await this.recover();
-    const matching = entries.filter((entry: PublishJournalEntry): boolean => entry.captureId === captureId);
-    return matching.length === 0 ? null : matching[matching.length - 1];
   }
 
   async clear(captureId: string, expectedContentUri: string): Promise<boolean> {
@@ -129,11 +108,9 @@ export class PublishJournalStore {
       for (const entry of document.entries) {
         if (typeof entry.captureId === 'string' && typeof entry.contentUri === 'string' &&
           entry.captureId.length > 0 && entry.contentUri.length > 0) {
-          const superseded = Array.isArray(entry.supersededUris) ? entry.supersededUris : [];
           result.push(new PublishJournalEntry({
             captureId: entry.captureId,
             contentUri: entry.contentUri,
-            supersededUris: uniqueUris(superseded, entry.contentUri),
             recordedAt: typeof entry.recordedAt === 'number' ? entry.recordedAt : 0
           }));
         }

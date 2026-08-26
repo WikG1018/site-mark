@@ -25,6 +25,7 @@ import { AppearanceSettingsDraft } from './AppearanceSettingsDraft';
 import { DiagnosticsGenerationOutcome, DiagnosticsGenerationOutcomeStore, DiagnosticsGenerationStatus }
   from './DiagnosticsActionOutcome';
 import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
+import { loadAppVersion } from '../../shared/AppVersion';
 
 const notificationActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 const appearanceActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
@@ -706,6 +707,27 @@ export struct DiagnosticsScreen {
 @Component
 export struct AboutScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @State private versionLabel: string = tr('正在读取版本…', 'Loading version…');
+  private versionGeneration: number = 0;
+
+  aboutToAppear(): void {
+    const generation = ++this.versionGeneration;
+    this.loadVersion(generation);
+  }
+
+  aboutToDisappear(): void {
+    this.versionGeneration += 1;
+  }
+
+  private async loadVersion(generation: number): Promise<void> {
+    const version = await loadAppVersion();
+    if (generation !== this.versionGeneration) {
+      return;
+    }
+    this.versionLabel = version.versionName === 'unknown' ? tr('版本信息不可用', 'Version unavailable') :
+      tr(`版本 ${version.versionName}（${version.versionCode}）`,
+        `Version ${version.versionName} (${version.versionCode})`);
+  }
 
   build() {
     NavDestination() {
@@ -718,7 +740,7 @@ export struct AboutScreen {
             Text('SiteMark').fontSize(30).fontWeight(FontWeight.Bold).fontColor(UiTokens.PRIMARY)
             Text(tr('工程印记 · 鸿蒙原生版', 'SiteMark · Native HarmonyOS')).fontSize(18)
               .fontWeight(FontWeight.Medium)
-            Text(tr('版本 1.0.0', 'Version 1.0.0')).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
+            Text(this.versionLabel).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
             Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无云同步；照片和项目数据在本机处理。',
               'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or cloud sync; photos and project data are processed on-device.'))
               .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).textAlign(TextAlign.Center)
