@@ -57,13 +57,22 @@ class ProjectExportService implements ProjectArchiveExporter {
     )).where((capture) => capture.status == CaptureStatus.ready).toList();
     final photos = <ExportPhotoRecord>[];
     for (final capture in captures) {
+      final photoNumber = capture.photoNumber;
+      final capturedAt = capture.capturedAt;
+      final originalSha256 = capture.originalSha256;
+      if (photoNumber == null || capturedAt == null || originalSha256 == null) {
+        throw StateError(
+          'Ready capture ${capture.id} is missing evidence fields; '
+          'export aborted',
+        );
+      }
       photos.add(
         ExportPhotoRecord(
-          photoNumber: capture.photoNumber!,
+          photoNumber: photoNumber,
           watermarkedPath: await capturePaths.renderedPhotoPath(capture.id),
           originalPath: includeOriginals ? capture.originalPath : null,
-          originalSha256: capture.originalSha256!,
-          capturedAt: _formatLocalTimestamp(capture.capturedAt!),
+          originalSha256: originalSha256,
+          capturedAt: _formatLocalTimestamp(capturedAt),
           workLocation: capture.workLocation,
           workContent: capture.workContent,
           photographer: capture.photographer,
@@ -149,13 +158,24 @@ class ProjectExportService implements ProjectArchiveExporter {
           }
           originalPath = capture.originalPath;
         }
+        final photoNumber = capture.photoNumber;
+        final capturedAt = capture.capturedAt;
+        final originalSha256 = capture.originalSha256;
+        if (photoNumber == null ||
+            capturedAt == null ||
+            originalSha256 == null) {
+          throw StateError(
+            'Ready capture ${capture.id} is missing evidence fields; '
+            'export aborted',
+          );
+        }
         photos.add(
           ExportPhotoRecord(
-            photoNumber: capture.photoNumber!,
+            photoNumber: photoNumber,
             watermarkedPath: await capturePaths.renderedPhotoPath(capture.id),
             originalPath: originalPath,
-            originalSha256: capture.originalSha256!,
-            capturedAt: _formatLocalTimestamp(capture.capturedAt!),
+            originalSha256: originalSha256,
+            capturedAt: _formatLocalTimestamp(capturedAt),
             workLocation: capture.workLocation,
             workContent: capture.workContent,
             photographer: capture.photographer,

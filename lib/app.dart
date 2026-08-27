@@ -272,6 +272,7 @@ final captureLocationCoordinatorProvider = Provider<CaptureLocationCoordinator>(
       database: ref.watch(databaseProvider),
       platform: ref.watch(platformServicesProvider),
       scheduler: ref.watch(captureBackgroundSchedulerProvider),
+      diagnostics: ref.watch(diagnosticRecorderProvider),
     );
   },
 );
@@ -849,7 +850,10 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
         );
         return MaterialApp.router(
           debugShowCheckedModeBanner: false,
-          title: 'SiteMark 工程印记',
+          // Resolved with the active localization delegates so the OS task
+          // switcher label follows the in-app language too.
+          onGenerateTitle: (titleContext) =>
+              AppStrings.of(titleContext).appTitleFull,
           themeMode: settings != null
               ? parseThemeMode(settings.themeMode)
               : ThemeMode.system,
