@@ -333,6 +333,9 @@ class _FakeCompletionNotificationService
 
   @override
   Future<void> setEnabled(bool enabled) => Future.value();
+
+  @override
+  Future<void> setLocale(String? localeCode) => Future.value();
 }
 
 /// Simulates a notification plugin whose initialization fails with a plain
@@ -355,6 +358,9 @@ class _FailingCompletionNotificationService
 
   @override
   Future<void> setEnabled(bool enabled) => Future.value();
+
+  @override
+  Future<void> setLocale(String? localeCode) => Future.value();
 }
 
 /// Saves the deep-link callback so a test can fire a notification tap after
@@ -381,6 +387,9 @@ class _TappingCompletionNotificationService
 
   @override
   Future<void> setEnabled(bool enabled) => Future.value();
+
+  @override
+  Future<void> setLocale(String? localeCode) => Future.value();
 }
 
 /// Records handler registration so tests can observe whether the memory

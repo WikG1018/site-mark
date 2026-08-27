@@ -699,9 +699,11 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
       final settings = next.value;
       if (settings == null) return;
       try {
-        ref
-            .read(completionNotificationServiceProvider)
-            .setEnabled(settings.completionNotificationsEnabled);
+        final service = ref.read(completionNotificationServiceProvider);
+        service.setEnabled(settings.completionNotificationsEnabled);
+        // The notification copy follows the in-app language instead of the
+        // device locale (null localeCode = follow system).
+        service.setLocale(settings.localeCode);
       } on UnimplementedError {
         // No production implementation injected; notifications stay inert.
       }

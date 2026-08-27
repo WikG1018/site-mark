@@ -8,8 +8,10 @@ import 'package:sitemark/platform/notification_service.dart';
 /// The service lives below the widget tree and is also constructed inside
 /// the WorkManager background isolate, so no `BuildContext` (and therefore
 /// no [AppStrings] lookup) is available for the channel name/description or
-/// the notification title/body. Copy is instead resolved from
-/// [WidgetsBinding.instance.platformDispatcher.locale]: SiteMark only
+/// the notification title/body. Copy is instead resolved from the persisted
+/// `AppSetting.localeCode`, pushed in via [setLocale] from both isolates;
+/// when the user has not picked an explicit language (null), it falls back
+/// to [WidgetsBinding.instance.platformDispatcher.locale]. SiteMark only
 /// supports zh/en, so a language-code switch with English as the fallback
 /// is sufficient.
 final class LocalNotificationService implements CompletionNotificationService {
@@ -23,12 +25,25 @@ final class LocalNotificationService implements CompletionNotificationService {
   /// nothing is posted before the settings stream delivers the first value.
   bool _enabled = false;
 
+  /// In-memory copy of the persisted `AppSetting.localeCode`; null means the
+  /// user did not pick an explicit language and the device locale decides.
+  String? _localeCode;
+
   static const String _channelId = 'capture_ready';
 
-  static bool get _isZh =>
-      WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh';
+  @override
+  Future<void> setLocale(String? localeCode) async {
+    _localeCode = localeCode;
+  }
 
-  static AndroidNotificationChannel get _channel => AndroidNotificationChannel(
+  bool get _isZh => switch (_localeCode) {
+    'zh' => true,
+    'en' => false,
+    _ =>
+      WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh',
+  };
+
+  AndroidNotificationChannel get _channel => AndroidNotificationChannel(
     _channelId,
     _isZh ? '照片处理' : 'Photo processing',
     description: _isZh

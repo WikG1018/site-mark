@@ -24,6 +24,11 @@ abstract class CompletionNotificationService {
 
   /// Persists the master on/off switch used as the send gate.
   Future<void> setEnabled(bool enabled);
+
+  /// Syncs the persisted `AppSetting.localeCode` (`'zh'`, `'en'`, or null for
+  /// "follow system") used to resolve the notification copy; see
+  /// [showCaptureReady] / channel metadata.
+  Future<void> setLocale(String? localeCode);
 }
 
 /// Overridden in `main.dart` with the production implementation.

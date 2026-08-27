@@ -114,4 +114,7 @@ class _FakeCompletionNotificationService
 
   @override
   Future<void> setEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setLocale(String? localeCode) async {}
 }

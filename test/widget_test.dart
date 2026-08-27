@@ -1163,6 +1163,9 @@ class _FakeCompletionNotificationService
 
   @override
   Future<void> setEnabled(bool enabled) => Future.value();
+
+  @override
+  Future<void> setLocale(String? localeCode) => Future.value();
 }
 
 class _WidgetTestPlatformServices implements PlatformServices {
