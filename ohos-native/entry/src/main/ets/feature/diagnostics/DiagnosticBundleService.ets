@@ -5,6 +5,7 @@ import { DiagnosticEventRecord } from '../../data/database/AppDatabase';
 import { ArchiveDeliveryCoordinator, ExportDeliveryOutcome } from '../backup/ExportDeliveryPolicy';
 import { SystemSharePanel } from '../../core/system/SystemSharePanel';
 import { loadAppVersion } from '../../shared/AppVersion';
+import { tr, userFacingError } from '../../shared/AppText';
 
 interface DiagnosticEnvironmentJson {
   app_version: string;
@@ -105,7 +106,8 @@ export class DiagnosticBundleService {
       return new DiagnosticBundleResult(path, fileName, events.length);
     } catch (_) {
       await this.runtime.recordDiagnosticBestEffort('diagnostics', 'failure', 0);
-      throw new Error('诊断包生成失败，请检查存储空间后重试');
+      throw userFacingError(tr('诊断包生成失败，请检查存储空间后重试',
+        'Could not generate the diagnostic bundle. Check available storage and try again.'));
     }
   }
 

@@ -74,18 +74,26 @@ export default class EntryAbility extends UIAbility {
       }
     };
     publish();
+    // Re-running applyImmersiveLayout must not orphan the previous window's
+    // listener: detach any earlier registration before overwriting the refs
+    // that onWindowStageDestroy uses to unsubscribe.
+    this.detachAvoidAreaListener();
     win.on('avoidAreaChange', listener);
     this.mainWindow = win;
     this.avoidAreaListener = listener;
   }
 
-  onWindowStageDestroy(): void {
+  private detachAvoidAreaListener(): void {
     if (this.mainWindow !== null && this.avoidAreaListener !== null) {
       try {
         this.mainWindow.off('avoidAreaChange', this.avoidAreaListener);
       } catch (_) {
       }
     }
+  }
+
+  onWindowStageDestroy(): void {
+    this.detachAvoidAreaListener();
     this.mainWindow = null;
     this.avoidAreaListener = null;
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onWindowStageDestroy');

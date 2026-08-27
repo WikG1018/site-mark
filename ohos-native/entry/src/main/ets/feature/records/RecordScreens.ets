@@ -1640,8 +1640,11 @@ export struct CaptureDetailScreen {
     try {
       await AppRuntime.require().republishCapture(this.capture.id);
       this.setMessage(tr('已再次保存到系统相册', 'Saved to the system gallery'), false);
-    } catch (_) {
-      this.setMessage(tr('保存失败或已取消，请稍后重试', 'Save failed or was cancelled. Try again later.'), true);
+    } catch (error) {
+      // Classified copy from the republish gate (busy/status/record-changed)
+      // flows through; only unclassified failures fall back here.
+      this.setMessage(userFacingMessage(error, '保存失败或已取消，请稍后重试',
+        'Save failed or was cancelled. Try again later.'), true);
     }
   }
 
