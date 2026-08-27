@@ -14,7 +14,7 @@ import { UiTokens } from '../../shared/UiTokens';
 import { CaptureCard, CaptureInfoRow } from './RecordComponents';
 import { ProjectBackupService } from '../backup/BackupService';
 import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
-import { tr } from '../../shared/AppText';
+import { tr, userFacingMessage } from '../../shared/AppText';
 import { CapturePageLoader, CapturePagedController } from './CapturePagedController';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
@@ -402,7 +402,8 @@ export struct AllRecordsView {
       }
     } catch (error) {
       if (this.pageState.isActive() && this.batchAction.isCurrent(actionToken)) {
-        this.setMessage((error as Error).message, true);
+        this.setMessage(userFacingMessage(error, '导出失败，请重试',
+          'Export failed. Please try again.'), true);
       }
     } finally {
       this.batchAction.finish(actionToken);
