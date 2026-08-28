@@ -3,9 +3,9 @@
 > 把本文件交给负责后续实现的 Agent 作为默认入口。  
 > 它描述**当前仓库的事实、边界和工作方式**，不是某一版本的任务清单。
 
-## 0. 当前主战场：鸿蒙原生版（本分支）
+## 0. 仓库结构：单分支、双产品线
 
-本分支 `ohos-native` 承载 HarmonyOS NEXT **原生**实现（Stage + ArkTS + ArkUI，位于 `ohos-native/`），不使用 Flutter 鸿蒙适配层。`main` 是独立的 Android 稳定线，两者各自演进，**不做跨平台自动同步**。接到任务时：
+仓库自 2026-08-28 起回到**单分支**演进：`main` 同时承载 Android 稳定线（Flutter）与 HarmonyOS NEXT **原生**实现（Stage + ArkTS + ArkUI，位于 `ohos-native/`，不使用 Flutter 鸿蒙适配层）。原 `ohos-native` 开发分支已并回 `main` 并删除；接到任务时：
 
 - **事实源顺序：** [`ohos-native/README.md`](ohos-native/README.md) → [`ohos-native/docs/deltas.md`](ohos-native/docs/deltas.md)（平台差异与转正条件）→ 最新一篇 `ohos-native/docs/verification-*.md`。与本文件冲突时以上述文档和代码为准。
 - **构建与门禁（本地 DevEco）：** 公共 CI runner 没有 DevEco/HarmonyOS SDK，ArkTS 编译、全量测试和 HAP 构建**只能在本机完成**：
@@ -13,7 +13,7 @@
   2. `pwsh -File ./tool/ohos-native/build-hap.ps1 -SkipRust -RunTests`（ArkTS 全量测试 + debug unsigned HAP）
   3. `pwsh -File ./tool/ohos-native/run-host-tests.ps1`（数据库契约、返回接线等主机门禁）
 - **防假绿：** ArkTS 测试报告必须通过 `verify-test-result.Tests.ps1` 校验；缺失、畸形或失败数非零的汇总一律视为门禁失败，不得只看测试进程退出码。
-- **CI 覆盖边界：** GitHub Actions 只跑主机门禁 + Dart/Rust 回归，**不编译 HAP**。每个 PR 必须按模板附本地 `build-hap.ps1 -RunTests` 的证据，否则无法确认 ArkTS 可编译。
+- **CI 覆盖边界：** GitHub Actions 只跑主机门禁 + Dart/Rust 回归，**不编译 HAP**。每个触碰鸿蒙代码的 PR 必须按模板附本地 `build-hap.ps1 -RunTests` 的证据，否则无法确认 ArkTS 可编译。
 - **设备结论红线：** `hdc list targets` 为 `[Empty]` 时不存在任何真机/模拟器验收。视觉走查、CameraPicker、相册交互、RDB 恢复和性能结论只能来自真实设备；不得用模拟器、单元测试或 debug 探针冒充设备结论。
 - **原生标识：** 包名 `io.github.wikg1018.sitemark.native`；目标 SDK HarmonyOS 6.1.1 / API 24（兼容 API 17）；版本号见 `ohos-native/AppScope/app.json5`（`versionName` / `versionCode`）。
 
@@ -24,9 +24,9 @@
 | 产品 | SiteMark（工程印记）：离线优先的工程水印相机（Android 稳定 + HarmonyOS NEXT 原生开发中） |
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | Android `io.github.wikg1018.sitemark`；鸿蒙原生 `io.github.wikg1018.sitemark.native` |
-| 默认基础分支 | `ohos-native`（当前主战场，见第 0 节）；`main` 为 Android 独立稳定线 |
-| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`；Android 见 `pubspec.yaml`（`1.0.8+23`） |
-| 平台 | 本分支：HarmonyOS NEXT（ArkTS 原生）；Android 12+（API 31+）仅作参照 |
+| 默认基础分支 | `main`（唯一开发分支，Android 与鸿蒙原生同线演进；见第 0 节） |
+| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.3`）；Android 见 `pubspec.yaml`（`1.0.9+24`） |
+| 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中 |
 | 数据库 | 鸿蒙 RDB 契约测试见 `tool/test_ohos_capture_database_contract*`；Android Drift schema 见 `lib/data/app_database.dart` |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
 
@@ -142,7 +142,7 @@ cargo test --manifest-path rust/Cargo.toml
 ## 7. 发布与维护（背景）
 
 - 发布步骤与自动化门禁：`docs/release-checklist.md`。  
-- **`v1.0.8` 已经发布**（有可下载 APK，GitHub Release 已设为 Latest）。后续 `1.0.x` 补丁发版前，至少完成清单中的拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。  
+- **`v1.0.8` 仍是 Latest**（真机回归后设为）；`v1.0.9` / `native-v1.0.3` 为 2026-08-28 双线并轨后的首个联合版本，发布时为 Pre-release。`1.0.x` 补丁转 Latest 前，至少完成清单中的拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。  
 - Agent **默认不**创建 GitHub Release、不上传签名密钥、不在未授权时合并 `main`。
 
 ## 8. 历史文档怎么用

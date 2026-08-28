@@ -60,7 +60,7 @@ void main() {
         find.text(locale.languageCode == 'en' ? 'Version' : '版本'),
         findsOneWidget,
       );
-      expect(find.text('1.0.8+23'), findsOneWidget);
+      expect(find.text('1.0.9+24'), findsOneWidget);
       expect(
         find.text(
           locale.languageCode == 'en'
@@ -127,7 +127,7 @@ void main() {
     await pumpScreen(tester, locale: const Locale('en'));
 
     expect(find.text('9.8.7+654'), findsOneWidget);
-    expect(find.text('1.0.8+23'), findsNothing);
+    expect(find.text('1.0.9+24'), findsNothing);
   });
 }
 
