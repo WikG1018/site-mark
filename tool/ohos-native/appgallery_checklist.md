@@ -39,3 +39,22 @@
 - [ ] 中英文应用介绍、更新说明、搜索关键词、图标和分类一致。
 - [ ] 介绍中明确：无广告、无账号、不自带相机、定位可选、卸载前应备份。
 - [ ] 审核备注中说明系统相机、系统保存面板、文件选择器和可选定位的触发步骤。
+
+## 本地签名流水线（2026-08-29）
+
+发布签名材料只能来自 AGC（AppGallery Connect），仓库不保存证书私钥：
+
+1. AGC → 证书/APP/Profile：创建发布证书（下载 `.cer`）、发布 Profile（下载 `.p7b`），
+   并使用证书请求对应的 `.p12` 密钥库（连同密码与别名）。
+2. 一键签名（材料放在仓库外或 git-ignored 路径）：
+
+   ```powershell
+   pwsh -File ./tool/ohos-native/sign-hap.ps1 `
+     -Hap ohos-native/entry/build/default/outputs/default/entry-default-unsigned.hap `
+     -Profile <release>.p7b -AppCert <release>.cer -Keystore <keystore>.p12 `
+     -KeyAlias <alias> -KeystorePass <storePassword> -KeyPass <keyPassword>
+   ```
+
+   脚本内部调用 DevEco SDK 自带的 `hap-sign-tool.jar` 完成签名并执行
+   `verify-app` 校验，输出产物路径与 SHA-256。
+3. 产物通过 `hdc install` 在真机验证后，再作为发布资源上传 GitHub Release。

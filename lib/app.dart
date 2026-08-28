@@ -850,6 +850,8 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
         );
         return MaterialApp.router(
           debugShowCheckedModeBanner: false,
+          onNavigationNotification:
+              RootNavigationScaffold.handleSystemBackContract,
           // Resolved with the active localization delegates so the OS task
           // switcher label follows the in-app language too.
           onGenerateTitle: (titleContext) =>
