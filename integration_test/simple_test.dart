@@ -323,6 +323,9 @@ class _NoopCompletionNotificationService
   Future<void> setEnabled(bool enabled) async {}
 
   @override
+  Future<void> setLocale(String? localeCode) async {}
+
+  @override
   Future<void> showCaptureReady({
     required String projectId,
     required String captureId,

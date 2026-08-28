@@ -13,7 +13,7 @@ import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { BackupResult, ProjectBackupService } from '../backup/BackupService';
 import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
-import { tr } from '../../shared/AppText';
+import { tr, userFacingMessage } from '../../shared/AppText';
 import { ScreenMessageClock } from '../../shared/Feedback';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
@@ -296,7 +296,13 @@ export struct AppearanceScreen {
     const value = draft.toRecord();
     try {
       await AppRuntime.require().database.updateSettings(value);
-      await AppRuntime.require().applyAppearance();
+      try {
+        await AppRuntime.require().applyAppearance();
+      } catch (_) {
+        // Settings are already committed; a failure while applying them
+        // in-memory (next launch applies the stored value) must not report
+        // the save itself as failed.
+      }
       if (this.saveCoordinator.isCurrent(token)) {
         this.settings = value;
         this.messageError = false;
@@ -850,7 +856,8 @@ export struct BackupScreen {
       }
     } catch (error) {
       if (this.actionCoordinator.isCurrent(token)) {
-        this.message = (error as Error).message;
+        this.message = userFacingMessage(error, '备份生成失败，请重试',
+          'Backup failed. Please try again.');
         this.messageError = true;
       }
     } finally {
@@ -925,7 +932,8 @@ export struct BackupScreen {
       }
     } catch (error) {
       if (this.actionCoordinator.isCurrent(token)) {
-        this.message = (error as Error).message;
+        this.message = userFacingMessage(error, '恢复失败，请重新选择备份',
+          'Restore failed. Choose the backup again.');
         this.messageError = true;
       }
     } finally {

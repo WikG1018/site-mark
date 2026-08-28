@@ -1295,4 +1295,11 @@ void main() {
     expect(await updates.moveNext(), isTrue);
     expect(updates.current!.lifecycleStatus, ProjectLifecycleStatus.archived);
   });
+
+  test('unknown capture status values fall back to failed', () {
+    const converter = CaptureStatusConverter();
+    expect(converter.fromSql('ready'), CaptureStatus.ready);
+    expect(converter.fromSql('unknown-future-status'), CaptureStatus.failed);
+    expect(converter.toSql(CaptureStatus.failed), 'failed');
+  });
 }

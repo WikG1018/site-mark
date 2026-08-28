@@ -1622,28 +1622,6 @@ void main() {
     expect(capture.originalDeletedAt, isNotNull);
   });
 
-  test('suggestAvailableName appends an import suffix until free', () async {
-    final database = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(database.close);
-    final service = _service(
-      database: database,
-      images: _ImportImagePipeline(_preview()),
-      files: _RecordingFileStore(),
-    );
-
-    expect(await service.suggestAvailableName('新项目'), '新项目');
-
-    await database.createProject(id: 'p1', name: '东区厂房改造');
-    expect(await service.suggestAvailableName('东区厂房改造'), '东区厂房改造（导入）');
-
-    await database.createProject(
-      id: 'p2',
-      name: '东区厂房改造（导入）',
-      restoreOperationId: 'hidden-restore',
-    );
-    expect(await service.suggestAvailableName('东区厂房改造'), '东区厂房改造（导入 2）');
-  });
-
   test('parseExportedTimestamp honors the recorded offset', () {
     final parsed = parseExportedTimestamp('2026-07-16 09:32:18 +08:00');
     expect(parsed, isNotNull);

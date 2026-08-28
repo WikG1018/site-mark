@@ -32,7 +32,15 @@ class CaptureStatusConverter extends TypeConverter<CaptureStatus, String> {
   const CaptureStatusConverter();
 
   @override
-  CaptureStatus fromSql(String fromDb) => CaptureStatus.values.byName(fromDb);
+  CaptureStatus fromSql(String fromDb) {
+    try {
+      return CaptureStatus.values.byName(fromDb);
+    } on ArgumentError {
+      // A row written by another app version (or corrupted) must degrade to a
+      // visible failed record instead of poisoning every capture query.
+      return CaptureStatus.failed;
+    }
+  }
 
   @override
   String toSql(CaptureStatus value) => value.name;

@@ -272,6 +272,7 @@ final captureLocationCoordinatorProvider = Provider<CaptureLocationCoordinator>(
       database: ref.watch(databaseProvider),
       platform: ref.watch(platformServicesProvider),
       scheduler: ref.watch(captureBackgroundSchedulerProvider),
+      diagnostics: ref.watch(diagnosticRecorderProvider),
     );
   },
 );
@@ -699,9 +700,11 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
       final settings = next.value;
       if (settings == null) return;
       try {
-        ref
-            .read(completionNotificationServiceProvider)
-            .setEnabled(settings.completionNotificationsEnabled);
+        final service = ref.read(completionNotificationServiceProvider);
+        service.setEnabled(settings.completionNotificationsEnabled);
+        // The notification copy follows the in-app language instead of the
+        // device locale (null localeCode = follow system).
+        service.setLocale(settings.localeCode);
       } on UnimplementedError {
         // No production implementation injected; notifications stay inert.
       }
@@ -847,7 +850,10 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
         );
         return MaterialApp.router(
           debugShowCheckedModeBanner: false,
-          title: 'SiteMark 工程印记',
+          // Resolved with the active localization delegates so the OS task
+          // switcher label follows the in-app language too.
+          onGenerateTitle: (titleContext) =>
+              AppStrings.of(titleContext).appTitleFull,
           themeMode: settings != null
               ? parseThemeMode(settings.themeMode)
               : ThemeMode.system,

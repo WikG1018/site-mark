@@ -22,8 +22,20 @@ export interface CaptureWorkflowDatabase {
 }
 
 const DATABASE_NAME: string = 'sitemark_native.db';
+// Bump when a change alters the persisted schema. Stores opened from an older
+// build run the pending SCHEMA_MIGRATIONS steps before the new value is written.
 const DATABASE_SCHEMA_VERSION: number = 14;
 const DEFAULT_PAGE_SIZE: number = 50;
+
+interface SchemaMigration {
+  version: number;
+  statements: string[];
+}
+
+// Non-idempotent upgrade steps (ALTER TABLE, backfills) for stores created by
+// an older build. Append-only: never edit or reorder committed entries. Fresh
+// stores skip them because SCHEMA_STATEMENTS already create the current schema.
+const SCHEMA_MIGRATIONS: SchemaMigration[] = [];
 
 const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS projects (
@@ -284,10 +296,21 @@ export class AppDatabase implements CaptureWorkflowDatabase {
 
   private async initialize(): Promise<void> {
     await this.store.executeSql('PRAGMA foreign_keys = ON');
+    // user_version 0 means a fresh store; a shipped store always carries its
+    // schema version, so 0 must not be treated as "needs every migration".
+    const storedVersion = this.store.version;
+    const fromVersion = storedVersion === 0 ? DATABASE_SCHEMA_VERSION : storedVersion;
     for (const statement of SCHEMA_STATEMENTS) {
       await this.store.executeSql(statement);
     }
-    await this.store.executeSql(`PRAGMA user_version = ${DATABASE_SCHEMA_VERSION}`);
+    for (const migration of SCHEMA_MIGRATIONS) {
+      if (migration.version > fromVersion) {
+        for (const statement of migration.statements) {
+          await this.store.executeSql(statement);
+        }
+      }
+    }
+    this.store.version = DATABASE_SCHEMA_VERSION;
     await this.store.executeSql(
       `INSERT OR IGNORE INTO app_settings(id, updated_at) VALUES('global', ?)`,
       [Date.now()]
@@ -345,7 +368,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       if (changed < 1) throw new Error('project_not_found');
       await transaction.commit();
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -367,7 +394,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       if (changed < 1) throw new Error('project_not_found');
       await transaction.commit();
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -451,7 +482,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       }
       await transaction.commit();
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -568,7 +603,9 @@ export class AppDatabase implements CaptureWorkflowDatabase {
         AS processing, COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END),0) AS failed
        FROM captures WHERE project_id=?`, [projectId]);
     try {
-      rows.goToFirstRow();
+      if (!rows.goToFirstRow()) {
+        return new CaptureStateCounts(0, 0);
+      }
       return new CaptureStateCounts(
         rows.getLong(rows.getColumnIndex('processing')),
         rows.getLong(rows.getColumnIndex('failed'))
@@ -621,7 +658,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       await transaction.execute('UPDATE projects SET updated_at=? WHERE id=?', [Date.now(), draft.projectId]);
       await transaction.commit();
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
     const created = await this.captureById(draft.id);
@@ -655,7 +696,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       await transaction.commit();
       return window;
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -812,7 +857,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
         [renderedPath, sha256, publishedUri.length === 0 ? null : publishedUri, id, capture.status]);
       await transaction.commit();
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -882,7 +931,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
         [Date.now(), id]);
       await transaction.commit();
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -912,7 +965,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       await transaction.execute('DELETE FROM captures WHERE id=?', [id]);
       await transaction.commit();
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -948,7 +1005,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       await transaction.execute('DELETE FROM projects WHERE id=?', [id]);
       await transaction.commit();
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -1014,7 +1075,11 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       await transaction.commit();
       return true;
     } catch (error) {
-      await transaction.rollback();
+      try {
+        await transaction.rollback();
+      } catch (_) {
+        // A failed rollback must not mask the original error the UI classifies.
+      }
       throw new Error((error as Error).message);
     }
   }
@@ -1165,7 +1230,9 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     const rows = await this.store.querySql(
       'SELECT COUNT(*) AS event_count,COALESCE(MAX(created_at),0) AS latest FROM diagnostic_events');
     try {
-      rows.goToFirstRow();
+      if (!rows.goToFirstRow()) {
+        return new DiagnosticSummary(0, 0);
+      }
       return new DiagnosticSummary(rows.getLong(rows.getColumnIndex('event_count')),
         rows.getLong(rows.getColumnIndex('latest')));
     } finally {

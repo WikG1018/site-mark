@@ -388,11 +388,10 @@ class CaptureWorkflow {
     }
     try {
       return await platform.requestCurrentLocation(10_000);
-    } catch (error) {
-      return LocationResult(
-        outcome: LocationOutcome.unavailable,
-        errorMessage: error.toString(),
-      );
+    } catch (_) {
+      // The watermark degrades to "no coordinates"; raw error strings must
+      // never flow into data objects.
+      return LocationResult(outcome: LocationOutcome.unavailable);
     }
   }
 }

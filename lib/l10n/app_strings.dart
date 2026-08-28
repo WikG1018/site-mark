@@ -23,6 +23,10 @@ class AppStrings {
   bool get _english => locale.languageCode == 'en';
 
   String get appName => _english ? 'SiteMark' : '工程印记';
+  String get appTitleFull =>
+      _english ? 'SiteMark Engineering Marks' : 'SiteMark 工程印记';
+  String get projectNamePlaceholder =>
+      _english ? 'Project name placeholder' : '项目名称占位';
   String get noProjects => _english ? 'No projects yet' : '还没有项目';
   String get noProjectsHint => _english
       ? 'Create an engineering project before recording the site.'

@@ -6,7 +6,7 @@ import { captureTemplateNameKey, inspectCaptureFields, normalizeCaptureTemplateN
 import { RestoredCaptureInput, RestoredProjectInput,
   RestoredTemplateInput } from '../../domain/RestoreModels';
 import { ProjectLifecycleStatus } from '../../domain/StateMachine';
-import { tr } from '../../shared/AppText';
+import { tr, userFacingError, ensureUserFacing } from '../../shared/AppText';
 import { DatabaseRestorePathReferenceLookup, HarmonyRestoreFileAccess,
   RestoreAttemptGate, RestoreFileCleanup } from './RestoreFileCleanup';
 import { RestoreStagingScope } from './RestoreStagingScope';
@@ -198,39 +198,40 @@ export class ProjectRestoreService {
       if (!committed) await this.rollbackFiles(operationId);
       const message = (error as Error).message;
       if (message.includes('selection archive')) {
-        throw new Error(tr('所选 ZIP 是普通照片分享包，不能用于恢复',
+        throw userFacingError(tr('所选 ZIP 是普通照片分享包，不能用于恢复',
           'The selected ZIP is a photo-sharing package and cannot be restored'));
       }
       if (message.includes('invalid_data:')) {
-        throw new Error(tr('备份已损坏、校验不一致或不是有效的 SiteMark 项目备份',
+        throw userFacingError(tr('备份已损坏、校验不一致或不是有效的 SiteMark 项目备份',
           'The backup is damaged, failed validation, or is not a valid SiteMark project backup'));
       }
       if (message.includes('restore_capture_fields_invalid:')) {
         const record = message.substring(message.indexOf(':') + 1);
-        throw new Error(tr(`备份中的记录“${record}”含空白、超长或不支持的字段，请使用新版应用修正后重新备份`,
+        throw userFacingError(tr(`备份中的记录“${record}”含空白、超长或不支持的字段，请使用新版应用修正后重新备份`,
           `Record “${record}” in the backup contains blank, overlong, or unsupported fields. Fix it in a current app and back up again.`));
       }
       if (message.includes('restore_template_fields_invalid:')) {
         const template = message.substring(message.indexOf(':') + 1);
-        throw new Error(tr(`备份中的模板“${template}”含空白、超长或不支持的字段，请修正后重新备份`,
+        throw userFacingError(tr(`备份中的模板“${template}”含空白、超长或不支持的字段，请修正后重新备份`,
           `Template “${template}” in the backup contains blank, overlong, or unsupported fields. Fix it and back up again.`));
       }
       if (message.includes('restore_template_duplicate:')) {
         const template = message.substring(message.indexOf(':') + 1);
-        throw new Error(tr(`备份中的模板“${template}”名称重复，请在原设备改名后重新备份`,
+        throw userFacingError(tr(`备份中的模板“${template}”名称重复，请在原设备改名后重新备份`,
           `Template “${template}” is duplicated in the backup. Rename it on the source device and back up again.`));
       }
       if (message.includes('restore_preview_invalid:')) {
         const field = message.substring(message.indexOf(':') + 1);
-        throw new Error(tr(`备份字段“${field}”无效，尚未解压任何照片，请修正源备份后重试`,
+        throw userFacingError(tr(`备份字段“${field}”无效，尚未解压任何照片，请修正源备份后重试`,
           `Backup field “${field}” is invalid. No photos were extracted. Fix the source backup and try again.`));
       }
       if (message.includes('restore_cleanup_pending') || message.includes('restore_journal_pending')) {
-        throw new Error(tr('上次恢复仍在清理，请稍后重试',
+        throw userFacingError(tr('上次恢复仍在清理，请稍后重试',
           'The previous restore is still being cleaned up. Try again shortly.'));
       }
-      throw new Error(message.length > 0 ? message : tr('恢复失败，请重新选择备份',
-        'Restore failed. Choose the backup again.'));
+      // Unknown native pipeline failures must not leak raw copy or paths.
+      throw ensureUserFacing(error, '恢复失败，请重新选择备份',
+        'Restore failed. Choose the backup again.');
     } finally {
       this.removeDirectory(staging);
     }
@@ -268,7 +269,7 @@ export class ProjectRestoreService {
         return candidate;
       }
     }
-    throw new Error(tr('恢复项目名称与现有项目冲突，请先重命名现有项目',
+    throw userFacingError(tr('恢复项目名称与现有项目冲突，请先重命名现有项目',
       'A restored project name conflicts with an existing project. Rename the existing project first.'));
   }
 

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -22,6 +24,7 @@ final class CaptureLocationCoordinator {
     required this.database,
     required this.platform,
     required this.scheduler,
+    this.diagnostics,
     this.retryDelays = const [
       Duration(milliseconds: 500),
       Duration(seconds: 2),
@@ -31,6 +34,11 @@ final class CaptureLocationCoordinator {
   final AppDatabase database;
   final PlatformServices platform;
   final CaptureBackgroundScheduler scheduler;
+
+  /// Optional diagnostics sink. When attached, gives up after retries are
+  /// recorded so a stuck `pending` location resolution is observable instead
+  /// of silently waiting for startup recovery.
+  final DiagnosticRecorder? diagnostics;
   final List<Duration> retryDelays;
 
   /// Fire-and-forgets [resolve] with `enqueue: true`. The caller (the capture
@@ -53,7 +61,21 @@ final class CaptureLocationCoordinator {
         await resolve(captureId, fallback: fallback, enqueue: true);
         return;
       } catch (_) {
-        if (attempt >= retryDelays.length) rethrow;
+        if (attempt >= retryDelays.length) {
+          // Startup recovery re-resolves pending rows later; recording keeps
+          // the give-up visible in diagnostic bundles.
+          diagnostics?.record(
+            DiagnosticEvent(
+              timestamp: DateTime.now(),
+              category: DiagnosticCategory.processing,
+              outcome: DiagnosticOutcome.failed,
+              code: DiagnosticCode.unexpected,
+              count: 1,
+              retryCount: attempt,
+            ),
+          );
+          rethrow;
+        }
         await Future<void>.delayed(retryDelays[attempt]);
       }
     }

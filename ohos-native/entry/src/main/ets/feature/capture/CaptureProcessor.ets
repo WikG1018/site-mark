@@ -5,7 +5,6 @@ import { ImagePipeline, RenderPhotoRequest } from '../../core/media/ImagePipelin
 import { SystemServices } from '../../core/system/SystemServices';
 import { CompletionNotifications } from '../../core/system/CompletionNotifications';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { tr } from '../../shared/AppText';
 import { needsExifLookup, resolveFinalCaptureLocation } from '../../shared/ExifLocationPolicy';
 
 const LOG_DOMAIN: number = 0x0000;
@@ -66,8 +65,7 @@ export class CaptureProcessor {
         throw new Error('pending_camera_not_processable');
       }
       if (capture.processingAttempts >= 3 && capture.status !== CaptureStatus.FAILED) {
-        await this.database.markFailed(captureId, tr('处理失败次数过多，请检查原图后重试',
-          'Processing failed too many times. Check the original and try again.'));
+        await this.database.markFailed(captureId, 'retry_limit_reached');
         return;
       }
       stage = 'mark_rendering';
@@ -132,8 +130,14 @@ export class CaptureProcessor {
       const current = await this.database.captureById(captureId);
       if (current !== null && current.status !== CaptureStatus.READY && current.status !== CaptureStatus.FAILED) {
         try {
-          await this.database.markFailed(captureId, this.userMessage(error as Error));
+          await this.database.markFailed(captureId, this.failureCode(error as Error));
         } catch (_) {
+          // Without this trail a persistently failing database would leave the
+          // record stuck in captured/rendering with zero visibility until
+          // startup recovery retries the same give-up path.
+          hilog.error(LOG_DOMAIN, LOG_TAG,
+            'markFailed failed for %{public}s after stage %{public}s; startup recovery will retry',
+            captureId, stage);
         }
       }
     } finally {
@@ -183,19 +187,22 @@ export class CaptureProcessor {
     };
   }
 
-  private userMessage(error: Error): string {
+  /**
+   * Stable reason code persisted in `captures.failure_reason`; the detail
+   * screen maps it to localized copy at render time (shared/AppText
+   * `captureFailureReason`) so a later language switch still updates the text.
+   */
+  private failureCode(error: Error): string {
     const message = error.message;
     if (message.indexOf('album_save_cancelled') >= 0) {
-      return tr('水印图已生成，但未保存到系统相册；点击重试可再次保存',
-        'The watermark was generated but not saved to the gallery. Retry to save it again.');
+      return 'album_save_cancelled';
     }
     if (message.indexOf('invalid_data:') >= 0) {
-      return tr('照片数据不符合处理要求，请检查原图后重试',
-        'The photo data cannot be processed. Check the original and try again.');
+      return 'invalid_data';
     }
     if (message.indexOf('原图不存在') >= 0) {
-      return tr('原图不存在或为空，请重新拍摄', 'The original is missing or empty. Capture it again.');
+      return 'original_missing';
     }
-    return tr('照片处理失败，请稍后重试', 'Photo processing failed. Try again later.');
+    return 'processing_failed';
   }
 }

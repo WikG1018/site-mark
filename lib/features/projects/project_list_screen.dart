@@ -327,16 +327,17 @@ class _ProjectCardSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
         leading: const CircleAvatar(child: Text('P')),
         title: Text(
-          'Project Name Placeholder',
+          strings.projectNamePlaceholder,
           style: Theme.of(context).textTheme.titleMedium,
         ),
-        subtitle: const Text('Local only'),
+        subtitle: Text(strings.localOnly),
         trailing: const Icon(Icons.more_vert),
       ),
     );

@@ -144,9 +144,13 @@ class WorkmanagerBackgroundWorkClient implements BackgroundWorkClient {
     required String tag,
   }) async {
     await _workmanager.registerOneOffTask(
-      // Use a per-capture unique name so a retry replaces any prior pending
-      // instance of the same capture, while `existingWorkPolicy: append`
-      // chains it onto the shared queue for serial execution.
+      // The unique name is the shared queue (see [captureProcessingQueue]):
+      // `ExistingWorkPolicy.append` chains every enqueue after the running
+      // work for serial execution. Nothing is replaced per capture, so a
+      // retry or startup reconcile can briefly leave two pending items for
+      // the same capture; they converge through the processor's idempotent
+      // state machine (ready early-exit / superseded cleanup) rather than
+      // any WorkManager-level dedup.
       queueName,
       taskName,
       inputData: {'captureId': captureId},
@@ -177,6 +181,10 @@ CaptureProcessor buildHeadlessCaptureProcessor(AppDatabase database) {
 /// when [enabled] (the persisted `AppSetting.completionNotificationsEnabled`
 /// switch) is true; a no-op otherwise.
 ///
+/// [localeCode] is the persisted `AppSetting.localeCode` (`'zh'`, `'en'`, or
+/// null for "follow system"); it decides the notification copy so the
+/// notification follows the in-app language instead of the device locale.
+///
 /// Extracted as a top-level function so the background dispatcher and unit
 /// tests share the exact same gate sequence. The service must be
 /// initialized before posting — the tap callback is a no-op here because
@@ -184,6 +192,7 @@ CaptureProcessor buildHeadlessCaptureProcessor(AppDatabase database) {
 /// in-memory send gate must be opened explicitly.
 Future<void> sendCaptureReadyNotificationIfEnabled({
   required bool enabled,
+  required String? localeCode,
   required CompletionNotificationService service,
   required String projectId,
   required String captureId,
@@ -191,6 +200,7 @@ Future<void> sendCaptureReadyNotificationIfEnabled({
 }) async {
   if (!enabled) return;
   await service.initialize((_) {});
+  await service.setLocale(localeCode);
   await service.setEnabled(true);
   await service.showCaptureReady(
     projectId: projectId,
@@ -219,6 +229,7 @@ Future<void> _notifyCaptureReady(AppDatabase database, String captureId) async {
     if (record == null || photoNumber == null || photoNumber.isEmpty) return;
     await sendCaptureReadyNotificationIfEnabled(
       enabled: settings.completionNotificationsEnabled,
+      localeCode: settings.localeCode,
       service: LocalNotificationService(),
       projectId: record.projectId,
       captureId: captureId,
