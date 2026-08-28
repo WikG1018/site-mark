@@ -1,9 +1,10 @@
 # SiteMark 工程印记
 
-> 面向工程现场记录的本地水印相机：Android 版稳定发布，HarmonyOS NEXT 原生 ArkTS 版正在开发验证。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.8`），HarmonyOS NEXT 原生 ArkTS 版提供 Pre-release 构建体验。仓库单分支维护两条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
-and a native HarmonyOS NEXT implementation under validation.
+(Latest `v1.0.8`) and a native HarmonyOS NEXT implementation published as
+pre-releases. Both product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -12,12 +13,19 @@ and a native HarmonyOS NEXT implementation under validation.
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
 [![Latest](https://img.shields.io/badge/latest-v1.0.8-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)
+[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.9%20%7C%20native--v1.0.3-F9AB00)](https://github.com/WikG1018/site-mark/releases)
 
-**当前稳定版本：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**
+**当前稳定版本（Latest）：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**
+
+**当前预发布版本：[`v1.0.9`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.9)（Android）· [`native-v1.0.3`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.3)（HarmonyOS NEXT，未签名 HAP）**
 
 支持 Android 12（API 31）及以上系统。`v1.0.8` 已完成真机回归并设为 Latest：加固相册发布与媒体生命周期，新图转正后再清理旧图、跨层 journal 对账、共享 URI 安全删除，以及 journal 键 XML 安全与清理重试上限。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
+`v1.0.9` / `native-v1.0.3` 是 2026-08-28 双产品线并轨（`ohos-native` 分支并回 `main`）后的首个联合版本，当前为 Pre-release：完成通知跟随应用内语言、失败原因存码与语言跟随、错误文案分类化、导出原子写 + ZIP64 等（详见[近期更新](#近期更新)）。待真机回归通过后转正为 Latest。
+
 ## 下载
+
+### 稳定版（Latest，推荐）
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
@@ -25,18 +33,29 @@ and a native HarmonyOS NEXT implementation under validation.
 | universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.8-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/sitemark-v1.0.8-universal.apk) |
 | SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/SHA256SUMS.txt) |
 
+### 预发布版（真机回归中，欢迎试用反馈）
+
+| 安装包 | 说明 | 下载 |
+| --- | --- | --- |
+| Android arm64（v1.0.9） | 正式签名，可从 v1.0.8 直接覆盖升级 | [sitemark-v1.0.9-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.9/sitemark-v1.0.9-arm64.apk) |
+| Android universal（v1.0.9） | 正式签名；文件更大 | [sitemark-v1.0.9-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.9/sitemark-v1.0.9-universal.apk) |
+| Android SHA-256（v1.0.9） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.9/SHA256SUMS.txt) |
+| HarmonyOS HAP（native-v1.0.3） | **未签名**，需在 DevEco/hdc 环境自行签名后安装 | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/entry-default-unsigned.hap) |
+| HarmonyOS SHA-256（native-v1.0.3） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/SHA256SUMS.txt) |
+
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
 
 ## HarmonyOS NEXT 原生版
 
-`ohos-native/` 是独立的 Stage + ArkTS + ArkUI 实现，不使用社区 Flutter 鸿蒙适配层，也不修改历史 `ohos` 分支。它已在 DevEco NEXT 模拟器跑通项目、拍摄处理、记录管理、水印、备份恢复、存储与诊断主流程，图像与 ZIP 规则复用 Android 版的同一 Rust 核心。
+`ohos-native/` 是独立的 Stage + ArkTS + ArkUI 实现，不使用社区 Flutter 鸿蒙适配层，与 Android 版同仓库单分支演进。它已在 DevEco NEXT 模拟器跑通项目、拍摄处理、记录管理、水印、备份恢复、存储与诊断主流程，图像与 ZIP 规则复用 Android 版的同一 Rust 核心。
 
-当前提供源码和可复现的 unsigned HAP 构建，**尚未提供签名的鸿蒙安装包**，真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成华为应用市场发布。
+当前以 Pre-release 提供 `native-v1.0.x` 的 unsigned HAP（见上方预发布下载），**尚未提供签名的鸿蒙安装包，也未上架华为应用市场**；真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成应用市场发布。
 
 - [鸿蒙原生版说明与构建](ohos-native/README.md)
 - [平台差异与验证边界](ohos-native/docs/deltas.md)
 - [DevEco 与模拟器技术探测](tool/ohos-native/probe.md)
+- [鸿蒙原生版发布记录](https://github.com/WikG1018/site-mark/releases?q=native-&expanded=false)
 
 ## 安装与升级
 
@@ -50,7 +69,7 @@ and a native HarmonyOS NEXT implementation under validation.
 
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
-- **v1.0.9**（Pre-release）：完成通知跟随应用内语言、定位失败诊断留痕、导出证据守卫、未知状态容错；鸿蒙原生线同轨发布 `native-v1.0.3`（失败留痕、错误文案分类、导出原子写、schema 迁移脚手架）。
+- **v1.0.9 / native-v1.0.3**（Pre-release，2026-08-28，双线并轨后首个联合版本）：Android——完成通知跟随应用内语言、定位失败诊断留痕、导出证据守卫、未知状态容错、compileSdk 37；鸿蒙原生——失败原因存码并随语言切换刷新、错误文案分类化、导出原子写 + ZIP64 大文件、数据库迁移脚手架。
 - **v1.0.8**：相册安全替换、跨层 journal 对账、共享 URI 保护、清理重试上限。
 - **v1.0.7**：恢复不再误删项目；拍摄处理幂等；解码与相册防线收紧。
 - **v1.0.6**：媒体清理可恢复；相册发布失败可回滚。
@@ -199,7 +218,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 
 ## 当前限制
 
-- 当前可下载稳定版仅支持 Android 12 及以上系统；HarmonyOS NEXT 原生版尚未正式发布；
+- 当前可下载稳定版仅支持 Android 12 及以上系统；HarmonyOS NEXT 原生版仅有 Pre-release 的未签名 HAP，尚未上架应用市场；
 - 不提供 iOS 版本、云同步、多人协作或图库图片导入；
 - 水印不是自由拖拽模板；
 - 后台任务执行时机仍受 Android 和厂商系统调度策略影响；
@@ -241,11 +260,11 @@ HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Prefere
 
 涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 已完成真机回归并设为 Latest；下载和校验以对应 GitHub Release 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 已完成真机回归并设为 Latest；`v1.0.9` / `native-v1.0.3` 为 Pre-release，待真机回归通过后转正。下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
-已验证环境：Flutter 3.44.6、JDK 17、Android SDK 36、NDK 28.2.13676358 和稳定版 Rust。
+已验证环境：Flutter 3.44.6、JDK 17、Android SDK 37（compileSdk 37 / targetSdk 36）、NDK 28.2.13676358 和稳定版 Rust。鸿蒙原生线另需 DevEco Studio（含 HarmonyOS SDK）。
 
 ```bash
 flutter pub get
@@ -255,6 +274,14 @@ cargo fmt --manifest-path rust/Cargo.toml --check
 cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path rust/Cargo.toml
 flutter build apk --debug
+```
+
+鸿蒙原生线（需要 DevEco Studio）：
+
+```powershell
+pwsh -File ./tool/ohos-native/build-rust.ps1              # 新工作树首次必须
+pwsh -File ./tool/ohos-native/build-hap.ps1 -SkipRust -RunTests   # ArkTS 测试 + unsigned HAP
+pwsh -File ./tool/ohos-native/run-host-tests.ps1          # 主机契约门禁
 ```
 
 生产发布需要 `android/key.properties` 和对应 keystore。签名文件与密码不会提交到仓库。
