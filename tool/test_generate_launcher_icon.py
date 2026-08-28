@@ -273,7 +273,10 @@ class LauncherIconGeneratorTest(unittest.TestCase):
 
     def test_scene_drives_svg_camera_lens_letter_red_dot_and_palette(self) -> None:
         scene = icon.SCENE
-        svg = ElementTree.fromstring(icon.build_master_svg())
+        parser = ElementTree.XMLParser()
+        parser.entity.clear()
+        parser.feed(icon.build_master_svg())
+        svg = parser.close()
 
         def by_id(identifier: str) -> ElementTree.Element:
             element = svg.find(f".//*[@id='{identifier}']")

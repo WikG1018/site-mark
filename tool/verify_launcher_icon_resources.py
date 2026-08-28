@@ -251,7 +251,10 @@ def _read_text(path: Path, root: Path) -> str:
 
 def _parse_xml(text: str, label: str) -> ElementTree.Element:
     try:
-        return ElementTree.fromstring(text)
+        parser = ElementTree.XMLParser()
+        parser.entity.clear()
+        parser.feed(text)
+        return parser.close()
     except ElementTree.ParseError as error:
         raise VerificationError(f"Invalid {label}: {error}") from error
 
