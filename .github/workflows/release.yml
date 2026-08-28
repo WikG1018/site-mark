@@ -115,8 +115,8 @@ jobs:
               fail_metadata "$APK expected versionCode=$EXPECTED_VERSION_CODE and versionName=$VERSION_NAME"
             grep -Fxq "minSdkVersion:'31'" <<<"$BADGING" ||
               fail_metadata "$APK expected minSdkVersion=31"
-            grep -Fxq "targetSdkVersion:'36'" <<<"$BADGING" ||
-              fail_metadata "$APK expected targetSdkVersion=36"
+            grep -Fxq "targetSdkVersion:'37'" <<<"$BADGING" ||
+              fail_metadata "$APK expected targetSdkVersion=37"
             PERMISSIONS="$($AAPT2 dump permissions "$APK")"
             for FORBIDDEN in \
               android.permission.INTERNET \
