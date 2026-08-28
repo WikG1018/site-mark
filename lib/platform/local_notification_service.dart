@@ -39,8 +39,7 @@ final class LocalNotificationService implements CompletionNotificationService {
   bool get _isZh => switch (_localeCode) {
     'zh' => true,
     'en' => false,
-    _ =>
-      WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh',
+    _ => WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh',
   };
 
   AndroidNotificationChannel get _channel => AndroidNotificationChannel(
