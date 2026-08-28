@@ -296,7 +296,13 @@ export struct AppearanceScreen {
     const value = draft.toRecord();
     try {
       await AppRuntime.require().database.updateSettings(value);
-      await AppRuntime.require().applyAppearance();
+      try {
+        await AppRuntime.require().applyAppearance();
+      } catch (_) {
+        // Settings are already committed; a failure while applying them
+        // in-memory (next launch applies the stored value) must not report
+        // the save itself as failed.
+      }
       if (this.saveCoordinator.isCurrent(token)) {
         this.settings = value;
         this.messageError = false;

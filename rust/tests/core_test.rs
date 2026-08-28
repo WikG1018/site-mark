@@ -720,6 +720,105 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
     assert!(manifest.contains("\"templates\": []"));
 }
 
+#[test]
+fn export_failure_keeps_the_previous_archive_intact_and_leaves_no_temporary() {
+    let directory = tempdir().unwrap();
+    let photo = directory.path().join("SM-20260716-001.jpg");
+    fs::write(&photo, b"jpeg-placeholder").unwrap();
+    let archive_path = directory.path().join("project.zip");
+
+    let first = export_project(export_request_for(&archive_path, &photo)).unwrap();
+    assert_eq!(first.photo_count, 1);
+    let intact = fs::read(&archive_path).unwrap();
+
+    // A mid-write failure (missing source file) must not disturb the previous
+    // export and must not leave a `.tmp` behind.
+    let missing = directory.path().join("missing.jpg");
+    let mut failing = export_request_for(&archive_path, &photo);
+    failing.photos[0].watermarked_path = missing.to_string_lossy().into_owned();
+    let error = export_project(failing).unwrap_err();
+    assert!(error.starts_with("not_found:"), "{error}");
+    assert_eq!(fs::read(&archive_path).unwrap(), intact);
+    assert!(!directory.path().join("project.zip.tmp").exists());
+}
+
+fn export_request_for(
+    archive_path: &std::path::Path,
+    photo: &std::path::Path,
+) -> ExportProjectRequest {
+    ExportProjectRequest {
+        project_id: "project-1".to_string(),
+        project_name: "东区厂房改造".to_string(),
+        project_description: None,
+        project_created_at: "2026-07-16T09:00:00+08:00".to_string(),
+        snapshot_at: "2026-07-16T10:00:00+08:00".to_string(),
+        omitted_processing_count: 0,
+        omitted_failed_count: 0,
+        output_zip_path: archive_path.to_string_lossy().into_owned(),
+        include_originals: false,
+        project_lifecycle_status: "active".to_string(),
+        project_is_pinned: false,
+        watermark: sample_watermark(),
+        photos: vec![first_photo_for(photo)],
+        templates: vec![],
+    }
+}
+
+fn first_photo_for(photo: &std::path::Path) -> ExportPhotoRecord {
+    ExportPhotoRecord {
+        photo_number: "SM-20260716-001".to_string(),
+        watermarked_path: photo.to_string_lossy().into_owned(),
+        original_path: None,
+        original_sha256: "0123456789abcdef".repeat(4),
+        captured_at: "2026-07-16 09:32:18 +08:00".to_string(),
+        work_location: "A 区三层".to_string(),
+        work_content: "风管安装检查".to_string(),
+        photographer: "张工".to_string(),
+        address: None,
+        coordinates: None,
+        notes: None,
+        latitude: None,
+        longitude: None,
+        accuracy_meters: None,
+        watermark_locale_code: Some("zh".to_string()),
+    }
+}
+
+#[test]
+fn export_rejects_duplicate_photo_numbers_before_writing() {
+    let directory = tempdir().unwrap();
+    let photo = directory.path().join("SM-20260716-001.jpg");
+    fs::write(&photo, b"jpeg-placeholder").unwrap();
+    let archive_path = directory.path().join("project.zip");
+
+    let mut request = export_request_for(&archive_path, &photo);
+    request.photos = vec![first_photo_for(&photo), first_photo_for(&photo)];
+    let error = export_project(request).unwrap_err();
+    assert!(error.contains("duplicate photo number"), "{error}");
+    assert!(!archive_path.exists());
+    assert!(!directory.path().join("project.zip.tmp").exists());
+}
+
+#[test]
+fn extract_rejects_identical_rendered_and_original_destinations() {
+    let directory = tempdir().unwrap();
+    let shared = directory.path().join("photo.jpg");
+    // The guard fires before the archive is opened, so a missing zip proves
+    // the destination check ran first (otherwise: not_found:).
+    let error = extract_archive_photo(ExtractArchivePhotoRequest {
+        zip_path: directory
+            .path()
+            .join("no-such.zip")
+            .to_string_lossy()
+            .into_owned(),
+        photo_number: "SM-20260716-001".to_string(),
+        rendered_destination: shared.to_string_lossy().into_owned(),
+        original_destination: Some(shared.to_string_lossy().into_owned()),
+    })
+    .unwrap_err();
+    assert!(error.contains("must differ"), "{error}");
+}
+
 fn valid_manifest_template(name: &str) -> serde_json::Value {
     serde_json::json!({
         "name": name,

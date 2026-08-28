@@ -117,11 +117,22 @@ fn response_json(input: *const c_char) -> String {
             value: None,
             error: Some(error),
         },
-        Err(_) => JsonResponse {
-            ok: false,
-            value: None,
-            error: Some("invalid_data:native panic".to_string()),
-        },
+        Err(panic) => {
+            // A panic is an internal bug, not bad input; classify it as
+            // internal and log the payload because the string boundary cannot
+            // carry diagnostics back to the caller.
+            let payload = panic
+                .downcast_ref::<&str>()
+                .map(|message| (*message).to_string())
+                .or_else(|| panic.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "unknown panic payload".to_string());
+            eprintln!("sitemark native panic: {payload}");
+            JsonResponse {
+                ok: false,
+                value: None,
+                error: Some("internal:native panic".to_string()),
+            }
+        }
     };
     serde_json::to_string(&response).unwrap_or_else(|_| {
         "{\"ok\":false,\"value\":null,\"error\":\"invalid_data:serialization\"}".to_string()

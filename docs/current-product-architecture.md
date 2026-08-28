@@ -48,7 +48,7 @@ Flutter 与 Rust 之间只传文件路径和结构化参数，不把整张全分
 
 ## 4. 数据模型
 
-当前 Drift schema 为版本 11，核心实体如下：
+当前 Drift schema 为版本 13，核心实体如下：
 
 - `projects`：项目名称、说明、生命周期状态（`active`/`completed`/`archived`）、置顶标记以及项目级水印设置；
 - `captures`：现场字段、照片编号、时间、定位、路径、哈希、处理状态和原图清理状态；

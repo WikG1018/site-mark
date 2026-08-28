@@ -216,21 +216,30 @@ class _CapturePagedListState extends State<CapturePagedList> {
     _watchedRowsSubscription = null;
     if (previous != null) unawaited(previous.cancel());
     if (ids.isEmpty) return;
-    _watchedRowsSubscription = widget.source.watchByIds(ids.toSet()).listen((
-      rows,
-    ) {
-      if (!mounted || generation != _watchGeneration) return;
-      final returnedIds = rows.map((row) => row.capture.id).toSet();
-      if (_watchedIds.any((id) => !returnedIds.contains(id))) {
-        unawaited(widget.controller.refresh());
-        return;
-      }
-      if (_watchedRowsChangeQueryMembershipOrOrder(rows)) {
-        unawaited(widget.controller.refresh());
-        return;
-      }
-      widget.controller.replaceWatchedRows(rows);
-    });
+    _watchedRowsSubscription = widget.source
+        .watchByIds(ids.toSet())
+        .listen(
+          (rows) {
+            if (!mounted || generation != _watchGeneration) return;
+            final returnedIds = rows.map((row) => row.capture.id).toSet();
+            if (_watchedIds.any((id) => !returnedIds.contains(id))) {
+              unawaited(widget.controller.refresh());
+              return;
+            }
+            if (_watchedRowsChangeQueryMembershipOrOrder(rows)) {
+              unawaited(widget.controller.refresh());
+              return;
+            }
+            widget.controller.replaceWatchedRows(rows);
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (!mounted || generation != _watchGeneration) return;
+            // A transient stream error should not silently break the real-time feed;
+            // trigger a full refresh so the controller either surfaces the error
+            // through its error state or succeeds on the next load.
+            unawaited(widget.controller.refresh());
+          },
+        );
   }
 
   bool _watchedRowsChangeQueryMembershipOrOrder(
