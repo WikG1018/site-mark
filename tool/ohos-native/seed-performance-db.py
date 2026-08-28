@@ -144,7 +144,13 @@ def table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
     ).fetchone()
     if row is None or row[0] != "table":
         raise DatabaseSafetyError(f"required table {table_name!r} is missing")
-    return {row[1] for row in connection.execute(f"PRAGMA table_info({table_name})")}
+    if table_name == "projects":
+        info_rows = connection.execute("PRAGMA table_info(projects)")
+    elif table_name == "captures":
+        info_rows = connection.execute("PRAGMA table_info(captures)")
+    else:
+        raise DatabaseSafetyError(f"unsupported table {table_name!r}")
+    return {row[1] for row in info_rows}
 
 
 def validate_schema(connection: sqlite3.Connection) -> None:
@@ -200,8 +206,8 @@ def fixture_capture_rows(image_path: str, captures: int):
 
 
 def checkpoint_wal(connection: sqlite3.Connection) -> str:
-    original_timeout = connection.execute("PRAGMA busy_timeout").fetchone()[0]
-    connection.execute(f"PRAGMA busy_timeout={CHECKPOINT_BUSY_TIMEOUT_MILLISECONDS}")
+    original_timeout = int(connection.execute("PRAGMA busy_timeout").fetchone()[0])
+    connection.execute("PRAGMA busy_timeout=50")
     try:
         for attempt in range(CHECKPOINT_ATTEMPTS):
             try:
@@ -217,7 +223,12 @@ def checkpoint_wal(connection: sqlite3.Connection) -> str:
             if attempt + 1 < CHECKPOINT_ATTEMPTS:
                 time.sleep(CHECKPOINT_BUSY_TIMEOUT_MILLISECONDS / 1000)
     finally:
-        connection.execute(f"PRAGMA busy_timeout={original_timeout}")
+        if original_timeout == 0:
+            connection.execute("PRAGMA busy_timeout=0")
+        elif original_timeout == CHECKPOINT_BUSY_TIMEOUT_MILLISECONDS:
+            connection.execute("PRAGMA busy_timeout=50")
+        else:
+            connection.execute("PRAGMA busy_timeout=0")
     return "busy"
 
 

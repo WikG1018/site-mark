@@ -253,6 +253,15 @@ fn io_failure(context: &str, error: std::io::Error) -> String {
     format!("{prefix}{context}: {error}")
 }
 
+/// Classifies text decodes: invalid UTF-8 is corrupt input, not an I/O fault.
+fn read_text_failure(context: &str, error: std::io::Error) -> String {
+    if error.kind() == std::io::ErrorKind::InvalidData {
+        invalid_data(context, error)
+    } else {
+        io_failure(context, error)
+    }
+}
+
 fn invalid_data(context: &str, error: impl std::fmt::Display) -> String {
     format!("invalid_data:{context}: {error}")
 }
@@ -370,37 +379,10 @@ where
     })
 }
 
-#[cfg(not(windows))]
 fn commit_render_temporary(temporary: &Path, output: &Path) -> Result<(), String> {
-    // POSIX rename replaces the destination atomically, so readers observe
-    // either the previous complete JPEG or the new complete JPEG.
+    // rename replaces the destination atomically on POSIX and Windows alike,
+    // so readers observe either the previous complete JPEG or the new one.
     fs::rename(temporary, output).map_err(|error| io_failure("commit output image", error))
-}
-
-#[cfg(windows)]
-fn commit_render_temporary(temporary: &Path, output: &Path) -> Result<(), String> {
-    // Windows does not replace an existing destination with std::fs::rename.
-    // Keep a rollback copy so development/test builds still preserve the old
-    // output if the final move fails. HarmonyOS uses the atomic POSIX branch.
-    let backup = PathBuf::from(format!("{}.bak", output.to_string_lossy()));
-    if backup.exists() {
-        fs::remove_file(&backup)
-            .map_err(|error| io_failure("remove stale output backup", error))?;
-    }
-    let had_output = output.exists();
-    if had_output {
-        fs::rename(output, &backup).map_err(|error| io_failure("stage previous output", error))?;
-    }
-    if let Err(error) = fs::rename(temporary, output) {
-        if had_output {
-            let _ = fs::rename(&backup, output);
-        }
-        return Err(io_failure("commit output image", error));
-    }
-    if had_output {
-        fs::remove_file(&backup).map_err(|error| io_failure("remove previous output", error))?;
-    }
-    Ok(())
 }
 
 pub fn export_diagnostic_bundle(
@@ -469,9 +451,6 @@ pub fn export_diagnostic_bundle(
             .get_ref()
             .sync_all()
             .map_err(|error| io_failure("sync diagnostic ZIP", error))?;
-        if output.exists() {
-            fs::remove_file(output).map_err(|error| io_failure("replace diagnostic ZIP", error))?;
-        }
         fs::rename(&temporary, output)
             .map_err(|error| io_failure("commit diagnostic ZIP", error))?;
         Ok(())
@@ -502,103 +481,148 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
             ),
         ));
     }
+    // Validate caller-dependent inputs before touching the output path so a
+    // failed export never disturbs an existing archive.
+    let mut seen_numbers = std::collections::HashSet::new();
+    for photo in &request.photos {
+        let safe_number = safe_photo_number_component(&photo.photo_number)?;
+        if !seen_numbers.insert(safe_number) {
+            return Err(invalid_data(
+                "validate export request",
+                format!("duplicate photo number {}", photo.photo_number),
+            ));
+        }
+        if request.include_originals && photo.original_path.is_none() {
+            return Err(invalid_data(
+                "validate export request",
+                format!("missing original for {}", photo.photo_number),
+            ));
+        }
+    }
+
     let output = Path::new(&request.output_zip_path);
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| io_failure("create export directory", error))?;
     }
-    let file = File::create(output).map_err(|error| io_failure("create ZIP", error))?;
-    let mut archive = ZipWriter::new(BufWriter::new(file));
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    let temporary = PathBuf::from(format!("{}.tmp", request.output_zip_path));
+    if temporary.exists() {
+        fs::remove_file(&temporary)
+            .map_err(|error| io_failure("remove stale export temporary", error))?;
+    }
+    let result = (|| -> Result<(), String> {
+        let file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(|error| io_failure("create ZIP", error))?;
+        let mut archive = ZipWriter::new(BufWriter::new(file));
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .large_file(true);
 
-    for photo in &request.photos {
-        let safe_number = safe_photo_number_component(&photo.photo_number)?;
-        add_file_to_zip(
-            &mut archive,
-            &photo.watermarked_path,
-            &format!("photos/{safe_number}.jpg"),
-            options,
-        )?;
-        if request.include_originals {
-            let original = photo.original_path.as_deref().ok_or_else(|| {
-                invalid_data(
-                    "validate export request",
-                    format!("missing original for {}", photo.photo_number),
-                )
-            })?;
-            let extension = Path::new(original)
-                .extension()
-                .and_then(|value| value.to_str())
-                .unwrap_or("jpg")
-                .to_ascii_lowercase();
+        for photo in &request.photos {
+            let safe_number = safe_photo_number_component(&photo.photo_number)?;
             add_file_to_zip(
                 &mut archive,
-                original,
-                &format!("originals/{safe_number}.{extension}"),
+                &photo.watermarked_path,
+                &format!("photos/{safe_number}.jpg"),
                 options,
             )?;
+            if request.include_originals {
+                let original = photo.original_path.as_deref().ok_or_else(|| {
+                    invalid_data(
+                        "validate export request",
+                        format!("missing original for {}", photo.photo_number),
+                    )
+                })?;
+                let extension = Path::new(original)
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("jpg")
+                    .to_ascii_lowercase();
+                add_file_to_zip(
+                    &mut archive,
+                    original,
+                    &format!("originals/{safe_number}.{extension}"),
+                    options,
+                )?;
+            }
         }
-    }
 
-    let mut csv_bytes = vec![0xef, 0xbb, 0xbf];
-    {
-        let mut csv = csv::WriterBuilder::new()
-            .has_headers(true)
-            .from_writer(&mut csv_bytes);
-        for photo in &request.photos {
-            csv.serialize(CsvRow {
-                project_name: &request.project_name,
-                photo_number: &photo.photo_number,
-                captured_at: &photo.captured_at,
-                work_location: &photo.work_location,
-                work_content: &photo.work_content,
-                photographer: &photo.photographer,
-                address: photo.address.as_deref().unwrap_or(""),
-                coordinates: photo.coordinates.as_deref().unwrap_or(""),
-                notes: photo.notes.as_deref().unwrap_or(""),
-                original_sha256: &photo.original_sha256,
-            })
-            .map_err(|error| invalid_data("write CSV record", error))?;
+        let mut csv_bytes = vec![0xef, 0xbb, 0xbf];
+        {
+            let mut csv = csv::WriterBuilder::new()
+                .has_headers(true)
+                .from_writer(&mut csv_bytes);
+            for photo in &request.photos {
+                csv.serialize(CsvRow {
+                    project_name: &request.project_name,
+                    photo_number: &photo.photo_number,
+                    captured_at: &photo.captured_at,
+                    work_location: &photo.work_location,
+                    work_content: &photo.work_content,
+                    photographer: &photo.photographer,
+                    address: photo.address.as_deref().unwrap_or(""),
+                    coordinates: photo.coordinates.as_deref().unwrap_or(""),
+                    notes: photo.notes.as_deref().unwrap_or(""),
+                    original_sha256: &photo.original_sha256,
+                })
+                .map_err(|error| invalid_data("write CSV record", error))?;
+            }
+            csv.flush()
+                .map_err(|error| io_failure("finish CSV", error))?;
         }
-        csv.flush()
-            .map_err(|error| io_failure("finish CSV", error))?;
-    }
-    archive
-        .start_file("records.csv", options)
-        .map_err(|error| zip_failure("start CSV entry", error))?;
-    archive
-        .write_all(&csv_bytes)
-        .map_err(|error| io_failure("write CSV entry", error))?;
+        archive
+            .start_file("records.csv", options)
+            .map_err(|error| zip_failure("start CSV entry", error))?;
+        archive
+            .write_all(&csv_bytes)
+            .map_err(|error| io_failure("write CSV entry", error))?;
 
-    // Single-project exports are the restorable backup format: schema v5
-    // records lifecycle status and pin flag with the watermark template.
-    // Selection archives intentionally stay at v1 and are not restorable.
-    let manifest = serde_json::to_vec_pretty(&ExportManifest {
-        schema_version: 5,
-        app: "SiteMark",
-        project_id: &request.project_id,
-        project_name: &request.project_name,
-        project_description: &request.project_description,
-        project_created_at: &request.project_created_at,
-        snapshot_at: &request.snapshot_at,
-        omitted_processing_count: request.omitted_processing_count,
-        omitted_failed_count: request.omitted_failed_count,
-        includes_originals: request.include_originals,
-        project_lifecycle_status: &request.project_lifecycle_status,
-        project_is_pinned: request.project_is_pinned,
-        watermark: &request.watermark,
-        photos: &request.photos,
-        templates: &request.templates,
-    })
-    .map_err(|error| invalid_data("serialize manifest", error))?;
-    archive
-        .start_file("manifest.json", options)
-        .map_err(|error| zip_failure("start manifest entry", error))?;
-    archive
-        .write_all(&manifest)
-        .map_err(|error| io_failure("write manifest entry", error))?;
-    archive
-        .finish()
-        .map_err(|error| zip_failure("finish ZIP", error))?;
+        // Single-project exports are the restorable backup format: schema v5
+        // records lifecycle status and pin flag with the watermark template.
+        // Selection archives intentionally stay at v1 and are not restorable.
+        let manifest = serde_json::to_vec_pretty(&ExportManifest {
+            schema_version: 5,
+            app: "SiteMark",
+            project_id: &request.project_id,
+            project_name: &request.project_name,
+            project_description: &request.project_description,
+            project_created_at: &request.project_created_at,
+            snapshot_at: &request.snapshot_at,
+            omitted_processing_count: request.omitted_processing_count,
+            omitted_failed_count: request.omitted_failed_count,
+            includes_originals: request.include_originals,
+            project_lifecycle_status: &request.project_lifecycle_status,
+            project_is_pinned: request.project_is_pinned,
+            watermark: &request.watermark,
+            photos: &request.photos,
+            templates: &request.templates,
+        })
+        .map_err(|error| invalid_data("serialize manifest", error))?;
+        archive
+            .start_file("manifest.json", options)
+            .map_err(|error| zip_failure("start manifest entry", error))?;
+        archive
+            .write_all(&manifest)
+            .map_err(|error| io_failure("write manifest entry", error))?;
+        let mut writer = archive
+            .finish()
+            .map_err(|error| zip_failure("finish ZIP", error))?;
+        writer
+            .flush()
+            .map_err(|error| io_failure("flush export ZIP", error))?;
+        writer
+            .get_ref()
+            .sync_all()
+            .map_err(|error| io_failure("sync export ZIP", error))?;
+        fs::rename(&temporary, output).map_err(|error| io_failure("commit export ZIP", error))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result?;
 
     Ok(ExportProjectResult {
         output_zip_path: request.output_zip_path.clone(),
@@ -629,8 +653,21 @@ pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProject
                 "project name is required",
             ));
         }
+        let mut seen_numbers = std::collections::HashSet::new();
         for photo in &project.photos {
-            safe_photo_number_component(&photo.photo_number)?;
+            let safe_number = safe_photo_number_component(&photo.photo_number)?;
+            if !seen_numbers.insert(safe_number) {
+                return Err(invalid_data(
+                    "validate export request",
+                    format!("duplicate photo number {}", photo.photo_number),
+                ));
+            }
+            if request.include_originals && photo.original_path.is_none() {
+                return Err(invalid_data(
+                    "validate export request",
+                    format!("missing original for {}", photo.photo_number),
+                ));
+            }
         }
     }
 
@@ -638,99 +675,125 @@ pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProject
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| io_failure("create export directory", error))?;
     }
-    let file = File::create(output).map_err(|error| io_failure("create ZIP", error))?;
-    let mut archive = ZipWriter::new(BufWriter::new(file));
-    let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    let temporary = PathBuf::from(format!("{}.tmp", request.output_zip_path));
+    if temporary.exists() {
+        fs::remove_file(&temporary)
+            .map_err(|error| io_failure("remove stale export temporary", error))?;
+    }
+    let result = (|| -> Result<(), String> {
+        let file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(|error| io_failure("create ZIP", error))?;
+        let mut archive = ZipWriter::new(BufWriter::new(file));
+        let options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .large_file(true);
 
-    for project in &request.projects {
-        let safe_project_id = safe_archive_component(&project.project_id)?;
-        for photo in &project.photos {
-            let safe_number = safe_photo_number_component(&photo.photo_number)?;
-            add_file_to_zip(
-                &mut archive,
-                &photo.watermarked_path,
-                &format!("projects/{safe_project_id}/photos/{safe_number}.jpg"),
-                options,
-            )?;
-            if request.include_originals {
-                let original = photo.original_path.as_deref().ok_or_else(|| {
-                    invalid_data(
-                        "validate export request",
-                        format!("missing original for {}", photo.photo_number),
-                    )
-                })?;
-                let extension = Path::new(original)
-                    .extension()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or("jpg")
-                    .to_ascii_lowercase();
+        for project in &request.projects {
+            let safe_project_id = safe_archive_component(&project.project_id)?;
+            for photo in &project.photos {
+                let safe_number = safe_photo_number_component(&photo.photo_number)?;
                 add_file_to_zip(
                     &mut archive,
-                    original,
-                    &format!("projects/{safe_project_id}/originals/{safe_number}.{extension}"),
+                    &photo.watermarked_path,
+                    &format!("projects/{safe_project_id}/photos/{safe_number}.jpg"),
                     options,
                 )?;
+                if request.include_originals {
+                    let original = photo.original_path.as_deref().ok_or_else(|| {
+                        invalid_data(
+                            "validate export request",
+                            format!("missing original for {}", photo.photo_number),
+                        )
+                    })?;
+                    let extension = Path::new(original)
+                        .extension()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("jpg")
+                        .to_ascii_lowercase();
+                    add_file_to_zip(
+                        &mut archive,
+                        original,
+                        &format!("projects/{safe_project_id}/originals/{safe_number}.{extension}"),
+                        options,
+                    )?;
+                }
             }
         }
-    }
 
-    let mut csv_bytes = vec![0xef, 0xbb, 0xbf];
-    {
-        let mut csv = csv::WriterBuilder::new()
-            .has_headers(true)
-            .from_writer(&mut csv_bytes);
-        for project in &request.projects {
-            for photo in &project.photos {
-                csv.serialize(CsvRow {
-                    project_name: &project.project_name,
-                    photo_number: &photo.photo_number,
-                    captured_at: &photo.captured_at,
-                    work_location: &photo.work_location,
-                    work_content: &photo.work_content,
-                    photographer: &photo.photographer,
-                    address: photo.address.as_deref().unwrap_or(""),
-                    coordinates: photo.coordinates.as_deref().unwrap_or(""),
-                    notes: photo.notes.as_deref().unwrap_or(""),
-                    original_sha256: &photo.original_sha256,
-                })
-                .map_err(|error| invalid_data("write CSV record", error))?;
+        let mut csv_bytes = vec![0xef, 0xbb, 0xbf];
+        {
+            let mut csv = csv::WriterBuilder::new()
+                .has_headers(true)
+                .from_writer(&mut csv_bytes);
+            for project in &request.projects {
+                for photo in &project.photos {
+                    csv.serialize(CsvRow {
+                        project_name: &project.project_name,
+                        photo_number: &photo.photo_number,
+                        captured_at: &photo.captured_at,
+                        work_location: &photo.work_location,
+                        work_content: &photo.work_content,
+                        photographer: &photo.photographer,
+                        address: photo.address.as_deref().unwrap_or(""),
+                        coordinates: photo.coordinates.as_deref().unwrap_or(""),
+                        notes: photo.notes.as_deref().unwrap_or(""),
+                        original_sha256: &photo.original_sha256,
+                    })
+                    .map_err(|error| invalid_data("write CSV record", error))?;
+                }
             }
+            csv.flush()
+                .map_err(|error| io_failure("finish CSV", error))?;
         }
-        csv.flush()
-            .map_err(|error| io_failure("finish CSV", error))?;
-    }
-    archive
-        .start_file("records.csv", options)
-        .map_err(|error| zip_failure("start CSV entry", error))?;
-    archive
-        .write_all(&csv_bytes)
-        .map_err(|error| io_failure("write CSV entry", error))?;
+        archive
+            .start_file("records.csv", options)
+            .map_err(|error| zip_failure("start CSV entry", error))?;
+        archive
+            .write_all(&csv_bytes)
+            .map_err(|error| io_failure("write CSV entry", error))?;
 
-    let manifest_projects: Vec<SelectionManifestProject> = request
-        .projects
-        .iter()
-        .map(|project| SelectionManifestProject {
-            project_id: &project.project_id,
-            project_name: &project.project_name,
-            photos: &project.photos,
+        let manifest_projects: Vec<SelectionManifestProject> = request
+            .projects
+            .iter()
+            .map(|project| SelectionManifestProject {
+                project_id: &project.project_id,
+                project_name: &project.project_name,
+                photos: &project.photos,
+            })
+            .collect();
+        let manifest = serde_json::to_vec_pretty(&SelectionManifest {
+            schema_version: 1,
+            app: "SiteMark",
+            includes_originals: request.include_originals,
+            projects: manifest_projects,
         })
-        .collect();
-    let manifest = serde_json::to_vec_pretty(&SelectionManifest {
-        schema_version: 1,
-        app: "SiteMark",
-        includes_originals: request.include_originals,
-        projects: manifest_projects,
-    })
-    .map_err(|error| invalid_data("serialize manifest", error))?;
-    archive
-        .start_file("manifest.json", options)
-        .map_err(|error| zip_failure("start manifest entry", error))?;
-    archive
-        .write_all(&manifest)
-        .map_err(|error| io_failure("write manifest entry", error))?;
-    archive
-        .finish()
-        .map_err(|error| zip_failure("finish ZIP", error))?;
+        .map_err(|error| invalid_data("serialize manifest", error))?;
+        archive
+            .start_file("manifest.json", options)
+            .map_err(|error| zip_failure("start manifest entry", error))?;
+        archive
+            .write_all(&manifest)
+            .map_err(|error| io_failure("write manifest entry", error))?;
+        let mut writer = archive
+            .finish()
+            .map_err(|error| zip_failure("finish ZIP", error))?;
+        writer
+            .flush()
+            .map_err(|error| io_failure("flush export ZIP", error))?;
+        writer
+            .get_ref()
+            .sync_all()
+            .map_err(|error| io_failure("sync export ZIP", error))?;
+        fs::rename(&temporary, output).map_err(|error| io_failure("commit export ZIP", error))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result?;
 
     Ok(ExportProjectResult {
         output_zip_path: request.output_zip_path.clone(),
@@ -822,29 +885,57 @@ pub fn export_project_bundle(
     if let Some(parent) = output.parent() {
         fs::create_dir_all(parent).map_err(|error| io_failure("create bundle directory", error))?;
     }
-    let file = File::create(output).map_err(|error| io_failure("create bundle ZIP", error))?;
-    let mut archive = ZipWriter::new(BufWriter::new(file));
-    let manifest_options =
-        SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-    let project_options =
-        SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
-    archive
-        .start_file("bundle.json", manifest_options)
-        .map_err(|error| zip_failure("start bundle manifest", error))?;
-    archive
-        .write_all(&manifest)
-        .map_err(|error| io_failure("write bundle manifest", error))?;
-    for (project, entry) in request.projects.iter().zip(entries.iter()) {
-        add_file_to_zip(
-            &mut archive,
-            &project.archive_path,
-            &entry.archive_path,
-            project_options,
-        )?;
+    let temporary = PathBuf::from(format!("{}.tmp", request.output_zip_path));
+    if temporary.exists() {
+        fs::remove_file(&temporary)
+            .map_err(|error| io_failure("remove stale bundle temporary", error))?;
     }
-    archive
-        .finish()
-        .map_err(|error| zip_failure("finish bundle ZIP", error))?;
+    let result = (|| -> Result<(), String> {
+        let file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(|error| io_failure("create bundle ZIP", error))?;
+        let mut archive = ZipWriter::new(BufWriter::new(file));
+        // large_file keeps the writer able to emit the ZIP64 entries its own
+        // 8 GiB per-entry validation permits.
+        let manifest_options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .large_file(true);
+        let project_options = SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Stored)
+            .large_file(true);
+        archive
+            .start_file("bundle.json", manifest_options)
+            .map_err(|error| zip_failure("start bundle manifest", error))?;
+        archive
+            .write_all(&manifest)
+            .map_err(|error| io_failure("write bundle manifest", error))?;
+        for (project, entry) in request.projects.iter().zip(entries.iter()) {
+            add_file_to_zip(
+                &mut archive,
+                &project.archive_path,
+                &entry.archive_path,
+                project_options,
+            )?;
+        }
+        let mut writer = archive
+            .finish()
+            .map_err(|error| zip_failure("finish bundle ZIP", error))?;
+        writer
+            .flush()
+            .map_err(|error| io_failure("flush bundle ZIP", error))?;
+        writer
+            .get_ref()
+            .sync_all()
+            .map_err(|error| io_failure("sync bundle ZIP", error))?;
+        fs::rename(&temporary, output).map_err(|error| io_failure("commit bundle ZIP", error))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result?;
 
     Ok(ExportProjectResult {
         output_zip_path: request.output_zip_path.clone(),
@@ -888,18 +979,72 @@ fn validate_source_format(format: Option<ImageFormat>) -> Result<(), String> {
 }
 
 fn validate_render_request(request: &RenderPhotoRequest) -> Result<(), String> {
-    for (label, value) in [
-        ("project name", request.project_name.as_str()),
-        ("work location", request.work_location.as_str()),
-        ("work content", request.work_content.as_str()),
-        ("photographer", request.photographer.as_str()),
-        ("photo number", request.photo_number.as_str()),
-        ("capture time", request.captured_at.as_str()),
+    for (label, value, max_chars) in [
+        (
+            "project name",
+            request.project_name.as_str(),
+            MAX_PROJECT_NAME_CHARS,
+        ),
+        (
+            "work location",
+            request.work_location.as_str(),
+            MAX_WORK_LOCATION_CHARS,
+        ),
+        (
+            "work content",
+            request.work_content.as_str(),
+            MAX_WORK_CONTENT_CHARS,
+        ),
+        (
+            "photographer",
+            request.photographer.as_str(),
+            MAX_PHOTOGRAPHER_CHARS,
+        ),
+        (
+            "photo number",
+            request.photo_number.as_str(),
+            MAX_PHOTO_NUMBER_CHARS,
+        ),
+        (
+            "capture time",
+            request.captured_at.as_str(),
+            MAX_CAPTURED_AT_CHARS,
+        ),
     ] {
         if value.trim().is_empty() {
             return Err(invalid_data(
                 "validate render request",
                 format!("{label} is required"),
+            ));
+        }
+        if value.chars().count() > max_chars {
+            return Err(invalid_data(
+                "validate render request",
+                format!("{label} exceeds {max_chars} characters"),
+            ));
+        }
+    }
+    for (label, value, max_chars) in [
+        (
+            "address",
+            request.address.as_deref().unwrap_or(""),
+            MAX_ADDRESS_CHARS,
+        ),
+        (
+            "coordinates",
+            request.coordinates.as_deref().unwrap_or(""),
+            MAX_COORDINATES_CHARS,
+        ),
+        (
+            "notes",
+            request.notes.as_deref().unwrap_or(""),
+            MAX_NOTES_CHARS,
+        ),
+    ] {
+        if value.chars().count() > max_chars {
+            return Err(invalid_data(
+                "validate render request",
+                format!("{label} exceeds {max_chars} characters"),
             ));
         }
     }
@@ -1352,6 +1497,35 @@ mod watermark_tests {
         assert!(validate_render_request(&sample_request("zh", 0.79, "甲")).is_err());
         assert!(validate_render_request(&sample_request("zh", 1.61, "甲")).is_err());
         assert!(validate_render_request(&sample_request("en", 1.60, "A")).is_ok());
+    }
+
+    #[test]
+    fn render_request_fields_enforce_length_caps() {
+        let mut oversized_notes = sample_request("zh", 1.0, "东区厂房改造");
+        oversized_notes.notes = Some("否".repeat(MAX_NOTES_CHARS + 1));
+        assert!(validate_render_request(&oversized_notes).is_err());
+
+        let mut boundary_notes = sample_request("zh", 1.0, "东区厂房改造");
+        boundary_notes.notes = Some("是".repeat(MAX_NOTES_CHARS));
+        assert!(validate_render_request(&boundary_notes).is_ok());
+
+        let mut oversized_project =
+            sample_request("zh", 1.0, "东".repeat(MAX_PROJECT_NAME_CHARS + 1).as_str());
+        oversized_project.work_content = "风管安装检查".to_string();
+        assert!(validate_render_request(&oversized_project).is_err());
+
+        let mut optional_fields_pass = sample_request("zh", 1.0, "东区厂房改造");
+        optional_fields_pass.address = Some("地".repeat(MAX_ADDRESS_CHARS));
+        optional_fields_pass.coordinates = Some("24.5130, 117.6471 · ±8m".to_string());
+        assert!(validate_render_request(&optional_fields_pass).is_ok());
+    }
+
+    #[test]
+    fn exported_timestamp_rejects_non_digit_years() {
+        assert!(is_valid_exported_timestamp("2026-07-16 09:32:18 +08:00"));
+        // u32 parsing alone would accept a leading '+' as the year's sign.
+        assert!(!is_valid_exported_timestamp("+026-07-16 09:32:18 +08:00"));
+        assert!(!is_valid_exported_timestamp("20a6-07-16 09:32:18 +08:00"));
     }
 
     #[test]
@@ -1858,6 +2032,15 @@ const MAX_TEMPLATE_NAME_CHARS: usize = 80;
 const MAX_WORK_LOCATION_CHARS: usize = 160;
 const MAX_WORK_CONTENT_CHARS: usize = 240;
 const MAX_PHOTOGRAPHER_CHARS: usize = 80;
+// Render-request caps: the app's forms enforce tighter limits, but render
+// input crosses the FFI unvalidated and wrap_text is O(n²) per field, so an
+// oversized field would stall the calling thread.
+const MAX_PROJECT_NAME_CHARS: usize = 120;
+const MAX_PHOTO_NUMBER_CHARS: usize = 32;
+const MAX_CAPTURED_AT_CHARS: usize = 32;
+const MAX_NOTES_CHARS: usize = 240;
+const MAX_ADDRESS_CHARS: usize = 200;
+const MAX_COORDINATES_CHARS: usize = 80;
 
 fn open_zip(zip_path: &str) -> Result<zip::ZipArchive<BufReader<File>>, String> {
     let file =
@@ -1981,9 +2164,15 @@ fn is_valid_exported_timestamp(value: &str) -> bool {
     {
         return false;
     }
-    let Some(year) = value[..4].parse::<u32>().ok() else {
+    // `parse::<u32>` would accept a leading '+'; the year must be plain digits.
+    let year_bytes = &bytes[0..4];
+    if !year_bytes.iter().all(u8::is_ascii_digit) {
         return false;
-    };
+    }
+    let year = u32::from(year_bytes[0] - b'0') * 1000
+        + u32::from(year_bytes[1] - b'0') * 100
+        + u32::from(year_bytes[2] - b'0') * 10
+        + u32::from(year_bytes[3] - b'0');
     let Some(month) = parse_two_digits(bytes, 5) else {
         return false;
     };
@@ -2132,7 +2321,7 @@ fn read_project_bundle_manifest(zip_path: &str) -> Result<(ProjectBundleManifest
         .by_ref()
         .take(MAX_MANIFEST_BYTES + 1)
         .read_to_string(&mut text)
-        .map_err(|error| io_failure("read bundle manifest", error))?;
+        .map_err(|error| read_text_failure("read bundle manifest", error))?;
     if text.len() as u64 > MAX_MANIFEST_BYTES {
         return Err(invalid_data(
             "read bundle manifest",
@@ -2505,7 +2694,7 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
         .by_ref()
         .take(MAX_MANIFEST_BYTES + 1)
         .read_to_string(&mut text)
-        .map_err(|error| io_failure("read manifest entry", error))?;
+        .map_err(|error| read_text_failure("read manifest entry", error))?;
     if text.len() as u64 > MAX_MANIFEST_BYTES {
         return Err(invalid_data(
             "read manifest",
@@ -2768,13 +2957,20 @@ pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, S
 /// Extracts one photo (and its original when requested) from a backup ZIP.
 ///
 /// Everything lands in `<destination>.tmp` first; only after the original's
-/// SHA-256 verifies are the files atomically renamed into place. Any failure
-/// removes every temporary file, so a failed extraction never leaves
-/// half-written files behind for the caller to clean up.
+/// SHA-256 verifies are the files atomically renamed into place. A failure
+/// before the first rename removes every temporary file; once the rendered
+/// photo has been committed, a later failure leaves it in place and cleans up
+/// the original's temporary file.
 pub fn extract_archive_photo(
     request: ExtractArchivePhotoRequest,
 ) -> Result<ExtractedArchivePhoto, String> {
     safe_photo_number_component(&request.photo_number)?;
+    if request.original_destination.as_deref() == Some(request.rendered_destination.as_str()) {
+        return Err(invalid_data(
+            "validate archive",
+            "rendered and original destinations must differ",
+        ));
+    }
     let manifest = read_project_manifest(&request.zip_path)?;
     let photo = manifest
         .photos
@@ -2830,8 +3026,12 @@ pub fn extract_archive_photo(
         io_failure("finalize rendered photo", error)
     })?;
     if let (Some(tmp), Some(destination)) = (original_tmp, request.original_destination.as_ref()) {
-        fs::rename(&tmp, destination)
-            .map_err(|error| io_failure("finalize original photo", error))?;
+        fs::rename(&tmp, destination).map_err(|error| {
+            // The rendered photo is already committed; only the original's
+            // temporary file still needs cleanup.
+            let _ = fs::remove_file(&tmp);
+            io_failure("finalize original photo", error)
+        })?;
     }
     Ok(ExtractedArchivePhoto {
         rendered_path: request.rendered_destination.clone(),

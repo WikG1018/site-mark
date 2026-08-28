@@ -352,6 +352,26 @@ void main() {
       expect(notifications, 0);
     },
   );
+
+  test('a newest-cursor stream error triggers a refresh', () async {
+    final source = _ControlledCaptureQuerySource();
+    addTearDown(source.dispose);
+    final controller = CapturePagerController(source);
+    addTearDown(controller.dispose);
+
+    final first = controller.setQuery(const CaptureListQuery(searchText: 'q'));
+    source.completePage('q', _page([_summary('row')], hasMore: false));
+    await first;
+    expect(source.pageRequestCount, 1);
+
+    source.failNewest('q', StateError('watch failed'));
+    await Future<void>.delayed(Duration.zero);
+    expect(source.pageRequestCount, 2);
+
+    source.completePage('q', _page([_summary('refreshed')], hasMore: false));
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.state.rows.single.capture.id, 'refreshed');
+  });
 }
 
 final class _ControlledCaptureQuerySource implements CaptureQuerySource {
@@ -439,6 +459,10 @@ final class _ControlledCaptureQuerySource implements CaptureQuerySource {
   void emitNewest(String searchText, CapturePageCursor? cursor) {
     _newestValues[searchText] = cursor;
     _newestControllers[searchText]?.add(cursor);
+  }
+
+  void failNewest(String searchText, Object error) {
+    _newestControllers[searchText]?.addError(error);
   }
 
   _PageRequest _pageRequest(String searchText, String? afterId) =>

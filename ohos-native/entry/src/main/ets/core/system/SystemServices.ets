@@ -9,6 +9,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { PublishJournalEntry, PublishJournalStore } from '../../data/prefs/PublishJournalStore';
 import { ExifGpsReading, exifGpsReading } from '../../shared/ExifLocationPolicy';
 import { AppSettingsLaunchPolicy, SettingsLaunchWant } from '../../shared/AppSettingsLaunchPolicy';
+import { tr } from '../../shared/AppText';
 
 export enum CameraOutcomeCode {
   CAPTURED = 0,
@@ -158,7 +159,8 @@ export class HarmonySystemServices implements SystemServices {
       if (this.context.applicationInfo.debug) {
         await this.writeDebugSample(targetPath);
         return new CameraOutcome(CameraOutcomeCode.CAPTURED, targetPath, true,
-          '模拟器相机不可用，已使用调试样图完成链路验证');
+          tr('模拟器相机不可用，已使用调试样图完成链路验证',
+            'Emulator camera unavailable; a debug sample completed the pipeline check.'));
       }
       return new CameraOutcome(CameraOutcomeCode.CANCELLED);
     } catch (error) {
@@ -166,7 +168,8 @@ export class HarmonySystemServices implements SystemServices {
         try {
           await this.writeDebugSample(targetPath);
           return new CameraOutcome(CameraOutcomeCode.CAPTURED, targetPath, true,
-            '模拟器相机不可用，已使用调试样图完成链路验证');
+            tr('模拟器相机不可用，已使用调试样图完成链路验证',
+              'Emulator camera unavailable; a debug sample completed the pipeline check.'));
         } catch (fallbackError) {
           return new CameraOutcome(CameraOutcomeCode.FAILED, '', false,
             safeError(fallbackError as BusinessError));

@@ -14,7 +14,7 @@ import { UiTokens } from '../../shared/UiTokens';
 import { CaptureCard, CaptureInfoRow } from './RecordComponents';
 import { ProjectBackupService } from '../backup/BackupService';
 import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
-import { tr, userFacingMessage } from '../../shared/AppText';
+import { tr, userFacingMessage, captureFailureReason } from '../../shared/AppText';
 import { CapturePageLoader, CapturePagedController } from './CapturePagedController';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
@@ -1795,7 +1795,7 @@ export struct CaptureDetailScreen {
                     tr('尚未保存，可使用下方按钮', 'Not saved; use the button below') })
                 if (this.capture!.failureReason.length > 0) {
                   CaptureInfoRow({ label: tr('失败原因', 'Failure reason'),
-                    value: this.capture!.failureReason })
+                    value: captureFailureReason(this.capture!.failureReason) })
                 }
               }
               .padding(18).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)

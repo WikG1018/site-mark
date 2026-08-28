@@ -184,10 +184,21 @@ final class CapturePagerController extends ChangeNotifier {
     _newestSubscription = null;
     if (previous != null) unawaited(previous.cancel());
     _watchedQuery = query;
-    _newestSubscription = _source.watchNewestCursor(query).listen((cursor) {
-      if (_disposed || !identical(_watchedQuery, query)) return;
-      _handleNewestCursor(cursor);
-    });
+    _newestSubscription = _source
+        .watchNewestCursor(query)
+        .listen(
+          (cursor) {
+            if (_disposed || !identical(_watchedQuery, query)) return;
+            _handleNewestCursor(cursor);
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (_disposed || !identical(_watchedQuery, query)) return;
+            // A transient stream error should not silently break the real-time feed;
+            // trigger a full refresh so the next load either surfaces the error via
+            // the existing _state.initialError/nextPageError path or succeeds.
+            unawaited(refresh());
+          },
+        );
   }
 
   void _handleNewestCursor(CapturePageCursor? cursor) {
