@@ -23,7 +23,10 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "io.github.wikg1018.sitemark"
-    compileSdk = 36
+    // Android 17 SDK (platforms;android-37.0). targetSdk stays on 36 — the
+    // Play requirement as of 2026-08 — until Android 17 behavior changes are
+    // verified on a real device.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

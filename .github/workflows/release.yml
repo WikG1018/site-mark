@@ -32,7 +32,7 @@ jobs:
         run: |
           SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
-          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358'
+          "$SDKMANAGER" 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
       - name: Verify tag and main history
         run: |
           python tool/verify_release_tag.py --tag "$GITHUB_REF_NAME" --pubspec pubspec.yaml
