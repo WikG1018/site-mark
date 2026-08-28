@@ -40,7 +40,7 @@ pre-releases. Both product lines live on a single branch.
 | Android arm64（v1.0.10） | 正式签名，可从 v1.0.8/v1.0.9 直接覆盖升级 | [sitemark-v1.0.10-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.10/sitemark-v1.0.10-arm64.apk) |
 | Android universal（v1.0.10） | 正式签名；文件更大 | [sitemark-v1.0.10-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.10/sitemark-v1.0.10-universal.apk) |
 | Android SHA-256（v1.0.10） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.10/SHA256SUMS.txt) |
-| HarmonyOS HAP（native-v1.0.3） | 开发签名（OpenHarmony 默认证书）；真机安装需 AGC 发布证书重新签名 | [entry-default-signed.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/entry-default-signed.hap) |
+| HarmonyOS HAP（native-v1.0.3） | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`） | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/entry-default-unsigned.hap) |
 | HarmonyOS SHA-256（native-v1.0.3） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/SHA256SUMS.txt) |
 
 > [!WARNING]
