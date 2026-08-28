@@ -50,6 +50,7 @@ and a native HarmonyOS NEXT implementation under validation.
 
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
+- **v1.0.9**（Pre-release）：完成通知跟随应用内语言、定位失败诊断留痕、导出证据守卫、未知状态容错；鸿蒙原生线同轨发布 `native-v1.0.3`（失败留痕、错误文案分类、导出原子写、schema 迁移脚手架）。
 - **v1.0.8**：相册安全替换、跨层 journal 对账、共享 URI 保护、清理重试上限。
 - **v1.0.7**：恢复不再误删项目；拍摄处理幂等；解码与相册防线收紧。
 - **v1.0.6**：媒体清理可恢复；相册发布失败可回滚。
