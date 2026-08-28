@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
-import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
 import 'package:sqlite3/sqlite3.dart';
@@ -395,40 +394,6 @@ class ProjectImportService implements ProjectArchiveImporter {
   @override
   Future<rust.ProjectArchivePreview> inspect(String zipPath) {
     return images.readProjectArchive(zipPath);
-  }
-
-  /// Whether [name] would collide with an existing project (display-name or
-  /// generated file-name key), matching `AppDatabase.createProject` rules.
-  Future<bool> projectNameTaken(String name) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return false;
-    final displayKey = normalizedProjectNameKey(trimmed);
-    final safeKey = safeProjectFileNameKey(trimmed);
-    for (final project in await database.getAllProjectsInternal()) {
-      if (normalizedProjectNameKey(project.name) == displayKey) return true;
-      if (safeProjectFileNameKey(project.name) == safeKey) return true;
-    }
-    return false;
-  }
-
-  /// Returns [base] itself when free, otherwise `base（导入）`,
-  /// `base（导入 2）`, ... trimmed to stay within the 120-character limit.
-  Future<String> suggestAvailableName(String base) async {
-    const maxLength = 120;
-    final trimmedBase = base.trim();
-    if (trimmedBase.isNotEmpty && !await projectNameTaken(trimmedBase)) {
-      return trimmedBase;
-    }
-    for (var attempt = 0; attempt < 100; attempt++) {
-      final suffix = attempt == 0 ? '（导入）' : '（导入 ${attempt + 1}）';
-      final budget = maxLength - suffix.length;
-      final stem = trimmedBase.length <= budget
-          ? trimmedBase
-          : trimmedBase.substring(0, budget);
-      final candidate = '$stem$suffix';
-      if (!await projectNameTaken(candidate)) return candidate;
-    }
-    throw StateError('Could not find an available project name');
   }
 
   /// Restores [zipPath] as a new project named [projectName].

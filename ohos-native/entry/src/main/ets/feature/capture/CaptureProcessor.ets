@@ -134,6 +134,12 @@ export class CaptureProcessor {
         try {
           await this.database.markFailed(captureId, this.userMessage(error as Error));
         } catch (_) {
+          // Without this trail a persistently failing database would leave the
+          // record stuck in captured/rendering with zero visibility until
+          // startup recovery retries the same give-up path.
+          hilog.error(LOG_DOMAIN, LOG_TAG,
+            'markFailed failed for %{public}s after stage %{public}s; startup recovery will retry',
+            captureId, stage);
         }
       }
     } finally {

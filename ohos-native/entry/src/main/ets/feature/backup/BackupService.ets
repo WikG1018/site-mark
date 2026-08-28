@@ -3,7 +3,7 @@ import { util } from '@kit.ArkTS';
 import { AppRuntime } from '../../app/AppRuntime';
 import { CaptureFilter, CapturePage, CapturePageCursor, CaptureRecord, ProjectRecord } from '../../domain/Models';
 import { CaptureStatus } from '../../domain/StateMachine';
-import { tr } from '../../shared/AppText';
+import { tr, userFacingError, ensureUserFacing } from '../../shared/AppText';
 import { safeProjectFileNameKey } from '../../domain/DomainRules';
 import { ArchiveDeliveryCoordinator, ExportDeliveryOutcome } from './ExportDeliveryPolicy';
 import { SystemSharePanel } from '../../core/system/SystemSharePanel';
@@ -109,7 +109,7 @@ export class ProjectBackupService {
   async create(projectIds: string[], includeOriginals: boolean,
     allowSkipFailed: boolean): Promise<BackupResult> {
     if (projectIds.length === 0) {
-      throw new Error(tr('请选择至少一个项目', 'Select at least one project'));
+      throw userFacingError(tr('请选择至少一个项目', 'Select at least one project'));
     }
     const exportsDir = `${this.runtime.context.filesDir}/exports`;
     this.ensureDirectory(exportsDir);
@@ -123,7 +123,7 @@ export class ProjectBackupService {
       for (const projectId of projectIds) {
         const project = await this.runtime.database.projectById(projectId);
         if (project === null) {
-          throw new Error(tr('所选项目已不存在，请刷新后重试',
+          throw userFacingError(tr('所选项目已不存在，请刷新后重试',
             'A selected project no longer exists. Refresh and try again.'));
         }
         const captures = await this.projectCaptures(projectId);
@@ -133,11 +133,11 @@ export class ProjectBackupService {
         const failed = captures.filter((capture: CaptureRecord): boolean =>
           capture.status === CaptureStatus.FAILED).length;
         if (processing > 0) {
-          throw new Error(tr(`项目“${project.name}”有 ${processing} 张照片仍在处理中，请处理完成后再备份`,
+          throw userFacingError(tr(`项目“${project.name}”有 ${processing} 张照片仍在处理中，请处理完成后再备份`,
             `Project “${project.name}” has ${processing} photo(s) still processing. Wait before backing up.`));
         }
         if (failed > 0 && !allowSkipFailed) {
-          throw new Error(tr(`项目“${project.name}”有 ${failed} 条失败记录。请先重新处理，或勾选“仅备份已完成记录”`,
+          throw userFacingError(tr(`项目“${project.name}”有 ${failed} 条失败记录。请先重新处理，或勾选“仅备份已完成记录”`,
             `Project “${project.name}” has ${failed} failed record(s). Reprocess them or enable “Back up completed records only”.`));
         }
         const ready = captures.filter((capture: CaptureRecord): boolean =>
@@ -145,7 +145,7 @@ export class ProjectBackupService {
         if (includeOriginals) {
           const missing = ready.filter((capture: CaptureRecord): boolean => !capture.hasOriginal());
           if (missing.length > 0) {
-            throw new Error(tr(`项目“${project.name}”有 ${missing.length} 张原图已清理，请关闭“包含私有原图”后重试`,
+            throw userFacingError(tr(`项目“${project.name}”有 ${missing.length} 张原图已清理，请关闭“包含私有原图”后重试`,
               `Project “${project.name}” has ${missing.length} cleared original(s). Disable “Include private originals” and try again.`));
           }
         }
@@ -173,7 +173,9 @@ export class ProjectBackupService {
       return new BackupResult(outputPath, fileName, projectIds.length, photoCount, omittedFailed);
     } catch (error) {
       await this.runtime.recordDiagnosticBestEffort('backup', 'failure', 0);
-      throw new Error((error as Error).message);
+      // Native pipeline / file-system failures must not leak raw copy.
+      throw ensureUserFacing(error, '备份生成失败，请重试',
+        'Backup failed. Please try again.');
     } finally {
       this.removeDirectory(workDir);
     }
@@ -198,15 +200,15 @@ export class ProjectBackupService {
   }
 
   async exportSelection(captureIds: string[], includeOriginals: boolean): Promise<BackupResult> {
-    if (captureIds.length === 0) throw new Error(tr('请先选择照片', 'Select photos first'));
+    if (captureIds.length === 0) throw userFacingError(tr('请先选择照片', 'Select photos first'));
     const captures: CaptureRecord[] = [];
     for (const id of captureIds) {
       const capture = await this.runtime.database.captureById(id);
       if (capture === null || capture.status !== CaptureStatus.READY) {
-        throw new Error(tr('仅可导出已完成的照片', 'Only completed photos can be exported'));
+        throw userFacingError(tr('仅可导出已完成的照片', 'Only completed photos can be exported'));
       }
       if (includeOriginals && !capture.hasOriginal()) {
-        throw new Error(tr('所选照片中有原图已清理，请关闭包含原图后重试',
+        throw userFacingError(tr('所选照片中有原图已清理，请关闭包含原图后重试',
           'Some selected originals were cleared. Disable original inclusion and try again.'));
       }
       captures.push(capture);
@@ -220,7 +222,7 @@ export class ProjectBackupService {
     const projects: SelectionProjectJson[] = [];
     for (const projectId of byProject.keys()) {
       const project = await this.runtime.database.projectById(projectId);
-      if (project === null) throw new Error(tr('所选照片所属项目已不存在',
+      if (project === null) throw userFacingError(tr('所选照片所属项目已不存在',
         'The project for a selected photo no longer exists'));
       const photos = (byProject.get(projectId) ?? []).map((capture: CaptureRecord): ExportPhotoRecordJson => ({
         photo_number: capture.photoNumber,

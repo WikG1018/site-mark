@@ -20,7 +20,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { UiTokens } from '../shared/UiTokens';
 import { CompletionNotifications } from '../core/system/CompletionNotifications';
-import { AppText, tr } from '../shared/AppText';
+import { AppText, tr, userFacingError } from '../shared/AppText';
 import { KeyedOperationGate } from '../core/concurrency/KeyedOperationGate';
 import { AsyncOnce } from '../core/concurrency/AsyncOnce';
 import { ScreenStateStore } from '../shared/ScreenStateStore';
@@ -201,12 +201,12 @@ export class AppRuntime {
 
   async republishCapture(captureId: string): Promise<void> {
     if (!this.republishGate.tryEnter(captureId)) {
-      throw new Error(tr('正在保存到相册，请稍候', 'Saving to the gallery. Please wait.'));
+      throw userFacingError(tr('正在保存到相册，请稍候', 'Saving to the gallery. Please wait.'));
     }
     try {
       const capture = await this.database.captureById(captureId);
       if (capture === null || capture.status !== CaptureStatus.READY || capture.renderedPath.length === 0) {
-        throw new Error(tr('仅可再次保存已完成的水印照片',
+        throw userFacingError(tr('仅可再次保存已完成的水印照片',
           'Only completed watermarked photos can be saved again.'));
       }
       const outcome = await this.services.saveJpegToAlbum(capture.renderedPath,
@@ -214,7 +214,7 @@ export class AppRuntime {
       const adopted = await this.database.adoptPublishedUriFromJournal(capture.id,
         capture.publishedUri, outcome.contentUri);
       if (!adopted) {
-        throw new Error(tr('记录已发生变化，请重新打开后再试',
+        throw userFacingError(tr('记录已发生变化，请重新打开后再试',
           'The record changed. Reopen it and try again.'));
       }
       try {

@@ -252,6 +252,7 @@ void main() {
 
       await sendCaptureReadyNotificationIfEnabled(
         enabled: false,
+        localeCode: 'en',
         service: service,
         projectId: 'project-1',
         captureId: 'capture-1',
@@ -260,6 +261,7 @@ void main() {
 
       expect(service.initializeCalls, 0);
       expect(service.enabledValues, isEmpty);
+      expect(service.localeValues, isEmpty);
       expect(service.showCalls, 0);
     });
 
@@ -270,6 +272,7 @@ void main() {
 
         await sendCaptureReadyNotificationIfEnabled(
           enabled: true,
+          localeCode: 'en',
           service: service,
           projectId: 'project-1',
           captureId: 'capture-1',
@@ -278,6 +281,7 @@ void main() {
 
         expect(service.initializeCalls, 1);
         expect(service.enabledValues, [true]);
+        expect(service.localeValues, ['en']);
         expect(service.showCalls, 1);
         expect(service.lastProjectId, 'project-1');
         expect(service.lastCaptureId, 'capture-1');
@@ -346,6 +350,7 @@ class _RecordingCompletionNotificationService
     implements CompletionNotificationService {
   int initializeCalls = 0;
   final List<bool> enabledValues = [];
+  final List<String?> localeValues = [];
   int showCalls = 0;
   String? lastProjectId;
   String? lastCaptureId;
@@ -376,5 +381,10 @@ class _RecordingCompletionNotificationService
   @override
   Future<void> setEnabled(bool enabled) async {
     enabledValues.add(enabled);
+  }
+
+  @override
+  Future<void> setLocale(String? localeCode) async {
+    localeValues.add(localeCode);
   }
 }

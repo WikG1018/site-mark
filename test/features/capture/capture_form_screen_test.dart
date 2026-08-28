@@ -576,6 +576,9 @@ class _NoOpCompletionNotificationService
   Future<void> setEnabled(bool enabled) => Future.value();
 
   @override
+  Future<void> setLocale(String? localeCode) => Future.value();
+
+  @override
   Future<void> showCaptureReady({
     required String projectId,
     required String captureId,
