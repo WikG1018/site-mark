@@ -13,15 +13,15 @@ pre-releases. Both product lines live on a single branch.
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
 [![Latest](https://img.shields.io/badge/latest-v1.0.8-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)
-[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.9%20%7C%20native--v1.0.3-F9AB00)](https://github.com/WikG1018/site-mark/releases)
+[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.10%20%7C%20native--v1.0.3-F9AB00)](https://github.com/WikG1018/site-mark/releases)
 
 **当前稳定版本（Latest）：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**
 
-**当前预发布版本：[`v1.0.9`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.9)（Android）· [`native-v1.0.3`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.3)（HarmonyOS NEXT，未签名 HAP）**
+**当前预发布版本：[`v1.0.10`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.10)（Android）· [`native-v1.0.3`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.3)（HarmonyOS NEXT）**
 
 支持 Android 12（API 31）及以上系统。`v1.0.8` 已完成真机回归并设为 Latest：加固相册发布与媒体生命周期，新图转正后再清理旧图、跨层 journal 对账、共享 URI 安全删除，以及 journal 键 XML 安全与清理重试上限。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
-`v1.0.9` / `native-v1.0.3` 是 2026-08-28 双产品线并轨（`ohos-native` 分支并回 `main`）后的首个联合版本，当前为 Pre-release：完成通知跟随应用内语言、失败原因存码与语言跟随、错误文案分类化、导出原子写 + ZIP64 等（详见[近期更新](#近期更新)）。待真机回归通过后转正为 Latest。
+`v1.0.10` / `native-v1.0.3` 为 Pre-release：v1.0.10 修复了全部记录页在选择模式下按系统返回会直接退到桌面的问题（返回现在先取消选择），并包含 v1.0.9 的通知语言跟随、失败原因存码与语言跟随、错误文案分类化、导出原子写 + ZIP64 等（详见[近期更新](#近期更新)）。待真机回归通过后转正为 Latest。
 
 ## 下载
 
@@ -37,10 +37,10 @@ pre-releases. Both product lines live on a single branch.
 
 | 安装包 | 说明 | 下载 |
 | --- | --- | --- |
-| Android arm64（v1.0.9） | 正式签名，可从 v1.0.8 直接覆盖升级 | [sitemark-v1.0.9-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.9/sitemark-v1.0.9-arm64.apk) |
-| Android universal（v1.0.9） | 正式签名；文件更大 | [sitemark-v1.0.9-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.9/sitemark-v1.0.9-universal.apk) |
-| Android SHA-256（v1.0.9） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.9/SHA256SUMS.txt) |
-| HarmonyOS HAP（native-v1.0.3） | **未签名**，需在 DevEco/hdc 环境自行签名后安装 | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/entry-default-unsigned.hap) |
+| Android arm64（v1.0.10） | 正式签名，可从 v1.0.8/v1.0.9 直接覆盖升级 | [sitemark-v1.0.10-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.10/sitemark-v1.0.10-arm64.apk) |
+| Android universal（v1.0.10） | 正式签名；文件更大 | [sitemark-v1.0.10-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.10/sitemark-v1.0.10-universal.apk) |
+| Android SHA-256（v1.0.10） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.10/SHA256SUMS.txt) |
+| HarmonyOS HAP（native-v1.0.3） | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`） | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/entry-default-unsigned.hap) |
 | HarmonyOS SHA-256（native-v1.0.3） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/SHA256SUMS.txt) |
 
 > [!WARNING]
@@ -69,6 +69,7 @@ pre-releases. Both product lines live on a single branch.
 
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
+- **v1.0.10**（Pre-release）：修复全部记录/项目记录页在选择模式下按系统返回直接退到桌面的问题，返回现在先取消选择（搜索、筛选同层处理）。
 - **v1.0.9 / native-v1.0.3**（Pre-release，2026-08-28，双线并轨后首个联合版本）：Android——完成通知跟随应用内语言、定位失败诊断留痕、导出证据守卫、未知状态容错、compileSdk 37；鸿蒙原生——失败原因存码并随语言切换刷新、错误文案分类化、导出原子写 + ZIP64 大文件、数据库迁移脚手架。
 - **v1.0.8**：相册安全替换、跨层 journal 对账、共享 URI 保护、清理重试上限。
 - **v1.0.7**：恢复不再误删项目；拍摄处理幂等；解码与相册防线收紧。

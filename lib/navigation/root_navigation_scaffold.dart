@@ -1,6 +1,7 @@
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -14,6 +15,20 @@ class RootNavigationScaffold extends ConsumerWidget {
   const RootNavigationScaffold({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
+
+  /// [WidgetsApp.onNavigationNotification] for the root shell contract.
+  ///
+  /// The shell claims every system back, so the framework always handles
+  /// backs and the engine's predictive-back callback must stay registered.
+  /// Reporting the raw [NavigationNotification.canHandlePop] instead lets it
+  /// oscillate with branch-level PopScope state: an idle root page reports
+  /// false (unregistering the callback), and re-arming it when the user
+  /// enters selection mode races the system — a back press then exits to the
+  /// launcher instead of cancelling the selection.
+  static bool handleSystemBackContract(NavigationNotification notification) {
+    SystemNavigator.setFrameworkHandlesBack(true);
+    return true;
+  }
 
   /// Only the three top-level tabs own the home dock.
   ///
@@ -53,38 +68,54 @@ class RootNavigationScaffold extends ConsumerWidget {
         final showRootNavigation = isRootTabPath(path);
         final recordsSelecting = ref.watch(allCapturesSelectionModeProvider);
         final hideForSelection = path == '/records' && recordsSelecting;
-        return Scaffold(
-          body: FloatingDockLayout(
-            animateDock: path != '/records',
-            dock: showRootNavigation && !hideForSelection
-                ? GlassSurface(
-                    key: const Key('root-dock'),
-                    borderRadius: BorderRadius.circular(22),
-                    child: SizedBox(
-                      height: floatingDockHeight,
-                      child: RootNavigationDock(
-                        selectedIndex: navigationShell.currentIndex,
-                        onDestinationSelected: (index) =>
-                            navigationShell.goBranch(
-                              index,
-                              initialLocation:
-                                  index == navigationShell.currentIndex,
-                            ),
+        // The shell is the deepest system-back guard: branch screens
+        // (selection mode, search, filters) consume backs first through their
+        // own PopScopes, so a back that reaches this scope means nothing in
+        // the active branch wanted it and the app should exit. Claiming the
+        // back unconditionally also keeps the engine's predictive-back
+        // callback registered at all times: if frameworkHandlesBack ever
+        // drops to false on an idle root page, re-arming it when the user
+        // enters selection mode races the system and a back press then exits
+        // to the launcher instead of cancelling the selection.
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            SystemNavigator.pop();
+          },
+          child: Scaffold(
+            body: FloatingDockLayout(
+              animateDock: path != '/records',
+              dock: showRootNavigation && !hideForSelection
+                  ? GlassSurface(
+                      key: const Key('root-dock'),
+                      borderRadius: BorderRadius.circular(22),
+                      child: SizedBox(
+                        height: floatingDockHeight,
+                        child: RootNavigationDock(
+                          selectedIndex: navigationShell.currentIndex,
+                          onDestinationSelected: (index) =>
+                              navigationShell.goBranch(
+                                index,
+                                initialLocation:
+                                    index == navigationShell.currentIndex,
+                              ),
+                        ),
                       ),
-                    ),
-                  )
-                : null,
-            floatingActionButton:
-                showRootNavigation && navigationShell.currentIndex == 0
-                ? FloatingActionButton(
-                    key: const Key('new-project-fab'),
-                    heroTag: 'new-project-fab',
-                    onPressed: () => context.push('/projects/new'),
-                    tooltip: strings.newProject,
-                    child: const Icon(Icons.add),
-                  )
-                : null,
-            child: navigationShell,
+                    )
+                  : null,
+              floatingActionButton:
+                  showRootNavigation && navigationShell.currentIndex == 0
+                  ? FloatingActionButton(
+                      key: const Key('new-project-fab'),
+                      heroTag: 'new-project-fab',
+                      onPressed: () => context.push('/projects/new'),
+                      tooltip: strings.newProject,
+                      child: const Icon(Icons.add),
+                    )
+                  : null,
+              child: navigationShell,
+            ),
           ),
         );
       },
