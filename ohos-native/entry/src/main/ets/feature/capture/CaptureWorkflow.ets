@@ -5,7 +5,7 @@ import { CaptureSessionStore, PendingCaptureSession } from '../../data/prefs/Cap
 import { CaptureDraft } from '../../domain/Models';
 import { CameraOutcomeCode, LocationOutcomeCode, LocationSnapshot,
   SystemServices } from '../../core/system/SystemServices';
-import { tr } from '../../shared/AppText';
+import { tr, userFacingError } from '../../shared/AppText';
 import { validateCaptureDraft } from './CaptureFormPolicy';
 
 export interface CaptureFormInput {
@@ -51,7 +51,7 @@ export class CaptureWorkflow {
     this.validate(input);
     const project = await this.database.projectById(input.projectId);
     if (project === null || project.lifecycleStatus !== 'active') {
-      throw new Error(tr('该项目当前只读，无法继续拍摄',
+      throw userFacingError(tr('该项目当前只读，无法继续拍摄',
         'This project is read-only, so capture is unavailable'));
     }
     const hasLocationPermission = await this.services.getLocationPermissionState();

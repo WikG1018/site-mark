@@ -795,6 +795,7 @@ export struct BackupScreen {
   @State private result: BackupResult | null = null;
   @State private loadingProjects: boolean = true;
   @State private projectLoadError: boolean = false;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private messageError: boolean = false;
   private readonly messageClock = new ScreenMessageClock();
 
@@ -860,8 +861,10 @@ export struct BackupScreen {
           this.message = next;
         }, tr(`备份已生成：${result.projectCount} 个项目、${result.photoCount} 张照片` +
           (result.omittedFailed > 0 ? `，已按你的选择跳过 ${result.omittedFailed} 条失败记录` : ''),
-          `Backup generated: ${result.projectCount} project(s), ${result.photoCount} photo(s)` +
-          (result.omittedFailed > 0 ? `; skipped ${result.omittedFailed} failed record(s)` : '')));
+          `Backup generated: ${result.projectCount} project${result.projectCount === 1 ? '' : 's'}, ` +
+          `${result.photoCount} photo${result.photoCount === 1 ? '' : 's'}` +
+          (result.omittedFailed > 0 ?
+            `; skipped ${result.omittedFailed} failed record${result.omittedFailed === 1 ? '' : 's'}` : '')));
       }
     } catch (error) {
       if (this.actionCoordinator.isCurrent(token)) {
@@ -934,8 +937,10 @@ export struct BackupScreen {
             this.message = next;
           }, tr(`已恢复 ${restored.projectCount} 个项目、${restored.photoCount} 张照片` +
             (restored.renamedCount > 0 ? `；${restored.renamedCount} 个同名项目已自动添加“恢复”后缀` : ''),
-            `Restored ${restored.projectCount} project(s) and ${restored.photoCount} photo(s)` +
-            (restored.renamedCount > 0 ? `; ${restored.renamedCount} duplicate name(s) received a Restore suffix` : '')));
+            `Restored ${restored.projectCount} project${restored.projectCount === 1 ? '' : 's'} and ` +
+            `${restored.photoCount} photo${restored.photoCount === 1 ? '' : 's'}` +
+            (restored.renamedCount > 0 ?
+              `; ${restored.renamedCount} duplicate name${restored.renamedCount === 1 ? '' : 's'} received a Restore suffix` : '')));
         }
         await this.load();
       }
@@ -1005,7 +1010,8 @@ export struct BackupScreen {
                   Column({ space: 3 }) {
                     Text(item.project.name).fontSize(16).fontWeight(FontWeight.Medium).width('100%')
                     Text(tr(`${item.captureCount} 条记录 · ${lifecycleLabel(item.project.lifecycleStatus)}`,
-                      `${item.captureCount} record(s) · ${lifecycleLabel(item.project.lifecycleStatus)}`))
+                      `${item.captureCount} record${item.captureCount === 1 ? '' : 's'} · ` +
+                      `${lifecycleLabel(item.project.lifecycleStatus)}`))
                       .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
                   }.layoutWeight(1).alignItems(HorizontalAlign.Start)
                 }
@@ -1098,7 +1104,8 @@ export struct BackupScreen {
           }
         }
         .cachedCount(4)
-        .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+        .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10,
+          bottom: 40 + this.safeAreaBottomVp })
         .width('100%')
         .layoutWeight(1)
       }.width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
