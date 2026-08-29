@@ -1,9 +1,9 @@
 # SiteMark 工程印记
 
-> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.8`），HarmonyOS NEXT 原生 ArkTS 版提供 Pre-release 构建体验。仓库单分支维护两条产品线。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.11`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版提供 Pre-release 构建体验。仓库单分支维护两条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
-(Latest `v1.0.8`) and a native HarmonyOS NEXT implementation published as
+(Latest `v1.0.11`, targeting Android 17) and a native HarmonyOS NEXT implementation published as
 pre-releases. Both product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
@@ -12,16 +12,15 @@ pre-releases. Both product lines live on a single branch.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.8-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)
+[![Latest](https://img.shields.io/badge/latest-v1.0.11-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.11)
 [![Pre-release](https://img.shields.io/badge/pre--release-v1.0.11%20%7C%20native--v1.0.3-F9AB00)](https://github.com/WikG1018/site-mark/releases)
 
-**当前稳定版本（Latest）：[`v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.8)**
+**当前稳定版本（Latest）：[`v1.0.11`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.11)**
 
 **当前预发布版本：[`v1.0.11`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.11)（Android）· [`native-v1.0.3`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.3)（HarmonyOS NEXT）**
 
-支持 Android 12（API 31）及以上系统。`v1.0.8` 已完成真机回归并设为 Latest：加固相册发布与媒体生命周期，新图转正后再清理旧图、跨层 journal 对账、共享 URI 安全删除，以及 journal 键 XML 安全与清理重试上限。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.11` 已完成真机回归并设为 Latest：targetSdk 提升到 Android 17（API 37，已逐项审查定向行为变化并模拟器实测），并修复全部记录页在选择模式下按系统返回直接退到桌面的问题。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
-`v1.0.11` / `native-v1.0.3` 为 Pre-release：v1.0.11 把 targetSdk 提升到 Android 17（API 37）——已逐项审查定向行为变化（大屏方向规则、后台启动、本地网络、后台音频），对本应用均为无影响或已有适配；v1.0.10 修复了全部记录页在选择模式下按系统返回直接退到桌面的问题（详见[近期更新](#近期更新)）。待真机回归通过后转正为 Latest。
 
 ## 下载
 
@@ -29,19 +28,16 @@ pre-releases. Both product lines live on a single branch.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.8-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/sitemark-v1.0.8-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.8-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/sitemark-v1.0.8-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.8/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.11-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/sitemark-v1.0.11-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.11-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/sitemark-v1.0.11-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/SHA256SUMS.txt) |
 
-### 预发布版（真机回归中，欢迎试用反馈）
+### 鸿蒙原生版预发布（native-v1.0.3）
 
 | 安装包 | 说明 | 下载 |
 | --- | --- | --- |
-| Android arm64（v1.0.11） | 正式签名，可从 v1.0.8/v1.0.9/v1.0.10 直接覆盖升级 | [sitemark-v1.0.11-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/sitemark-v1.0.11-arm64.apk) |
-| Android universal（v1.0.11） | 正式签名；文件更大 | [sitemark-v1.0.11-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/sitemark-v1.0.11-universal.apk) |
-| Android SHA-256（v1.0.11） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/SHA256SUMS.txt) |
-| HarmonyOS HAP（native-v1.0.3） | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`） | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/entry-default-unsigned.hap) |
-| HarmonyOS SHA-256（native-v1.0.3） | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/SHA256SUMS.txt) |
+| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`） | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/entry-default-unsigned.hap) |
+| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.3/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -69,7 +65,7 @@ pre-releases. Both product lines live on a single branch.
 
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
-- **v1.0.11**（Pre-release）：targetSdk 提升到 Android 17（API 37），compileSdk 同为 37；已审查 Android 17 定向行为变化（大屏方向/可调整性规则、后台 Activity 启动收紧、本地网络权限、后台音频、MessageQueue、原生库加载），对本离线应用均无影响，运行时行为与 36 一致。
+- **v1.0.11**（Latest）：targetSdk 提升到 Android 17（API 37），compileSdk 同为 37；已审查 Android 17 定向行为变化（大屏方向/可调整性规则、后台 Activity 启动收紧、本地网络权限、后台音频、MessageQueue、原生库加载），对本离线应用均无影响，运行时行为与 36 一致，真机回归通过。
 - **v1.0.10**（Pre-release）：修复全部记录/项目记录页在选择模式下按系统返回直接退到桌面的问题，返回现在先取消选择（搜索、筛选同层处理）。
 - **v1.0.9 / native-v1.0.3**（Pre-release，2026-08-28，双线并轨后首个联合版本）：Android——完成通知跟随应用内语言、定位失败诊断留痕、导出证据守卫、未知状态容错、compileSdk 37；鸿蒙原生——失败原因存码并随语言切换刷新、错误文案分类化、导出原子写 + ZIP64 大文件、数据库迁移脚手架。
 - **v1.0.8**：相册安全替换、跨层 journal 对账、共享 URI 保护、清理重试上限。
@@ -262,7 +258,7 @@ HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Prefere
 
 涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.8` 已完成真机回归并设为 Latest；`v1.0.9` / `native-v1.0.3` 为 Pre-release，待真机回归通过后转正。下载和校验以对应 GitHub Release 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.11` 已完成真机回归并设为 Latest；`native-v1.0.3` 为 Pre-release。下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
