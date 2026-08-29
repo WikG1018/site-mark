@@ -298,7 +298,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                             : Icons.select_all_outlined,
                       ),
               ),
-            if (!_searching)
+            if (!_searching || editing)
               IconButton(
                 key: const Key('edit-captures'),
                 onPressed: () {

@@ -1048,16 +1048,19 @@ fn validate_render_request(request: &RenderPhotoRequest) -> Result<(), String> {
             ));
         }
     }
-    if !(0.2..=0.95).contains(&request.opacity) {
+    // The accepted range is the union of both platforms' UI ranges (Android
+    // 0.2–0.95 / 0.80–1.60, HarmonyOS 0.35–1.0 / 0.75–1.60): a backup
+    // restored from the other platform must RENDER, not fail validation.
+    if !(0.2..=1.0).contains(&request.opacity) {
         return Err(invalid_data(
             "validate render request",
-            "watermark opacity must be between 0.2 and 0.95",
+            "watermark opacity must be between 0.2 and 1.0",
         ));
     }
-    if !(0.80..=1.60).contains(&request.font_scale) {
+    if !(0.75..=1.60).contains(&request.font_scale) {
         return Err(invalid_data(
             "validate render request",
-            "font scale must be between 0.80 and 1.60",
+            "font scale must be between 0.75 and 1.60",
         ));
     }
     if !matches!(request.locale_code.as_str(), "zh" | "en") {
@@ -1494,9 +1497,24 @@ mod watermark_tests {
 
     #[test]
     fn font_scale_bounds_are_enforced() {
-        assert!(validate_render_request(&sample_request("zh", 0.79, "甲")).is_err());
+        assert!(validate_render_request(&sample_request("zh", 0.74, "甲")).is_err());
+        assert!(validate_render_request(&sample_request("zh", 0.75, "甲")).is_ok());
         assert!(validate_render_request(&sample_request("zh", 1.61, "甲")).is_err());
         assert!(validate_render_request(&sample_request("en", 1.60, "A")).is_ok());
+    }
+
+    #[test]
+    fn opacity_bounds_cover_the_cross_platform_union() {
+        let at = |opacity: f64| {
+            let mut request = sample_request("zh", 1.0, "甲");
+            request.opacity = opacity;
+            validate_render_request(&request)
+        };
+        assert!(at(0.19).is_err());
+        assert!(at(0.20).is_ok());
+        assert!(at(0.95).is_ok());
+        assert!(at(1.0).is_ok());
+        assert!(at(1.01).is_err());
     }
 
     #[test]

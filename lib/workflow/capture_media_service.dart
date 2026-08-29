@@ -5,6 +5,7 @@ import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_media_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 
@@ -89,6 +90,14 @@ class CaptureMediaService {
           failures[id] = CaptureMediaFailure.recordMissing;
           continue;
         }
+        // Same read-only contract as the detail screen: completed/archived
+        // projects never lose originals through a batch path either.
+        final project = await database.projectById(record.projectId);
+        if (project == null ||
+            project.lifecycleStatus != ProjectLifecycleStatus.active) {
+          failures[id] = CaptureMediaFailure.projectReadOnly;
+          continue;
+        }
         if (record.status != CaptureStatus.ready &&
             record.status != CaptureStatus.failed) {
           failures[id] = CaptureMediaFailure.clearStatusNotAllowed;
@@ -146,6 +155,14 @@ class CaptureMediaService {
         final record = await database.captureById(id);
         if (record == null) {
           failures[id] = CaptureMediaFailure.recordMissing;
+          continue;
+        }
+        // Same read-only contract as the detail screen: completed/archived
+        // projects never lose records through a batch path either.
+        final project = await database.projectById(record.projectId);
+        if (project == null ||
+            project.lifecycleStatus != ProjectLifecycleStatus.active) {
+          failures[id] = CaptureMediaFailure.projectReadOnly;
           continue;
         }
         if (record.status != CaptureStatus.ready &&

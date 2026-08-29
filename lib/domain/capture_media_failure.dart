@@ -18,6 +18,10 @@ enum CaptureMediaFailure {
   /// republish was called on a row that is not ready.
   republishStatusNotAllowed,
 
+  /// The capture's project is completed or archived (read-only), so
+  /// destructive batch operations must not touch it.
+  projectReadOnly,
+
   /// The retained original file was not found on disk.
   originalMissing,
 

@@ -19,6 +19,7 @@ import { LazyListDataSource } from '../../shared/LazyListDataSource';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
+import { RecordRefreshGate } from '../records/RecordUiCoordinator';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { ProjectCard } from './ProjectComponents';
@@ -309,6 +310,7 @@ export struct ProjectListView {
 @Component
 export struct ProjectEditorScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private name: string = '';
   @State private description: string = '';
   @State private saving: boolean = false;
@@ -463,7 +465,8 @@ export struct ProjectEditorScreen {
               .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
               .borderRadius(UiTokens.CONTROL_RADIUS)
           }
-          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })
+          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12,
+            bottom: 40 + this.safeAreaBottomVp })
           .constraintSize({ minHeight: '100%' })
           .justifyContent(FlexAlign.Start)
         }
@@ -526,6 +529,7 @@ export struct ProjectDetailScreen {
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
   private projectId: string = '';
   private readonly refreshListener: () => void = (): void => { this.refreshContent(); };
+  private readonly refreshGate: RecordRefreshGate = new RecordRefreshGate();
   private readonly memoryListener: (level: number) => void = (_level: number): void => {
     this.pageState.requestSafeReload();
   };
@@ -654,7 +658,7 @@ export struct ProjectDetailScreen {
   }
 
   private refreshContent(): void {
-    if (!this.pageState.isActive()) {
+    if (!this.pageState.isActive() || !this.refreshGate.shouldRefresh()) {
       return;
     }
     this.loadProject();
@@ -899,7 +903,7 @@ export struct ProjectDetailScreen {
       let succeeded = 0;
       for (const id of ids) {
         try {
-          await action(id);
+          await this.refreshGate.runSuppressedAsync((): Promise<void> => action(id));
           succeeded += 1;
         } catch (_) {
         }
@@ -975,7 +979,8 @@ export struct ProjectDetailScreen {
     if (!this.selection.requestPermanentDelete()) {
       this.syncSelection();
       this.setMessage(tr(`再次点击“确认删除”将永久删除已选 ${this.selectedIds.length} 条记录`,
-        `Tap “Confirm delete” again to permanently delete ${this.selectedIds.length} selected records`), false);
+        `Tap “Confirm delete” again to permanently delete ${this.selectedIds.length} selected ` +
+        `${this.selectedIds.length === 1 ? 'record' : 'records'}`), false);
       return;
     }
     await this.runBatch((id: string): Promise<void> => AppRuntime.require().deleteCapture(id),
@@ -1126,7 +1131,7 @@ export struct ProjectDetailScreen {
         Text('▦').fontSize(34).fontColor(UiTokens.PRIMARY)
         Column({ space: 4 }) {
           Text(this.project!.name).fontSize(22).fontWeight(FontWeight.Bold).fontColor(UiTokens.TEXT)
-            .maxLines(2).width('100%')
+            .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
           Text(lifecycleLabel(this.project!.lifecycleStatus)).fontSize(13).fontColor(UiTokens.PRIMARY)
             .width('100%')
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
@@ -1236,7 +1241,7 @@ export struct ProjectDetailScreen {
                         .onClick((): void => { if (this.canMutateProject()) this.confirmDelete = false; })
                       Button(tr('确认删除', 'Confirm delete')).layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
                         .backgroundColor(UiTokens.DANGER)
-                        .fontColor(Color.White)
+                        .fontColor(UiTokens.ON_DANGER)
                         .enabled(this.canMutateProject())
                         .accessibilityText(tr('确认永久删除本机项目记录；不处理已保存到相册的照片',
                           'Confirm permanent deletion of on-device project records; gallery photos remain'))
@@ -1378,7 +1383,7 @@ export struct ProjectDetailScreen {
           !this.selectionMode) {
           Button(tr('拍摄', 'Capture')).height(54).fontSize(17).fontWeight(FontWeight.Bold)
             .fontColor(UiTokens.ON_PRIMARY).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
-            .shadow({ radius: 18, color: `#66${UiTokens.PRIMARY.substring(1)}`, offsetY: 7 })
+            .shadow({ radius: 18, color: `#66${UiTokens.PRIMARY.substring(UiTokens.PRIMARY.length - 6)}`, offsetY: 7 })
             .margin({ right: 18, bottom: 18 + this.safeAreaBottomVp }).align(Alignment.BottomEnd)
             .enabled(this.canMutateProject())
             .onClick((): void => { this.beginCapture(); })
@@ -1398,6 +1403,7 @@ export struct ProjectDetailScreen {
 @Component
 export struct ProjectSettingsScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private project: ProjectRecord | null = null;
   @State private watermarkOpacity: number = 0.78;
   @State private fontScale: number = 1.0;
@@ -1671,7 +1677,8 @@ export struct ProjectSettingsScreen {
                 onRetry: (): void => { this.save(); } })
             }
           }
-          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })
+          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12,
+            bottom: 40 + this.safeAreaBottomVp })
           .width('100%')
         }.layoutWeight(1)
         }

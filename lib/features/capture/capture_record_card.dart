@@ -107,7 +107,11 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final capture = widget.summary.capture;
-    final (label, icon, color) = _statusPresentation(capture.status, strings);
+    final (label, icon, color) = _statusPresentation(
+      capture.status,
+      strings,
+      Theme.of(context).brightness,
+    );
     final searchSnippet = _searchSnippet(capture, strings);
     final VoidCallback? cardTap = widget.selectionMode
         ? widget.selectable
@@ -345,31 +349,39 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     return null;
   }
 
+  // Raw Material hues are too dark on dark surfaces; each status gets a
+  // brightness-adjusted shade so the label stays readable in both themes.
   (String, IconData, Color) _statusPresentation(
     CaptureStatus status,
     AppStrings strings,
+    Brightness brightness,
   ) {
+    final bool dark = brightness == Brightness.dark;
     return switch (status) {
       CaptureStatus.ready => (
         strings.ready,
         Icons.check_circle_outline,
-        Colors.green,
+        dark ? Colors.green.shade300 : Colors.green.shade700,
       ),
-      CaptureStatus.failed => (strings.failed, Icons.error_outline, Colors.red),
+      CaptureStatus.failed => (
+        strings.failed,
+        Icons.error_outline,
+        dark ? Colors.red.shade300 : Colors.red.shade700,
+      ),
       CaptureStatus.pendingCamera => (
         strings.pendingCamera,
         Icons.photo_camera_outlined,
-        Colors.orange,
+        dark ? Colors.orange.shade300 : Colors.orange.shade800,
       ),
       CaptureStatus.captured => (
         strings.waitingForProcessing,
         Icons.hourglass_top,
-        Colors.orange,
+        dark ? Colors.orange.shade300 : Colors.orange.shade800,
       ),
       CaptureStatus.rendering => (
         strings.processing,
         Icons.auto_awesome_outlined,
-        Colors.blue,
+        dark ? Colors.blue.shade300 : Colors.blue.shade700,
       ),
     };
   }
