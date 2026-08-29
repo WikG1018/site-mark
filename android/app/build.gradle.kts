@@ -23,9 +23,11 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "io.github.wikg1018.sitemark"
-    // Android 17 SDK (platforms;android-37.0). targetSdk stays on 36 — the
-    // Play requirement as of 2026-08 — until Android 17 behavior changes are
-    // verified on a real device.
+    // Android 17 SDK (platforms;android-37.0). targetSdk 37 opts into the
+    // Android 17 targeted behavior changes; the audited ones (large-screen
+    // orientation rules, background activity launch, local network access,
+    // background audio) all turn out to be no-ops for this offline,
+    // system-camera, orientation-unlocked app — see the targetSdk 37 PR.
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
@@ -42,7 +44,7 @@ android {
     defaultConfig {
         applicationId = "io.github.wikg1018.sitemark"
         minSdk = 31
-        targetSdk = 36
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

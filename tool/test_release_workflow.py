@@ -5,6 +5,8 @@ import unittest
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[1]
 RELEASE_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "release.yml"
 CI_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
+APP_GRADLE = REPOSITORY_ROOT / "android" / "app" / "build.gradle.kts"
+EXPECTED_TARGET_SDK = "37"
 
 FORBIDDEN_PERMISSIONS = (
     "android.permission.INTERNET",
@@ -27,6 +29,16 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn('ARM64_VERSION_CODE="$((2000 + VERSION_CODE))"', workflow)
         self.assertIn('verify_badging "$ARM64" "$ARM64_VERSION_CODE"', workflow)
         self.assertIn('verify_badging "$UNIVERSAL" "$VERSION_CODE"', workflow)
+
+    def test_release_badging_asserts_the_gradle_target_sdk(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        gradle = APP_GRADLE.read_text(encoding="utf-8")
+
+        # The workflow's badging assertion and the Gradle targetSdk must move
+        # together, or a release would ship (or reject) the wrong targeting.
+        self.assertIn(f"targetSdk = {EXPECTED_TARGET_SDK}", gradle)
+        self.assertIn(f"targetSdkVersion:'{EXPECTED_TARGET_SDK}'", workflow)
+        self.assertNotIn("targetSdkVersion:'36'", workflow)
 
     def test_metadata_failures_include_the_failed_assertion(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
