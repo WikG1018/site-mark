@@ -72,7 +72,22 @@ try {
   if ($null -eq $hap -or $hap.Length -lt 1) {
     throw 'HAP build completed without a non-empty artifact'
   }
-  Get-FileHash -Algorithm SHA256 -LiteralPath $hap.FullName | Select-Object Path, Hash
+  # Release assets follow the Android scheme sitemark-<tag>-<variant>.<ext>,
+  # and the native tag is native-v<versionName>.
+  $versionLine = Select-String -LiteralPath (Join-Path $projectRoot 'AppScope\app.json5') `
+    -Pattern '"versionName"\s*:\s*"([^"]+)"'
+  if ($null -eq $versionLine) { throw 'versionName not found in AppScope/app.json5' }
+  $versionName = $versionLine.Matches[0].Groups[1].Value
+  $distName = if ($BuildMode -eq 'debug') {
+    "sitemark-native-v$versionName-unsigned.hap"
+  } else {
+    "sitemark-native-v$versionName-release-unsigned.hap"
+  }
+  $distDir = Join-Path $repoRoot 'dist'
+  New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+  $distHap = Join-Path $distDir $distName
+  Copy-Item -LiteralPath $hap.FullName -Destination $distHap -Force
+  Get-FileHash -Algorithm SHA256 -LiteralPath $distHap | Select-Object Path, Hash
 } finally {
   Pop-Location
 }

@@ -39,7 +39,7 @@ pre-releases. Both product lines live on a single branch.
 | Android arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.12-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/sitemark-v1.0.12-arm64.apk) |
 | Android universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.12-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/sitemark-v1.0.12-universal.apk) |
 | Android SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/SHA256SUMS.txt) |
-| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.5/entry-default-unsigned.hap) |
+| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [sitemark-native-v1.0.5-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.5/sitemark-native-v1.0.5-unsigned.hap) |
 | HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.5/SHA256SUMS.txt) |
 
 > [!WARNING]

@@ -11,7 +11,7 @@
 
 - [ ] `pwsh -File ./tool/ohos-native/run-host-tests.ps1` 通过
 - [ ] `pwsh -File ./tool/ohos-native/build-hap.ps1 -SkipRust -RunTests` 通过；ArkTS 测试计数：_____ 项通过 / 0 失败
-- [ ] debug HAP 构建成功（`entry-default-unsigned.hap`）
+- [ ] debug HAP 构建成功（`dist/sitemark-native-v<版本>-unsigned.hap`）
 
 <details>
 <summary>测试输出摘要（粘贴最后几行，含通过/失败计数）</summary>
