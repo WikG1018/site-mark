@@ -69,6 +69,14 @@ double viewerScale(WidgetTester tester) {
       .getMaxScaleOnAxis();
 }
 
+Offset viewerPan(WidgetTester tester) {
+  final value = tester
+      .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+      .transformationController!
+      .value;
+  return Offset(value.storage[12], value.storage[13]);
+}
+
 Future<void> doubleTapViewer(WidgetTester tester) async {
   final target = find.byType(InteractiveViewer);
   await tester.tap(target);
@@ -1083,6 +1091,55 @@ void main() {
     await rightFinger.up();
     // Let the double-tap recognizer's timeout elapse so the test leaves no
     // pending timers behind.
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets('single-finger drag pans the photo while zoomed', (tester) async {
+    await pumpHost(tester);
+    await doubleTapViewer(tester);
+    expect(viewerScale(tester), closeTo(2, 0.001));
+    final panBefore = viewerPan(tester);
+
+    await tester.drag(find.byType(InteractiveViewer), const Offset(60, 40));
+    await tester.pump();
+
+    expect(viewerScale(tester), closeTo(2, 0.001));
+    final panAfter = viewerPan(tester);
+    expect(panAfter.dx, closeTo(panBefore.dx + 60, 0.001));
+    expect(panAfter.dy, closeTo(panBefore.dy + 40, 0.001));
+    // Let the double-tap recognizer's countdown elapse so the test leaves no
+    // pending timers behind.
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets('the finger left behind by a pinch keeps panning the photo', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    final center = tester.getCenter(find.byType(InteractiveViewer));
+
+    final leftFinger = await tester.startGesture(center - const Offset(40, 0));
+    await tester.pump();
+    final rightFinger = await tester.startGesture(center + const Offset(40, 0));
+    await tester.pump();
+    await leftFinger.moveBy(const Offset(-20, 0));
+    await rightFinger.moveBy(const Offset(20, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(viewerScale(tester), closeTo(1.5, 0.001));
+
+    // Lift one finger: the remaining finger never produces a fresh down, so
+    // the pan must adopt it on the next move or zoomed corners are lost.
+    final panBefore = viewerPan(tester);
+    await rightFinger.up();
+    await tester.pump();
+    await leftFinger.moveBy(const Offset(30, 0));
+    await tester.pump();
+
+    final panAfter = viewerPan(tester);
+    expect(panAfter.dx, closeTo(panBefore.dx + 30, 0.001));
+    expect(panAfter.dy, closeTo(panBefore.dy, 0.001));
+
+    await leftFinger.up();
     await tester.pump(const Duration(milliseconds: 350));
   });
 

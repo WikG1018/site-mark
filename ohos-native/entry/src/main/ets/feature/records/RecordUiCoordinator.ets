@@ -493,6 +493,63 @@ export class PhotoViewerGestureState {
   }
 }
 
+/**
+ * Tracks the single finger that pans a zoomed photo.
+ *
+ * A finger that is already on screen never emits a fresh Down event, so when
+ * a two-finger pinch ends with one finger still resting on the display, the
+ * pan must adopt that finger on its next Move instead of waiting for a new
+ * Down — otherwise the pinch-to-pan handoff kills panning entirely and the
+ * corners of the zoomed photo are unreachable. Touch types mirror ArkUI's
+ * TouchType (Down=0, Up=1, Move=2, Cancel=3) so host tests need no UI SDK.
+ */
+export class PhotoViewerPanTracker {
+  static readonly TOUCH_DOWN: number = 0;
+  static readonly TOUCH_UP: number = 1;
+  static readonly TOUCH_MOVE: number = 2;
+  static readonly TOUCH_CANCEL: number = 3;
+
+  private touchId: number = -1;
+  private startX: number = 0;
+  private startY: number = 0;
+  sessionBegan: boolean = false;
+  deltaX: number = 0;
+  deltaY: number = 0;
+
+  onTouch(zoomed: boolean, type: number, touchCount: number, touchId: number,
+    x: number, y: number): boolean {
+    this.sessionBegan = false;
+    if (!zoomed || touchCount !== 1) {
+      this.touchId = -1;
+      return false;
+    }
+    if (type === PhotoViewerPanTracker.TOUCH_DOWN) {
+      return this.adopt(touchId, x, y);
+    }
+    if (type === PhotoViewerPanTracker.TOUCH_MOVE) {
+      if (touchId === this.touchId) {
+        this.deltaX = x - this.startX;
+        this.deltaY = y - this.startY;
+        return true;
+      }
+      return this.adopt(touchId, x, y);
+    }
+    // Up/Cancel end the session; a finger still resting re-adopts on Move.
+    this.touchId = -1;
+    return false;
+  }
+
+  private adopt(touchId: number, x: number, y: number): boolean {
+    this.touchId = touchId;
+    this.startX = x;
+    this.startY = y;
+    this.deltaX = 0;
+    this.deltaY = 0;
+    this.sessionBegan = true;
+    return false;
+  }
+}
+
 export class ViewerRenderedVersionTracker {
   private captureId: string = '';
   private version: number = 0;
