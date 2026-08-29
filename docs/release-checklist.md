@@ -85,6 +85,7 @@ flutter build apk --release
 - arm64 APK、universal APK 与 `SHA256SUMS.txt` 均已上传到同一 GitHub Release。
 - Release 标题统一为 `SiteMark <标签>`（Android）或 `SiteMark 鸿蒙原生版 <版本号>`（HarmonyOS NEXT）；Android 标题由发布工作流自动生成。
 - 发布资产统一按 `sitemark-<标签>-<变体>.<扩展名>` 命名，例如 `sitemark-v1.0.12-arm64.apk`、`sitemark-native-v1.0.5-unsigned.hap`。
+- `README.md` 与 `README_EN.md` 的版本号、徽章、下载链接和 Latest/Pre-release 状态必须保持一致；更新其中一个时同步另一个。
 - Release 页面显示的标签、版本说明和文件名一致。
 - 随机下载一个发布 APK，重新校验 SHA-256、签名、版本和安装升级。
 - 发布后记录真机型号、Android 版本、测试时间、关键结果和仍需观察的系统调度限制。

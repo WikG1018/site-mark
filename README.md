@@ -1,5 +1,7 @@
 # SiteMark 工程印记
 
+[English](README_EN.md) | 简体中文
+
 > 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.11`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版提供 Pre-release 构建体验。仓库单分支维护两条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
