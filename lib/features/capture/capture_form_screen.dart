@@ -184,6 +184,20 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     if (state == AppLifecycleState.resumed) {
       _loadPermission();
     }
+    if (state == AppLifecycleState.paused) {
+      // Non-ITGSA ROMs reclaim the process without ever delivering a KILL
+      // broadcast — and the system camera being foreground is exactly when
+      // memory pressure spikes. Persist the same snapshot the KILL hook
+      // would write so a plain LMK kill cannot lose typed fields.
+      _CaptureFormKillHook(
+        projectId: widget.projectId,
+        locationController: _locationController,
+        contentController: _contentController,
+        photographerController: _photographerController,
+        notesController: _notesController,
+        store: ref.read(captureFormDraftStoreProvider),
+      ).persistForKill();
+    }
   }
 
   void _applyCarryForward(CaptureCarryForwardDraft? draft) {

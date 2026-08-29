@@ -78,9 +78,14 @@ class _ProjectWatermarkSettingsScreenState
             );
           }
           _position ??= project.watermarkPosition;
-          _opacity ??= project.watermarkOpacity;
+          // Restored backups can carry the other platform's wider values
+          // (opacity up to 1.0, font scale down to 0.75). The render pipeline
+          // accepts them, but the sliders below are limited to this platform's
+          // range — clamp only the displayed initial value so the Slider stays
+          // in bounds until the user picks a new one.
+          _opacity ??= project.watermarkOpacity.clamp(0.20, 0.95);
           _accentColorArgb ??= project.watermarkAccentColorArgb;
-          _fontScale ??= project.watermarkFontScale;
+          _fontScale ??= project.watermarkFontScale.clamp(0.80, 1.60);
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [

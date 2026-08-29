@@ -8,6 +8,7 @@ import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/domain/capture_media_failure.dart';
+import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -659,6 +660,56 @@ void main() {
       );
     },
   );
+
+  // Read-only contract parity: completed/archived projects are protected in
+  // batch paths too, not just on the detail screen. The capture is created
+  // while the project is active and the project is archived afterwards —
+  // createPendingCapture itself already rejects read-only projects.
+  test('batch delete and clear-originals refuse read-only projects', () async {
+    final pending = await database.createPendingCapture(
+      id: 'capture-archived',
+      projectId: 'project-1',
+      originalPath: '/private/archived-original.jpg',
+      workLocation: 'B 区',
+      workContent: '检查',
+      photographer: '张工',
+      watermarkLocaleCode: 'zh',
+      locationResolution: 'resolved',
+    );
+    await database.markCaptured(
+      captureId: pending.id,
+      capturedAt: DateTime(2026, 7, 16, 10),
+    );
+    await database.markRendering(
+      captureId: pending.id,
+      originalSha256: digestA,
+    );
+    await database.markReady(
+      captureId: pending.id,
+      publishedUri: 'content://media/site-mark/9',
+    );
+    final archived = await database.updateProjectLifecycleStatus(
+      projectId: 'project-1',
+      expectedStatus: ProjectLifecycleStatus.active,
+      targetStatus: ProjectLifecycleStatus.archived,
+    );
+    expect(archived, isNotNull);
+
+    final deleted = await service.deleteAll(['capture-archived']);
+    expect(deleted.succeededIds, isEmpty);
+    expect(
+      deleted.failures['capture-archived'],
+      CaptureMediaFailure.projectReadOnly,
+    );
+    expect(await database.captureById('capture-archived'), isNotNull);
+
+    final cleared = await service.clearOriginals(['capture-archived']);
+    expect(cleared.succeededIds, isEmpty);
+    expect(
+      cleared.failures['capture-archived'],
+      CaptureMediaFailure.projectReadOnly,
+    );
+  });
 
   // Regression: while the stale-row delete keeps failing the task must
   // survive for a later launch — the action itself stays a success.

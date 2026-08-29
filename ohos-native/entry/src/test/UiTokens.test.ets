@@ -29,6 +29,15 @@ export default function uiTokensTest(): void {
       expect(UiTokens.ON_PRIMARY).assertEqual('#FFFFFF');
     });
 
+    it('applies ON_DANGER together with the danger color', 0, () => {
+      UiTokens.apply(true, AccentSwatches.defaultArgb());
+      expect(UiTokens.DANGER).assertEqual('#FFB4AB');
+      expect(UiTokens.ON_DANGER).assertEqual('#410E0B');
+      UiTokens.apply(false, AccentSwatches.defaultArgb());
+      expect(UiTokens.DANGER).assertEqual('#B3261E');
+      expect(UiTokens.ON_DANGER).assertEqual('#FFFFFF');
+    });
+
     it('keeps the legacy green label white before any accent is applied', 0, () => {
       expect(UiTokens.onColorFor(0xFF176B55)).assertEqual('#FFFFFF');
     });

@@ -265,6 +265,10 @@ class AppStrings {
           : '仅可删除就绪或失败状态的记录',
     CaptureMediaFailure.republishStatusNotAllowed =>
       _english ? 'Only ready captures can be republished' : '仅可就绪状态的记录重新发布',
+    CaptureMediaFailure.projectReadOnly =>
+      _english
+          ? 'This capture belongs to a completed or archived project'
+          : '该记录所属项目已完结或归档，为只读状态',
     CaptureMediaFailure.originalMissing =>
       _english ? 'Original photo is unexpectedly missing' : '原图意外缺失，无法完成操作',
     CaptureMediaFailure.renderedPhotoMissing =>

@@ -381,7 +381,9 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     watermarkOpacity: number, watermarkAccentColorArgb: number,
     watermarkFontScale: number): Promise<void> {
     const position = watermarkPosition === 'bottomRight' ? 'bottomRight' : 'bottomLeft';
-    const opacity = Math.max(0.35, Math.min(1, watermarkOpacity));
+    // 接受范围与 Android 对齐为并集（透明度 0.20–1.0、字号 0.75–1.6），
+    // 跨端恢复备份时不再把对端合法值钳改成默认。
+    const opacity = Math.max(0.2, Math.min(1, watermarkOpacity));
     const fontScale = Math.max(0.75, Math.min(1.6, watermarkFontScale));
     const transaction = await this.store.createTransaction();
     try {

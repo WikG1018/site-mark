@@ -768,11 +768,14 @@ class ProjectImportService implements ProjectArchiveImporter {
       ? value
       : null;
 
+  // Union of both platforms' UI ranges (Android 0.20-0.95 / 0.80-1.60,
+  // HarmonyOS 0.35-1.0 / 0.75-1.6): importing a backup created on the other
+  // platform must keep its values instead of nulling them to defaults.
   static double? _validOpacity(double? value) =>
-      value != null && value >= 0.2 && value <= 0.95 ? value : null;
+      value != null && value >= 0.2 && value <= 1.0 ? value : null;
 
   static double? _validFontScale(double? value) =>
-      value != null && value >= 0.80 && value <= 1.60 ? value : null;
+      value != null && value >= 0.75 && value <= 1.60 ? value : null;
 
   static String _validLocale(String? value) =>
       value != null && {'zh', 'en'}.contains(value) ? value : 'zh';

@@ -260,7 +260,7 @@ class HarmonyCaptureDatabaseContractTest(unittest.TestCase):
     def test_custom_button_text_has_explicit_action_colors(self) -> None:
         records = RECORD_SOURCE.read_text(encoding="utf-8")
         contracts = (
-            (r"Text\(this\.renamingTemplateId.*?Save name.*?fontColor\(Color\.White\)", "save"),
+            (r"Text\(this\.renamingTemplateId.*?Save name.*?fontColor\(UiTokens\.ON_PRIMARY\)", "save"),
             (r"Text\(tr\('取消重命名'.*?fontColor\(UiTokens\.TEXT\)", "cancel"),
             (r"Text\(tr\('改名'.*?fontColor\(UiTokens\.PRIMARY\)", "rename"),
             (r"Text\(this\.deleteTemplateId.*?Confirm delete.*?fontColor\(UiTokens\.DANGER\)", "delete"),

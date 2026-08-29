@@ -45,6 +45,7 @@ struct Index {
   private readonly consentAction: ScreenActionCoordinator = new ScreenActionCoordinator();
   private readonly tabCoordinator: RootTabCoordinator = new RootTabCoordinator(0);
   private subscribedRuntime: AppRuntime | null = null;
+  private shellMounted: boolean = false;
   private consentStore: PrivacyConsentStore = new PrivacyConsentStore(
     new PreferencesConsentStorage(AbilityContextHolder.require()));
   private readonly runtimeListener: () => void = (): void => {
@@ -75,6 +76,7 @@ struct Index {
 
   onPageShow(): void {
     this.activateRootShell();
+    this.attachNotificationLaunches();
   }
 
   onPageHide(): void {
@@ -178,7 +180,6 @@ struct Index {
       this.subscribeRuntime(runtime);
       this.runtimeReady = true;
       this.runtimeListener();
-      this.attachNotificationLaunches();
       this.requestMotionPolicyRefresh(generation);
     } catch (_) {
       if (!this.rootLifecycle.isCurrent(generation)) {
@@ -204,6 +205,11 @@ struct Index {
   }
 
   private attachNotificationLaunches(): void {
+    // Navigation 挂载前的 pushPathByName 可能被丢弃（冷启动点通知直达详情），
+    // 因此只在壳挂载后消费暂存的 captureId；attach 可重复调用。
+    if (!this.shellMounted) {
+      return;
+    }
     PendingNotificationLaunch.attach((captureId: string): void =>
       this.openCapturedRecord(captureId));
   }
@@ -411,6 +417,10 @@ struct Index {
     .width('100%')
     .height('100%')
     .backgroundColor(UiTokens.BACKGROUND)
+    .onAppear((): void => {
+      this.shellMounted = true;
+      this.attachNotificationLaunches();
+    })
   }
 
   @Builder

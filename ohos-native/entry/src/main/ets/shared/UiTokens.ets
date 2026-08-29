@@ -5,6 +5,7 @@ export class UiTokens {
   static GLASS_STRONG: string = '#F4F6FBF8';
   static PRIMARY: string = '#176B55';
   static ON_PRIMARY: string = '#FFFFFF';
+  static ON_DANGER: string = '#FFFFFF';
   static PRIMARY_CONTAINER: string = '#C7F1DF';
   static TEXT: string = '#17201C';
   static TEXT_SECONDARY: string = '#526059';
@@ -46,6 +47,7 @@ export class UiTokens {
       UiTokens.TEXT_SECONDARY = '#AAB8B0';
       UiTokens.OUTLINE = '#526159';
       UiTokens.DANGER = '#FFB4AB';
+      UiTokens.ON_DANGER = '#410E0B';
       UiTokens.SUCCESS = '#8BD69B';
       UiTokens.WARNING = '#F3C66F';
       UiTokens.CONTROL = '#253029';
@@ -69,6 +71,7 @@ export class UiTokens {
       UiTokens.TEXT_SECONDARY = '#526059';
       UiTokens.OUTLINE = '#C7D4CC';
       UiTokens.DANGER = '#B3261E';
+      UiTokens.ON_DANGER = '#FFFFFF';
       UiTokens.SUCCESS = '#2E7D32';
       UiTokens.WARNING = '#8A5A00';
       UiTokens.CONTROL = '#E7EEE9';

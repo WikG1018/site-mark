@@ -18,7 +18,7 @@ export struct CaptureInfoRow {
         .constraintSize({ minWidth: 78, maxWidth: '40%' })
         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(this.value.length > 0 ? this.value : '—').fontSize(14).fontColor(UiTokens.TEXT)
-        .layoutWeight(1).maxLines(4)
+        .layoutWeight(1).maxLines(4).textOverflow({ overflow: TextOverflow.Ellipsis })
     }.width('100%').alignItems(VerticalAlign.Top)
   }
 }
@@ -70,7 +70,7 @@ export struct CaptureCard {
         Text(this.selected ? '✓' : '')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
+          .fontColor(this.selected ? UiTokens.ON_PRIMARY : Color.White)
           .textAlign(TextAlign.Center)
           .accessibilityLevel('no')
           .width(32).height(32)

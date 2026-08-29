@@ -216,6 +216,7 @@ export struct SettingsView {
 @Component
 export struct AppearanceScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   private readonly loadCoordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
   private readonly saveCoordinator: ScreenLifecycleActionCoordinator = appearanceActionCoordinator;
   @State private settings: AppSettingsRecord | null = null;
@@ -401,7 +402,8 @@ export struct AppearanceScreen {
             }
           }
           .padding(16)
-          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10,
+            bottom: 40 + this.safeAreaBottomVp })
           .width(`calc(100% - ${UiTokens.PAGE_PADDING * 2}vp)`)
           .backgroundColor(UiTokens.SURFACE)
           .borderRadius(UiTokens.CARD_RADIUS)
@@ -415,6 +417,7 @@ export struct AppearanceScreen {
 @Component
 export struct StorageScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private snapshot: StorageSnapshot = new StorageSnapshot();
   @State private message: string = '';
   private readonly messageClock = new ScreenMessageClock();
@@ -471,7 +474,8 @@ export struct StorageScreen {
             }
           }
           .padding(16)
-          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10,
+            bottom: 40 + this.safeAreaBottomVp })
           .width(`calc(100% - ${UiTokens.PAGE_PADDING * 2}vp)`)
           .backgroundColor(UiTokens.SURFACE)
           .borderRadius(UiTokens.CARD_RADIUS)
@@ -485,6 +489,7 @@ export struct StorageScreen {
 @Component
 export struct DiagnosticsScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   private readonly loadCoordinator: ScreenRequestCoordinator = new ScreenRequestCoordinator();
   private readonly actionCoordinator: ScreenLifecycleActionCoordinator = diagnosticsActionCoordinator;
   @State private summary: DiagnosticSummary = new DiagnosticSummary(0, 0);
@@ -711,7 +716,8 @@ export struct DiagnosticsScreen {
                 .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY).width('100%')
             }
           }
-          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10,
+            bottom: 40 + this.safeAreaBottomVp })
           .width('100%')
         }.layoutWeight(1)
       }.width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
@@ -722,6 +728,7 @@ export struct DiagnosticsScreen {
 @Component
 export struct AboutScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private versionLabel: string = tr('正在读取版本…', 'Loading version…');
   private versionGeneration: number = 0;
 
@@ -769,10 +776,15 @@ export struct AboutScreen {
             Text(tr('本应用不申请网络权限。点击仓库链接时会交给系统浏览器。',
               'This app does not request network permission. Repository links open in the system browser.'))
               .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
+            Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
+            Text(tr('本项目以 Apache-2.0 许可证开源，第三方组件声明见仓库 THIRD_PARTY_NOTICES.md。',
+              'This project is open source under the Apache-2.0 license; third-party notices are in THIRD_PARTY_NOTICES.md in the repository.'))
+              .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
           }
           .padding(20).width('100%').backgroundColor(UiTokens.SURFACE)
           .borderRadius(UiTokens.CARD_RADIUS).border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
-          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+          .margin({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10,
+            bottom: 40 + this.safeAreaBottomVp })
         }.layoutWeight(1)
       }.width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }.hideTitleBar(true)
@@ -1001,7 +1013,8 @@ export struct BackupScreen {
                 Row({ space: 12 }) {
                   Text(this.projectSelection.isSelected(item.project.id) ? '✓' : '')
                     .width(UiTokens.TOUCH_TARGET).height(UiTokens.TOUCH_TARGET).textAlign(TextAlign.Center)
-                    .fontColor(this.projectSelection.isSelected(item.project.id) ? Color.White : UiTokens.TEXT_SECONDARY)
+                    .fontColor(this.projectSelection.isSelected(item.project.id) ?
+                      UiTokens.ON_PRIMARY : UiTokens.TEXT_SECONDARY)
                     .backgroundColor(this.projectSelection.isSelected(item.project.id) ?
                       UiTokens.PRIMARY : UiTokens.SURFACE_MUTED)
                     .border({ width: 1, color: this.projectSelection.isSelected(item.project.id) ?

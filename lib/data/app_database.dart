@@ -913,7 +913,10 @@ ORDER BY
     if (!{'bottomLeft', 'bottomRight'}.contains(position)) {
       throw ArgumentError.value(position, 'position');
     }
-    if (opacity < 0.2 || opacity > 0.95) {
+    // Accept the union of both platforms' UI ranges (Android 0.20-0.95,
+    // HarmonyOS 0.35-1.0) so cross-device backup restore never silently
+    // rewrites a value the other platform considers valid.
+    if (opacity < 0.2 || opacity > 1.0) {
       throw ArgumentError.value(opacity, 'opacity');
     }
     _validatedFontScale(fontScale);
@@ -1422,10 +1425,12 @@ ORDER BY
     });
   }
 
-  /// Validates that a watermark font scale is within the allowed 0.80-1.60
-  /// range. Throws [ArgumentError] for out-of-range values.
+  /// Validates that a watermark font scale is within the allowed 0.75-1.60
+  /// range (the union of both platforms' UI ranges; see [_validatedOpacity]-
+  /// style union note in [updateProjectWatermarkSettings]). Throws
+  /// [ArgumentError] for out-of-range values.
   double _validatedFontScale(double value) {
-    if (value < 0.80 || value > 1.60) {
+    if (value < 0.75 || value > 1.60) {
       throw ArgumentError.value(value, 'fontScale');
     }
     return value;

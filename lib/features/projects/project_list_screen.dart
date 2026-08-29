@@ -243,6 +243,39 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                 key: ValueKey('project-summaries-$_summaryStreamKey'),
                 stream: stream,
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    final strings = AppStrings.of(context);
+                    return SizedBox(
+                      key: const Key('project-list-error'),
+                      height: constraints.maxHeight * 0.55,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                strings.projectLoadFailed,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              FilledButton.tonal(
+                                key: const Key('project-list-retry'),
+                                onPressed: () {
+                                  // Nulling the cached stream forces
+                                  // _summariesFor to re-subscribe on rebuild.
+                                  setState(() {
+                                    _summaryStream = null;
+                                  });
+                                },
+                                child: Text(strings.retry),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
                   if (!snapshot.hasData) {
                     final skeletonCount = adaptiveSkeletonCount(
                       viewportHeight: constraints.maxHeight,

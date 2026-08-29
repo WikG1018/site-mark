@@ -48,9 +48,15 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   /// Pending clear-originals execution. Set while the 5-second undo window is
   /// open; cancelled by the Snackbar undo action or by [dispose].
   Timer? _clearOriginalsTimer;
+  ScaffoldMessengerState? _clearOriginalsMessenger;
 
   @override
   void dispose() {
+    if (_clearOriginalsTimer != null) {
+      // Exiting selection cancels the pending run; withdraw the snackbar too
+      // so it doesn't keep implying a cleanup that will never happen.
+      _clearOriginalsMessenger?.hideCurrentSnackBar();
+    }
     _clearOriginalsTimer?.cancel();
     super.dispose();
   }
@@ -257,6 +263,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     if (ids.isEmpty || _busy || _clearOriginalsTimer != null) return;
     final strings = AppStrings.of(context);
     final messenger = ScaffoldMessenger.maybeOf(context);
+    _clearOriginalsMessenger = messenger;
     _clearOriginalsTimer = Timer(const Duration(seconds: 5), () {
       _clearOriginalsTimer = null;
       _executeClearOriginals(ids);

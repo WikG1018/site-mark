@@ -440,7 +440,8 @@ export struct AllRecordsView {
     if (!this.selection.requestPermanentDelete()) {
       this.touchSelection();
       this.setMessage(tr(`再次点击“删除”将永久删除已选 ${this.selection.selectedIds.length} 条记录`,
-        `Tap “Delete” again to permanently delete ${this.selection.selectedIds.length} selected records`), false);
+        `Tap “Delete” again to permanently delete ${this.selection.selectedIds.length} selected ` +
+        `${this.selection.selectedIds.length === 1 ? 'record' : 'records'}`), false);
       return;
     }
     await this.runBatch(async (id: string): Promise<void> => AppRuntime.require().deleteCapture(id),
@@ -716,6 +717,7 @@ export struct AllRecordsView {
 @Component
 export struct CaptureFormScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private project: ProjectRecord | null = null;
   @State private workLocation: string = '';
   @State private workContent: string = '';
@@ -788,6 +790,23 @@ export struct CaptureFormScreen {
     this.templateRequest.invalidate();
   }
 
+  private async refreshLocationState(): Promise<void> {
+    const runtime = AppRuntime.current;
+    if (runtime === null) {
+      return;
+    }
+    const generation = this.lifecycle.snapshot();
+    let granted = this.locationGranted;
+    try {
+      granted = await runtime.services.getLocationPermissionState();
+    } catch (_) {
+      return;
+    }
+    if (this.lifecycle.accept(generation)) {
+      this.locationGranted = granted;
+    }
+  }
+
   private persistKillDraft(): void {
     const runtime = AppRuntime.current;
     if (runtime === null) return;
@@ -795,6 +814,7 @@ export struct CaptureFormScreen {
     if (projectId.length === 0) return;
     if (this.workLocation.length === 0 && this.workContent.length === 0 &&
       this.photographer.length === 0 && this.notes.length === 0) {
+      this.clearKillDraft();
       return;
     }
     const snapshot = new CaptureKillDraftSnapshot({
@@ -919,6 +939,10 @@ export struct CaptureFormScreen {
   }
 
   private handleBack(): void {
+    // 相机拉起期间系统相机即将覆盖本页：返回键不能先弹掉表单。
+    if (this.busy) {
+      return;
+    }
     if (this.suggestionField.length > 0) {
       this.suggestionField = '';
       this.suggestionFilter = '';
@@ -1467,13 +1491,15 @@ export struct CaptureFormScreen {
               'The system camera takes the photo. Watermarks process serially after you return; location, work, and photographer are retained.'))
               .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(18).width('100%')
           }
-          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10, bottom: 40 })
+          .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10,
+            bottom: 40 + this.safeAreaBottomVp })
           .width('100%')
         }.layoutWeight(1)
       }
       .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
     }
     .hideTitleBar(true)
+    .onShown((): void => { this.refreshLocationState(); })
     .onBackPressed((): boolean => {
       this.handleBack();
       return true;
@@ -1489,6 +1515,7 @@ export struct CaptureFormScreen {
 @Component
 export struct CaptureDetailScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private capture: CaptureRecord | null = null;
   @State private project: ProjectRecord | null = null;
   @State private loadingRecord: boolean = true;
@@ -1793,12 +1820,12 @@ export struct CaptureDetailScreen {
       Row({ space: 6 }) {
         Button(tr('水印成片', 'Watermarked')).height(UiTokens.TOUCH_TARGET).fontSize(12)
           .backgroundColor(!this.showingOriginal ? UiTokens.PRIMARY : UiTokens.GLASS_STRONG)
-          .fontColor(!this.showingOriginal ? Color.White : UiTokens.TEXT)
+          .fontColor(!this.showingOriginal ? UiTokens.ON_PRIMARY : UiTokens.TEXT)
           .accessibilityText(tr('查看水印成片', 'View watermarked photo'))
           .onClick((): void => this.switchPhoto(false))
         Button(tr('原图', 'Original')).height(UiTokens.TOUCH_TARGET).fontSize(12)
           .backgroundColor(this.showingOriginal ? UiTokens.PRIMARY : UiTokens.GLASS_STRONG)
-          .fontColor(this.showingOriginal ? Color.White : UiTokens.TEXT)
+          .fontColor(this.showingOriginal ? UiTokens.ON_PRIMARY : UiTokens.TEXT)
           .enabled(this.capture?.hasOriginal() ?? false)
           .accessibilityText(tr('查看原图', 'View original photo'))
           .onClick((): void => this.switchPhoto(true))
@@ -1913,7 +1940,7 @@ export struct CaptureDetailScreen {
                     .constraintSize({ minHeight: UiTokens.TOUCH_TARGET }).width('100%')
                     .enabled(!this.deleting)
                     .backgroundColor(UiTokens.DANGER)
-                    .fontColor(Color.White)
+                    .fontColor(UiTokens.ON_DANGER)
                     .accessibilityText(tr('永久删除原图、水印成片和整条记录，无法撤销',
                       'Permanently delete the original, watermarked photo, and record. This cannot be undone.'))
                     .onClick((): void => { this.deleteRecord(); })
@@ -1921,7 +1948,8 @@ export struct CaptureDetailScreen {
                   .transition(panelTransition(24))
               }
             }
-            .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 8, bottom: 40 })
+            .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 8,
+              bottom: 40 + this.safeAreaBottomVp })
             .width('100%')
           }.layoutWeight(1)
         } else if (this.loadingRecord) {
@@ -1942,6 +1970,7 @@ export struct CaptureDetailScreen {
 @Component
 export struct CaptureEditorScreen {
   @Consume('pathStack') pathStack: NavPathStack;
+  @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private capture: CaptureRecord | null = null;
   @State private location: string = '';
   @State private content: string = '';
@@ -2123,7 +2152,8 @@ export struct CaptureEditorScreen {
                 .transition(panelTransition(0))
             }
             }
-            .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12, bottom: 40 })
+            .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12,
+              bottom: 40 + this.safeAreaBottomVp })
             .width('100%')
           }.layoutWeight(1)
         }
