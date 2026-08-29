@@ -25,7 +25,9 @@ export 'package:sitemark/features/capture/capture_fullscreen_sequence.dart'
 /// - single tap toggles the transparent chrome [AppBar];
 /// - double tap animates the [TransformationController] between 1x and 2x;
 /// - while at 1x, a vertical drag moves the photo and can dismiss the route;
-/// - while zoomed past 1x the [InteractiveViewer] pans normally;
+/// - while zoomed past 1x, a single finger pans the photo through the same
+///   transformation controller as the pinch, including the finger a pinch
+///   leaves behind;
 /// - horizontal swipe (PageView) is only active when the current page is at 1x.
 class CaptureFullscreenScreen extends ConsumerStatefulWidget {
   // The bounds assertion reads the runtime list length, so this constructor
@@ -368,10 +370,26 @@ class _CaptureFullscreenScreenState
 
   void _onPointerMove(PointerMoveEvent event) {
     if (!_pinchPointers.containsKey(event.pointer)) return;
+    final previous = _pinchPointers[event.pointer]!;
     _pinchPointers[event.pointer] = event.localPosition;
     if (_pinchPointers.length == 2) {
       _pinchUpdate(_pinchPointers.values.toList());
+    } else if (_pinchPointers.length == 1 && _zoomed && !_multiTouch) {
+      _panUpdate(event.localPosition - previous);
     }
+  }
+
+  /// One-finger pan while zoomed, driven through the same controller as the
+  /// pinch. The InteractiveViewer keeps pan disabled so its recognizer never
+  /// fights the PageView swipe or the dismiss drag at 1x.
+  void _panUpdate(Offset delta) {
+    final photoId = _currentPhotoId;
+    if (photoId == null || delta == Offset.zero) return;
+    final (scale, pan) = _decomposeTransform(_controllerFor(photoId).value);
+    _controllerFor(photoId).value = _composeTransform(
+      scale,
+      _clampPan(scale, pan + delta),
+    );
   }
 
   void _onPointerUpOrCancel(PointerEvent event) {

@@ -2,11 +2,11 @@ import { describe, expect, it } from '@ohos/hypium';
 import { CaptureFilter, CaptureRecord } from '../main/ets/domain/Models';
 import { CaptureStatus } from '../main/ets/domain/StateMachine';
 import { BatchActionItem } from '../main/ets/shared/AppComponents';
-import { DetailMediaSwapCoordinator, PhotoViewerGestureState, RecordBatchLayoutPolicy,
-  RecordNavigationSeedStore, RecordRefreshGate, RecordRestorePolicy, RecordSearchCoordinator,
-  RecordSelectionCoordinator, RecordTimerScheduler, RenderedRefreshTracker, ViewerRenderedVersionTracker,
-  ViewerFullImageCoordinator, ViewerNavigationSeedCoordinator,
-  ViewerNodePolicy } from '../main/ets/feature/records/RecordUiCoordinator';
+import { DetailMediaSwapCoordinator, PhotoViewerGestureState, PhotoViewerPanTracker,
+  RecordBatchLayoutPolicy, RecordNavigationSeedStore, RecordRefreshGate, RecordRestorePolicy,
+  RecordSearchCoordinator, RecordSelectionCoordinator, RecordTimerScheduler,
+  RenderedRefreshTracker, ViewerRenderedVersionTracker, ViewerFullImageCoordinator,
+  ViewerNavigationSeedCoordinator, ViewerNodePolicy } from '../main/ets/feature/records/RecordUiCoordinator';
 import { ListPageCoordinator } from '../main/ets/shared/ListPageCoordinator';
 import { RootShellPolicy } from '../main/ets/shared/RootShellPolicy';
 import { UiTokens } from '../main/ets/shared/UiTokens';
@@ -495,6 +495,42 @@ export default function recordUiCoordinatorTest(): void {
       gesture.resetAfterMove();
       expect(gesture.scale).assertEqual(1);
       expect(gesture.canSwipe()).assertTrue();
+    });
+
+    it('pans a zoomed photo with a fresh single finger', 0, () => {
+      const tracker = new PhotoViewerPanTracker();
+      const down = tracker.onTouch(true, PhotoViewerPanTracker.TOUCH_DOWN, 1, 7, 100, 80);
+      expect(down).assertFalse();
+      expect(tracker.sessionBegan).assertTrue();
+      const moved = tracker.onTouch(true, PhotoViewerPanTracker.TOUCH_MOVE, 1, 7, 130, 60);
+      expect(moved).assertTrue();
+      expect(tracker.deltaX).assertEqual(30);
+      expect(tracker.deltaY).assertEqual(-20);
+      tracker.onTouch(true, PhotoViewerPanTracker.TOUCH_UP, 1, 7, 130, 60);
+      const afterLift = tracker.onTouch(true, PhotoViewerPanTracker.TOUCH_MOVE, 1, 7, 140, 60);
+      expect(afterLift).assertFalse();
+      expect(tracker.sessionBegan).assertTrue();
+    });
+
+    it('adopts the finger a pinch leaves behind so zoomed corners stay reachable', 0, () => {
+      const tracker = new PhotoViewerPanTracker();
+      // Two fingers on screen: panning stays suppressed and tracking resets.
+      expect(tracker.onTouch(true, PhotoViewerPanTracker.TOUCH_DOWN, 2, 7, 100, 80)).assertFalse();
+      expect(tracker.sessionBegan).assertFalse();
+      // One finger lifts: the survivor only ever produces Move events now.
+      expect(tracker.onTouch(true, PhotoViewerPanTracker.TOUCH_MOVE, 1, 7, 120, 90)).assertFalse();
+      expect(tracker.sessionBegan).assertTrue();
+      expect(tracker.onTouch(true, PhotoViewerPanTracker.TOUCH_MOVE, 1, 7, 160, 90)).assertTrue();
+      expect(tracker.deltaX).assertEqual(40);
+      expect(tracker.deltaY).assertEqual(0);
+    });
+
+    it('keeps panning disabled while the photo is at 1x or two fingers rest', 0, () => {
+      const tracker = new PhotoViewerPanTracker();
+      expect(tracker.onTouch(false, PhotoViewerPanTracker.TOUCH_DOWN, 1, 7, 10, 10)).assertFalse();
+      expect(tracker.onTouch(false, PhotoViewerPanTracker.TOUCH_MOVE, 1, 7, 40, 10)).assertFalse();
+      expect(tracker.onTouch(true, PhotoViewerPanTracker.TOUCH_MOVE, 2, 7, 40, 10)).assertFalse();
+      expect(tracker.sessionBegan).assertFalse();
     });
 
     it('gives the viewer swipe a dedicated slower duration than generic UI motion', 0, () => {

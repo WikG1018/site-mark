@@ -9,9 +9,9 @@ import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { MotionPolicy } from '../../shared/MotionPolicy';
 import { UiTokens } from '../../shared/UiTokens';
 import { PhotoViewerWindowController, PhotoViewerWindowLoader } from './PhotoViewerWindow';
-import { PhotoViewerGestureState, RecordNavigationSeedStore, ViewerFullImageCoordinator,
-  ViewerFullImageRequest, ViewerNavigationSeedCoordinator, ViewerNodePolicy,
-  ViewerRenderedVersionTracker } from './RecordUiCoordinator';
+import { PhotoViewerGestureState, PhotoViewerPanTracker, RecordNavigationSeedStore,
+  ViewerFullImageCoordinator, ViewerFullImageRequest, ViewerNavigationSeedCoordinator,
+  ViewerNodePolicy, ViewerRenderedVersionTracker } from './RecordUiCoordinator';
 
 class RuntimePhotoViewerWindowLoader implements PhotoViewerWindowLoader {
   captureViewerWindow(captureId: string): Promise<CaptureViewerWindow> {
@@ -34,9 +34,7 @@ export struct PhotoViewerScreen {
   private readonly fullImage: ViewerFullImageCoordinator = new ViewerFullImageCoordinator();
   private panBaseX: number = 0;
   private panBaseY: number = 0;
-  private panTouchId: number = -1;
-  private panTouchStartX: number = 0;
-  private panTouchStartY: number = 0;
+  private readonly panTracker: PhotoViewerPanTracker = new PhotoViewerPanTracker();
   private viewportWidth: number = 0;
   private viewportHeight: number = 0;
   @State private topInsetVp: number = 0;
@@ -258,20 +256,18 @@ export struct PhotoViewerScreen {
   }
 
   private handleViewerTouch(event: TouchEvent): void {
-    if (this.viewerScale <= 1 || event.touches.length !== 1) {
-      this.panTouchId = -1;
+    if (event.touches.length === 0) {
       return;
     }
     const touch = event.touches[0];
-    if (event.type === TouchType.Down) {
-      this.panTouchId = touch.id;
-      this.panTouchStartX = touch.x;
-      this.panTouchStartY = touch.y;
+    const progressed = this.panTracker.onTouch(this.viewerScale > 1, event.type,
+      event.touches.length, touch.id, touch.x, touch.y);
+    if (this.panTracker.sessionBegan) {
       this.beginPan();
-    } else if (event.type === TouchType.Move && touch.id === this.panTouchId) {
-      this.updatePan(touch.x - this.panTouchStartX, touch.y - this.panTouchStartY);
-    } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-      this.panTouchId = -1;
+      return;
+    }
+    if (progressed) {
+      this.updatePan(this.panTracker.deltaX, this.panTracker.deltaY);
     }
   }
 
