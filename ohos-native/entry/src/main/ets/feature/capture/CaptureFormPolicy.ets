@@ -5,6 +5,7 @@ import { tr } from '../../shared/AppText';
 
 export class CaptureFormMetrics {
   static readonly TOUCH_TARGET: number = 44;
+  static readonly DRAFT_PERSIST_DEBOUNCE_MS: number = 600;
   static readonly LOCATION_MAX_LENGTH: number = 160;
   static readonly WORK_MAX_LENGTH: number = 240;
   static readonly PHOTOGRAPHER_MAX_LENGTH: number = 80;

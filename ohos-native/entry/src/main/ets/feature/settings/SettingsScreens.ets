@@ -229,6 +229,7 @@ export struct AppearanceScreen {
   @State private message: string = '';
   @State private loading: boolean = true;
   @State private saving: boolean = false;
+  @State private savedFlash: boolean = false;
   @State private messageError: boolean = false;
   private readonly messageClock = new ScreenMessageClock();
 
@@ -306,8 +307,15 @@ export struct AppearanceScreen {
       if (this.saveCoordinator.isCurrent(token)) {
         this.settings = value;
         this.messageError = false;
+        // The inline message sits at the bottom of a long scroll and
+        // auto-clears after 4s, so mirror the confirmation on the top-bar
+        // action where the user's tap actually landed.
+        this.savedFlash = true;
         this.messageClock.show((next: string): void => {
           this.message = next;
+          if (next.length === 0) {
+            this.savedFlash = false;
+          }
         }, tr('设置已保存', 'Settings saved'));
       }
     } catch (_) {
@@ -325,8 +333,9 @@ export struct AppearanceScreen {
       Column() {
         AppTopBar({ title: tr('外观与默认水印', 'Appearance & watermark'), showBack: true,
           backAccessibilityText: settingsBackAccessibilityText(),
-          onBack: (): void => { this.pathStack.pop(); }, actionLabel: this.saving ? tr('保存中…', 'Saving…') :
-            tr('保存', 'Save'),
+          onBack: (): void => { this.pathStack.pop(); },
+          actionLabel: this.saving ? tr('保存中…', 'Saving…') :
+            (this.savedFlash ? tr('已保存', 'Saved') : tr('保存', 'Save')),
           actionAccessibilityText: this.saving ? tr('正在保存设置', 'Saving settings') : tr('保存设置', 'Save settings'),
           actionEnabled: !this.loading && !this.saving && this.settings !== null,
           onAction: (): void => { this.save(); } })
@@ -654,7 +663,7 @@ export struct DiagnosticsScreen {
             Button(this.busy ? tr('正在处理…', 'Working…') :
               tr('生成并保存诊断包', 'Generate and save diagnostic bundle'))
               .constraintSize({ minHeight: 48 }).padding({ top: 8, bottom: 8 }).width('100%')
-              .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+              .backgroundColor(UiTokens.PRIMARY).fontColor(UiTokens.ON_PRIMARY)
               .enabled(!this.busy).onClick((): void => { this.confirming = true; })
             if (this.confirming) {
               Column({ space: 10 }) {
@@ -676,7 +685,7 @@ export struct DiagnosticsScreen {
                     .constraintSize({ minHeight: settingsConfirmationButtonHeight() }).padding({ top: 8, bottom: 8 })
                     .width('100%')
                     .backgroundColor(UiTokens.PRIMARY)
-                    .fontColor(Color.White).accessibilityText(diagnosticsConfirmAccessibilityText())
+                    .fontColor(UiTokens.ON_PRIMARY).accessibilityText(diagnosticsConfirmAccessibilityText())
                     .onClick((): void => { this.generate(); })
                 }.width('100%')
               }
@@ -1045,7 +1054,7 @@ export struct BackupScreen {
             Button(this.busy ? tr('正在处理…', 'Working…') :
               tr(`生成备份（已选 ${this.selectedIds.length} 个）`,
                 `Generate backup (${this.selectedIds.length} selected)`))
-              .height(50).width('100%').backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+              .height(50).width('100%').backgroundColor(UiTokens.PRIMARY).fontColor(UiTokens.ON_PRIMARY)
               .enabled(!this.busy && this.selectedIds.length > 0).onClick((): void => { this.createBackup(); })
           }
           if (this.result !== null) {

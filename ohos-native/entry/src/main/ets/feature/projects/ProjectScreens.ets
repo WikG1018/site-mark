@@ -1045,7 +1045,7 @@ export struct ProjectDetailScreen {
           Button(tr('应用筛选', 'Apply filters')).layoutWeight(1)
             .height(RecordBatchLayoutPolicy.filterControlHeight())
             .enabled(!this.pageBusy())
-            .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+            .backgroundColor(UiTokens.PRIMARY).fontColor(UiTokens.ON_PRIMARY)
           .onClick((): void => { this.filterOpen = false; this.markFilterChanged(); this.resetCaptures(); })
       }.width('100%')
     }
@@ -1188,7 +1188,7 @@ export struct ProjectDetailScreen {
                       Text(tr('恢复进行中', 'Reopen')).fontSize(12).fontColor(UiTokens.PRIMARY)
                         .maxLines(2).textAlign(TextAlign.Center)
                     }
-                    .layoutWeight(1).height(UiTokens.TOUCH_TARGET).backgroundColor(UiTokens.ACCENT_SURFACE)
+                    .layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET }).backgroundColor(UiTokens.ACCENT_SURFACE)
                     .enabled(this.canMutateProject())
                     .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ACTIVE); })
                   } else {
@@ -1196,7 +1196,7 @@ export struct ProjectDetailScreen {
                       Text(tr('标记完成', 'Mark completed')).fontSize(12).fontColor(UiTokens.PRIMARY)
                         .maxLines(2).textAlign(TextAlign.Center)
                     }
-                    .layoutWeight(1).height(UiTokens.TOUCH_TARGET).backgroundColor(UiTokens.ACCENT_SURFACE)
+                    .layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET }).backgroundColor(UiTokens.ACCENT_SURFACE)
                     .enabled(this.canMutateProject())
                     .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.COMPLETED); })
                   }
@@ -1205,7 +1205,7 @@ export struct ProjectDetailScreen {
                       Text(tr('归档', 'Archive')).fontSize(12).fontColor(UiTokens.PRIMARY)
                         .maxLines(2).textAlign(TextAlign.Center)
                     }
-                    .layoutWeight(1).height(UiTokens.TOUCH_TARGET).backgroundColor(UiTokens.ACCENT_SURFACE)
+                    .layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET }).backgroundColor(UiTokens.ACCENT_SURFACE)
                     .enabled(this.canMutateProject())
                     .onClick((): void => { this.setLifecycle(ProjectLifecycleStatus.ARCHIVED); })
                   }
@@ -1213,7 +1213,7 @@ export struct ProjectDetailScreen {
                     Text(tr('删除项目', 'Delete project')).fontSize(12).fontColor(UiTokens.DANGER)
                       .maxLines(2).textAlign(TextAlign.Center)
                   }
-                  .layoutWeight(1).height(UiTokens.TOUCH_TARGET).backgroundColor(UiTokens.DANGER_CONTAINER)
+                  .layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET }).backgroundColor(UiTokens.DANGER_CONTAINER)
                   .enabled(this.canMutateProject())
                   .accessibilityText(tr('删除项目，永久删除本机项目记录',
                     'Delete project, permanently delete on-device project records'))
@@ -1231,10 +1231,10 @@ export struct ProjectDetailScreen {
                       'The in-app project, records, and private files cannot be recovered. Gallery photos and saved backups remain.'))
                       .fontSize(13).fontColor(UiTokens.DANGER).lineHeight(19).width('100%')
                     Row({ space: 8 }) {
-                      Button(tr('取消', 'Cancel')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                      Button(tr('取消', 'Cancel')).layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
                         .enabled(this.canMutateProject())
                         .onClick((): void => { if (this.canMutateProject()) this.confirmDelete = false; })
-                      Button(tr('确认删除', 'Confirm delete')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                      Button(tr('确认删除', 'Confirm delete')).layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
                         .backgroundColor(UiTokens.DANGER)
                         .fontColor(Color.White)
                         .enabled(this.canMutateProject())
@@ -1377,7 +1377,7 @@ export struct ProjectDetailScreen {
         if (this.project !== null && this.project!.lifecycleStatus === ProjectLifecycleStatus.ACTIVE &&
           !this.selectionMode) {
           Button(tr('拍摄', 'Capture')).height(54).fontSize(17).fontWeight(FontWeight.Bold)
-            .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
+            .fontColor(UiTokens.ON_PRIMARY).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
             .shadow({ radius: 18, color: `#66${UiTokens.PRIMARY.substring(1)}`, offsetY: 7 })
             .margin({ right: 18, bottom: 18 + this.safeAreaBottomVp }).align(Alignment.BottomEnd)
             .enabled(this.canMutateProject())
