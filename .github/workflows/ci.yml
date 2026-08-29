@@ -125,3 +125,48 @@ jobs:
         with:
           name: sitemark-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
+
+  ios:
+    # Compile-only gate for the iOS platform scaffold: the full Dart/Rust/HarmonyOS
+    # test matrix already runs on the ubuntu `test` job in the same PR run.
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2.21.0
+        with:
+          flutter-version: 3.44.6
+          channel: stable
+          cache: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - run: flutter pub get
+      - name: Build unsigned iOS app
+        run: |
+          for attempt in 1 2 3; do
+            if flutter build ios --no-codesign --release; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::iOS build failed; retrying after a transient-download backoff (attempt $attempt/3)."
+            sleep "$((attempt * 10))"
+          done
+      - name: Verify iOS app metadata
+        run: |
+          PLIST="build/ios/iphoneos/Runner.app/Info.plist"
+          test -f "$PLIST"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST" | grep -Fx "SiteMark"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST" | grep -Fx "1.0.13"
+          /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$PLIST" >/dev/null
+          /usr/libexec/PlistBuddy -c "Print :NSLocationWhenInUseUsageDescription" "$PLIST" >/dev/null
+          /usr/libexec/PlistBuddy -c "Print :NSPhotoLibraryAddUsageDescription" "$PLIST" >/dev/null
+          test -z "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$PLIST" 2>/dev/null)"
+          test -z "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$PLIST" 2>/dev/null)"
+      - name: Upload unsigned iOS app artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: sitemark-ios-unsigned
+          path: build/ios/iphoneos/Runner.app
