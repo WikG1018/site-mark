@@ -25,7 +25,7 @@
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | Android `io.github.wikg1018.sitemark`；鸿蒙原生 `io.github.wikg1018.sitemark.native` |
 | 默认基础分支 | `main`（唯一开发分支，Android 与鸿蒙原生同线演进；见第 0 节） |
-| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.3`）；Android 见 `pubspec.yaml`（`1.0.9+24`） |
+| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.4`）；Android 见 `pubspec.yaml`（`1.0.9+24`） |
 | 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中 |
 | 数据库 | 鸿蒙 RDB 契约测试见 `tool/test_ohos_capture_database_contract*`；Android Drift schema 见 `lib/data/app_database.dart` |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
