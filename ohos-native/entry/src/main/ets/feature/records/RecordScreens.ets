@@ -704,7 +704,9 @@ export struct AllRecordsView {
     // 筛选面板使用系统半模态(HarmonyOS 规范形态):下拉可关、返回键联动
     // (BackAction.CLOSE_FILTER 置 filterOpen=false 即关闭)。
     .bindSheet(this.filterOpen, (): void => { this.filterPanel(); }, {
-      height: 460,
+      // FIT_CONTENT: the fixed 460vp cap crowded the apply row at large
+      // font scales combined with the bottom safe-area inset.
+      height: SheetSize.FIT_CONTENT,
       dragBar: true,
       onDisappear: (): void => { this.filterOpen = false; },
     })
@@ -1207,7 +1209,7 @@ export struct CaptureFormScreen {
         const text = (error as Error).message;
         this.setMessage(text === 'capture_form_invalid' ? tr('请修正表单中标出的内容后再拍摄',
           'Fix the highlighted form fields before capturing') :
-          tr('无法完成拍摄，请检查项目状态后重试',
+          userFacingMessage(error, '无法完成拍摄，请检查项目状态后重试',
             'Capture could not be completed. Check the project status and try again.'), true);
       }
     } finally {
@@ -1834,7 +1836,8 @@ export struct CaptureDetailScreen {
                   Text(this.capture!.photoNumber).fontSize(18).fontWeight(FontWeight.Bold)
                     .layoutWeight(1).maxLines(2)
                   Text(statusLabel(this.capture!.status)).fontSize(13)
-                    .fontColor(this.capture!.status === CaptureStatus.FAILED ? UiTokens.DANGER : UiTokens.SUCCESS)
+                    .fontColor(this.capture!.status === CaptureStatus.FAILED ? UiTokens.DANGER :
+                      (this.capture!.status === CaptureStatus.READY ? UiTokens.SUCCESS : UiTokens.WARNING))
                 }.width('100%')
                 CaptureInfoRow({ label: tr('项目', 'Project'), value: this.capture!.projectName })
                 CaptureInfoRow({ label: tr('工程部位', 'Location'), value: this.capture!.workLocation })

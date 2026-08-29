@@ -317,7 +317,13 @@ export struct PhotoViewerScreen {
       }
       const area = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
       if (stale()) return;
-      this.topInsetVp = Math.max(0, this.getUIContext().px2vp(area.topRect.height));
+      // TYPE_SYSTEM reads zero while the system bars are hidden, so the
+      // camera cutout must be folded in separately or the top chrome can
+      // overlap a punch-hole on cutout devices.
+      const cutout = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_CUTOUT);
+      if (stale()) return;
+      this.topInsetVp = Math.max(0, this.getUIContext()
+        .px2vp(Math.max(area.topRect.height, cutout.topRect.height)));
       this.bottomInsetVp = Math.max(0, this.getUIContext().px2vp(area.bottomRect.height));
       const color = lightContent ? '#FFFFFF' : UiTokens.TEXT;
       if (stale()) return;

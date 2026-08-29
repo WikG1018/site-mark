@@ -14,7 +14,9 @@ export struct CaptureInfoRow {
 
   build() {
     Row({ space: 12 }) {
-      Text(this.label).fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).width(78)
+      Text(this.label).fontSize(13).fontColor(UiTokens.TEXT_SECONDARY)
+        .constraintSize({ minWidth: 78, maxWidth: '40%' })
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(this.value.length > 0 ? this.value : '—').fontSize(14).fontColor(UiTokens.TEXT)
         .layoutWeight(1).maxLines(4)
     }.width('100%').alignItems(VerticalAlign.Top)
@@ -111,13 +113,15 @@ export struct CaptureCard {
         }.width('100%')
         if (this.showProject) {
           Text(this.capture.projectName).fontSize(13).fontWeight(FontWeight.Medium)
-            .fontColor(UiTokens.PRIMARY).maxLines(1).width('100%')
+            .fontColor(UiTokens.PRIMARY).maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
         }
         Text(`${this.capture.workLocation} · ${this.capture.workContent}`)
           .fontSize(14).fontColor(UiTokens.TEXT).maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
         Text(this.capture.photographer)
-          .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).maxLines(1).width('100%')
+          .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
         Text(this.capture.hasOriginal() ? tr('原图已保留', 'Original retained') :
           tr('原图已清理', 'Original cleared'))
           .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
