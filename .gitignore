@@ -25,6 +25,9 @@ key.properties
 rust/target/
 target/
 
+# Local release staging (APK/HAP copies)
+/dist/
+
 # IDE and OS
 .idea/
 .vscode/

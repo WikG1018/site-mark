@@ -68,7 +68,7 @@ pwsh -File .\tool\ohos-native\build-hap.ps1 -SkipRust -BuildMode release
 ohos-native/entry/build/default/outputs/default/entry-default-unsigned.hap
 ```
 
-构建脚本会拒绝缺失、格式异常、失败数非零或统计不一致的 ArkTS 测试结果，避免仅凭测试进程退出码产生“假绿”。生产签名需在 DevEco 中配置自有证书；签名文件和密码不得提交。
+构建脚本会把上述产物复制为 `dist/sitemark-native-v<版本>-unsigned.hap`，与 GitHub Release 资产命名保持一致。它还会拒绝缺失、格式异常、失败数非零或统计不一致的 ArkTS 测试结果，避免仅凭测试进程退出码产生“假绿”。生产签名需在 DevEco 中配置自有证书；签名文件和密码不得提交。
 
 ## 调试边界
 
