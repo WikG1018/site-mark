@@ -115,7 +115,9 @@ export struct AppTopBar {
       }
     }
     .width('100%')
-    .height(UiTokens.TOP_BAR_HEIGHT + this.safeAreaTopVp)
+    // minHeight, not height: two-line titles at large system font scale need
+    // more room than the 68vp base, and a fixed bar clips the title text.
+    .constraintSize({ minHeight: UiTokens.TOP_BAR_HEIGHT + this.safeAreaTopVp })
     .padding({ left: this.showBack ? 4 : UiTokens.PAGE_PADDING,
       right: UiTokens.PAGE_PADDING, top: topPaddingVp(this.safeAreaTopVp, 6), bottom: 6 })
     .alignItems(VerticalAlign.Center)
@@ -150,7 +152,7 @@ export struct EmptyPanel {
         Button(this.actionLabel)
           .margin({ top: 6 })
           .height(44)
-          .fontColor(Color.White)
+          .fontColor(UiTokens.ON_PRIMARY)
           .backgroundColor(UiTokens.PRIMARY)
           .borderRadius(22)
           .onClick(this.onAction)

@@ -376,7 +376,10 @@ export struct PhotoViewerScreen {
           .fontColor(Color.White)
           .backgroundColor(UiTokens.OVERLAY)
           .borderRadius(UiTokens.CONTROL_RADIUS)
-          .margin({ right: 16, top: 18 })
+          // Below the "n / N" counter pill (TopEnd, top 26+inset): both
+          // rendered over the photo when the full image fails, and at the
+          // same top offset they drew on top of each other.
+          .margin({ right: 16, top: 78 + this.topInsetVp })
           .align(Alignment.TopEnd)
           .accessibilityText(tr('重新加载当前高清照片', 'Reload the current full-resolution photo'))
           .onClick((): void => { this.retryFullImage(); })

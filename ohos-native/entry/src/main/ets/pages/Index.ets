@@ -13,6 +13,7 @@ import { ProjectDetailScreen, ProjectEditorScreen, ProjectListView,
 import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, SettingsView,
   StorageScreen } from '../feature/settings/SettingsScreens';
 import { UiTokens } from '../shared/UiTokens';
+import { AccentSwatches } from '../shared/AccentSwatches';
 import { AppText, tr } from '../shared/AppText';
 import { panelTransition } from '../shared/AppComponents';
 import { MotionPolicy } from '../shared/MotionPolicy';
@@ -57,7 +58,13 @@ struct Index {
 
   aboutToAppear(): void {
     if (AppRuntime.current === null) {
-      AppText.apply('', this.context().resourceManager.getConfigurationSync().locale);
+      const configuration = this.context().resourceManager.getConfigurationSync();
+      AppText.apply('', configuration.locale);
+      // The privacy gate and fatal-error screens render before runtime init,
+      // which is when UiTokens normally follows the stored settings — seed
+      // them from the system color mode so dark-mode devices do not get a
+      // light first screen. Runtime applyAppearance overrides this later.
+      UiTokens.apply(configuration.colorMode === 0, AccentSwatches.defaultArgb());
     }
     this.activateRootShell();
   }
@@ -447,7 +454,7 @@ struct Index {
           Button(this.consentBusy ? tr('正在保存…', 'Saving…') : tr('同意并继续', 'Agree and continue'))
             .height(54).width('100%').fontSize(17)
             .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
+            .fontColor(UiTokens.ON_PRIMARY).backgroundColor(UiTokens.PRIMARY).borderRadius(27)
             .enabled(!this.consentBusy)
             .onClick((): void => { this.acceptPrivacy(); })
           Button(tr('退出应用', 'Exit app')).height(44).width('100%').fontColor(UiTokens.TEXT_SECONDARY)
@@ -481,7 +488,7 @@ struct Index {
           Text(tr('无法启动', 'Unable to start')).fontSize(26).fontWeight(FontWeight.Bold).fontColor(UiTokens.TEXT)
           Text(this.runtimeError).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
             .lineHeight(22).textAlign(TextAlign.Center).padding({ left: 32, right: 32 })
-          Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+          Button(tr('重试', 'Retry')).height(46).backgroundColor(UiTokens.PRIMARY).fontColor(UiTokens.ON_PRIMARY)
             .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
         }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
         .transition(TransitionEffect.opacity(0)

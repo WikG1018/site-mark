@@ -33,6 +33,7 @@ import appSettingsLaunchPolicyTest from './AppSettingsLaunchPolicy.test';
 import accentSwatchesTest from './AccentSwatches.test';
 import appearanceSettingsDraftTest from './AppearanceSettingsDraft.test';
 import systemBarsTest from './SystemBars.test';
+import uiTokensTest from './UiTokens.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -70,4 +71,5 @@ export default function testsuite(): void {
   accentSwatchesTest();
   appearanceSettingsDraftTest();
   systemBarsTest();
+  uiTokensTest();
 }

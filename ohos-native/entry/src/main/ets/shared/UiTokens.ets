@@ -4,6 +4,7 @@ export class UiTokens {
   static GLASS: string = '#ECF1F8F3';
   static GLASS_STRONG: string = '#F4F6FBF8';
   static PRIMARY: string = '#176B55';
+  static ON_PRIMARY: string = '#FFFFFF';
   static PRIMARY_CONTAINER: string = '#C7F1DF';
   static TEXT: string = '#17201C';
   static TEXT_SECONDARY: string = '#526059';
@@ -34,6 +35,7 @@ export class UiTokens {
   static apply(dark: boolean, accentArgb: number): void {
     const accent = `#${(accentArgb >>> 0).toString(16).padStart(8, '0')}`;
     UiTokens.PRIMARY = accent;
+    UiTokens.ON_PRIMARY = UiTokens.onColorFor(accentArgb);
     if (dark) {
       UiTokens.BACKGROUND = '#101512';
       UiTokens.SURFACE = '#171D19';
@@ -81,5 +83,30 @@ export class UiTokens {
       UiTokens.CARD_SHADOW = '#14000000';
       UiTokens.OVERLAY = '#66000000';
     }
+  }
+
+  /// Text color with the stronger WCAG contrast on [accentArgb]: bright
+  /// accents (yellow, orange, the default green) need dark labels — white on
+  /// the yellow swatch is ~1.9:1 and unreadable.
+  static onColorFor(accentArgb: number): string {
+    const luminance = UiTokens.relativeLuminance(accentArgb);
+    const contrastAgainstWhite = 1.05 / (luminance + 0.05);
+    const contrastAgainstDark = (luminance + 0.05) / 0.055;
+    return contrastAgainstWhite >= contrastAgainstDark ? '#FFFFFF' : '#1B1B1B';
+  }
+
+  private static relativeLuminance(accentArgb: number): number {
+    const r = UiTokens.linearChannel((accentArgb >>> 16) & 0xFF);
+    const g = UiTokens.linearChannel((accentArgb >>> 8) & 0xFF);
+    const b = UiTokens.linearChannel(accentArgb & 0xFF);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  private static linearChannel(channel: number): number {
+    const value = channel / 255;
+    if (value <= 0.03928) {
+      return value / 12.92;
+    }
+    return Math.pow((value + 0.055) / 1.055, 2.4);
   }
 }

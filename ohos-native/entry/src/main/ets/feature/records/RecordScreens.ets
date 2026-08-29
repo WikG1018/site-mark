@@ -159,6 +159,22 @@ export struct AllRecordsView {
     };
   }
 
+  private hasActiveFilter(): boolean {
+    return this.searchText.length > 0 || this.selectedProjectId.length > 0 ||
+      Number.parseInt(this.yearText) > 0 || Number.parseInt(this.monthText) > 0 ||
+      Number.parseInt(this.dayText) > 0;
+  }
+
+  private clearAllFilters(): void {
+    this.searchText = '';
+    this.yearText = '';
+    this.monthText = '';
+    this.dayText = '';
+    this.selectedProjectId = '';
+    this.markFilterChanged();
+    this.resetCaptures();
+  }
+
   private async loadProjects(): Promise<void> {
     const generation = ++this.projectsGeneration;
     try {
@@ -565,16 +581,16 @@ export struct AllRecordsView {
         }
       })
       Row({ space: 8 }) {
-        Button(tr('清除日期', 'Clear date')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+        Button(tr('清除日期', 'Clear date')).layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
           .enabled(!this.batchBusy)
           .backgroundColor(UiTokens.CONTROL).fontColor(UiTokens.TEXT)
           .onClick((): void => {
             this.yearText = ''; this.monthText = ''; this.dayText = '';
             this.markFilterChanged(); this.resetCaptures();
           })
-        Button(tr('应用筛选', 'Apply filters')).layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+        Button(tr('应用筛选', 'Apply filters')).layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
           .enabled(!this.batchBusy)
-          .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+          .backgroundColor(UiTokens.PRIMARY).fontColor(UiTokens.ON_PRIMARY)
           .onClick((): void => {
             this.filterOpen = false; this.markFilterChanged(); this.resetCaptures();
           })
@@ -634,9 +650,15 @@ export struct AllRecordsView {
               onRetry: (): void => { this.retryCaptures(); } })
           }.padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12 }).width('100%')
         } else if (!this.controller.loadingInitial && this.captureCount() === 0) {
-        EmptyPanel({ icon: '▣', title: tr('暂无拍摄记录', 'No capture records'),
-          message: tr('在进行中的项目里完成拍摄后，记录会显示在这里。',
-            'Records appear here after you capture photos in an active project.') })
+        EmptyPanel({ icon: '▣',
+          title: this.hasActiveFilter() ? tr('没有匹配的记录', 'No matching records') :
+            tr('暂无拍摄记录', 'No capture records'),
+          message: this.hasActiveFilter() ?
+            tr('换个关键词或调整筛选条件再试。', 'Try a different keyword or adjust the filters.') :
+            tr('在进行中的项目里完成拍摄后，记录会显示在这里。',
+              'Records appear here after you capture photos in an active project.'),
+          actionLabel: this.hasActiveFilter() ? tr('清除筛选', 'Clear filters') : '',
+          onAction: (): void => { this.clearAllFilters(); } })
         } else {
           List({ space: 12, scroller: this.recordsScroller }) {
             LazyForEach(this.controller.data, (capture: CaptureRecord) => {
@@ -744,6 +766,7 @@ export struct CaptureFormScreen {
     this.persistKillDraft();
   };
   private killDraftQueue: Promise<void> = Promise.resolve();
+  private draftPersistTimer: number = -1;
 
   aboutToAppear(): void {
     this.lifecycle.activate();
@@ -753,6 +776,10 @@ export struct CaptureFormScreen {
 
   aboutToDisappear(): void {
     this.messageClock.reset();
+    if (this.draftPersistTimer >= 0) {
+      clearTimeout(this.draftPersistTimer);
+      this.draftPersistTimer = -1;
+    }
     AppRuntime.current?.uiMemory.unregister(this.killDraftListener);
     this.lifecycle.deactivate();
     this.loadRequest.invalidate();
@@ -905,6 +932,7 @@ export struct CaptureFormScreen {
       return;
     }
     this.captureGeneration += 1;
+    this.flushKillDraft();
     this.pathStack.pop();
   }
 
@@ -1018,6 +1046,29 @@ export struct CaptureFormScreen {
   private requiredFieldEdited(): void {
     this.undo.requiredFieldEdited();
     this.undoAvailable = false;
+    this.scheduleKillDraftPersist();
+  }
+
+  /// The kill draft used to be written only from the memory-pressure
+  /// listener, so the common kill — the process dying inside the system
+  /// camera without a memory warning — lost every typed field. Persist on
+  /// edits (debounced), before leaving the page, and when the page hides.
+  private scheduleKillDraftPersist(): void {
+    if (this.draftPersistTimer >= 0) {
+      clearTimeout(this.draftPersistTimer);
+    }
+    this.draftPersistTimer = setTimeout((): void => {
+      this.draftPersistTimer = -1;
+      this.persistKillDraft();
+    }, CaptureFormMetrics.DRAFT_PERSIST_DEBOUNCE_MS);
+  }
+
+  private flushKillDraft(): void {
+    if (this.draftPersistTimer >= 0) {
+      clearTimeout(this.draftPersistTimer);
+      this.draftPersistTimer = -1;
+    }
+    this.persistKillDraft();
   }
 
   private async saveTemplate(): Promise<void> {
@@ -1283,10 +1334,10 @@ export struct CaptureFormScreen {
         Button() {
           Text(this.renamingTemplateId.length > 0 ? tr('保存名称', 'Save name') :
             tr('保存当前', 'Save current')).maxLines(CaptureFormMetrics.TEMPLATE_ACTION_MAX_LINES)
-            .textAlign(TextAlign.Center).fontSize(12).fontColor(Color.White)
+            .textAlign(TextAlign.Center).fontSize(12).fontColor(UiTokens.ON_PRIMARY)
         }
           .width('100%').constraintSize({ minHeight: CaptureFormMetrics.TEMPLATE_ACTION_MIN_HEIGHT })
-          .backgroundColor(UiTokens.PRIMARY).fontColor(Color.White)
+          .backgroundColor(UiTokens.PRIMARY).fontColor(UiTokens.ON_PRIMARY)
           .enabled(!this.templateLoadFailed)
           .onClick((): void => { this.saveTemplate(); })
       }.width('100%')
@@ -1384,7 +1435,9 @@ export struct CaptureFormScreen {
                 'Applies only to this record and clears after each capture'),
               error: this.notesError, maxLength: CaptureFormMetrics.NOTES_MAX_LENGTH,
               onFieldFocus: (): void => { this.focusField(''); },
-              onChange: (value: string): void => { this.notes = value; this.notesError = ''; } })
+              onChange: (value: string): void => {
+                this.notes = value; this.notesError = ''; this.scheduleKillDraftPersist();
+              } })
             if (this.undoAvailable) {
               Button(tr('撤销上一次应用', 'Undo last application'))
                 .height(CaptureFormMetrics.TOUCH_TARGET).fontSize(13).fontColor(UiTokens.PRIMARY)
@@ -1404,7 +1457,7 @@ export struct CaptureFormScreen {
                 .lineHeight(19).width('100%').transition(panelTransition(0))
             }
             Button(this.busy ? tr('正在打开系统相机…', 'Opening the system camera…') : tr('拍摄', 'Capture'))
-              .height(56).fontSize(17).fontWeight(FontWeight.Bold).fontColor(Color.White)
+              .height(56).fontSize(17).fontWeight(FontWeight.Bold).fontColor(UiTokens.ON_PRIMARY)
               .backgroundColor(UiTokens.PRIMARY).borderRadius(28).width('100%')
               .enabled(!this.busy && this.project?.lifecycleStatus === ProjectLifecycleStatus.ACTIVE)
               .onClick((): void => { this.capture(); })
@@ -1422,6 +1475,11 @@ export struct CaptureFormScreen {
     .onBackPressed((): boolean => {
       this.handleBack();
       return true;
+    })
+    .onHidden((): void => {
+      // Covers navigation into the system camera — the last chance to make
+      // the draft durable before the process can be killed there.
+      this.flushKillDraft();
     })
   }
 }
@@ -1450,6 +1508,7 @@ export struct CaptureDetailScreen {
     }, text);
   }
   @State private confirmDelete: boolean = false;
+  @State private deleting: boolean = false;
   @State private mediaRevision: number = 0;
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
   private readonly media: DetailMediaSwapCoordinator = new DetailMediaSwapCoordinator();
@@ -1674,11 +1733,13 @@ export struct CaptureDetailScreen {
   }
 
   private async deleteRecord(): Promise<void> {
-    if (this.capture === null) return;
+    if (this.capture === null || this.deleting) return;
+    this.deleting = true;
     try {
       await AppRuntime.require().deleteCapture(this.capture.id);
       this.pathStack.pop();
     } catch (_) {
+      this.deleting = false;
       this.setMessage(tr('处理中记录暂时不能删除', 'A processing record cannot be deleted yet'), true);
     }
   }
@@ -1808,17 +1869,17 @@ export struct CaptureDetailScreen {
                   Button() {
                     Text(this.capture!.publishedUri.length > 0 ? tr('再次保存', 'Save again') :
                       tr('保存到相册', 'Save to gallery'))
-                      .fontSize(13).fontColor(Color.White).maxLines(2).textAlign(TextAlign.Center)
+                      .fontSize(13).fontColor(UiTokens.ON_PRIMARY).maxLines(2).textAlign(TextAlign.Center)
                   }
-                  .layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                  .layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
                   .backgroundColor(UiTokens.PRIMARY).borderRadius(16)
                   .onClick((): void => { this.republish(); })
                 } else if (this.capture!.status === CaptureStatus.FAILED && this.capture!.hasOriginal()) {
                   Button() {
                     Text(tr('重新处理', 'Reprocess'))
-                      .fontSize(13).fontColor(Color.White).maxLines(2).textAlign(TextAlign.Center)
+                      .fontSize(13).fontColor(UiTokens.ON_PRIMARY).maxLines(2).textAlign(TextAlign.Center)
                   }
-                  .layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                  .layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
                   .backgroundColor(UiTokens.PRIMARY).borderRadius(16)
                   .onClick((): void => { this.retry(); })
                 }
@@ -1826,7 +1887,7 @@ export struct CaptureDetailScreen {
                   Text(tr('清理原图', 'Clear original'))
                     .fontSize(13).fontColor(UiTokens.PRIMARY).maxLines(2).textAlign(TextAlign.Center)
                 }
-                .layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                .layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
                 .backgroundColor(UiTokens.CONTROL).borderRadius(16)
                 .enabled(this.capture!.hasOriginal() && (this.capture!.status === CaptureStatus.READY ||
                   this.capture!.status === CaptureStatus.FAILED))
@@ -1835,7 +1896,7 @@ export struct CaptureDetailScreen {
                   Text(tr('删除记录', 'Delete record'))
                     .fontSize(13).fontColor(UiTokens.DANGER).maxLines(2).textAlign(TextAlign.Center)
                 }
-                .layoutWeight(1).height(UiTokens.TOUCH_TARGET)
+                .layoutWeight(1).constraintSize({ minHeight: UiTokens.TOUCH_TARGET })
                 .backgroundColor(UiTokens.DANGER_CONTAINER).borderRadius(16)
                 .onClick((): void => { this.confirmDelete = !this.confirmDelete; })
               }.width('100%')
@@ -1844,8 +1905,10 @@ export struct CaptureDetailScreen {
                   Text(tr('将删除应用内原图、水印成片和记录，并请求删除已发布照片。此操作无法撤销。',
                     'This deletes the private original, watermarked image, and record, and requests deletion of the published photo. This cannot be undone.'))
                     .fontSize(13).fontColor(UiTokens.DANGER).lineHeight(19).width('100%')
-                  Button(tr('确认删除整条记录', 'Confirm record deletion'))
-                    .height(UiTokens.TOUCH_TARGET).width('100%')
+                  Button(this.deleting ? tr('正在删除…', 'Deleting…') :
+                    tr('确认删除整条记录', 'Confirm record deletion'))
+                    .constraintSize({ minHeight: UiTokens.TOUCH_TARGET }).width('100%')
+                    .enabled(!this.deleting)
                     .backgroundColor(UiTokens.DANGER)
                     .fontColor(Color.White)
                     .accessibilityText(tr('永久删除原图、水印成片和整条记录，无法撤销',
