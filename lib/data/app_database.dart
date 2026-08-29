@@ -1426,8 +1426,8 @@ ORDER BY
   }
 
   /// Validates that a watermark font scale is within the allowed 0.75-1.60
-  /// range (the union of both platforms' UI ranges; see [_validatedOpacity]-
-  /// style union note in [updateProjectWatermarkSettings]). Throws
+  /// range (the union of both platforms' UI ranges; see the union note in
+  /// [updateProjectWatermarkSettings]). Throws
   /// [ArgumentError] for out-of-range values.
   double _validatedFontScale(double value) {
     if (value < 0.75 || value > 1.60) {

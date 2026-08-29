@@ -13,11 +13,11 @@ pre-releases. Both product lines live on a single branch.
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
 [![Latest](https://img.shields.io/badge/latest-v1.0.11-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.11)
-[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.11%20%7C%20native--v1.0.4-F9AB00)](https://github.com/WikG1018/site-mark/releases)
+[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.12%20%7C%20native--v1.0.5-F9AB00)](https://github.com/WikG1018/site-mark/releases)
 
 **当前稳定版本（Latest）：[`v1.0.11`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.11)**
 
-**当前预发布版本：[`v1.0.11`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.11)（Android）· [`native-v1.0.4`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.4)（HarmonyOS NEXT）**
+**当前预发布版本：[`v1.0.12`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.12)（Android）· [`native-v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.5)（HarmonyOS NEXT）**
 
 支持 Android 12（API 31）及以上系统。`v1.0.11` 已完成真机回归并设为 Latest：targetSdk 提升到 Android 17（API 37，已逐项审查定向行为变化并模拟器实测），并修复全部记录页在选择模式下按系统返回直接退到桌面的问题。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
@@ -32,12 +32,15 @@ pre-releases. Both product lines live on a single branch.
 | universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.11-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/sitemark-v1.0.11-universal.apk) |
 | SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/SHA256SUMS.txt) |
 
-### 鸿蒙原生版预发布（native-v1.0.4）
+### 预发布（v1.0.12 · native-v1.0.5）
 
-| 安装包 | 说明 | 下载 |
+| 安装包 | 适用设备/说明 | 下载 |
 | --- | --- | --- |
-| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.4/entry-default-unsigned.hap) |
-| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.4/SHA256SUMS.txt) |
+| Android arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.12-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/sitemark-v1.0.12-arm64.apk) |
+| Android universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.12-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/sitemark-v1.0.12-universal.apk) |
+| Android SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/SHA256SUMS.txt) |
+| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [entry-default-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.5/entry-default-unsigned.hap) |
+| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.5/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -258,7 +261,7 @@ HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Prefere
 
 涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.11` 已完成真机回归并设为 Latest；`native-v1.0.4` 为 Pre-release。下载和校验以对应 GitHub Release 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.11` 已完成真机回归并设为 Latest；`v1.0.12` 与 `native-v1.0.5` 为 Pre-release，真机回归通过后转正。下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
