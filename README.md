@@ -2,11 +2,11 @@
 
 [English](README_EN.md) | 简体中文
 
-> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.11`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版提供 Pre-release 构建体验。仓库单分支维护两条产品线。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.13`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP）。仓库单分支维护两条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
-(Latest `v1.0.11`, targeting Android 17) and a native HarmonyOS NEXT implementation published as
-pre-releases. Both product lines live on a single branch.
+(Latest `v1.0.13`, targeting Android 17) and a native HarmonyOS NEXT implementation published
+alongside it. Both product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -14,14 +14,14 @@ pre-releases. Both product lines live on a single branch.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.11-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.11)
-[![Pre-release](https://img.shields.io/badge/pre--release-v1.0.12%20%7C%20native--v1.0.5-F9AB00)](https://github.com/WikG1018/site-mark/releases)
+[![Latest](https://img.shields.io/badge/latest-v1.0.13-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.13)
+[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.6-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.6)
 
-**当前稳定版本（Latest）：[`v1.0.11`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.11)**
+**当前稳定版本（Latest）：[`v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.13)**
 
-**当前预发布版本：[`v1.0.12`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.12)（Android）· [`native-v1.0.5`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.5)（HarmonyOS NEXT）**
+**鸿蒙原生版当前版本：[`native-v1.0.6`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.6)（HarmonyOS NEXT，未签名 HAP）**
 
-支持 Android 12（API 31）及以上系统。`v1.0.11` 已完成真机回归并设为 Latest：targetSdk 提升到 Android 17（API 37，已逐项审查定向行为变化并模拟器实测），并修复全部记录页在选择模式下按系统返回直接退到桌面的问题。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.13` 已设为 Latest：在 v1.0.11 的 targetSdk 37（Android 17）基础上，修复全屏照片查看器双指缩放后无法单指拖动查看角落的问题，并新增英文版 README。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 
 ## 下载
@@ -30,19 +30,16 @@ pre-releases. Both product lines live on a single branch.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.11-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/sitemark-v1.0.11-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.11-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/sitemark-v1.0.11-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.11/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.13-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/sitemark-v1.0.13-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.13-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/sitemark-v1.0.13-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/SHA256SUMS.txt) |
 
-### 预发布（v1.0.12 · native-v1.0.5）
+### 鸿蒙原生版（native-v1.0.6）
 
 | 安装包 | 适用设备/说明 | 下载 |
 | --- | --- | --- |
-| Android arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.12-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/sitemark-v1.0.12-arm64.apk) |
-| Android universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.12-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/sitemark-v1.0.12-universal.apk) |
-| Android SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.12/SHA256SUMS.txt) |
-| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [sitemark-native-v1.0.5-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.5/sitemark-native-v1.0.5-unsigned.hap) |
-| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.5/SHA256SUMS.txt) |
+| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [sitemark-native-v1.0.6-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.6/sitemark-native-v1.0.6-unsigned.hap) |
+| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.6/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -51,7 +48,7 @@ pre-releases. Both product lines live on a single branch.
 
 `ohos-native/` 是独立的 Stage + ArkTS + ArkUI 实现，不使用社区 Flutter 鸿蒙适配层，与 Android 版同仓库单分支演进。它已在 DevEco NEXT 模拟器跑通项目、拍摄处理、记录管理、水印、备份恢复、存储与诊断主流程，图像与 ZIP 规则复用 Android 版的同一 Rust 核心。
 
-当前以 Pre-release 提供 `native-v1.0.x` 的 unsigned HAP（见上方预发布下载），**尚未提供签名的鸿蒙安装包，也未上架华为应用市场**；真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成应用市场发布。
+当前提供 `native-v1.0.6` 的 unsigned HAP（见上方下载表），**尚未提供签名的鸿蒙安装包，也未上架华为应用市场**；真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成应用市场发布。
 
 - [鸿蒙原生版说明与构建](ohos-native/README.md)
 - [平台差异与验证边界](ohos-native/docs/deltas.md)
@@ -70,7 +67,9 @@ pre-releases. Both product lines live on a single branch.
 
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
-- **v1.0.11**（Latest）：targetSdk 提升到 Android 17（API 37），compileSdk 同为 37；已审查 Android 17 定向行为变化（大屏方向/可调整性规则、后台 Activity 启动收紧、本地网络权限、后台音频、MessageQueue、原生库加载），对本离线应用均无影响，运行时行为与 36 一致，真机回归通过。
+- **v1.0.13 / native-v1.0.6**（Latest）：修复全屏照片查看器双指缩放后无法单指拖动查看角落的问题（Android 与鸿蒙原生同修）；README 新增英文版并支持中英切换。
+- **v1.0.12 / native-v1.0.5**（Pre-release）：双版本全量审查修复（只读批量绕过、跨端水印域统一、深色对比度、冷启动通知路由、草稿耐久性）。
+- **v1.0.11**：targetSdk 提升到 Android 17（API 37），compileSdk 同为 37；已审查 Android 17 定向行为变化（大屏方向/可调整性规则、后台 Activity 启动收紧、本地网络权限、后台音频、MessageQueue、原生库加载），对本离线应用均无影响，运行时行为与 36 一致，真机回归通过。
 - **v1.0.10**（Pre-release）：修复全部记录/项目记录页在选择模式下按系统返回直接退到桌面的问题，返回现在先取消选择（搜索、筛选同层处理）。
 - **v1.0.9 / native-v1.0.3**（Pre-release，2026-08-28，双线并轨后首个联合版本）：Android——完成通知跟随应用内语言、定位失败诊断留痕、导出证据守卫、未知状态容错、compileSdk 37；鸿蒙原生——失败原因存码并随语言切换刷新、错误文案分类化、导出原子写 + ZIP64 大文件、数据库迁移脚手架。
 - **v1.0.8**：相册安全替换、跨层 journal 对账、共享 URI 保护、清理重试上限。
@@ -263,7 +262,7 @@ HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Prefere
 
 涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.11` 已完成真机回归并设为 Latest；`v1.0.12` 与 `native-v1.0.5` 为 Pre-release，真机回归通过后转正。下载和校验以对应 GitHub Release 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.13` 已设为 Latest；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
