@@ -26,8 +26,10 @@
 1. `flutter create --platforms=ios .` 生成 `ios/`（Runner 工程、AppDelegate、Podfile）；清理到仓库规范（组织标识 `io.github.wikg1018.sitemark`，Display name 与 Android 一致）。
 2. Info.plist 写入权限键（见设计文档权限清单；`NSPhotoLibraryUsageDescription` 可延后到 Phase 2b）。
 3. Podfile 集成 `rust_builder` Pod（cargokit 自动交叉编译 Rust）；确认 `sqlite3` 系统库链接可用，不行则加 `sqlite3_flutter_libs` 依赖（记入设计文档偏差）。
-4. `.workflows/ci.yml` 增加 `ios` job（macos-15）：rustup `aarch64-apple-ios` + `aarch64-apple-ios-sim` → `flutter pub get` → `flutter test` → `flutter build ios --no-codesign --release`，产物上传 artifact。
+4. `ci.yml` 增加 `ios` job（macos-15）：rustup `aarch64-apple-ios` + `aarch64-apple-ios-sim` → `flutter pub get` → `flutter build ios --no-codesign --release` + 产物 artifact。全量 Dart/Rust/鸿蒙测试由同一次 PR run 的 ubuntu `test` job 覆盖，iOS job 不重复跑，只做 iOS 编译验证与 Info.plist 元数据校验。（实施修正：原计划在 iOS job 重复 `flutter test`，无增量价值。）
 5. `docs/release-checklist.md` 增加「iOS 构建检查」小节（此时只有构建门禁，无发版）。
+
+实施记录（2026-08-30）：Flutter 3.44 的 iOS 模板默认走 Swift Package Manager 混合模式（无 Podfile，CocoaPods 仅用于未迁移 SPM 的插件如 cargokit FFI 桥）；`file-picker-darwin` 要求最低 iOS 14.0，`IPHONEOS_DEPLOYMENT_TARGET` 由 13.0 升至 14.0；`pubspec.lock` 无需任何变更（iOS 集成零依赖增量，flutter create 触发的 Pigeon 27.1.2→27.3.0 漂移已还原）。
 
 验收：ios job 绿（含 Rust 交叉编译 + Flutter 全量测试）；Android / 鸿蒙 job 无回归。
 
