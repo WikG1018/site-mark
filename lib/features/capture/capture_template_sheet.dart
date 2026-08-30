@@ -3,6 +3,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/capture_owned_route_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/workflow/capture_template_service.dart';
 
 @immutable
@@ -216,18 +217,17 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
         builder: (dialogContext) {
           final route = ModalRoute.of(dialogContext);
           if (route != null) routeController.attach(route);
-          return AlertDialog(
+          return buildAdaptiveAlertDialog<bool>(
+            dialogContext: dialogContext,
             title: Text(strings.captureTemplateDeleteTitle),
             content: Text(strings.captureTemplateDeleteNotice),
             actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: Text(strings.cancel),
-              ),
-              FilledButton(
+              AppDialogAction(label: strings.cancel, result: false),
+              AppDialogAction(
                 key: const Key('capture-template-delete-confirm'),
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(strings.deleteAction),
+                label: strings.deleteAction,
+                result: true,
+                isDefault: true,
               ),
             ],
           );

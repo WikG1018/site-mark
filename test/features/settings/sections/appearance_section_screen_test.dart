@@ -1,5 +1,6 @@
 // test/features/settings/sections/appearance_section_screen_test.dart
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,6 +54,21 @@ void main() {
     await tester.tap(find.byKey(const Key('dynamic-color-switch')));
     await tester.pumpAndSettle();
     expect((await database.getAppSettings()).useDynamicColor, isTrue);
+  });
+
+  testWidgets('iOS keeps the adaptive switch functional', (tester) async {
+    // Switch.adaptive renders Flutter's cupertino-styled Material switch on
+    // iOS (no CupertinoSwitch widget); assert the iOS platform branch is
+    // wired by driving it and checking persistence.
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await pumpScreen(tester);
+      await tester.tap(find.byKey(const Key('dynamic-color-switch')));
+      await tester.pumpAndSettle();
+      expect((await database.getAppSettings()).useDynamicColor, isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('shows 9 theme color chips when dynamic color is off', (

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 
 class StorageSectionScreen extends ConsumerStatefulWidget {
   const StorageSectionScreen({super.key});
@@ -16,23 +17,19 @@ class StorageSectionScreen extends ConsumerStatefulWidget {
 class _StorageSectionScreenState extends ConsumerState<StorageSectionScreen> {
   Future<void> _clearLocalExports(BuildContext context) async {
     final strings = AppStrings.of(context);
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(strings.clearLocalExports),
-        content: Text(strings.clearLocalExportsPrompt),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(strings.cancel),
-          ),
-          FilledButton(
-            key: const Key('confirm-clear-exports'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(strings.clear),
-          ),
-        ],
-      ),
+      title: Text(strings.clearLocalExports),
+      content: Text(strings.clearLocalExportsPrompt),
+      actions: [
+        AppDialogAction(label: strings.cancel, result: false),
+        AppDialogAction(
+          key: const Key('confirm-clear-exports'),
+          label: strings.clear,
+          result: true,
+          isDefault: true,
+        ),
+      ],
     );
     if (confirmed != true || !context.mounted) return;
 

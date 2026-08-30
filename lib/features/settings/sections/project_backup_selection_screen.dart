@@ -4,6 +4,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_backup_preflight.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -74,66 +75,57 @@ class _ProjectBackupSelectionScreenState
     ).inspect(_selectedIds.toList(growable: false));
     if (!mounted) return;
     if (snapshot.processingCount > 0) {
-      await showDialog<void>(
+      await showAppDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(strings.backupWaitForProcessingTitle),
-          content: Text(
-            strings.backupWaitForProcessingMessage(snapshot.processingCount),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(strings.gotIt),
-            ),
-          ],
+        title: Text(strings.backupWaitForProcessingTitle),
+        content: Text(
+          strings.backupWaitForProcessingMessage(snapshot.processingCount),
         ),
+        actions: [AppDialogAction(label: strings.gotIt, isDefault: true)],
       );
       return;
     }
     var allowFailedOmissions = false;
     if (snapshot.failedCount > 0) {
       allowFailedOmissions =
-          await showDialog<bool>(
+          await showAppDialog<bool>(
             context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: Text(strings.backupFailedRecordsTitle),
-              content: Text(
-                strings.backupFailedRecordsMessage(snapshot.failedCount),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext, false),
-                  child: Text(strings.backupReturnToProcess),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(dialogContext, true),
-                  child: Text(strings.backupCompletedRecordsOnly),
-                ),
-              ],
+            title: Text(strings.backupFailedRecordsTitle),
+            content: Text(
+              strings.backupFailedRecordsMessage(snapshot.failedCount),
             ),
+            actions: [
+              AppDialogAction(
+                label: strings.backupReturnToProcess,
+                result: false,
+              ),
+              AppDialogAction(
+                label: strings.backupCompletedRecordsOnly,
+                result: true,
+                isDefault: true,
+              ),
+            ],
           ) ??
           false;
       if (!allowFailedOmissions || !mounted) return;
     }
-    final includeOriginals = await showDialog<bool>(
+    final includeOriginals = await showAppDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(strings.includePrivateOriginals),
-        content: Text(strings.includePrivateOriginalsConsequence),
-        actions: [
-          TextButton(
-            key: const Key('exclude-private-originals'),
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(strings.excludePrivateOriginals),
-          ),
-          FilledButton(
-            key: const Key('include-private-originals'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(strings.includePrivateOriginals),
-          ),
-        ],
-      ),
+      title: Text(strings.includePrivateOriginals),
+      content: Text(strings.includePrivateOriginalsConsequence),
+      actions: [
+        AppDialogAction(
+          key: const Key('exclude-private-originals'),
+          label: strings.excludePrivateOriginals,
+          result: false,
+        ),
+        AppDialogAction(
+          key: const Key('include-private-originals'),
+          label: strings.includePrivateOriginals,
+          result: true,
+          isDefault: true,
+        ),
+      ],
     );
     if (includeOriginals == null || !mounted) return;
 

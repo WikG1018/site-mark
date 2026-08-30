@@ -167,6 +167,12 @@ iOS 是第三条产品线，走 Flutter 复用：`lib/` UI 与业务逻辑、`ru
   成片经 `PHPhotoLibrary` 发布，`localIdentifier` 承担 URI 角色，相册内文件名由系统决定。
 - **成片删除**：`PHAsset` 删除会弹系统确认框；界面文案统一按“可能弹出系统确认”表述，
   不做平台分支。
+- **界面惯例**：开关/滑块用 Flutter 自适应构造（iOS 呈现 Cupertino 外观），标准确认/
+  信息对话框经 `lib/shared/ui/adaptive_dialog.dart` 在 iOS 呈现 CupertinoAlertDialog，
+  Android 分支保持原 Material 组合；复杂表单对话框仍为 Material（已知偏差）。应用图标
+  与 Android 同源（`assets/branding/sitemark-icon.png` 单尺寸 1024）。通知授权与
+  Android 同时机：用户打开通知开关时请求（决策 D-022）；启动屏深色自适应留待
+  真机阶段（当前固定白色背景，与 Android 浅色一致）。
 - **后台处理**：前台轮询与 Android 完全一致；后台只注册一个 BGProcessingTask
   （identifier 与 Info.plist `BGTaskSchedulerPermittedIdentifiers`、AppDelegate 注册
   三方精确一致，后台模式仅 `processing`），触发时重新入队未完成记录并再次提交下一轮

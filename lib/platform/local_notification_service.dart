@@ -93,7 +93,15 @@ final class LocalNotificationService implements CompletionNotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.requestNotificationsPermission();
-    return granted ?? true;
+    if (granted != null) return granted;
+    // iOS authorizes at the settings toggle (parity with Android's timing)
+    // instead of implicitly at the first notification post.
+    final iosGranted = await _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
+    return iosGranted ?? true;
   }
 
   @override

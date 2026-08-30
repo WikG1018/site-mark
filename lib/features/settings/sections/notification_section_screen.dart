@@ -25,7 +25,7 @@ class NotificationSectionScreen extends ConsumerWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SwitchListTile(
+          SwitchListTile.adaptive(
             key: const Key('completion-notification-switch'),
             title: Text(strings.completionNotificationTitle),
             subtitle: Text(strings.completionNotificationSubtitle),

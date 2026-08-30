@@ -77,6 +77,19 @@
 
 验收：TestFlight 可安装、真机回归清单建立。未提供账号前本阶段不启动。
 
+### Phase 5 — 功能对齐与 HIG 界面适配（2026-08-30 用户追加）
+
+设计:[`specs/2026-08-30-ios-parity-hig.md`](../specs/2026-08-30-ios-parity-hig.md)。
+
+1. iOS 应用图标换品牌图标(`assets/branding/sitemark-icon.png` 单尺寸 1024)。启动屏深色自适应经 CI 验证手写 storyboard XML 会被 ibtool 拒绝且无本机验证手段,回退并留待真机阶段(见实施记录)。
+2. 通知授权流对齐:开关时在 iOS 经 `requestPermissions(alert/badge/sound)` 显式请求(与 Android 时机一致)。
+3. HIG 组件自适应:`Switch.adaptive` / `SwitchListTile.adaptive` / `Slider.adaptive`(6 处);`lib/shared/ui/adaptive_dialog.dart` 共享 helper,iOS 呈现 CupertinoAlertDialog,标准确认/信息对话框迁移(约 12 处),复杂表单对话框保留 Material(记录偏差)。
+4. 文档:decision-records、NEXT_AGENT_PROMPT 平台边界修正、架构文档 iOS 小节补 UI 惯例。
+
+验收:CI 双绿(含 actool 图标编译);Android 平台 widget 树零变化(既有用例不改即过);深色启动屏真机复核待 Apple 账号/设备阶段补做。
+
+实施记录（2026-08-30，PR #125）：功能对齐面——iOS 应用图标从 Flutter 模板默认图换为品牌图标（`assets/branding/sitemark-icon.png` 1024 全出血单尺寸声明，Xcode 14+ 单尺寸 catalog 经 CI actool 编译验证），删除模板散置 PNG；通知授权时机对齐 Android（开关时经 `IOSFlutterLocalNotificationsPlugin.requestPermissions(alert/badge/sound)` 显式请求，原先首次发通知才隐式弹；`resolvePlatformSpecificImplementation` 依赖平台接口静态 instance + `defaultTargetPlatform`，测试以真实子类 fake 注入并逐用例设平台）。HIG 适配面——`Switch.adaptive`/`SwitchListTile.adaptive`/`Slider.adaptive` 落地 6 处（要点：`Switch.adaptive` 在 iOS 是 Cupertino 风格的 Material 自绘，无 `CupertinoSwitch` 类型；`Slider.adaptive` 则真实构建 `CupertinoSlider`）；新增 `lib/shared/ui/adaptive_dialog.dart`（`showAppDialog` + 供自定义 showDialog 场景的 `buildAdaptiveAlertDialog`），iOS 呈现 `CupertinoAlertDialog`、Android 逐字节复刻原组合，迁移 11 处标准对话框，7 处复杂对话框（重命名表单、删除项目状态化内容、进度 PopScope、搜索列表、恢复预览）保留 Material 记录为偏差；SF 字体/弹性滚动/返回滑动由平台默认提供，核实后无需改码。**CI 修正一轮**：手写启动屏 storyboard（systemBackgroundColor + 移除占位图）被 CI ibtool `CompileStoryboard` 拒绝，本机无 Xcode 无法定位具体行，且深色启动效果本就无法离线验证——整体回退该改动（storyboard 与 LaunchImage 恢复模板原样），深色启动闪白留待真机/模拟器阶段。文档同步：决策 D-022、NEXT_AGENT_PROMPT 移除「不做 iOS」、架构文档界面惯例小节、release-checklist 图标同源纪律。TDD 先红后绿新增 10 用例；本地 Flutter 3.44.6 全量 `flutter test` 1030 通过（既有 1020 零改动）、`dart analyze` 0 issue、`dart format` 0 diff。
+
 ## 文件结构（预期新增/修改）
 
 ```

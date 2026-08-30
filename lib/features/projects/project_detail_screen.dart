@@ -10,6 +10,7 @@ import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
@@ -595,23 +596,19 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       var confirmFailed = false;
       if (requiresSettledCaptures && preview.failedCount > 0) {
         if (!mounted) return;
-        final confirmed = await showDialog<bool>(
+        final confirmed = await showAppDialog<bool>(
           context: context,
-          builder: (dialogContext) => AlertDialog(
-            content: Text(
-              strings.projectLifecycleFailedConfirm(preview.failedCount),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
-                child: Text(strings.cancel),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
-                child: Text(strings.projectLifecycleContinue),
-              ),
-            ],
+          content: Text(
+            strings.projectLifecycleFailedConfirm(preview.failedCount),
           ),
+          actions: [
+            AppDialogAction(label: strings.cancel, result: false),
+            AppDialogAction(
+              label: strings.projectLifecycleContinue,
+              result: true,
+              isDefault: true,
+            ),
+          ],
         );
         if (confirmed != true) {
           return;
