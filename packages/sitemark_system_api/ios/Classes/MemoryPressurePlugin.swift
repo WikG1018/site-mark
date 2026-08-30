@@ -15,9 +15,9 @@ public class MemoryPressurePlugin {
     static let channelName = "sitemark/memory_pressure"
 
     private var channel: FlutterMethodChannel?
-    // The iOS-only C typealias: `DispatchSource.MemoryPressureSourceObject`
-    // does not exist in the iOS Swift overlay.
-    private var source: DispatchSourceMemoryPressureSourceObject?
+    // The concrete source class has different names per SDK; keep only a
+    // cancel closure so no SDK-specific type name leaks into this file.
+    private var cancelSource: (() -> Void)?
     private var nextEventId: Int64 = 0
 
     func attach(messenger: FlutterBinaryMessenger) {
@@ -35,20 +35,20 @@ public class MemoryPressurePlugin {
         self.channel = channel
         let source = DispatchSource.makeMemoryPressureSource(
             eventMask: [.warning, .critical], queue: .main)
-        source.setEventHandler { [weak self, weak source] in
-            guard let self, let source, !source.isCancelled else { return }
+        source.setEventHandler { [weak self] in
+            guard let self, !source.isCancelled else { return }
             guard let level = MemoryPressureLevelMapper.levelName(for: source.data) else {
                 return
             }
             self.forward(level: level)
         }
         source.resume()
-        self.source = source
+        cancelSource = { source.cancel() }
     }
 
     func detach() {
-        source?.cancel()
-        source = nil
+        cancelSource?()
+        cancelSource = nil
         channel?.setMethodCallHandler(nil)
         channel = nil
     }
