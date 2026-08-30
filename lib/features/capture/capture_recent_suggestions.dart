@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/features/capture/capture_owned_route_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/motion.dart';
 
 typedef CaptureRecentSuggestionsLoader =
@@ -306,10 +308,11 @@ class _SuggestionHistoryDialogState extends State<_SuggestionHistoryDialog> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final values = _filtered;
-    return AlertDialog(
+    return buildAdaptiveAlertDialog<void>(
+      dialogContext: context,
       title: Text(strings.searchHistory),
       content: SizedBox(
-        width: 420,
+        width: defaultTargetPlatform == TargetPlatform.iOS ? 232 : 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -338,12 +341,7 @@ class _SuggestionHistoryDialogState extends State<_SuggestionHistoryDialog> {
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.cancel),
-        ),
-      ],
+      actions: [AppDialogAction(label: strings.cancel)],
     );
   }
 }

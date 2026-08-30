@@ -5,6 +5,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 
 class StorageSectionScreen extends ConsumerStatefulWidget {
   const StorageSectionScreen({super.key});
@@ -54,94 +55,89 @@ class _StorageSectionScreenState extends ConsumerState<StorageSectionScreen> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final usage = ref.watch(storageUsageProvider);
-    return Scaffold(
-      appBar: AppBar(title: Text(strings.storageScope)),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
+    return AdaptivePageScaffold(
+      title: strings.storageScope,
+      body: Column(
+        key: const Key('storage-section'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Column(
-            key: const Key('storage-section'),
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          Row(
             children: [
-              Row(
-                children: [
-                  const Spacer(),
-                  IconButton(
-                    key: const Key('storage-refresh'),
-                    onPressed: () => ref.invalidate(storageUsageProvider),
-                    tooltip: strings.refreshStorage,
-                    icon: const Icon(Icons.refresh),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              usage.when(
-                data: (value) => Column(
-                  children: [
-                    Card(
-                      child: Column(
-                        children: [
-                          _StorageRow(
-                            label: strings.storageTotal,
-                            bytes: value.totalBytes,
-                            emphasized: true,
-                          ),
-                          const Divider(height: 1),
-                          _StorageRow(
-                            label: strings.privateOriginals,
-                            bytes: value.originalBytes,
-                          ),
-                          _StorageRow(
-                            label: strings.privateWatermarked,
-                            bytes: value.renderedBytes,
-                          ),
-                          _StorageRow(
-                            label: strings.localExportFiles,
-                            bytes: value.exportBytes,
-                          ),
-                          _StorageRow(
-                            label: strings.databaseAndOther,
-                            bytes: value.databaseAndOtherBytes,
-                          ),
-                        ],
-                      ),
-                    ),
-                    ListTile(
-                      key: const Key('manage-storage-records'),
-                      leading: const Icon(Icons.photo_library_outlined),
-                      title: Text(strings.manageRecords),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.go('/records'),
-                    ),
-                    ListTile(
-                      key: const Key('clear-local-exports'),
-                      leading: const Icon(Icons.delete_sweep_outlined),
-                      title: Text(strings.clearLocalExports),
-                      subtitle: Text(strings.clearLocalExportsHint),
-                      onTap: value.exportBytes == 0
-                          ? null
-                          : () => _clearLocalExports(context),
-                    ),
-                  ],
-                ),
-                error: (_, _) => Column(
-                  children: [
-                    Text(strings.storageLoadFailed),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      key: const Key('retry-storage-load'),
-                      onPressed: () => ref.invalidate(storageUsageProvider),
-                      icon: const Icon(Icons.refresh),
-                      label: Text(strings.retry),
-                    ),
-                  ],
-                ),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
+              const Spacer(),
+              IconButton(
+                key: const Key('storage-refresh'),
+                onPressed: () => ref.invalidate(storageUsageProvider),
+                tooltip: strings.refreshStorage,
+                icon: const Icon(Icons.refresh),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          usage.when(
+            data: (value) => Column(
+              children: [
+                Card(
+                  child: Column(
+                    children: [
+                      _StorageRow(
+                        label: strings.storageTotal,
+                        bytes: value.totalBytes,
+                        emphasized: true,
+                      ),
+                      const Divider(height: 1),
+                      _StorageRow(
+                        label: strings.privateOriginals,
+                        bytes: value.originalBytes,
+                      ),
+                      _StorageRow(
+                        label: strings.privateWatermarked,
+                        bytes: value.renderedBytes,
+                      ),
+                      _StorageRow(
+                        label: strings.localExportFiles,
+                        bytes: value.exportBytes,
+                      ),
+                      _StorageRow(
+                        label: strings.databaseAndOther,
+                        bytes: value.databaseAndOtherBytes,
+                      ),
+                    ],
+                  ),
+                ),
+                ListTile(
+                  key: const Key('manage-storage-records'),
+                  leading: const Icon(Icons.photo_library_outlined),
+                  title: Text(strings.manageRecords),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.go('/records'),
+                ),
+                ListTile(
+                  key: const Key('clear-local-exports'),
+                  leading: const Icon(Icons.delete_sweep_outlined),
+                  title: Text(strings.clearLocalExports),
+                  subtitle: Text(strings.clearLocalExportsHint),
+                  onTap: value.exportBytes == 0
+                      ? null
+                      : () => _clearLocalExports(context),
+                ),
+              ],
+            ),
+            error: (_, _) => Column(
+              children: [
+                Text(strings.storageLoadFailed),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  key: const Key('retry-storage-load'),
+                  onPressed: () => ref.invalidate(storageUsageProvider),
+                  icon: const Icon(Icons.refresh),
+                  label: Text(strings.retry),
+                ),
+              ],
+            ),
+            loading: () => const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            ),
           ),
         ],
       ),

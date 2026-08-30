@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/theme/accent_choice_chip.dart'
     show AccentChoiceChip;
@@ -145,7 +146,7 @@ class _ProjectWatermarkSettingsScreenState
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
-              SegmentedButton<String>(
+              AdaptiveSegmentedButton<String>(
                 segments: [
                   ButtonSegment(
                     value: 'bottomLeft',

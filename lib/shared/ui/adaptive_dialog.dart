@@ -14,6 +14,9 @@ class AppDialogAction<T> {
     this.result,
     this.isDefault = false,
     this.isDestructive = false,
+    this.enabled = true,
+    this.autoPop = true,
+    this.child,
     this.key,
   });
 
@@ -22,6 +25,20 @@ class AppDialogAction<T> {
   final T? result;
   final bool isDefault;
   final bool isDestructive;
+
+  /// False disables the generated button (e.g. while an async delete runs);
+  /// the pop still only happens through an enabled action.
+  final bool enabled;
+
+  /// Whether pressing the action closes the dialog automatically with
+  /// [result]. Keep true for side-effect-only callbacks (haptics); set false
+  /// when [onPressed] pops the route itself — e.g. a submit that pops only
+  /// after successful validation.
+  final bool autoPop;
+
+  /// Optional custom button content (e.g. an inline progress spinner);
+  /// falls back to [Text] of [label].
+  final Widget? child;
   final Key? key;
 }
 
@@ -38,7 +55,7 @@ Future<T?> showAppDialog<T>({
   required BuildContext context,
   Widget? title,
   Widget? content,
-  required List<AppDialogAction<T>> actions,
+  List<AppDialogAction<T>> actions = const [],
   bool barrierDismissible = true,
 }) {
   return showDialog<T>(
@@ -61,24 +78,33 @@ Widget buildAdaptiveAlertDialog<T>({
   required BuildContext dialogContext,
   Widget? title,
   Widget? content,
-  required List<AppDialogAction<T>> actions,
+  List<AppDialogAction<T>> actions = const [],
 }) {
   void popWith(AppDialogAction<T> action) {
     action.onPressed?.call();
-    Navigator.of(dialogContext).pop(action.result);
+    if (action.autoPop) {
+      Navigator.of(dialogContext).pop(action.result);
+    }
   }
+
+  VoidCallback? resolveTap(AppDialogAction<T> action) =>
+      action.enabled ? () => popWith(action) : null;
 
   if (defaultTargetPlatform == TargetPlatform.iOS) {
     return CupertinoAlertDialog(
       title: title,
-      content: content,
+      // Cupertino alerts provide no Material ancestor; Material form
+      // controls inside (text fields) render corrupted without one.
+      content: content == null
+          ? null
+          : Material(type: MaterialType.transparency, child: content),
       actions: [
         for (final action in actions)
           CupertinoDialogAction(
             isDefaultAction: action.isDefault,
             isDestructiveAction: action.isDestructive,
-            onPressed: () => popWith(action),
-            child: Text(action.label),
+            onPressed: resolveTap(action),
+            child: action.child ?? Text(action.label),
           ),
       ],
     );
@@ -94,20 +120,20 @@ Widget buildAdaptiveAlertDialog<T>({
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(dialogContext).colorScheme.error,
             ),
-            onPressed: () => popWith(action),
-            child: Text(action.label),
+            onPressed: resolveTap(action),
+            child: action.child ?? Text(action.label),
           )
         else if (action.isDefault)
           FilledButton(
             key: action.key,
-            onPressed: () => popWith(action),
-            child: Text(action.label),
+            onPressed: resolveTap(action),
+            child: action.child ?? Text(action.label),
           )
         else
           TextButton(
             key: action.key,
-            onPressed: () => popWith(action),
-            child: Text(action.label),
+            onPressed: resolveTap(action),
+            child: action.child ?? Text(action.label),
           ),
     ],
   );

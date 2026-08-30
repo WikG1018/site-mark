@@ -11,6 +11,7 @@ import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/features/capture/capture_batch_action_bar.dart';
 import 'package:sitemark/features/capture/capture_date_filter_bar.dart';
@@ -744,7 +745,8 @@ class _RenameProjectDialogState extends State<_RenameProjectDialog> {
     final strings = AppStrings.of(context);
     return PopScope(
       canPop: !_saving,
-      child: AlertDialog(
+      child: buildAdaptiveAlertDialog<Project>(
+        dialogContext: context,
         title: Text(strings.renameProjectTitle),
         content: SingleChildScrollView(
           child: Form(
@@ -772,19 +774,17 @@ class _RenameProjectDialogState extends State<_RenameProjectDialog> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: _saving ? null : () => Navigator.of(context).pop(),
-            child: Text(strings.cancel),
-          ),
-          FilledButton(
+          AppDialogAction(label: strings.cancel, enabled: !_saving),
+          AppDialogAction(
             key: const Key('confirm-rename-project'),
-            onPressed: _saving ? null : _submit,
-            child: _saving
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(strings.save),
+            label: strings.save,
+            enabled: !_saving,
+            // _submit pops the dialog itself, and only after a successful
+            // save — validation failures keep it open.
+            onPressed: _submit,
+            autoPop: false,
+            isDefault: true,
+            child: _saving ? const AdaptiveProgressIndicator(size: 18) : null,
           ),
         ],
       ),
@@ -835,7 +835,8 @@ class _DeleteProjectDialogState extends State<_DeleteProjectDialog> {
     final colors = Theme.of(context).colorScheme;
     return PopScope(
       canPop: !_deleting,
-      child: AlertDialog(
+      child: buildAdaptiveAlertDialog<ProjectDeletionResult>(
+        dialogContext: context,
         title: Text(strings.deleteProjectTitle),
         content: SingleChildScrollView(
           child: Column(
@@ -867,23 +868,16 @@ class _DeleteProjectDialogState extends State<_DeleteProjectDialog> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: _deleting ? null : () => Navigator.of(context).pop(),
-            child: Text(strings.cancel),
-          ),
-          FilledButton(
+          AppDialogAction(label: strings.cancel, enabled: !_deleting),
+          AppDialogAction(
             key: const Key('confirm-delete-project'),
-            style: FilledButton.styleFrom(
-              backgroundColor: colors.error,
-              foregroundColor: colors.onError,
-            ),
-            onPressed: _deleting ? null : _delete,
-            child: _deleting
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(strings.deleteProject),
+            label: strings.deleteProject,
+            enabled: !_deleting,
+            // _delete pops the dialog itself with the deletion result.
+            onPressed: _delete,
+            autoPop: false,
+            isDestructive: true,
+            child: _deleting ? const AdaptiveProgressIndicator(size: 18) : null,
           ),
         ],
       ),

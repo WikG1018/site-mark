@@ -20,6 +20,7 @@ import 'package:sitemark/features/capture/capture_detail_tabs.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 
@@ -763,7 +764,7 @@ class _PreviewSourceToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return SegmentedButton<CapturePreviewSource>(
+    return AdaptiveSegmentedButton<CapturePreviewSource>(
       segments: [
         ButtonSegment(
           value: CapturePreviewSource.watermarked,

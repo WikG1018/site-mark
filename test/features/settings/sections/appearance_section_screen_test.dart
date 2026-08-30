@@ -1,6 +1,7 @@
 // test/features/settings/sections/appearance_section_screen_test.dart
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,6 +55,26 @@ void main() {
     await tester.tap(find.byKey(const Key('dynamic-color-switch')));
     await tester.pumpAndSettle();
     expect((await database.getAppSettings()).useDynamicColor, isTrue);
+  });
+
+  testWidgets('iOS renders the sliding segmented control and persists theme', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await pumpScreen(tester);
+
+      expect(
+        find.byType(CupertinoSlidingSegmentedControl<String>),
+        findsOneWidget,
+      );
+      expect(find.byType(SegmentedButton<String>), findsNothing);
+      await tester.tap(find.text('深色'));
+      await tester.pumpAndSettle();
+      expect((await database.getAppSettings()).themeMode, 'dark');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('iOS keeps the adaptive switch functional', (tester) async {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 import 'package:sitemark/shared/theme/accent_choice_chip.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
 
@@ -28,7 +29,7 @@ class AppearanceSectionScreen extends ConsumerWidget {
         children: [
           Text(strings.theme, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          SegmentedButton<String>(
+          AdaptiveSegmentedButton<String>(
             key: const Key('theme-segmented'),
             style: segmentTapTargetStyle,
             segments: [
