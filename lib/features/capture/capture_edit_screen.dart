@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 
 class CaptureEditScreen extends ConsumerStatefulWidget {
@@ -110,8 +111,8 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
         final captureMissing =
             capture == null && !waitingForCapture && !captureLoadFailed;
         if (capture != null) _initialize(capture);
-        return Scaffold(
-          appBar: AppBar(title: Text(strings.editRecord)),
+        return AdaptivePageScaffold.raw(
+          title: strings.editRecord,
           body: waitingForCapture
               ? const Center(child: CircularProgressIndicator())
               : captureLoadFailed

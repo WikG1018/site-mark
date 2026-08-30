@@ -231,9 +231,16 @@ Flutter 自适应构造（`Switch.adaptive` / `SwitchListTile.adaptive` / `Slide
 CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用图标与 Android
 同源（`tool/generate_launcher_icon.py` 产出的品牌图标）。
 
-明确不做平台分支重写：不引入 iOS 专属导航结构或大标题重构，不内置相机 SDK
-（iOS 经 `UIImagePickerController` 桥，与 D-001 的「系统相机」精神一致）；后台调度
-差异（BGTaskScheduler 机会性补拍）如实展示在诊断页，不模拟 Android 节奏。
+明确不做平台分支重写：不内置相机 SDK。iOS 经 `UIImagePickerController` 桥拍摄,
+**不做自定义取景(AVCaptureSession)**——2026-08-30 用户确认不需要完整相机体验,
+简易系统桥即为最终形态;后台调度差异（BGTaskScheduler 机会性补拍）如实展示在
+诊断页，不模拟 Android 节奏。
+
+2026-08-30 追加(Phase 6):导航与控件按 iOS 惯例深化——设置分区页与次级页在 iOS
+使用 `CupertinoSliverNavigationBar` 大标题导航(滚动收拢 + 毛玻璃),`SegmentedButton`
+在 iOS 呈现 `CupertinoSlidingSegmentedControl`,全部确认/信息/表单/进度对话框经
+`lib/shared/ui/adaptive_dialog.dart` 在 iOS 呈现 Cupertino 形态。根 Dock 玻璃浮动条
+与 iOS 26/27(Liquid Glass 世代)方向一致,维持既有实现。
 品牌视觉变更时需同步刷新 iOS `AppIcon.appiconset` 与 `assets/branding/`。
 
 ## 决策变更规则

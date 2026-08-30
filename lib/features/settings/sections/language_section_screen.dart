@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 
 class LanguageSectionScreen extends ConsumerWidget {
   const LanguageSectionScreen({super.key});
@@ -22,12 +23,14 @@ class LanguageSectionScreen extends ConsumerWidget {
     }
     return SettingsSectionScaffold(
       title: strings.language,
-      body: SegmentedButton<String?>(
+      // The Cupertino sliding control requires non-null values, so the
+      // "follow system" locale (persisted null/empty) rides as ''.
+      body: AdaptiveSegmentedButton<String>(
         key: const Key('language-segmented'),
         style: segmentTapTargetStyle,
         segments: [
           ButtonSegment(
-            value: null,
+            value: '',
             label: Text(
               strings.systemLanguage,
               key: const Key('language-system'),
@@ -42,14 +45,10 @@ class LanguageSectionScreen extends ConsumerWidget {
             label: Text(strings.english, key: const Key('language-en')),
           ),
         ],
-        selected: {
-          (settings.localeCode?.isEmpty ?? true) ? null : settings.localeCode,
-        },
+        selected: {settings.localeCode ?? ''},
         onSelectionChanged: (selection) => ref
             .read(appSettingControllerProvider.notifier)
-            .update(
-              (s) => s.copyWith(localeCode: Value(selection.single ?? '')),
-            ),
+            .update((s) => s.copyWith(localeCode: Value(selection.single))),
       ),
     );
   }

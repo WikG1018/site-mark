@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 
@@ -272,10 +274,11 @@ void _showBlockingProgress(BuildContext context, String label) {
     barrierDismissible: false,
     builder: (dialogContext) => PopScope(
       canPop: false,
-      child: AlertDialog(
+      child: buildAdaptiveAlertDialog<void>(
+        dialogContext: dialogContext,
         content: Row(
           children: [
-            const CircularProgressIndicator(),
+            const AdaptiveProgressIndicator(),
             const SizedBox(width: 16),
             Expanded(child: Text(label)),
           ],
@@ -295,12 +298,13 @@ void _showRestoreProgress(
     barrierDismissible: false,
     builder: (dialogContext) => PopScope(
       canPop: false,
-      child: AlertDialog(
+      child: buildAdaptiveAlertDialog<void>(
+        dialogContext: dialogContext,
         content: ValueListenableBuilder<(int, int)>(
           valueListenable: progress,
           builder: (context, value, _) => Row(
             children: [
-              const CircularProgressIndicator(),
+              const AdaptiveProgressIndicator(),
               const SizedBox(width: 16),
               Expanded(
                 child: Text(strings.restoringProgress(value.$1, value.$2)),
@@ -470,10 +474,11 @@ class _RestorePreviewDialogState extends State<_RestorePreviewDialog> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return AlertDialog(
+    return buildAdaptiveAlertDialog<List<String>>(
+      dialogContext: context,
       title: Text(strings.restorePreview),
       content: SizedBox(
-        width: 420,
+        width: defaultTargetPlatform == TargetPlatform.iOS ? 232 : 420,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -522,14 +527,14 @@ class _RestorePreviewDialogState extends State<_RestorePreviewDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(strings.cancel),
-        ),
-        FilledButton(
+        AppDialogAction(label: strings.cancel),
+        AppDialogAction(
           key: const Key('restore-confirm'),
+          label: strings.restoreAction,
+          // _confirm pops the dialog itself with the renamed project list.
           onPressed: _confirm,
-          child: Text(strings.restoreAction),
+          autoPop: false,
+          isDefault: true,
         ),
       ],
     );

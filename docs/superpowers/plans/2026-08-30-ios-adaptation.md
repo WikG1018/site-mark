@@ -90,6 +90,19 @@
 
 实施记录（2026-08-30，PR #125）：功能对齐面——iOS 应用图标从 Flutter 模板默认图换为品牌图标（`assets/branding/sitemark-icon.png` 1024 全出血单尺寸声明，Xcode 14+ 单尺寸 catalog 经 CI actool 编译验证），删除模板散置 PNG；通知授权时机对齐 Android（开关时经 `IOSFlutterLocalNotificationsPlugin.requestPermissions(alert/badge/sound)` 显式请求，原先首次发通知才隐式弹；`resolvePlatformSpecificImplementation` 依赖平台接口静态 instance + `defaultTargetPlatform`，测试以真实子类 fake 注入并逐用例设平台）。HIG 适配面——`Switch.adaptive`/`SwitchListTile.adaptive`/`Slider.adaptive` 落地 6 处（要点：`Switch.adaptive` 在 iOS 是 Cupertino 风格的 Material 自绘，无 `CupertinoSwitch` 类型；`Slider.adaptive` 则真实构建 `CupertinoSlider`）；新增 `lib/shared/ui/adaptive_dialog.dart`（`showAppDialog` + 供自定义 showDialog 场景的 `buildAdaptiveAlertDialog`），iOS 呈现 `CupertinoAlertDialog`、Android 逐字节复刻原组合，迁移 11 处标准对话框，7 处复杂对话框（重命名表单、删除项目状态化内容、进度 PopScope、搜索列表、恢复预览）保留 Material 记录为偏差；SF 字体/弹性滚动/返回滑动由平台默认提供，核实后无需改码。**CI 修正一轮**：手写启动屏 storyboard（systemBackgroundColor + 移除占位图）被 CI ibtool `CompileStoryboard` 拒绝，本机无 Xcode 无法定位具体行，且深色启动效果本就无法离线验证——整体回退该改动（storyboard 与 LaunchImage 恢复模板原样），深色启动闪白留待真机/模拟器阶段。文档同步：决策 D-022、NEXT_AGENT_PROMPT 移除「不做 iOS」、架构文档界面惯例小节、release-checklist 图标同源纪律。TDD 先红后绿新增 10 用例；本地 Flutter 3.44.6 全量 `flutter test` 1030 通过（既有 1020 零改动）、`dart analyze` 0 issue、`dart format` 0 diff。
 
+### Phase 6 — iOS 27 视界适配（2026-08-30 用户追加,设计 D-022 更新）
+
+设计:[`specs/2026-08-30-ios-parity-hig.md`](../specs/2026-08-30-ios-parity-hig.md)「iOS 27 视界适配」节。用户拍板:相机**不需要**完整相机(维持系统桥,偏差转正为决策);导航形态按 iOS 调整;复杂对话框与标准对话框统一。
+
+1. 导航:设置分区页(9 屏)与次级列表/表单页改 iOS 大标题导航(`CupertinoSliverNavigationBar`,滚动收拢 + 毛玻璃),Android 保持现有 AppBar;根 Dock 已是玻璃浮动条,不动。
+2. 分段控件:`SegmentedButton` 全部 6 处改自适应,iOS 呈现 `CupertinoSlidingSegmentedControl`。
+3. 对话框统一:剩余 7 处复杂对话框(重命名表单、删除项目、搜索建议、恢复预览、3 处进度)全部走 `buildAdaptiveAlertDialog`;进度指示 iOS 用 `CupertinoActivityIndicator`;搜索/预览宽度按平台收敛。
+4. 相机决策落档:更新 D-022 与设计文档,UIImagePickerController 维持。
+
+验收:CI 双绿;Android 分支 widget 树零变化(既有用例不改即过);iOS 关键界面经无头真渲染走查确认。
+
+实施记录（2026-08-30,PR #TBD):导航——新增 `lib/shared/ui/adaptive_page_scaffold.dart`(iOS 用 `CupertinoSliverNavigationBar` 滚动收拢大标题 + 毛玻璃导航栏,Material 平台保持原 `AppBar` + 内容列表,支持 actions/bottomNavigationBar 透传);`SettingsSectionScaffold` 9 屏与存储统计、备份选择、新建项目、编辑记录 4 个独立页接入。分段控件——`AdaptiveSegmentedButton`(API 镜像 `SegmentedButton`,Material 分支原样透传)迁移全部 6 处,iOS 呈现 `CupertinoSlidingSegmentedControl`;语言页 `String?` 改用空字符串哨兵以满足 Cupertino 控件的 `Object` 边界(顺带修复空字符串 locale 原先不回显选中项的不一致)。对话框统一——剩余 7 处复杂对话框全部接入 `buildAdaptiveAlertDialog`:重命名/删除项目(按钮内联进度、`enabled` 禁用态、`autoPop: false` 由提交回调自行 pop 以保住校验失败的对话框)、搜索建议/恢复预览(内容宽度按平台收敛,iOS alert 约 270pt)、3 处进度(iOS 用 `CupertinoActivityIndicator`)。**走查抓到并修复两个真问题**:(1) 本批迁移的确认按钮自身会 pop,与 helper 的自动 pop 相撞造成双重 pop 顶掉底层页面——给 action 增加显式 `autoPop` 契约,既有测试(restore/backup 全流程)即时抓到;(2) CupertinoAlertDialog 无 Material 祖先,内嵌 Material 输入框渲染损坏(红色色块)——iOS 分支给 content 包 `Material(transparency)`,复渲染后输入框干净呈现,这正是 Apple 风格重命名 alert 的标准做法。相机决策落档:用户确认不需要完整相机,UIImagePickerController 维持,D-022 由偏差转正为决策。视觉验证沿用无头真渲染方案(本机无 Xcode),6 张新走查图确认大标题/滑动分段/统一表单与进度 alert 均为正确 iOS 形态。TDD 新增 4 用例(脚手架双平台/原生分支、iOS 滑动分段持久化);全量 `flutter test` 1034 通过(既有 1030 零改动)、`dart analyze` 0 issue、`dart format`(3.44.6)0 diff。
+
 ## 文件结构（预期新增/修改）
 
 ```

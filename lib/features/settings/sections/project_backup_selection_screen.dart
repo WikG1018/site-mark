@@ -5,6 +5,8 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_backup_preflight.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
@@ -138,12 +140,13 @@ class _ProjectBackupSelectionScreenState
       barrierDismissible: false,
       builder: (dialogContext) => PopScope(
         canPop: false,
-        child: AlertDialog(
+        child: buildAdaptiveAlertDialog<void>(
+          dialogContext: dialogContext,
           content: ValueListenableBuilder<(int, int)>(
             valueListenable: progress,
             builder: (context, value, _) => Row(
               children: [
-                const CircularProgressIndicator(),
+                const AdaptiveProgressIndicator(),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Text(strings.backingUpProgress(value.$1, value.$2)),
@@ -259,8 +262,8 @@ class _ProjectBackupSelectionScreenState
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final database = ref.watch(databaseProvider);
-    return Scaffold(
-      appBar: AppBar(title: Text(strings.backupProjects)),
+    return AdaptivePageScaffold.raw(
+      title: strings.backupProjects,
       body: StreamBuilder<List<Project>>(
         stream: database.watchProjects(),
         builder: (context, snapshot) {

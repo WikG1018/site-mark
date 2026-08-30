@@ -69,3 +69,14 @@
 - CI ubuntu `test` + macos `ios` 双绿(含 actool 图标编译)。
 - Android 行为零变化:共享界面在 android 平台的 widget 树与改前一致(既有 1020 用例
   无一改动即为证据)。
+
+## 追加(2026-08-30 第二批,Phase 6):iOS 27 视界适配
+
+用户拍板:相机**不需要**完整相机——`UIImagePickerController` 系统桥维持,原「自定义取景待评估」偏差就此转为已接受决策(D-022 同步更新)。导航形态按 iOS 调整,复杂对话框与标准对话框统一,整体遵循 iOS 26/27(Liquid Glass 世代)的设计方向。
+
+| 项 | 方案 |
+| --- | --- |
+| 导航 | 设置分区页与次级列表/表单页在 iOS 用 `CupertinoSliverNavigationBar`:滚动收拢的大标题 + 毛玻璃导航栏(iOS 26/27 招牌形态);Android 保持现有 `AppBar`。根 Dock 已是 `GlassSurface` 玻璃浮动条,与 Liquid Glass 方向一致,不动 |
+| 分段控件 | 6 处 `SegmentedButton` 改自适应:iOS 呈现 `CupertinoSlidingSegmentedControl`(滑动分段,原生形态),Android 不变 |
+| 对话框统一 | 剩余 7 处复杂对话框全部走 `buildAdaptiveAlertDialog`:重命名表单/删除项目(内容 widget 直通),搜索建议/恢复预览(宽度按平台收敛,iOS alert 约 270pt),3 处进度(iOS 用 `CupertinoActivityIndicator`) |
+| 相机 | 维持系统桥,落档为决策 |

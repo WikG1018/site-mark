@@ -1,5 +1,6 @@
 // lib/features/settings/settings_section_scaffold.dart
 import 'package:flutter/material.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 
 /// Segmented buttons default to 40dp; lifting to 48dp meets Android tap-target.
 const segmentTapTargetStyle = ButtonStyle(
@@ -7,7 +8,8 @@ const segmentTapTargetStyle = ButtonStyle(
 );
 
 /// Standard scaffold for a settings sub-page: AppBar with the section title,
-/// scrollable body with consistent padding.
+/// scrollable body with consistent padding. On iOS this is the large-title
+/// collapsing nav bar (see [AdaptivePageScaffold]).
 class SettingsSectionScaffold extends StatelessWidget {
   const SettingsSectionScaffold({
     super.key,
@@ -20,10 +22,7 @@ class SettingsSectionScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: ListView(padding: const EdgeInsets.all(20), children: [body]),
-    );
+    return AdaptivePageScaffold(title: title, body: body);
   }
 }
 

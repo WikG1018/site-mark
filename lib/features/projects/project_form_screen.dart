@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:uuid/uuid.dart';
 
 class ProjectFormScreen extends ConsumerStatefulWidget {
@@ -75,8 +76,8 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(strings.createProject)),
+    return AdaptivePageScaffold.raw(
+      title: strings.createProject,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

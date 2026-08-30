@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 
 enum CaptureDetailSection { fieldRecord, fileInfo }
 
@@ -19,7 +20,7 @@ class CaptureDetailTabs extends StatelessWidget {
     final strings = AppStrings.of(context);
     return SizedBox(
       width: double.infinity,
-      child: SegmentedButton<CaptureDetailSection>(
+      child: AdaptiveSegmentedButton<CaptureDetailSection>(
         segments: [
           ButtonSegment(
             value: CaptureDetailSection.fieldRecord,
