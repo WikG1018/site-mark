@@ -12,6 +12,9 @@ import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
 import 'package:sitemark/features/capture/capture_template_sheet.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
@@ -153,7 +156,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     _templateSheetController = null;
     _templateSheetOpen = false;
     oldTemplateSheet?.dismiss();
-    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    hideAppToast();
     _locationController.clear();
     _contentController.clear();
     _photographerController.clear();
@@ -268,25 +271,23 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     final operation = ++_templateOperation;
     _applyRequiredFields(selected);
     final strings = AppStrings.of(context);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(strings.captureTemplateApplied),
-          action: SnackBarAction(
-            label: strings.undo,
-            onPressed: () {
-              if (!mounted ||
-                  widget.projectId != projectId ||
-                  _initGeneration != generation ||
-                  _templateOperation != operation) {
-                return;
-              }
-              _applyRequiredFields(previous);
-            },
-          ),
-        ),
-      );
+    showAppToast(
+      context,
+      strings.captureTemplateApplied,
+      replace: true,
+      action: AppToastAction(
+        label: strings.undo,
+        onPressed: () {
+          if (!mounted ||
+              widget.projectId != projectId ||
+              _initGeneration != generation ||
+              _templateOperation != operation) {
+            return;
+          }
+          _applyRequiredFields(previous);
+        },
+      ),
+    );
   }
 
   @override
@@ -334,9 +335,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     if (project.lifecycleStatus != ProjectLifecycleStatus.active) {
       if (!mounted) return;
       final strings = AppStrings.of(context);
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(strings.captureReadOnlyMessage)));
+      showAppToast(context, strings.captureReadOnlyMessage, replace: true);
       return;
     }
     unawaited(HapticFeedback.lightImpact());
@@ -377,9 +376,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
       if (!isCurrent()) return;
       setState(() => _working = false);
       final strings = AppStrings.of(context);
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(strings.captureReadOnlyMessage)));
+      showAppToast(context, strings.captureReadOnlyMessage, replace: true);
       return;
     }
     if (!mounted) return;
@@ -411,14 +408,12 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         // in-flight snackbar so burst captures never queue a stack of them.
         _notesController.clear();
         setState(() => _working = false);
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(strings.captureQueuedContinue),
-              duration: const Duration(seconds: 2),
-            ),
-          );
+        showAppToast(
+          context,
+          strings.captureQueuedContinue,
+          duration: const Duration(seconds: 2),
+          replace: true,
+        );
       case CaptureWorkflowOutcome.delayed:
         try {
           await ref.read(captureFormDraftStoreProvider).clear(projectId);
@@ -429,27 +424,22 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         if (!isCurrent()) return;
         _notesController.clear();
         setState(() => _working = false);
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(strings.captureQueueDelayedContinue),
-              duration: const Duration(seconds: 4),
-            ),
-          );
+        showAppToast(
+          context,
+          strings.captureQueueDelayedContinue,
+          duration: const Duration(seconds: 4),
+          replace: true,
+        );
       case CaptureWorkflowOutcome.cancelled:
         // The camera was dismissed without a photo; stay on the form and
         // re-enable the button without surfacing a confirmation.
         setState(() => _working = false);
       case CaptureWorkflowOutcome.failed:
         setState(() => _working = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${strings.captureFailed}: '
-              '${strings.captureFailureMessage(result.failureCode ?? CaptureFailureCode.unexpected)}',
-            ),
-          ),
+        showAppToast(
+          context,
+          '${strings.captureFailed}: '
+          '${strings.captureFailureMessage(result.failureCode ?? CaptureFailureCode.unexpected)}',
         );
     }
   }
@@ -481,10 +471,11 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         final readOnly =
             project != null &&
             project.lifecycleStatus != ProjectLifecycleStatus.active;
-        return Scaffold(
-          appBar: AppBar(title: Text(strings.captureFormTitle)),
+        return AdaptivePageScaffold.raw(
+          title: strings.captureFormTitle,
+          iosBodyPadding: EdgeInsets.zero,
           body: waitingForProject
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: AdaptiveProgressIndicator())
               : projectLoadFailed
               ? _ResourceUnavailableState(
                   key: const Key('project-load-error'),
@@ -850,7 +841,7 @@ class CaptureSubmitButton extends StatelessWidget {
           ? const SizedBox.square(
               key: ValueKey('capture-button-busy'),
               dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: AdaptiveProgressIndicator(size: 18),
             )
           : const Icon(
               Icons.photo_camera_outlined,

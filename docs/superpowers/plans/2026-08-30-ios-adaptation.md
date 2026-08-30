@@ -103,6 +103,18 @@
 
 实施记录（2026-08-30,PR #126):导航——新增 `lib/shared/ui/adaptive_page_scaffold.dart`(iOS 用 `CupertinoSliverNavigationBar` 滚动收拢大标题 + 毛玻璃导航栏,Material 平台保持原 `AppBar` + 内容列表,支持 actions/bottomNavigationBar 透传);`SettingsSectionScaffold` 9 屏与存储统计、备份选择、新建项目、编辑记录 4 个独立页接入。分段控件——`AdaptiveSegmentedButton`(API 镜像 `SegmentedButton`,Material 分支原样透传)迁移全部 6 处,iOS 呈现 `CupertinoSlidingSegmentedControl`;语言页 `String?` 改用空字符串哨兵以满足 Cupertino 控件的 `Object` 边界(顺带修复空字符串 locale 原先不回显选中项的不一致)。对话框统一——剩余 7 处复杂对话框全部接入 `buildAdaptiveAlertDialog`:重命名/删除项目(按钮内联进度、`enabled` 禁用态、`autoPop: false` 由提交回调自行 pop 以保住校验失败的对话框)、搜索建议/恢复预览(内容宽度按平台收敛,iOS alert 约 270pt)、3 处进度(iOS 用 `CupertinoActivityIndicator`)。**走查抓到并修复两个真问题**:(1) 本批迁移的确认按钮自身会 pop,与 helper 的自动 pop 相撞造成双重 pop 顶掉底层页面——给 action 增加显式 `autoPop` 契约,既有测试(restore/backup 全流程)即时抓到;(2) CupertinoAlertDialog 无 Material 祖先,内嵌 Material 输入框渲染损坏(红色色块)——iOS 分支给 content 包 `Material(transparency)`,复渲染后输入框干净呈现,这正是 Apple 风格重命名 alert 的标准做法。相机决策落档:用户确认不需要完整相机,UIImagePickerController 维持,D-022 由偏差转正为决策。视觉验证沿用无头真渲染方案(本机无 Xcode),6 张新走查图确认大标题/滑动分段/统一表单与进度 alert 均为正确 iOS 形态。TDD 新增 4 用例(脚手架双平台/原生分支、iOS 滑动分段持久化);全量 `flutter test` 1034 通过(既有 1030 零改动)、`dart analyze` 0 issue、`dart format`(3.44.6)0 diff。
 
+### Phase 7 — 全界面 iOS 27 走查与修复(2026-08-31 用户追加)
+
+用户要求:每个界面都符合 iOS 27 风格,检查清楚后对整个 iOS 版本全面深度审查、修复并继续完善。
+
+1. 反馈形态:iOS 无 Snackbar——全部确认/结果提示(约 30 处,含撤销/重试动作)迁移 `showAppToast`,iOS 呈现浮动玻璃胶囊(`GlassSurface` + Overlay),Material 平台保持 SnackBar 语义(`replace` 映射 hideCurrent+show)。
+2. 动作菜单:照片操作/项目操作/状态筛选 3 处 `showModalBottomSheet` 迁移 `showAppActionSheet`,iOS 呈现 `CupertinoActionSheet`(标题/副标题/破坏性红字/选中勾/系统取消行),Material 分支复刻原底部队列。
+3. 导航补全:剩余 8 处直连 `AppBar`(3 个主标签页、项目详情、照片详情双态、拍照表单、项目水印设置)全部接入 `AdaptivePageScaffold`;层级推入路由 iOS 改 `CupertinoPage`(边缘滑动返回手势)。
+4. 控件收尾:20+ 处 `CircularProgressIndicator` → `AdaptiveProgressIndicator`;多选圆圈(`AdaptiveSelectionMark`,iOS Photos 式圆形勾)替换记录卡 Checkbox 与备份选择 CheckboxListTile(Material 行);窄屏日期筛选 `DropdownMenu` → `CompactFilterMenu`(与宽栏一致);批量进度条圆角化;两级 FAB iOS 呈玻璃浮钮(`AdaptiveFloatingButton`)。
+5. 依赖补全:`cupertino_icons` 入 pubspec(此前 `CupertinoIcons` 字形在任何平台都是方块)。
+
+实施记录（2026-08-31,PR #127):新增共享组件四件——`adaptive_sheet.dart`(`showAppActionSheet`/`AppSheetAction`,支持 title/message/subtitle/checked/enabled/sheetKey,iOS `CupertinoActionSheet` + 自动取消行,Material 滚动容器防长列表溢出)、`adaptive_toast.dart`(`showAppToast`/`hideAppToast`/`AppToastAction`,iOS Overlay 玻璃胶囊 + 计时自动消失,Material 分支 maybeOf 空安全 + 存置 messenger 的 mounted 防护防跨用例 dispose 崩溃)、`adaptive_selection_mark.dart`、`adaptive_floating_button.dart`(extended 由 label 驱动);`AdaptivePageScaffold` 增 `titleWidget`(搜索字段就地换入导航栏)与 `iosBodyPadding`(自绘内边距的复杂页传零)与 `floatingActionButton` 透传。迁移覆盖:全部 30 处 Snackbar、3 处动作菜单、9 处 AppBar(主标签页大标题 + trailing 动作)、22 处转轮、日期窄屏菜单、两处 FAB、批量进度圆角;`_sharedAxisPage` iOS 分支换 `CupertinoPage` 获得边缘滑动返回。**走查复抓两类真问题**:(1) pubspec 缺 `cupertino_icons`,补依赖前图标字形全平台方块;(2) Toast 胶囊 `Row(min)+Expanded` 布局矛盾致 6px 溢出,改正横幅布局。测试:组件新增 9 用例(动作表双平台/Toast 双平台/胶囊自动消失/hideAppToast),既有用例同步点(narrow sheet 断言 CompactFilterMenu、项目列表 ListTile.selected 断言由 helper 透传);全量 `flutter test` 1043 通过、`dart analyze` 0 issue、`dart format`(3.44.6)0 diff;5 张无头真渲染走查图确认动作表/大标题/胶囊/玻璃浮钮均为正确 iOS 27 形态(走查 harness 按惯例不入库)。
+
 ## 文件结构（预期新增/修改）
 
 ```

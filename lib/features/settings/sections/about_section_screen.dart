@@ -5,6 +5,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_links.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 
 /// Fallback version/build used when [PackageInfo.fromPlatform] fails (e.g. in
 /// unit tests where no platform plugin is available).
@@ -50,15 +51,11 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
           .read(externalLinkServiceProvider)
           .open(siteMarkRepositoryUri);
       if (!opened && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppStrings.of(context).openLinkFailed)),
-        );
+        showAppToast(context, AppStrings.of(context).openLinkFailed);
       }
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppStrings.of(context).openLinkFailed)),
-        );
+        showAppToast(context, AppStrings.of(context).openLinkFailed);
       }
     }
   }

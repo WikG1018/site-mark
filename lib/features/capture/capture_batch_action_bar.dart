@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
@@ -49,14 +50,13 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   /// Pending clear-originals execution. Set while the 5-second undo window is
   /// open; cancelled by the Snackbar undo action or by [dispose].
   Timer? _clearOriginalsTimer;
-  ScaffoldMessengerState? _clearOriginalsMessenger;
 
   @override
   void dispose() {
     if (_clearOriginalsTimer != null) {
-      // Exiting selection cancels the pending run; withdraw the snackbar too
+      // Exiting selection cancels the pending run; withdraw the toast too
       // so it doesn't keep implying a cleanup that will never happen.
-      _clearOriginalsMessenger?.hideCurrentSnackBar();
+      hideAppToast();
     }
     _clearOriginalsTimer?.cancel();
     super.dispose();
@@ -140,15 +140,12 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     int failed,
   ) {
     if (messenger == null) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          '$title · ${strings.actionResult(succeeded, skipped, failed)}',
-        ),
-        action: SnackBarAction(
-          label: strings.viewAction,
-          onPressed: controller.exit,
-        ),
+    showAppToast(
+      context,
+      '$title · ${strings.actionResult(succeeded, skipped, failed)}',
+      action: AppToastAction(
+        label: strings.viewAction,
+        onPressed: controller.exit,
       ),
     );
   }
@@ -254,23 +251,20 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     final ids = _selectedIds;
     if (ids.isEmpty || _busy || _clearOriginalsTimer != null) return;
     final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    _clearOriginalsMessenger = messenger;
     _clearOriginalsTimer = Timer(const Duration(seconds: 5), () {
       _clearOriginalsTimer = null;
       _executeClearOriginals(ids);
     });
-    messenger?.showSnackBar(
-      SnackBar(
-        content: Text(strings.clearOriginalsScheduled(ids.length)),
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: strings.undo,
-          onPressed: () {
-            _clearOriginalsTimer?.cancel();
-            _clearOriginalsTimer = null;
-          },
-        ),
+    showAppToast(
+      context,
+      strings.clearOriginalsScheduled(ids.length),
+      duration: const Duration(seconds: 5),
+      action: AppToastAction(
+        label: strings.undo,
+        onPressed: () {
+          _clearOriginalsTimer?.cancel();
+          _clearOriginalsTimer = null;
+        },
       ),
     );
   }
@@ -440,6 +434,7 @@ class _CompactProgress extends StatelessWidget {
           LinearProgressIndicator(
             minHeight: 2,
             value: total == 0 ? null : completed / total,
+            borderRadius: BorderRadius.circular(999),
           ),
           const SizedBox(height: 4),
           Text(

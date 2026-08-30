@@ -12,6 +12,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/adaptive_skeleton_count.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
 class ProjectListScreen extends ConsumerStatefulWidget {
@@ -176,66 +177,66 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _handleRootBack();
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: SizedBox(
-            height: kToolbarHeight,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _searching
-                  ? TextField(
-                      key: const Key('project-search-field'),
-                      controller: _searchController,
-                      focusNode: _searchFocus,
-                      decoration: InputDecoration(
-                        hintText: strings.searchProjectsHint,
-                        border: InputBorder.none,
-                      ),
-                      onChanged: _onSearchChanged,
-                    )
-                  : Text(strings.appName, key: const Key('project-title')),
-            ),
+      child: AdaptivePageScaffold.raw(
+        title: strings.appName,
+        titleWidget: SizedBox(
+          height: 44,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _searching
+                ? TextField(
+                    key: const Key('project-search-field'),
+                    controller: _searchController,
+                    focusNode: _searchFocus,
+                    decoration: InputDecoration(
+                      hintText: strings.searchProjectsHint,
+                      border: InputBorder.none,
+                    ),
+                    onChanged: _onSearchChanged,
+                  )
+                : Text(strings.appName, key: const Key('project-title')),
           ),
-          actions: [
-            if (_searching)
-              IconButton(
-                key: const Key('project-search-action'),
-                onPressed: _handleSearchAction,
-                tooltip: _query.isNotEmpty ? strings.clear : strings.cancel,
-                icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
-              )
-            else ...[
-              Semantics(
-                key: const Key('project-status-filter'),
-                label:
-                    '${strings.projectStatusFilterTitle}: '
-                    '${_statusLabel(strings, _status)}',
-                button: true,
-                onTap: _openStatusFilter,
-                excludeSemantics: true,
-                child: TextButton.icon(
-                  onPressed: _openStatusFilter,
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  icon: const Icon(Icons.filter_list, size: 20),
-                  label: Text(_statusLabel(strings, _status)),
-                ),
-              ),
-              IconButton(
-                key: const Key('search-projects'),
-                onPressed: _startSearch,
-                tooltip: strings.searchProjects,
-                icon: AnimatedRotation(
-                  turns: _searching ? 0.5 : 0,
-                  duration: AppMotion.durationOf(context, AppMotion.short4),
-                  child: const Icon(Icons.search),
-                ),
-              ),
-            ],
-          ],
         ),
+        actions: [
+          if (_searching)
+            IconButton(
+              key: const Key('project-search-action'),
+              onPressed: _handleSearchAction,
+              tooltip: _query.isNotEmpty ? strings.clear : strings.cancel,
+              icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
+            )
+          else ...[
+            Semantics(
+              key: const Key('project-status-filter'),
+              label:
+                  '${strings.projectStatusFilterTitle}: '
+                  '${_statusLabel(strings, _status)}',
+              button: true,
+              onTap: _openStatusFilter,
+              excludeSemantics: true,
+              child: TextButton.icon(
+                onPressed: _openStatusFilter,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                icon: const Icon(Icons.filter_list, size: 20),
+                label: Text(_statusLabel(strings, _status)),
+              ),
+            ),
+            IconButton(
+              key: const Key('search-projects'),
+              onPressed: _startSearch,
+              tooltip: strings.searchProjects,
+              icon: AnimatedRotation(
+                turns: _searching ? 0.5 : 0,
+                duration: AppMotion.durationOf(context, AppMotion.short4),
+                child: const Icon(Icons.search),
+              ),
+            ),
+          ],
+        ],
+        iosBodyPadding: EdgeInsets.zero,
         body: LayoutBuilder(
           key: const Key('project-list-content'),
           builder: (context, constraints) =>

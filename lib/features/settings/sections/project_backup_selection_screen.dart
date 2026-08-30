@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
+import 'package:sitemark/shared/ui/adaptive_selection_mark.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:sitemark/shared/ui/adaptive_progress.dart';
@@ -195,9 +198,7 @@ class _ProjectBackupSelectionScreenState
     progress.dispose();
     if (!mounted) return;
     if (failure != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_describeBackupError(strings, failure))),
-      );
+      showAppToast(context, _describeBackupError(strings, failure));
       return;
     }
     await _saveBackup(result!);
@@ -226,9 +227,7 @@ class _ProjectBackupSelectionScreenState
               ? strings.backupSaved
               : strings.backupSavedWithOmissions(result.omittedFailedCount)
         : strings.backupGeneratedNotSaved;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    showAppToast(context, message);
   }
 
   Future<void> _shareBackup(ProjectBackupResult result) async {
@@ -246,15 +245,10 @@ class _ProjectBackupSelectionScreenState
     }
     if (!mounted) return;
     setState(() => _sharing = false);
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    messenger.removeCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          failure == null ? strings.backupShared : strings.backupShareFailed,
-        ),
-      ),
+    showAppToast(
+      context,
+      failure == null ? strings.backupShared : strings.backupShareFailed,
+      replace: true,
     );
   }
 
@@ -309,43 +303,68 @@ class _ProjectBackupSelectionScreenState
               const SizedBox(height: 4),
               for (final project in projects)
                 Card(
-                  child: CheckboxListTile(
-                    value: _selectedIds.contains(project.id),
-                    title: Text(project.name),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (project.description != null)
-                          Text(project.description!),
-                        const SizedBox(height: 4),
-                        Align(
-                          alignment: AlignmentDirectional.centerStart,
-                          child: Chip(
-                            key: Key(
-                              'backup-status-${project.lifecycleStatus.name}',
+                  child: Builder(
+                    builder: (tileContext) {
+                      void toggle(bool selected) => setState(() {
+                        if (selected) {
+                          _selectedIds.add(project.id);
+                        } else {
+                          _selectedIds.remove(project.id);
+                        }
+                      });
+                      final subtitle = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (project.description != null)
+                            Text(project.description!),
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Chip(
+                              key: Key(
+                                'backup-status-${project.lifecycleStatus.name}',
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              label: Text(
+                                _statusLabel(strings, project.lifecycleStatus),
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                              padding: EdgeInsets.zero,
                             ),
-                            visualDensity: VisualDensity.compact,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            label: Text(
-                              _statusLabel(strings, project.lifecycleStatus),
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
-                            padding: EdgeInsets.zero,
                           ),
-                        ),
-                      ],
-                    ),
-                    isThreeLine: project.description != null,
-                    onChanged: _submitting
-                        ? null
-                        : (selected) => setState(() {
-                            if (selected ?? false) {
-                              _selectedIds.add(project.id);
-                            } else {
-                              _selectedIds.remove(project.id);
-                            }
-                          }),
+                        ],
+                      );
+                      if (defaultTargetPlatform == TargetPlatform.iOS) {
+                        // HIG: pick-many rows use a trailing round checkmark
+                        // instead of a Material checkbox.
+                        return ListTile(
+                          title: Text(project.name),
+                          subtitle: subtitle,
+                          isThreeLine: project.description != null,
+                          trailing: AdaptiveSelectionMark(
+                            selected: _selectedIds.contains(project.id),
+                            onChanged: _submitting ? null : toggle,
+                          ),
+                          onTap: _submitting
+                              ? null
+                              : () =>
+                                    toggle(!_selectedIds.contains(project.id)),
+                        );
+                      }
+                      return CheckboxListTile(
+                        value: _selectedIds.contains(project.id),
+                        title: Text(project.name),
+                        subtitle: subtitle,
+                        isThreeLine: project.description != null,
+                        onChanged: _submitting
+                            ? null
+                            : (selected) {
+                                toggle(selected ?? false);
+                              },
+                      );
+                    },
                   ),
                 ),
             ],

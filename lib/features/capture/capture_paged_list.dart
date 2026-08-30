@@ -7,6 +7,7 @@ import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/adaptive_skeleton_count.dart';
 import 'package:skeletonizer/skeletonizer.dart';
@@ -389,7 +390,7 @@ class _CapturePagedListState extends State<CapturePagedList> {
                         child: SizedBox.square(
                           key: Key('capture-next-page-loading'),
                           dimension: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: AdaptiveProgressIndicator(size: 18),
                         ),
                       ),
                     ),

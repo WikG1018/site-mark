@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/platform/notification_service.dart';
 
 class NotificationSectionScreen extends ConsumerWidget {
@@ -17,7 +19,7 @@ class NotificationSectionScreen extends ConsumerWidget {
     if (settings == null) {
       return SettingsSectionScaffold(
         title: strings.completionNotificationTitle,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const Center(child: AdaptiveProgressIndicator()),
       );
     }
     return SettingsSectionScaffold(
@@ -63,10 +65,9 @@ class NotificationSectionScreen extends ConsumerWidget {
           .read(appSettingControllerProvider.notifier)
           .update((s) => s.copyWith(completionNotificationsEnabled: true));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppStrings.of(context).notificationPermissionDenied),
-        ),
+      showAppToast(
+        context,
+        AppStrings.of(context).notificationPermissionDenied,
       );
     }
   }

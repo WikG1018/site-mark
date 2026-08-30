@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 
 class LanguageSectionScreen extends ConsumerWidget {
@@ -18,7 +19,7 @@ class LanguageSectionScreen extends ConsumerWidget {
     if (settings == null) {
       return SettingsSectionScaffold(
         title: strings.language,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const Center(child: AdaptiveProgressIndicator()),
       );
     }
     return SettingsSectionScaffold(

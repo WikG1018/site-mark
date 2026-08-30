@@ -239,6 +239,8 @@ class _NarrowFilterSheetState extends State<_NarrowFilterSheet> {
     );
   }
 
+  /// Full-width trigger mirroring the wide bar's [CompactFilterMenu] so the
+  /// narrow sheet stays visually identical to the inline filter row.
   Widget _dropdown({
     required Key key,
     required int? value,
@@ -248,17 +250,16 @@ class _NarrowFilterSheetState extends State<_NarrowFilterSheet> {
     required bool enabled,
     required ValueChanged<int?> onChanged,
   }) {
-    return DropdownMenu<int?>(
+    final entries = <(int?, String)>[(null, allLabel)];
+    for (final option in options) {
+      entries.add((option, labelFor(option)));
+    }
+    return CompactFilterMenu<int?>(
       key: key,
-      initialSelection: value,
+      label: value == null ? allLabel : labelFor(value),
+      selectedValue: value,
+      entries: entries,
       enabled: enabled,
-      expandedInsets: EdgeInsets.zero,
-      label: Text(allLabel),
-      dropdownMenuEntries: [
-        DropdownMenuEntry<int?>(value: null, label: allLabel),
-        for (final option in options)
-          DropdownMenuEntry<int?>(value: option, label: labelFor(option)),
-      ],
       onSelected: onChanged,
     );
   }
