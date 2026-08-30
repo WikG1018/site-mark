@@ -32,6 +32,8 @@
 	<string>SiteMark uses your location to stamp the work location on photos.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>SiteMark saves watermarked photos to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SiteMark replaces or removes its own published photos when a record is re-saved or cleaned up.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,5 +1,5 @@
 name: sitemark_system_api
-description: "SiteMark Android system bridge (Pigeon API, ContentProvider, target policy) as a headless-safe local Flutter plugin."
+description: "SiteMark system bridge (Pigeon API, target policy, publish journal) as a headless-safe local Flutter plugin for Android and iOS."
 version: 0.1.0
 publish_to: none
 
@@ -21,4 +21,6 @@ flutter:
     platforms:
       android:
         package: io.github.wikg1018.sitemark.system
+        pluginClass: SiteMarkSystemPlugin
+      ios:
         pluginClass: SiteMarkSystemPlugin
