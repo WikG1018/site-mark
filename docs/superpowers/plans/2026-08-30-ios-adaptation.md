@@ -3,6 +3,7 @@
 > 日期：2026-08-30
 > 设计：[`specs/2026-08-30-ios-adaptation-design.md`](../specs/2026-08-30-ios-adaptation-design.md)
 > 需求源：用户 2026-08-30 确认按设计推进（Flutter 复用路线）
+> 交接：Phase 0–2b 完成后的接替入口见 [`handoffs/2026-08-30-ios-adaptation-handoff.md`](../handoffs/2026-08-30-ios-adaptation-handoff.md)
 
 ## Global Constraints
 
