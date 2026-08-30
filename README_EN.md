@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.13`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS version reuses the shared Flutter codebase (adaptation in progress, no signed release yet). All product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.13`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -50,6 +50,12 @@ The current release provides an unsigned HAP of `native-v1.0.6` (see the downloa
 - [DevEco and emulator technical probe](tool/ohos-native/probe.md)
 - [HarmonyOS native release history](https://github.com/WikG1018/site-mark/releases?q=native-&expanded=false)
 
+## iOS version
+
+iOS shares the Flutter UI, business logic, database schema, and the Rust imaging core with Android; platform capabilities (system camera bridge, optional foreground location, photo publishing and deletion, opportunistic BGTaskScheduler catch-up) live in the in-repo Swift plugin. The UI is fully adapted to iOS 26/27 conventions: large-title navigation, Cupertino action sheets and dialogs, glass-capsule toasts, edge-swipe back, and correct dark mode on every surface.
+
+Two things remain, both blocked on external inputs: signing and TestFlight distribution through GitHub Actions once an Apple Developer account is available (signing material never enters the repository), and on-device verification of the dark launch screen, gesture feel, and real-camera behavior. Until then there is no iOS installable package and no timeline.
+
 ## Install and upgrade
 
 1. Prefer the arm64 package; use universal only when the device is incompatible.
@@ -72,7 +78,7 @@ See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releas
 - **v1.0.6**: recoverable media cleanup; gallery publish rollback.
 - **v1.0.0–v1.0.5**: project lifecycle and backup, floating navigation, search and full-screen browsing, publishing pipeline stabilization.
 
-## Improvements completed across the early versions
+## Feature overview
 
 | Area | Current state |
 | --- | --- |
@@ -89,11 +95,11 @@ See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releas
 
 ## Product positioning
 
-Engineering sites need more than "adding text to photos": a smooth capture experience, stable background processing, clear project archiving, and traceable original-photo information.
+I built SiteMark because recording on a jobsite takes more than stamping text on photos: shooting has to feel effortless, background processing has to be dependable, projects need clean archiving, and original-photo details must stay traceable.
 
-SiteMark does not re-implement a camera in the app and does not embed a third-party camera SDK. Through standard Android capabilities it invokes the phone's system/vendor camera, keeping the device's own focus, HDR, stabilization, lens switching, and image tuning; SiteMark handles the engineering details before the shot, local watermark processing after it, record management, and project backup.
+I deliberately did not re-implement a camera or embed a third-party camera SDK — manufacturers have spent years tuning their own lenses, and an app-level rework only makes things worse. SiteMark invokes the system/vendor camera through standard platform APIs, leaving focus, HDR, stabilization, and image quality to the system, and does three things itself: engineering fields before the shot, local watermarking after it, and record/project management.
 
-The released APK has no ads, accounts, cloud sync, or analytics uploads, and it does not request the network permission. Tapping the GitHub repository link hands over to an external browser.
+The published APK has no ads, accounts, cloud sync, or analytics uploads, and it never requests the network permission; repository links open in the external browser. Offline is not a slogan here — it is a hard boundary.
 
 ## Quick start
 
@@ -215,7 +221,7 @@ Camera permission is held by the external system camera app; SiteMark provides t
 
 ## Current limitations
 
-- The downloadable stable version supports Android 12 and later only; the HarmonyOS NEXT native version is a Pre-release unsigned HAP and is not on any app store yet; the iOS version is in adaptation and has no installable signed package yet;
+- The downloadable stable version supports Android 12 and later only; the HarmonyOS NEXT native version is a Pre-release unsigned HAP and is not on any app store yet; the iOS version is fully adapted but has no signed release yet (waiting on an Apple Developer account), so no installable package exists;
 - No cloud sync, multi-user collaboration, or importing from the device gallery;
 - The watermark is not a free-drag template;
 - Background task timing is still subject to Android and vendor scheduling policies; on iOS, background catch-up is scheduled opportunistically by the system and is not guaranteed to run right after a capture;
@@ -230,7 +236,7 @@ Camera permission is held by the external system camera app; SiteMark provides t
 | Data | Drift, SQLite | Projects, settings, capture records, per-project templates, status transitions, filters, and database migrations |
 | Background work | Kotlin, WorkManager, Dart background isolate | Persistent processing queue, failure retries, launch and restart resume |
 | Android integration | Kotlin, Pigeon, Intent, ContentProvider, LocationManager, MediaStore | System camera, optional foreground location, image checks, and gallery publishing |
-| iOS integration | Swift, Pigeon, BGTaskScheduler, PHPhotoLibrary | System camera bridge, optional foreground location, image checks, gallery publishing/deletion, opportunistic background catch-up (in adaptation) |
+| iOS integration | Swift, Pigeon, BGTaskScheduler, PHPhotoLibrary | System camera bridge, optional foreground location, image checks, gallery publishing/deletion, opportunistic background catch-up |
 | Image & archive | Rust, flutter_rust_bridge | EXIF orientation, full-resolution watermarking, SHA-256, CSV/JSON/ZIP, and backup verification |
 
 The HarmonyOS NEXT native line uses Stage + ArkTS + ArkUI, RelationalStore, Preferences, CameraPicker, and PhotoAccessHelper, and calls the same `sitemark_core` Rust crate through a C ABI + C++ N-API. The two product lines share business semantics and the image/archive algorithms, but not the UI SDK or database files. The iOS line reuses the same Flutter UI, business logic, and Rust core; platform capabilities are provided by the in-repo Swift plugin (Pigeon + BGTaskScheduler), sharing business semantics, the database schema, and backup formats with Android — see section 10 of [Current product boundaries and overall architecture](docs/current-product-architecture.md).
@@ -286,7 +292,7 @@ Production releases need `android/key.properties` and the matching keystore. Sig
 
 ## Contributing
 
-Bug reproductions, Android vendor camera compatibility results, privacy reviews, and engineering-record workflow suggestions are welcome. Before starting, read the [contributing guide](CONTRIBUTING.md), the [security policy](SECURITY.md), and the [third-party notices](THIRD_PARTY_NOTICES.md). Automated coding agents should read the [agent entry point](NEXT_AGENT_PROMPT.md) first.
+Bug reproductions, Android vendor camera compatibility results, privacy reviews, and engineering-record workflow suggestions are welcome. Before starting, read the [contributing guide](CONTRIBUTING.md), the [security policy](SECURITY.md), and the [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## License
 

@@ -2,12 +2,14 @@
 
 [English](README_EN.md) | 简体中文
 
-> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.13`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版走 Flutter 复用路线适配中（尚无签名发布）。仓库单分支维护三条产品线。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.13`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
 (Latest `v1.0.13`, targeting Android 17), a native HarmonyOS NEXT implementation published
-alongside it, and an iOS adaptation in progress on the shared Flutter codebase (no signed
-release yet). All product lines live on a single branch.
+alongside it, and an iOS build on the shared Flutter codebase that is fully adapted
+(iOS 26/27-style UI, background catch-up, dark mode) and awaits an Apple Developer
+account for signed distribution — no installable package yet. All product lines live on a
+single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -56,6 +58,12 @@ release yet). All product lines live on a single branch.
 - [DevEco 与模拟器技术探测](tool/ohos-native/probe.md)
 - [鸿蒙原生版发布记录](https://github.com/WikG1018/site-mark/releases?q=native-&expanded=false)
 
+## iOS 版
+
+iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema 和 Rust 图像核心；平台能力（系统相机桥、可选前台定位、相册发布与删除、BGTaskScheduler 机会性后台补拍）由仓库内的 Swift 插件承接。界面已按 iOS 26/27 形态全量适配：大标题导航、Cupertino 动作表与对话框、玻璃胶囊提示、边缘滑动返回，深色模式全表面正确。
+
+剩余工作只有两类，且都需要外部条件：一是 Apple Developer 账号到位后，由 GitHub Actions 完成 TestFlight 与签名发布（证书材料不入库）；二是在真机上验证启动屏深色、滑动手感与相机实拍。在此之前不提供任何 iOS 安装包，也不承诺时间。
+
 ## 安装与升级
 
 1. 优先下载 arm64 安装包；只有设备不兼容时再使用 universal。
@@ -78,7 +86,7 @@ release yet). All product lines live on a single branch.
 - **v1.0.6**：媒体清理可恢复；相册发布失败可回滚。
 - **v1.0.0–v1.0.5**：项目生命周期与备份、悬浮导航、搜索与全屏浏览、发布链路稳定化。
 
-## 从早期版本累计完成的改进
+## 功能总览
 
 | 范围 | 当前状态 |
 | --- | --- |
@@ -95,11 +103,11 @@ release yet). All product lines live on a single branch.
 
 ## 产品定位
 
-工程现场需要的不只是“给照片加文字”，还包括顺手的拍摄体验、稳定的后台处理、清晰的项目归档和可回查的原图信息。
+我做 SiteMark，是因为工程现场的记录需求远不止“给照片加文字”：拍摄要顺手、后台处理要稳、项目归档要清晰、原图信息要可回查。
 
-SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。应用通过 Android 标准能力调用手机系统/厂商相机，保留设备原有的对焦、HDR、防抖、镜头切换和画质调校；SiteMark 负责拍摄前的工程信息、拍摄后的本地水印处理、记录管理和项目备份。
+我刻意不在应用里重新实现相机，也不嵌第三方相机 SDK——厂商对着自家镜头调校了多年，应用层重做一遍只会更差。SiteMark 通过系统标准能力调用手机系统/厂商相机，把对焦、HDR、防抖和画质留给系统；自己只做三件事：拍摄前的工程信息、拍摄后的本地水印处理、以及记录与项目备份。
 
-发布 APK 没有广告、账号、云同步或统计上传，也不申请网络权限。点击 GitHub 仓库链接时会交给外部浏览器处理。
+发布 APK 没有广告、账号、云同步或统计上传，也不申请网络权限；点击 GitHub 仓库链接时交给外部浏览器处理。离线不是营销词，是硬边界。
 
 ## 快速使用
 
@@ -221,7 +229,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 
 ## 当前限制
 
-- 当前可下载稳定版仅支持 Android 12 及以上系统；HarmonyOS NEXT 原生版仅有 Pre-release 的未签名 HAP，尚未上架应用市场；iOS 版适配进行中，尚无可安装的签名包；
+- 当前可下载稳定版仅支持 Android 12 及以上系统；HarmonyOS NEXT 原生版仅有 Pre-release 的未签名 HAP，尚未上架应用市场；iOS 版已完成适配但尚无签名发布（等 Apple Developer 账号），当前无可安装包；
 - 不提供云同步、多人协作或图库图片导入；
 - 水印不是自由拖拽模板；
 - 后台任务执行时机仍受 Android 和厂商系统调度策略影响；iOS 上由系统机会性调度后台补拍，不保证拍完立刻处理；
@@ -236,7 +244,7 @@ SiteMark 不在应用里重新实现相机，也不嵌入第三方相机 SDK。�
 | 数据 | Drift、SQLite | 项目、设置、拍摄记录、项目内模板、状态流转、筛选与数据库迁移 |
 | 后台任务 | Kotlin、WorkManager、Dart 后台 isolate | 持久化处理队列、失败重试、启动和重启恢复 |
 | Android 集成 | Kotlin、Pigeon、Intent、ContentProvider、LocationManager、MediaStore | 系统相机、可选前台定位、图片检查和相册发布 |
-| iOS 集成 | Swift、Pigeon、BGTaskScheduler、PHPhotoLibrary | 系统相机桥、可选前台定位、图片检查、相册发布与删除、机会性后台补拍（适配中） |
+| iOS 集成 | Swift、Pigeon、BGTaskScheduler、PHPhotoLibrary | 系统相机桥、可选前台定位、图片检查、相册发布与删除、机会性后台补拍 |
 | 图像与归档 | Rust、flutter_rust_bridge | EXIF 方向、全分辨率水印、SHA-256、CSV/JSON/ZIP 和备份校验 |
 
 HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Preferences、CameraPicker 和 PhotoAccessHelper，通过 C ABI + C++ N-API 调用同一 `sitemark_core` Rust crate。两条产品线共享业务语义、图像和归档算法，不共享 UI SDK 或数据库文件。iOS 线复用同一套 Flutter 界面、业务逻辑与 Rust 核心，平台能力由仓库内 Swift 插件（Pigeon + BGTaskScheduler）承接，与 Android 共享业务语义、数据库 schema 和备份格式，详见[当前产品边界与总体架构](docs/current-product-architecture.md)第 10 节。
@@ -292,7 +300,7 @@ pwsh -File ./tool/ohos-native/run-host-tests.ps1          # 主机契约门禁
 
 ## 参与贡献
 
-欢迎提交缺陷复现、Android 厂商相机兼容性结果、隐私审查和工程记录流程建议。开始前请阅读 [贡献指南](CONTRIBUTING.md)、[安全政策](SECURITY.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。自动化编码 Agent 请先阅读 [Agent 执行入口](NEXT_AGENT_PROMPT.md)。
+欢迎提交缺陷复现、Android 厂商相机兼容性结果、隐私审查和工程记录流程建议。开始前请阅读 [贡献指南](CONTRIBUTING.md)、[安全政策](SECURITY.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
 ## License
 

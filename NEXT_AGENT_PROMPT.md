@@ -3,11 +3,12 @@
 > 把本文件交给负责后续实现的 Agent 作为默认入口。  
 > 它描述**当前仓库的事实、边界和工作方式**，不是某一版本的任务清单。
 
-## 0. 仓库结构：单分支、双产品线
+## 0. 仓库结构：单分支、三条产品线
 
-仓库自 2026-08-28 起回到**单分支**演进：`main` 同时承载 Android 稳定线（Flutter）与 HarmonyOS NEXT **原生**实现（Stage + ArkTS + ArkUI，位于 `ohos-native/`，不使用 Flutter 鸿蒙适配层）。原 `ohos-native` 开发分支已并回 `main` 并删除；接到任务时：
+仓库自 2026-08-28 起回到**单分支**演进：`main` 同时承载 Android 稳定线（Flutter）、HarmonyOS NEXT **原生**实现（Stage + ArkTS + ArkUI，位于 `ohos-native/`，不使用 Flutter 鸿蒙适配层）与 iOS 复用线（Flutter + Swift 插件）。原 `ohos-native` 开发分支已并回 `main` 并删除；接到任务时：
 
 - **事实源顺序：** [`ohos-native/README.md`](ohos-native/README.md) → [`ohos-native/docs/deltas.md`](ohos-native/docs/deltas.md)（平台差异与转正条件）→ 最新一篇 `ohos-native/docs/verification-*.md`。与本文件冲突时以上述文档和代码为准。
+- **iOS 线事实源：** [`docs/current-product-architecture.md`](docs/current-product-architecture.md) 第 10 节 → [`docs/superpowers/specs/2026-08-30-ios-parity-hig.md`](docs/superpowers/specs/2026-08-30-ios-parity-hig.md)（含 Phase 5–8 追加批次）→ `docs/decision-records.md` D-022。
 - **构建与门禁（本地 DevEco）：** 公共 CI runner 没有 DevEco/HarmonyOS SDK，ArkTS 编译、全量测试和 HAP 构建**只能在本机完成**：
   1. `pwsh -File ./tool/ohos-native/build-rust.ps1`（新工作树首次必须；生成 `arm64-v8a` / `x86_64` 原生库）
   2. `pwsh -File ./tool/ohos-native/build-hap.ps1 -SkipRust -RunTests`（ArkTS 全量测试 + debug unsigned HAP）
@@ -26,7 +27,7 @@
 | 应用 ID | Android `io.github.wikg1018.sitemark`；鸿蒙原生 `io.github.wikg1018.sitemark.native` |
 | 默认基础分支 | `main`（唯一开发分支，Android 与鸿蒙原生同线演进；见第 0 节） |
 | 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.6`）；Android 见 `pubspec.yaml`（`1.0.13+28`） |
-| 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中；iOS Flutter 复用线 Phase 0–3 已合入（BGTaskScheduler/诊断页/l10n），Phase 5 功能对齐与 HIG 界面适配见 `docs/superpowers/specs/2026-08-30-ios-parity-hig.md`；Phase 4（TestFlight）等 Apple Developer 账号 |
+| 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中；iOS 复用线 Phase 0–3、5–8 已全部合入（Swift 桥/BGTaskScheduler/界面全量 iOS 26/27 形态/深色桥接），仅剩 Phase 4（TestFlight/签名）等 Apple Developer 账号与真机验证项 |
 | 数据库 | 鸿蒙 RDB 契约测试见 `tool/test_ohos_capture_database_contract*`；Android Drift schema 见 `lib/data/app_database.dart` |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
 
@@ -64,7 +65,7 @@
 - **后台处理**：全分辨率串行队列（WorkManager）；幂等、可恢复；强行停止后需用户再打开应用。iOS 由 BGTaskScheduler 机会性补拍承接，不模拟 Android 节奏。  
 - **图像核心**：Rust + flutter_rust_bridge；跨 FFI 只传路径与结构化参数。  
 - **SQLite 为状态事实源**：Drift/SQLite；schema 变更必须可迁移且不丢用户数据。  
-- **iOS 线（D-022）**：Flutter 复用 + Swift 桥；界面按平台惯例自适应（自适应控件/CupertinoAlertDialog），不做 iOS 专属导航重构或原生重写。  
+- **iOS 线（D-022）**：Flutter 复用 + Swift 桥；相机维持系统桥（UIImagePickerController，不做 AVCaptureSession）。界面已按 iOS 26/27 形态全量落地（大标题导航/Cupertino 动作表与对话框/玻璃胶囊 Toast/CupertinoPage 边缘返回/深色主题桥接），改动必须保持 Android 分支行为零变化。  
 - **不做**：图库导入、自由拖拽水印、多人协作、云备份。
 
 ## 4. 工程约定
@@ -144,7 +145,7 @@ cargo test --manifest-path rust/Cargo.toml
 
 - 发布步骤与自动化门禁：`docs/release-checklist.md`。  
 - **`v1.0.13` 是 Latest**（全屏查看器单指拖动修复随本版发布）；`native-v1.0.6` 为当前鸿蒙原生发布（未签名 HAP）。后续发版按清单完成拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。
-- **iOS 第三条产品线：** Phase 0–2b 已合入 `main`（PR #119–#122）。接替 Agent 从 [`docs/superpowers/handoffs/2026-08-30-ios-adaptation-handoff.md`](docs/superpowers/handoffs/2026-08-30-ios-adaptation-handoff.md) 开工，下一步是 Phase 3（Dart 接线 / BGTaskScheduler / 诊断页与 l10n）。Phase 4（TestFlight）在用户提供 Apple Developer 账号之前不启动。  
+- **iOS 第三条产品线：** Phase 0–3、5–8 已全部合入 `main`（PR #119–#128，含实施记录见 `docs/superpowers/plans/2026-08-30-ios-adaptation.md`）。下一步是 Phase 4（TestFlight/签名），在用户提供 Apple Developer 账号之前不启动；真机项（深色启动屏/滑动手感/相机实拍）待设备。  
 - Agent **默认不**创建 GitHub Release、不上传签名密钥、不在未授权时合并 `main`。
 
 ## 8. 历史文档怎么用
