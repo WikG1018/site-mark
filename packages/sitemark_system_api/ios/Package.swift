@@ -7,6 +7,13 @@ import PackageDescription
 
 let package = Package(
     name: "sitemark-system-api-ios",
+    // SPM's tools-5.9 default macOS floor (10.13) predates the throwing
+    // FileHandle APIs the archive copy path uses (10.15.4+); the pod build
+    // keeps its own iOS 14 deployment target from the Xcode project.
+    platforms: [
+        .macOS(.v13),
+        .iOS(.v14),
+    ],
     targets: [
         .target(
             name: "SiteMarkSystemApiCore",

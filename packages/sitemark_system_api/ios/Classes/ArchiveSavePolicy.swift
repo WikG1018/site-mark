@@ -49,7 +49,7 @@ public enum ArchiveSavePolicy {
         let output = try FileHandle(forWritingTo: destination)
         defer { try? output.close() }
         while let chunk = try input.read(upToCount: 64 * 1024), !chunk.isEmpty {
-            output.write(chunk)
+            try output.write(contentsOf: chunk)
         }
     }
 
