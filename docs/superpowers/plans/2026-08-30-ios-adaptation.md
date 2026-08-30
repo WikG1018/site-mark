@@ -67,6 +67,8 @@
 
 验收：`flutter test` 全量绿；文档与设计文档一致。
 
+实施记录（2026-08-30，PR #124）：钉死版本插件源码调研发现两处关键事实并据此接线——workmanager_apple 0.9.1+2 **不会**自动注册 BGTaskScheduler handler（`registerLaunchHandlers` 为 0.10+ API，未使用），handler 由 AppDelegate 在 launch 完成前显式 `registerBGProcessingTask(withIdentifier:)`；且 iOS dispatcher 按 **uniqueName** 回传任务名，一次性任务到达时是串行队列名而非 `captureProcessingTask`，原检查会静默忽略全部 iOS 任务。落地为三方精确一致的 identifier `io.github.wikg1018.sitemark.capture-processing`（Dart 常量 ↔ Info.plist ↔ AppDelegate，CI PlistBuddy 门禁 + Dart 漂移测试双保险）；`BackgroundWorkClient.scheduleBackgroundReconcile`（Android no-op / iOS 提交 BGProcessingTaskRequest，前台 initialize 提交、后台任务体消费后再武装）；dispatcher 增加 BG 任务分支（重入队 captured/rendering 走幂等管线）与 uniqueName 识别；`setPluginRegistrantCallback` 补上后台引擎插件注册（否则后台 isolate 的 drift/path_provider/Rust 全部 channel-error）。诊断页新增「平台差异」卡片：后台处理说明 + iOS 专属机会性调度披露（内容分支，用 `defaultTargetPlatform`，不改交互）；相册删除统一「可能弹出系统确认」表述；补模糊定位说明。平台初始化审查结论为无需改码：Darwin 通知初始化已就位且 Android channel 经空安全护栏、Dart 与 Swift 原图/journal 同在 Application Support、`main.dart` 始终注入生产内存压力服务。文档四处更新（两份产品文档 iOS 小节、中英 README 三条产品线表述，iOS 未进任何 Release 下载表）。TDD 先红后绿，新增 13 用例；本地 Flutter 3.44.6 全量 `flutter test` 1020 通过（既有 1007 零回归）、`dart analyze` 0 issue、`dart format` 0 diff；XCTest 45 例未触碰。
+
 ### Phase 4 — 分发准备（前置条件：Apple Developer 账号）
 
 1. 用户提供 Apple Developer Program 账号与证书材料后：fastlane 或 `xcodebuild archive` 接入 GitHub Secrets；TestFlight 上传 job。
