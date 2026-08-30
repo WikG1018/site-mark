@@ -884,6 +884,7 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
             seedColor: seedColor,
             dynamicColor: useDynamicColor ? darkDynamic : null,
           ),
+          builder: bridgeCupertinoTheme,
           routerConfig: ref.watch(routerProvider),
         );
       },

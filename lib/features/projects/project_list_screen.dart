@@ -323,6 +323,8 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                           : 'project-list-${_status.name}',
                     ),
                     controller: listController,
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: EdgeInsets.fromLTRB(
                       16,
                       16,
