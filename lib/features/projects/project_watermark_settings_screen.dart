@@ -175,7 +175,7 @@ class _ProjectWatermarkSettingsScreenState
                   Text('${(_opacity! * 100).round()}%'),
                 ],
               ),
-              Slider(
+              Slider.adaptive(
                 value: _opacity!,
                 min: 0.2,
                 max: 0.95,
@@ -195,7 +195,7 @@ class _ProjectWatermarkSettingsScreenState
                   Text('${(_fontScale! * 100).round()}%'),
                 ],
               ),
-              Slider(
+              Slider.adaptive(
                 key: const Key('project-font-scale-slider'),
                 value: _fontScale!,
                 min: 0.80,

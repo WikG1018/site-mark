@@ -26,7 +26,7 @@
 | 应用 ID | Android `io.github.wikg1018.sitemark`；鸿蒙原生 `io.github.wikg1018.sitemark.native` |
 | 默认基础分支 | `main`（唯一开发分支，Android 与鸿蒙原生同线演进；见第 0 节） |
 | 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.6`）；Android 见 `pubspec.yaml`（`1.0.13+28`） |
-| 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中；iOS 适配进行中（Phase 0–2b 已合入，下一步 Phase 3，交接见 `docs/superpowers/handoffs/2026-08-30-ios-adaptation-handoff.md`） |
+| 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中；iOS Flutter 复用线 Phase 0–3 已合入（BGTaskScheduler/诊断页/l10n），Phase 5 功能对齐与 HIG 界面适配见 `docs/superpowers/specs/2026-08-30-ios-parity-hig.md`；Phase 4（TestFlight）等 Apple Developer 账号 |
 | 数据库 | 鸿蒙 RDB 契约测试见 `tool/test_ohos_capture_database_contract*`；Android Drift schema 见 `lib/data/app_database.dart` |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
 
@@ -61,10 +61,11 @@
 - **无网络发布面**：发布 APK 不申请 `INTERNET` / `ACCESS_NETWORK_STATE`；无账号、广告、分析、云同步、远程 API。  
 - **定位**：仅前台、可拒绝；不申请后台定位。优先原图 EXIF GPS。  
 - **存储**：原图与中间文件在应用私有目录；水印成片经 MediaStore 到 `Pictures/SiteMark`。不申请广泛媒体权限。  
-- **后台处理**：全分辨率串行队列（WorkManager）；幂等、可恢复；强行停止后需用户再打开应用。  
+- **后台处理**：全分辨率串行队列（WorkManager）；幂等、可恢复；强行停止后需用户再打开应用。iOS 由 BGTaskScheduler 机会性补拍承接，不模拟 Android 节奏。  
 - **图像核心**：Rust + flutter_rust_bridge；跨 FFI 只传路径与结构化参数。  
 - **SQLite 为状态事实源**：Drift/SQLite；schema 变更必须可迁移且不丢用户数据。  
-- **不做**：iOS、图库导入、自由拖拽水印、多人协作、云备份。
+- **iOS 线（D-022）**：Flutter 复用 + Swift 桥；界面按平台惯例自适应（自适应控件/CupertinoAlertDialog），不做 iOS 专属导航重构或原生重写。  
+- **不做**：图库导入、自由拖拽水印、多人协作、云备份。
 
 ## 4. 工程约定
 

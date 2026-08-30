@@ -1,5 +1,7 @@
 // test/features/settings/sections/watermark_defaults_section_screen_test.dart
 import 'package:drift/native.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,5 +94,20 @@ void main() {
   testWidgets('shows 9 accent chips', (tester) async {
     await pumpScreen(tester);
     expect(find.byType(AccentChoiceChip), findsNWidgets(9));
+  });
+
+  testWidgets('iOS renders opacity slider as a CupertinoSlider', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await pumpScreen(tester);
+
+      // Slider.adaptive is itself typed Slider; on iOS it renders
+      // CupertinoSlider for both the opacity and font-scale controls.
+      expect(find.byType(CupertinoSlider), findsNWidgets(2));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

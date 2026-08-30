@@ -89,7 +89,7 @@ class _WatermarkDefaultsSectionScreenState
                       Text('$percent%'),
                     ],
                   ),
-                  Slider(
+                  Slider.adaptive(
                     key: const Key('opacity-slider'),
                     value: opacity,
                     min: 0.20,
@@ -137,7 +137,7 @@ class _WatermarkDefaultsSectionScreenState
                       Text('$percent%'),
                     ],
                   ),
-                  Slider(
+                  Slider.adaptive(
                     key: const Key('default-font-scale-slider'),
                     value: fontScale,
                     min: 0.80,

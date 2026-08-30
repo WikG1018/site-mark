@@ -81,7 +81,7 @@ class AppearanceSectionScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
           ],
-          SwitchListTile(
+          SwitchListTile.adaptive(
             key: const Key('dynamic-color-switch'),
             title: Text(strings.dynamicColorTitle),
             subtitle: Text(strings.dynamicColorSubtitle),

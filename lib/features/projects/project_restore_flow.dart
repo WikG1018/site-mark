@@ -8,6 +8,7 @@ import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 
@@ -62,23 +63,19 @@ Future<void> runProjectRestoreFlow(
   ProjectRestoreFlowLifetime? lifetime,
 }) async {
   final strings = AppStrings.of(context);
-  final shouldChoose = await showDialog<bool>(
+  final shouldChoose = await showAppDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text(strings.restoreProjects),
-      content: Text(strings.restoreExplanation),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: Text(strings.cancel),
-        ),
-        FilledButton(
-          key: const Key('choose-restore-zip'),
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: Text(strings.chooseRestoreZip),
-        ),
-      ],
-    ),
+    title: Text(strings.restoreProjects),
+    content: Text(strings.restoreExplanation),
+    actions: [
+      AppDialogAction(label: strings.cancel, result: false),
+      AppDialogAction(
+        key: const Key('choose-restore-zip'),
+        label: strings.chooseRestoreZip,
+        result: true,
+        isDefault: true,
+      ),
+    ],
   );
   if (shouldChoose != true || !context.mounted) return;
 
@@ -343,23 +340,19 @@ Future<void> _showRestoreSuccess(
   final message = '${strings.restoreComplete}\n$summary';
 
   if (archivedCount > 0) {
-    final viewArchived = await showDialog<bool>(
+    final viewArchived = await showAppDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(strings.restoreComplete),
-        content: Text(summary),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(strings.done),
-          ),
-          FilledButton(
-            key: const Key('view-archived-projects'),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(strings.viewArchivedProjects),
-          ),
-        ],
-      ),
+      title: Text(strings.restoreComplete),
+      content: Text(summary),
+      actions: [
+        AppDialogAction(label: strings.done, result: false),
+        AppDialogAction(
+          key: const Key('view-archived-projects'),
+          label: strings.viewArchivedProjects,
+          result: true,
+          isDefault: true,
+        ),
+      ],
     );
     if (!context.mounted) return;
     if (viewArchived == true) {

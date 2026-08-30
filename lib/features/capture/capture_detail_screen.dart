@@ -10,6 +10,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_failure_guidance.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/domain/capture_file_info.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
@@ -708,28 +709,19 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
 
   Future<void> _deleteAll(CaptureRecord capture) async {
     final strings = AppStrings.of(context);
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(strings.deleteAll),
-        content: Text(strings.confirmDeleteAll(1)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(strings.cancel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-            ),
-            onPressed: () {
-              HapticFeedback.heavyImpact();
-              Navigator.pop(dialogContext, true);
-            },
-            child: Text(strings.deleteAction),
-          ),
-        ],
-      ),
+      title: Text(strings.deleteAll),
+      content: Text(strings.confirmDeleteAll(1)),
+      actions: [
+        AppDialogAction(label: strings.cancel, result: false),
+        AppDialogAction(
+          label: strings.deleteAction,
+          result: true,
+          isDestructive: true,
+          onPressed: () => HapticFeedback.heavyImpact(),
+        ),
+      ],
     );
     if (confirmed != true) return;
     final current = await _currentCaptureForAction(

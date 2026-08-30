@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 
 class DiagnosticsSectionScreen extends ConsumerWidget {
   const DiagnosticsSectionScreen({
@@ -96,25 +97,18 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
 
   Future<void> _generateAndShare(BuildContext context, WidgetRef ref) async {
     final strings = AppStrings.of(context);
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        final dialogStrings = AppStrings.of(dialogContext);
-        return AlertDialog(
-          title: Text(dialogStrings.shareDiagnosticBundleTitle),
-          content: Text(dialogStrings.shareDiagnosticBundleContent),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(dialogStrings.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(dialogStrings.confirmGenerate),
-            ),
-          ],
-        );
-      },
+      title: Text(strings.shareDiagnosticBundleTitle),
+      content: Text(strings.shareDiagnosticBundleContent),
+      actions: [
+        AppDialogAction(label: strings.cancel, result: false),
+        AppDialogAction(
+          label: strings.confirmGenerate,
+          result: true,
+          isDefault: true,
+        ),
+      ],
     );
     if (confirmed != true || !context.mounted) return;
     try {
@@ -131,25 +125,15 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
   }
 
   Future<void> _clear(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final strings = AppStrings.of(context);
+    final confirmed = await showAppDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        final dialogStrings = AppStrings.of(dialogContext);
-        return AlertDialog(
-          title: Text(dialogStrings.clearDiagnosticsTitle),
-          content: Text(dialogStrings.clearDiagnosticsContent),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(dialogStrings.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: Text(dialogStrings.clear),
-            ),
-          ],
-        );
-      },
+      title: Text(strings.clearDiagnosticsTitle),
+      content: Text(strings.clearDiagnosticsContent),
+      actions: [
+        AppDialogAction(label: strings.cancel, result: false),
+        AppDialogAction(label: strings.clear, result: true, isDefault: true),
+      ],
     );
     if (confirmed != true) return;
     final service = await ref.read(diagnosticBundleServiceProvider.future);

@@ -220,6 +220,22 @@ HarmonyOS NEXT 产品线使用 Stage + ArkTS + ArkUI 重写界面、导航、RDB
 
 当前验收只覆盖 DevEco API 22 x86_64 模拟器、ArkTS 自动化测试和 `arm64-v8a`/`x86_64` 双 ABI 构建。正式签名、HarmonyOS NEXT 真机相机、相册授权和高像素性能在完成真机回归前不得宣称已对等。
 
+## D-022 iOS 采用 Flutter 复用线并按平台惯例自适应界面
+
+**状态：已接受（CI 编译验证级，真机视觉走查待 Apple 账号阶段）**
+
+iOS 产品线复用 `lib/` 界面与业务逻辑、`rust/` 图像核心、数据库 schema 与备份格式，
+平台能力由仓库内 Swift 插件承接（见 Phase 0 设计）。界面遵循平台惯例：组件层使用
+Flutter 自适应构造（`Switch.adaptive` / `SwitchListTile.adaptive` / `Slider.adaptive`），
+标准确认/信息对话框经 `lib/shared/ui/adaptive_dialog.dart` 在 iOS 呈现
+CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用图标与 Android
+同源（`tool/generate_launcher_icon.py` 产出的品牌图标）；启动屏背景色跟随系统深浅色。
+
+明确不做平台分支重写：不引入 iOS 专属导航结构或大标题重构，不内置相机 SDK
+（iOS 经 `UIImagePickerController` 桥，与 D-001 的「系统相机」精神一致）；后台调度
+差异（BGTaskScheduler 机会性补拍）如实展示在诊断页，不模拟 Android 节奏。
+品牌视觉变更时需同步刷新 iOS `AppIcon.appiconset` 与 `assets/branding/`。
+
 ## 决策变更规则
 
 - 不直接删除已经发布版本遵循的决策；

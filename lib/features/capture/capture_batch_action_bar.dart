@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
@@ -158,28 +159,19 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     required String cancelLabel,
     required String deleteLabel,
   }) {
-    return showDialog<bool>(
+    return showAppDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(cancelLabel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-            ),
-            onPressed: () {
-              HapticFeedback.heavyImpact();
-              Navigator.pop(dialogContext, true);
-            },
-            child: Text(deleteLabel),
-          ),
-        ],
-      ),
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        AppDialogAction(label: cancelLabel, result: false),
+        AppDialogAction(
+          label: deleteLabel,
+          result: true,
+          isDestructive: true,
+          onPressed: () => HapticFeedback.heavyImpact(),
+        ),
+      ],
     );
   }
 
