@@ -52,7 +52,8 @@ jobs:
           dart format packages/sitemark_system_api/lib/src/system_api.g.dart
           git diff --exit-code -- \
             packages/sitemark_system_api/lib/src/system_api.g.dart \
-            packages/sitemark_system_api/android/src/main/kotlin/io/github/wikg1018/sitemark/system/SystemApi.g.kt
+            packages/sitemark_system_api/android/src/main/kotlin/io/github/wikg1018/sitemark/system/SystemApi.g.kt \
+            packages/sitemark_system_api/ios/Classes/SystemApi.g.swift
       - run: flutter analyze
       - run: flutter test
       - run: cargo fmt --manifest-path rust/Cargo.toml --check
@@ -142,6 +143,8 @@ jobs:
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim
       - run: flutter pub get
+      - name: Run Swift bridge policy tests
+        run: swift test --package-path packages/sitemark_system_api/ios
       - name: Build unsigned iOS app
         run: |
           for attempt in 1 2 3; do
