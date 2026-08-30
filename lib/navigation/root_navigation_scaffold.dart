@@ -9,6 +9,7 @@ import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
 import 'package:sitemark/navigation/root_navigation_dock.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
+import 'package:sitemark/shared/ui/adaptive_floating_button.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
 class RootNavigationScaffold extends ConsumerWidget {
@@ -106,12 +107,12 @@ class RootNavigationScaffold extends ConsumerWidget {
                   : null,
               floatingActionButton:
                   showRootNavigation && navigationShell.currentIndex == 0
-                  ? FloatingActionButton(
+                  ? AdaptiveFloatingButton(
                       key: const Key('new-project-fab'),
                       heroTag: 'new-project-fab',
                       onPressed: () => context.push('/projects/new'),
                       tooltip: strings.newProject,
-                      child: const Icon(Icons.add),
+                      icon: Icons.add,
                     )
                   : null,
               child: navigationShell,

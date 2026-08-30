@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 
@@ -38,16 +40,10 @@ class _StorageSectionScreenState extends ConsumerState<StorageSectionScreen> {
       final result = await ref.read(storageUsageServiceProvider).clearExports();
       ref.invalidate(storageUsageProvider);
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(strings.localExportsCleared(result.deletedFiles)),
-        ),
-      );
+      showAppToast(context, strings.localExportsCleared(result.deletedFiles));
     } catch (_) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(strings.clearLocalExportsFailed)));
+      showAppToast(context, strings.clearLocalExportsFailed);
     }
   }
 
@@ -136,7 +132,7 @@ class _StorageSectionScreenState extends ConsumerState<StorageSectionScreen> {
             ),
             loading: () => const Padding(
               padding: EdgeInsets.all(20),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: AdaptiveProgressIndicator()),
             ),
           ),
         ],

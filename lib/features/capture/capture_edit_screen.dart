@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
 
@@ -91,9 +93,7 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _working = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.of(context).regenerationFailed)),
-      );
+      showAppToast(context, AppStrings.of(context).regenerationFailed);
     }
   }
 
@@ -114,7 +114,7 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
         return AdaptivePageScaffold.raw(
           title: strings.editRecord,
           body: waitingForCapture
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: AdaptiveProgressIndicator())
               : captureLoadFailed
               ? _ResourceUnavailableState(
                   key: const Key('capture-load-error'),
@@ -172,12 +172,7 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
                       FilledButton.icon(
                         onPressed: _working ? null : _save,
                         icon: _working
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
+                            ? const AdaptiveProgressIndicator(size: 18)
                             : const Icon(Icons.auto_awesome_outlined),
                         label: Text(strings.regenerateWatermark),
                       ),

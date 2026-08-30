@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_sheet.dart';
 
 enum ProjectAction {
   watermark,
@@ -109,32 +110,18 @@ Future<ProjectAction?> showProjectActionSheet(
 ) {
   final strings = AppStrings.of(context);
   final actions = projectActionsFor(project, strings);
-  final errorColor = Theme.of(context).colorScheme.error;
-  return showModalBottomSheet<ProjectAction>(
+  return showAppActionSheet<ProjectAction>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (sheetContext) => ListView(
-      key: const Key('project-action-sheet'),
-      shrinkWrap: true,
-      children: [
-        for (final item in actions)
-          ListTile(
-            key: item.key,
-            leading: Icon(
-              item.icon,
-              color: item.action == ProjectAction.delete ? errorColor : null,
-            ),
-            title: Text(
-              item.label,
-              style: item.action == ProjectAction.delete
-                  ? TextStyle(color: errorColor)
-                  : null,
-            ),
-            onTap: () => Navigator.pop(sheetContext, item.action),
-          ),
-      ],
-    ),
+    sheetKey: const Key('project-action-sheet'),
+    actions: [
+      for (final item in actions)
+        AppSheetAction(
+          key: item.key,
+          label: item.label,
+          icon: item.icon,
+          isDestructive: item.action == ProjectAction.delete,
+          result: item.action,
+        ),
+    ],
   );
 }

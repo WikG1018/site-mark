@@ -11,6 +11,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/capture_filter.dart';
+import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
@@ -192,11 +193,11 @@ void main() {
     await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
     await tester.pumpAndSettle();
 
-    // The sheet hosts the year/month/day dropdowns.
-    expect(find.byType(DropdownMenu<int?>), findsNWidgets(3));
+    // The sheet hosts the year/month/day compact menus, matching the wide bar.
+    expect(find.byType(CompactFilterMenu<int?>), findsNWidgets(3));
 
     // Changing the year resets month and day, matching the wide bar.
-    await tester.tap(find.byType(DropdownMenu<int?>).at(0));
+    await tester.tap(find.byType(CompactFilterMenu<int?>).at(0));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, '2025'));
     await tester.pumpAndSettle();
@@ -206,7 +207,7 @@ void main() {
     expect(filter.value.day, isNull);
 
     // The month dropdown now only lists months available in 2025.
-    await tester.tap(find.byType(DropdownMenu<int?>).at(1));
+    await tester.tap(find.byType(CompactFilterMenu<int?>).at(1));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(MenuItemButton, '6月'), findsOneWidget);
     expect(find.widgetWithText(MenuItemButton, '7月'), findsNothing);

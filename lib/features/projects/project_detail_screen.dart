@@ -25,6 +25,9 @@ import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/features/projects/project_action_sheet.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
+import 'package:sitemark/shared/ui/adaptive_floating_button.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
@@ -227,11 +230,10 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
 
   void _showSelectionRetry(VoidCallback retry) {
     final strings = AppStrings.of(context);
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(strings.captureListLoadFailed),
-        action: SnackBarAction(label: strings.retry, onPressed: retry),
-      ),
+    showAppToast(
+      context,
+      strings.captureListLoadFailed,
+      action: AppToastAction(label: strings.retry, onPressed: retry),
     );
   }
 
@@ -287,59 +289,59 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               project != null &&
               project.lifecycleStatus == ProjectLifecycleStatus.active &&
               !editing;
-          return Scaffold(
-            appBar: AppBar(
-              title: AnimatedSwitcher(
-                key: const Key('capture-search-title-switcher'),
-                duration: AppMotion.durationOf(context, AppMotion.short4),
-                layoutBuilder: (currentChild, previousChildren) => Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [...previousChildren, ?currentChild],
-                ),
-                child: project != null && _searching
-                    ? CaptureSearchField(
-                        key: const ValueKey('capture-search-title'),
-                        initialText: _searchText,
-                        onChanged: _onSearchChanged,
-                      )
-                    : Text(title, key: const ValueKey('capture-list-title')),
+          return AdaptivePageScaffold.raw(
+            title: title,
+            titleWidget: AnimatedSwitcher(
+              key: const Key('capture-search-title-switcher'),
+              duration: AppMotion.durationOf(context, AppMotion.short4),
+              layoutBuilder: (currentChild, previousChildren) => Stack(
+                alignment: Alignment.centerLeft,
+                children: [...previousChildren, ?currentChild],
               ),
-              actions: [
-                if (project != null && !_searching && !editing)
-                  IconButton(
-                    key: const Key('search-captures'),
-                    onPressed: () => setState(() => _searching = true),
-                    tooltip: strings.searchCaptures,
-                    icon: const Icon(Icons.search),
-                  ),
-                if (project != null && !editing && !_searching)
-                  IconButton(
-                    key: const Key('project-actions'),
-                    tooltip: strings.projectActions,
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () => _showProjectActions(project),
-                  ),
-                if (project != null && editing)
-                  IconButton(
-                    key: const Key('select-all-captures'),
-                    onPressed: _selectAllLoading ? null : _toggleSelectAll,
-                    tooltip: allEligibleSelected
-                        ? strings.deselectAll
-                        : strings.selectAll,
-                    icon: _selectAllLoading
-                        ? const SizedBox.square(
-                            key: Key('select-all-progress'),
-                            dimension: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(
-                            allEligibleSelected
-                                ? Icons.check_box_outline_blank
-                                : Icons.select_all_outlined,
-                          ),
-                  ),
-              ],
+              child: project != null && _searching
+                  ? CaptureSearchField(
+                      key: const ValueKey('capture-search-title'),
+                      initialText: _searchText,
+                      onChanged: _onSearchChanged,
+                    )
+                  : Text(title, key: const ValueKey('capture-list-title')),
             ),
+            actions: [
+              if (project != null && !_searching && !editing)
+                IconButton(
+                  key: const Key('search-captures'),
+                  onPressed: () => setState(() => _searching = true),
+                  tooltip: strings.searchCaptures,
+                  icon: const Icon(Icons.search),
+                ),
+              if (project != null && !editing && !_searching)
+                IconButton(
+                  key: const Key('project-actions'),
+                  tooltip: strings.projectActions,
+                  icon: const Icon(Icons.more_vert),
+                  onPressed: () => _showProjectActions(project),
+                ),
+              if (project != null && editing)
+                IconButton(
+                  key: const Key('select-all-captures'),
+                  onPressed: _selectAllLoading ? null : _toggleSelectAll,
+                  tooltip: allEligibleSelected
+                      ? strings.deselectAll
+                      : strings.selectAll,
+                  icon: _selectAllLoading
+                      ? const SizedBox.square(
+                          key: Key('select-all-progress'),
+                          dimension: 20,
+                          child: AdaptiveProgressIndicator(size: 20),
+                        )
+                      : Icon(
+                          allEligibleSelected
+                              ? Icons.check_box_outline_blank
+                              : Icons.select_all_outlined,
+                        ),
+                ),
+            ],
+            iosBodyPadding: EdgeInsets.zero,
             body: FloatingDockLayout(
               dock: project != null && editing
                   ? CaptureBatchActionBar(
@@ -374,13 +376,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   ScaleTransition(scale: animation, child: child),
               child: !canCapture
                   ? const SizedBox.shrink()
-                  : FloatingActionButton.extended(
+                  : AdaptiveFloatingButton(
                       key: const ValueKey('capture-fab'),
                       heroTag: 'project-capture-fab-${widget.projectId}',
                       onPressed: () =>
                           context.push('/projects/${widget.projectId}/capture'),
-                      icon: const Icon(Icons.photo_camera_outlined),
-                      label: Text(strings.capture),
+                      icon: Icons.photo_camera_outlined,
+                      label: strings.capture,
                     ),
             ),
           );
@@ -577,20 +579,15 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     ProjectLifecycleStatus target,
   ) async {
     final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.of(context);
     final service = ref.read(projectLifecycleServiceProvider);
     try {
       final preview = await service.preview(projectId, target);
       final requiresSettledCaptures = target != ProjectLifecycleStatus.active;
       if (requiresSettledCaptures && preview.processingCount > 0) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              strings.projectLifecycleProcessingBlocked(
-                preview.processingCount,
-              ),
-            ),
-          ),
+        if (!mounted) return;
+        showAppToast(
+          context,
+          strings.projectLifecycleProcessingBlocked(preview.processingCount),
         );
         return;
       }
@@ -618,44 +615,35 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       }
       await service.transition(preview, confirmFailed: confirmFailed);
     } on ProjectLifecycleProcessingException catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            strings.projectLifecycleProcessingBlocked(error.processingCount),
-          ),
-        ),
+      if (!mounted) return;
+      showAppToast(
+        context,
+        strings.projectLifecycleProcessingBlocked(error.processingCount),
       );
     } on ProjectLifecycleConfirmationRequiredException catch (error) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            strings.projectLifecycleFailedConfirm(error.failedCount),
-          ),
-        ),
+      if (!mounted) return;
+      showAppToast(
+        context,
+        strings.projectLifecycleFailedConfirm(error.failedCount),
       );
     } on ProjectLifecycleConflictException {
-      messenger.showSnackBar(
-        SnackBar(content: Text(strings.projectLifecycleConflict)),
-      );
+      if (!mounted) return;
+      showAppToast(context, strings.projectLifecycleConflict);
     } on ProjectLifecycleInvalidTransitionException {
-      messenger.showSnackBar(
-        SnackBar(content: Text(strings.projectLifecycleConflict)),
-      );
+      if (!mounted) return;
+      showAppToast(context, strings.projectLifecycleConflict);
     }
   }
 
   Future<void> _deleteProject(Project project) async {
     final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.of(context);
     final service = ref.read(projectDeletionServiceProvider);
     late final ProjectDeletionPreview preview;
     try {
       preview = await service.preview(project.id);
     } catch (_) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(strings.deleteProjectPreviewFailed)),
-      );
+      showAppToast(context, strings.deleteProjectPreviewFailed);
       return;
     }
     if (!mounted) return;
@@ -669,14 +657,11 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     );
     if (!mounted || result == null) return;
     context.go('/');
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          result.cleanupPending
-              ? strings.projectDeletedCleanupPending
-              : strings.projectDeleted,
-        ),
-      ),
+    showAppToast(
+      context,
+      result.cleanupPending
+          ? strings.projectDeletedCleanupPending
+          : strings.projectDeleted,
     );
   }
 }

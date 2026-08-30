@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/features/capture/capture_owned_route_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/motion.dart';
 
@@ -212,10 +213,7 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
                     height: 24,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      child: AdaptiveProgressIndicator(size: 18),
                     ),
                   )
                 : _error != null

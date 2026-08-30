@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/theme/accent_choice_chip.dart'
@@ -52,8 +54,9 @@ class _ProjectWatermarkSettingsScreenState
   Widget build(BuildContext context) {
     final database = ref.watch(databaseProvider);
     final strings = AppStrings.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(strings.projectWatermarkSettings)),
+    return AdaptivePageScaffold.raw(
+      title: strings.projectWatermarkSettings,
+      iosBodyPadding: EdgeInsets.zero,
       body: FutureBuilder<Project?>(
         future: _projectFuture,
         builder: (context, snapshot) {
@@ -64,7 +67,7 @@ class _ProjectWatermarkSettingsScreenState
           final projectLoadFailed = project == null && snapshot.hasError;
           if (project == null) {
             if (waitingForProject) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: AdaptiveProgressIndicator());
             }
             return _ResourceUnavailableState(
               key: projectLoadFailed
@@ -230,10 +233,7 @@ class _ProjectWatermarkSettingsScreenState
               FilledButton.icon(
                 onPressed: _saving ? null : () => _save(database),
                 icon: _saving
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const AdaptiveProgressIndicator(size: 18)
                     : const Icon(Icons.check),
                 label: Text(strings.save),
               ),

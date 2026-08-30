@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -106,11 +107,7 @@ class _LocationPermissionTile extends StatelessWidget {
       leading: const Icon(Icons.location_on_outlined),
       title: Text(strings.locationLabel),
       trailing: current == null
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? AdaptiveProgressIndicator(size: 16)
           : Text(enabled ? strings.enabled : strings.disabled),
       subtitle: current != null && !enabled
           ? Text(

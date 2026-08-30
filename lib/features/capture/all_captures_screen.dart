@@ -20,9 +20,12 @@ import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/features/capture/capture_search_field.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 
 /// Global capture-records surface backed by a fixed-size cursor pager.
 class AllCapturesScreen extends ConsumerStatefulWidget {
@@ -210,11 +213,10 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
 
   void _showSelectionRetry(VoidCallback retry) {
     final strings = AppStrings.of(context);
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(strings.captureListLoadFailed),
-        action: SnackBarAction(label: strings.retry, onPressed: retry),
-      ),
+    showAppToast(
+      context,
+      strings.captureListLoadFailed,
+      action: AppToastAction(label: strings.retry, onPressed: retry),
     );
   }
 
@@ -251,75 +253,75 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _handleRootBack();
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: AnimatedSwitcher(
-            key: const Key('capture-search-title-switcher'),
-            duration: AppMotion.durationOf(context, AppMotion.short4),
-            layoutBuilder: (currentChild, previousChildren) => Stack(
-              alignment: Alignment.centerLeft,
-              children: [...previousChildren, ?currentChild],
-            ),
-            child: _searching
-                ? CaptureSearchField(
-                    key: const ValueKey('capture-search-title'),
-                    initialText: _searchText,
-                    onChanged: _onSearchChanged,
-                  )
-                : Text(
-                    strings.allRecords,
-                    key: const ValueKey('capture-list-title'),
-                  ),
+      child: AdaptivePageScaffold.raw(
+        title: strings.allRecords,
+        titleWidget: AnimatedSwitcher(
+          key: const Key('capture-search-title-switcher'),
+          duration: AppMotion.durationOf(context, AppMotion.short4),
+          layoutBuilder: (currentChild, previousChildren) => Stack(
+            alignment: Alignment.centerLeft,
+            children: [...previousChildren, ?currentChild],
           ),
-          actions: [
-            if (!_searching && !editing)
-              IconButton(
-                key: const Key('search-captures'),
-                onPressed: () => setState(() => _searching = true),
-                tooltip: strings.searchCaptures,
-                icon: const Icon(Icons.search),
-              ),
-            if (editing)
-              IconButton(
-                key: const Key('select-all-captures'),
-                onPressed: _selectAllLoading ? null : _toggleSelectAll,
-                tooltip: allEligibleSelected
-                    ? strings.deselectAll
-                    : strings.selectAll,
-                icon: _selectAllLoading
-                    ? const SizedBox.square(
-                        key: Key('select-all-progress'),
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        allEligibleSelected
-                            ? Icons.check_box_outline_blank
-                            : Icons.select_all_outlined,
-                      ),
-              ),
-            if (!_searching || editing)
-              IconButton(
-                key: const Key('edit-captures'),
-                onPressed: () {
-                  if (_selectionController.editing) {
-                    _invalidateSelectionRequests();
-                    _selectionController.exit();
-                  } else {
-                    _selectionController.enter();
-                  }
-                },
-                tooltip: editing ? strings.done : strings.editRecords,
-                icon: AnimatedSwitcher(
-                  duration: AppMotion.durationOf(context, AppMotion.short4),
-                  child: Icon(
-                    editing ? Icons.done : Icons.edit_outlined,
-                    key: ValueKey(editing),
-                  ),
+          child: _searching
+              ? CaptureSearchField(
+                  key: const ValueKey('capture-search-title'),
+                  initialText: _searchText,
+                  onChanged: _onSearchChanged,
+                )
+              : Text(
+                  strings.allRecords,
+                  key: const ValueKey('capture-list-title'),
+                ),
+        ),
+        actions: [
+          if (!_searching && !editing)
+            IconButton(
+              key: const Key('search-captures'),
+              onPressed: () => setState(() => _searching = true),
+              tooltip: strings.searchCaptures,
+              icon: const Icon(Icons.search),
+            ),
+          if (editing)
+            IconButton(
+              key: const Key('select-all-captures'),
+              onPressed: _selectAllLoading ? null : _toggleSelectAll,
+              tooltip: allEligibleSelected
+                  ? strings.deselectAll
+                  : strings.selectAll,
+              icon: _selectAllLoading
+                  ? const SizedBox.square(
+                      key: Key('select-all-progress'),
+                      dimension: 20,
+                      child: AdaptiveProgressIndicator(size: 20),
+                    )
+                  : Icon(
+                      allEligibleSelected
+                          ? Icons.check_box_outline_blank
+                          : Icons.select_all_outlined,
+                    ),
+            ),
+          if (!_searching || editing)
+            IconButton(
+              key: const Key('edit-captures'),
+              onPressed: () {
+                if (_selectionController.editing) {
+                  _invalidateSelectionRequests();
+                  _selectionController.exit();
+                } else {
+                  _selectionController.enter();
+                }
+              },
+              tooltip: editing ? strings.done : strings.editRecords,
+              icon: AnimatedSwitcher(
+                duration: AppMotion.durationOf(context, AppMotion.short4),
+                child: Icon(
+                  editing ? Icons.done : Icons.edit_outlined,
+                  key: ValueKey(editing),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
+        iosBodyPadding: EdgeInsets.zero,
         body: FloatingDockLayout(
           animateDock: false,
           dock: editing

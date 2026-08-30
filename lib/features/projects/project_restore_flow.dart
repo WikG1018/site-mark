@@ -8,6 +8,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/shared/ui/adaptive_progress.dart';
@@ -318,7 +319,7 @@ void _showRestoreProgress(
 }
 
 void _showMessage(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  showAppToast(context, message);
 }
 
 Future<void> _showRestoreSuccess(
@@ -326,7 +327,6 @@ Future<void> _showRestoreSuccess(
   AppStrings strings,
   List<ProjectImportResult> results,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
   final activeCount = results
       .where((r) => r.lifecycleStatus == ProjectLifecycleStatus.active)
       .length;
@@ -366,19 +366,19 @@ Future<void> _showRestoreSuccess(
     } else {
       GoRouter.maybeOf(context)?.go('/');
     }
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    showAppToast(context, message);
     return;
   }
 
   if (results.length == 1 &&
       results.single.lifecycleStatus != ProjectLifecycleStatus.archived) {
     GoRouter.maybeOf(context)?.go('/projects/${results.single.projectId}');
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+    showAppToast(context, message);
     return;
   }
 
   GoRouter.maybeOf(context)?.go('/');
-  messenger.showSnackBar(SnackBar(content: Text(message)));
+  showAppToast(context, message);
 }
 
 class _PreparedDiscardGuard {

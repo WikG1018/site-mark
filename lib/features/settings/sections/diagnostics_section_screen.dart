@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 
 class DiagnosticsSectionScreen extends ConsumerWidget {
@@ -118,9 +119,7 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
       await ref.read(shareFileServiceProvider).shareFile(path);
     } catch (_) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(strings.diagnosticBundleFailed)));
+      showAppToast(context, strings.diagnosticBundleFailed);
     }
   }
 

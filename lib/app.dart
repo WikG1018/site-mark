@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:dynamic_color/dynamic_color.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -394,11 +396,18 @@ final projectBundleServiceProvider = Provider<ProjectBundleService>((ref) {
 
 /// Shared Axis (horizontal) page for hierarchical navigation (list → detail
 /// → form/edit), per M3 motion guidance.
-CustomTransitionPage<void> _sharedAxisPage(
+///
+/// On iOS the page uses [CupertinoPage] instead: hierarchical pushes slide in
+/// horizontally with an interactive edge-swipe back, the navigation form of
+/// the Liquid Glass era.
+Page<void> _sharedAxisPage(
   GoRouterState state,
   Widget child, {
   bool freezeSecondary = false,
 }) {
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return CupertinoPage<void>(key: state.pageKey, child: child);
+  }
   return CustomTransitionPage<void>(
     key: state.pageKey,
     transitionDuration: AppMotion.medium2,

@@ -20,6 +20,9 @@ import 'package:sitemark/features/capture/capture_detail_tabs.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
@@ -51,7 +54,7 @@ final class CaptureDetailArguments {
 /// photo. For `ready` records the preview pairs with the list thumbnail through
 /// a [Hero] tagged `capture-photo-{id}`.
 ///
-/// Clearing the original is deferred: the action shows an undo [SnackBar] and
+/// Clearing the original is deferred: the action shows an undo toast and
 /// only executes after a five-second window unless undone. Deleting everything
 /// keeps an [AlertDialog] confirmation with a red [FilledButton].
 class CaptureDetailScreen extends ConsumerStatefulWidget {
@@ -162,10 +165,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                   : captureMissing
                   ? strings.captureNotFound
                   : strings.captureDetail;
-              return Scaffold(
-                appBar: AppBar(title: Text(title)),
+              return AdaptivePageScaffold.raw(
+                title: title,
+                iosBodyPadding: EdgeInsets.zero,
                 body: waitingForCapture
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const Center(child: AdaptiveProgressIndicator())
                     : _ResourceUnavailableState(
                         key: captureLoadFailed
                             ? const Key('capture-load-error')
@@ -260,38 +264,37 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                   photoNumber: capture.photoNumber,
                   fallback: strings.captureDetail,
                 );
-                return Scaffold(
-                  appBar: AppBar(
-                    title: Text(title),
-                    actions: [
-                      if (canDeleteRecord)
-                        Semantics(
-                          key: const Key('capture-detail-actions'),
-                          label: MaterialLocalizations.of(
-                            context,
-                          ).moreButtonTooltip,
-                          button: true,
-                          onTap: () => _openActions(
-                            capture,
-                            canEdit: canEdit,
-                            canDeleteOriginal: canDeleteOriginal,
-                          ),
-                          child: ExcludeSemantics(
-                            child: IconButton(
-                              onPressed: () => _openActions(
-                                capture,
-                                canEdit: canEdit,
-                                canDeleteOriginal: canDeleteOriginal,
-                              ),
-                              tooltip: MaterialLocalizations.of(
-                                context,
-                              ).moreButtonTooltip,
-                              icon: const Icon(Icons.more_vert),
+                return AdaptivePageScaffold.raw(
+                  title: title,
+                  actions: [
+                    if (canDeleteRecord)
+                      Semantics(
+                        key: const Key('capture-detail-actions'),
+                        label: MaterialLocalizations.of(
+                          context,
+                        ).moreButtonTooltip,
+                        button: true,
+                        onTap: () => _openActions(
+                          capture,
+                          canEdit: canEdit,
+                          canDeleteOriginal: canDeleteOriginal,
+                        ),
+                        child: ExcludeSemantics(
+                          child: IconButton(
+                            onPressed: () => _openActions(
+                              capture,
+                              canEdit: canEdit,
+                              canDeleteOriginal: canDeleteOriginal,
                             ),
+                            tooltip: MaterialLocalizations.of(
+                              context,
+                            ).moreButtonTooltip,
+                            icon: const Icon(Icons.more_vert),
                           ),
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
+                  iosBodyPadding: EdgeInsets.zero,
                   body: ListView(
                     padding: const EdgeInsets.all(20),
                     children: [
@@ -378,7 +381,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                           else if (infoSnapshot.hasError)
                             _FileInfoInspectionError(onRetry: _retryFileInfo)
                           else
-                            const Center(child: CircularProgressIndicator()),
+                            const Center(child: AdaptiveProgressIndicator()),
                         ],
                       ),
                     ],
@@ -657,21 +660,19 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
 
   void _deleteOriginal(CaptureRecord capture) {
     final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.of(context);
     _clearOriginalsTimer?.cancel();
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(strings.clearOriginalsScheduled(1)),
-        duration: _clearOriginalsWindow,
-        action: SnackBarAction(
-          label: strings.undo,
-          onPressed: () {
-            _clearOriginalsTimer?.cancel();
-            _clearOriginalsTimer = null;
-            messenger.hideCurrentSnackBar();
-          },
-        ),
+    showAppToast(
+      context,
+      strings.clearOriginalsScheduled(1),
+      duration: _clearOriginalsWindow,
+      replace: true,
+      action: AppToastAction(
+        label: strings.undo,
+        onPressed: () {
+          _clearOriginalsTimer?.cancel();
+          _clearOriginalsTimer = null;
+          hideAppToast();
+        },
       ),
     );
     _clearOriginalsTimer = Timer(_clearOriginalsWindow, () {
@@ -693,18 +694,15 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
     ]);
     if (!mounted) return;
     final failure = result.failures[current.id];
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          failure == null
-              ? strings.actionResult(
-                  result.succeededIds.length,
-                  result.skippedIds.length,
-                  result.failures.length,
-                )
-              : strings.captureMediaFailure(failure),
-        ),
-      ),
+    showAppToast(
+      context,
+      failure == null
+          ? strings.actionResult(
+              result.succeededIds.length,
+              result.skippedIds.length,
+              result.failures.length,
+            )
+          : strings.captureMediaFailure(failure),
     );
   }
 
@@ -739,14 +737,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       context.go('/projects/$_projectId');
     } else {
       final failure = result.failures[current.id];
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            failure == null
-                ? strings.deleteRecord
-                : strings.captureMediaFailure(failure),
-          ),
-        ),
+      showAppToast(
+        context,
+        failure == null
+            ? strings.deleteRecord
+            : strings.captureMediaFailure(failure),
       );
     }
   }

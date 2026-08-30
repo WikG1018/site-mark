@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/features/capture/capture_owned_route_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/workflow/capture_template_service.dart';
@@ -382,7 +383,7 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
                               onRename: _openRename,
                               onDelete: _confirmDelete,
                             )
-                          : const Center(child: CircularProgressIndicator());
+                          : const Center(child: AdaptiveProgressIndicator());
                       return AnimatedSwitcher(
                         key: const Key('capture-template-switcher'),
                         duration: duration,

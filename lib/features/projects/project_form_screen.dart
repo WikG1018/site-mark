@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_progress.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:uuid/uuid.dart';
 
@@ -65,9 +67,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.of(context).createProjectFailed)),
-      );
+      showAppToast(context, AppStrings.of(context).createProjectFailed);
       return;
     }
     if (mounted) context.go('/');
@@ -118,10 +118,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
                   FilledButton.icon(
                     onPressed: _saving ? null : _save,
                     icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
+                        ? const AdaptiveProgressIndicator(size: 18)
                         : const Icon(Icons.check),
                     label: Text(strings.save),
                   ),

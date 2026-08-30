@@ -13,6 +13,7 @@ import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_selection_mark.dart';
 import 'package:sitemark/motion.dart';
 
 /// Shared capture list item used by both the project detail and the global
@@ -156,14 +157,13 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                   context,
                 ).colorScheme.surface.withValues(alpha: .92),
                 borderRadius: BorderRadius.circular(8),
-                child: SizedBox.square(
-                  dimension: 40,
-                  child: Checkbox(
-                    value: widget.selected,
+                child: Center(
+                  child: AdaptiveSelectionMark(
+                    selected: widget.selected,
                     onChanged: widget.selectable
-                        ? (value) {
+                        ? (selected) {
                             HapticFeedback.selectionClick();
-                            widget.onSelectedChanged?.call(value ?? false);
+                            widget.onSelectedChanged?.call(selected);
                           }
                         : null,
                   ),
