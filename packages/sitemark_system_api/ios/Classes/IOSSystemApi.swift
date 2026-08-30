@@ -25,7 +25,8 @@ final class IOSSystemApi: NSObject {
     private var permissionCallback: ((Result<LocationPermissionState, Error>) -> Void)?
     private var locationCallbacks: [(Result<LocationResult, Error>) -> Void] = []
     private var locationTimeout: DispatchWorkItem?
-    private var requestedLocationTimeoutMillis: Int64 = Self.defaultLocationTimeoutMillis
+    private var requestedLocationTimeoutMillis: Int64 =
+        IOSSystemApi.defaultLocationTimeoutMillis
     private lazy var locationManager = CLLocationManager()
 
     private enum Keys {
@@ -46,7 +47,7 @@ final class IOSSystemApi: NSObject {
                 at: supportDirectory, withIntermediateDirectories: true)
         }
         publishJournal = PublishJournalStore(
-            JournalFilePersistence(directory: supportDirectory))
+            JournalFilePersistence(directory: supportDirectory ?? sandboxRoot))
         metadataReader = ImageIOImageMetadataReader()
         super.init()
     }

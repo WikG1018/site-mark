@@ -15,7 +15,9 @@ public class MemoryPressurePlugin {
     static let channelName = "sitemark/memory_pressure"
 
     private var channel: FlutterMethodChannel?
-    private var source: DispatchSource.MemoryPressureSourceObject?
+    // The iOS-only C typealias: `DispatchSource.MemoryPressureSourceObject`
+    // does not exist in the iOS Swift overlay.
+    private var source: DispatchSourceMemoryPressureSourceObject?
     private var nextEventId: Int64 = 0
 
     func attach(messenger: FlutterBinaryMessenger) {
