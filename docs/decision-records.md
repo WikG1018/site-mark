@@ -229,7 +229,7 @@ iOS 产品线复用 `lib/` 界面与业务逻辑、`rust/` 图像核心、数据
 Flutter 自适应构造（`Switch.adaptive` / `SwitchListTile.adaptive` / `Slider.adaptive`），
 标准确认/信息对话框经 `lib/shared/ui/adaptive_dialog.dart` 在 iOS 呈现
 CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用图标与 Android
-同源（`tool/generate_launcher_icon.py` 产出的品牌图标）；启动屏背景色跟随系统深浅色。
+同源（`tool/generate_launcher_icon.py` 产出的品牌图标）。
 
 明确不做平台分支重写：不引入 iOS 专属导航结构或大标题重构，不内置相机 SDK
 （iOS 经 `UIImagePickerController` 桥，与 D-001 的「系统相机」精神一致）；后台调度

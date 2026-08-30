@@ -43,10 +43,9 @@
   Xcode 14+ 单尺寸(1024 universal)声明,CI `flutter build ios` 的 actool 即为编译门禁。
 - 图标再生成纪律:`assets/branding/` 由生成器产出;更换品牌视觉时需同步刷新
   `AppIcon.appiconset`(写入 release-checklist)。
-- 启动屏:去掉默认空图,背景色改引用 asset catalog `LaunchBackground` colorset
-  (light/dark 双变体,取值对齐应用 light/dark 的 `surfaceContainerLowest`),
-  storyboard 用 `<variation key="dark">` 声明深色变体;CI ibtool 编译为门禁,
-  深色生效需真机/模拟器复核(无 Apple 账号前不可验,记入实施记录)。
+- 启动屏:深色模式闪白(固定白色背景)是已知小差异;深浅色自适应背景需手写
+  storyboard XML 或 colorset 方案,CI 已验证手写 XML 会被 ibtool 拒绝,且视觉效果
+  无本机验证手段——留待真机/模拟器阶段处理(见实施记录)。
 
 ### 3. 通知授权流对齐
 

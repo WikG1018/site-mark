@@ -81,7 +81,7 @@
 
 设计:[`specs/2026-08-30-ios-parity-hig.md`](../specs/2026-08-30-ios-parity-hig.md)。
 
-1. iOS 应用图标换品牌图标(`assets/branding/sitemark-icon.png` 单尺寸 1024);启动屏背景随深浅色(`LaunchBackground` colorset + storyboard 深色 variation)。
+1. iOS 应用图标换品牌图标(`assets/branding/sitemark-icon.png` 单尺寸 1024)。启动屏深色自适应经 CI 验证手写 storyboard XML 会被 ibtool 拒绝且无本机验证手段,回退并留待真机阶段(见实施记录)。
 2. 通知授权流对齐:开关时在 iOS 经 `requestPermissions(alert/badge/sound)` 显式请求(与 Android 时机一致)。
 3. HIG 组件自适应:`Switch.adaptive` / `SwitchListTile.adaptive` / `Slider.adaptive`(6 处);`lib/shared/ui/adaptive_dialog.dart` 共享 helper,iOS 呈现 CupertinoAlertDialog,标准确认/信息对话框迁移(约 12 处),复杂表单对话框保留 Material(记录偏差)。
 4. 文档:decision-records、NEXT_AGENT_PROMPT 平台边界修正、架构文档 iOS 小节补 UI 惯例。
