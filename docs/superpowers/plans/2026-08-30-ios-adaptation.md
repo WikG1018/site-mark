@@ -55,6 +55,8 @@
 
 验收：CI 绿（iOS job 编译 + Flutter 全量测试 + XCTest）；`flutter test` 里 platform-channel 的 mock 层无需改动（Dart 接口不变）。
 
+实施记录（2026-08-30，PR #122）：`IOSSystemApi` 全量接线落地（相机/定位/元数据/发布/存档/删除/设置 + 内存压力通道），插件 pubspec 正式声明 iOS platform + pluginClass，Runner 首次编译完整 pod；XCTest 45/45（新增映射/命名/EXIF fixture/私有目录校验），flutter test 1007 通过、mock 层零改动。设计偏差 3 条已在 PR 声明：定位 `address` 恒为 nil（对齐 Android 现状 + 离线原则，CLGeocoder 不实施）、相机目标目录用 Application Support/originals 而非 tmp（tmp 会被系统清理，破坏崩溃恢复契约）、iOS 授权映射 notDetermined→denied / denied→permanentlyDenied。CI 修复三轮沉淀的平台陷阱：C 级 typealias（`DispatchSourceMemoryPressureEvent` 等）只在 iOS SDK 存在，跨平台文件必须用 Swift 嵌套名 `DispatchSource.MemoryPressureEvent`；内存压力源具体类名各 SDK 不同，用「类型推断局部变量 + 取消闭包」绕开类型标注；存储属性默认值不能引用 `Self`；iOS 上 `PHAsset` 删除经 `deleteAssets` 走系统确认框（全量相册权限下）。
+
 ### Phase 3 — Dart 侧接线与平台差异落地
 
 1. workmanager iOS 后台注册：BGProcessingTask 复用同一 Dart 回调；`conditional_polling_stream` 前台路径不动。
