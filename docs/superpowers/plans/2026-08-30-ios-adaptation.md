@@ -115,6 +115,18 @@
 
 实施记录（2026-08-31,PR #127):新增共享组件四件——`adaptive_sheet.dart`(`showAppActionSheet`/`AppSheetAction`,支持 title/message/subtitle/checked/enabled/sheetKey,iOS `CupertinoActionSheet` + 自动取消行,Material 滚动容器防长列表溢出)、`adaptive_toast.dart`(`showAppToast`/`hideAppToast`/`AppToastAction`,iOS Overlay 玻璃胶囊 + 计时自动消失,Material 分支 maybeOf 空安全 + 存置 messenger 的 mounted 防护防跨用例 dispose 崩溃)、`adaptive_selection_mark.dart`、`adaptive_floating_button.dart`(extended 由 label 驱动);`AdaptivePageScaffold` 增 `titleWidget`(搜索字段就地换入导航栏)与 `iosBodyPadding`(自绘内边距的复杂页传零)与 `floatingActionButton` 透传。迁移覆盖:全部 30 处 Snackbar、3 处动作菜单、9 处 AppBar(主标签页大标题 + trailing 动作)、22 处转轮、日期窄屏菜单、两处 FAB、批量进度圆角;`_sharedAxisPage` iOS 分支换 `CupertinoPage` 获得边缘滑动返回。**走查复抓两类真问题**:(1) pubspec 缺 `cupertino_icons`,补依赖前图标字形全平台方块;(2) Toast 胶囊 `Row(min)+Expanded` 布局矛盾致 6px 溢出,改正横幅布局。测试:组件新增 9 用例(动作表双平台/Toast 双平台/胶囊自动消失/hideAppToast),既有用例同步点(narrow sheet 断言 CompactFilterMenu、项目列表 ListTile.selected 断言由 helper 透传);全量 `flutter test` 1043 通过、`dart analyze` 0 issue、`dart format`(3.44.6)0 diff;5 张无头真渲染走查图确认动作表/大标题/胶囊/玻璃浮钮均为正确 iOS 27 形态(走查 harness 按惯例不入库)。
 
+### Phase 8 — 苹果官方 App 质感打磨(2026-08-31 用户追加)
+
+用户要求:不需要用户协助的部分全部处理掉,只保留必须用户参与的部分,把 iOS 版本做到视觉与流畅体验如苹果官方 App。
+
+1. 深色模式正确性:全量走查 5 个 iOS 表面(大标题导航/对话框/动作表/Toast/滑动分段)的深色渲染,修复不随主题者。
+2. 按压语言:去墨水涟漪(iOS 无 ink splash 词汇,按压用高亮),Android 保持 M3 InkSparkle。
+3. 触感:滑动分段控件选中加 `selectionClick`(原生分段控件的标准反馈)。
+4. 动效:Toast 胶囊退场淡出(含连发竞态防护:仅"当前"胶囊可拆除槽位)。
+5. 键盘:主列表(全部记录/项目列表)拖拽收起搜索键盘(iOS 惯例)。
+
+实施记录（2026-08-31,PR #128):**深色走查抓到真 bug**——大标题导航栏不随应用主题变深(浅色栏+近白大标题压在深色内容上,对比度不可读);根因是 Cupertino 表面按平台亮度解析动态色,应用内手选深色而系统浅色时同样触发。修复:`MaterialApp.builder` 桥接 `CupertinoTheme`(brightness/primaryColor 随 Material 解析值),抽为 `app_theme.dart` 的 `bridgeCupertinoTheme` 并新增双亮度回归测试;对话框/动作表/Toast 走查本就正确,无需改。其余:iOS `NoSplash`(`_buildThemeData` 平台分支)、`AdaptiveSegmentedButton` 选中触感、Toast 退场动画(识别 + 竞态防护后既有 5 个 Toast 用例零改动通过)、records/project 列表 `keyboardDismissBehavior.onDrag`。评估后不做:下拉刷新(Android 侧无此交互,单侧加入引入分叉;分页控制器改造风险大于收益,留待真机试用后定夺)。走查 6 张图(5 深 1 浅回归)确认;harness 不入库。全量 `flutter test` 1045 通过(新增桥接 2 用例)、`dart analyze` 0 issue、`dart format` 0 diff。
+
 ## 文件结构（预期新增/修改）
 
 ```

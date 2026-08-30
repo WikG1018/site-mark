@@ -1,3 +1,5 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Builds a light [ColorScheme] from [seedColor], optionally preferring a
@@ -19,6 +21,11 @@ ThemeData _buildThemeData(ColorScheme colorScheme) {
   return ThemeData(
     colorScheme: colorScheme,
     useMaterial3: true,
+    // Cupertino buttons dim on press; ink splashes are not part of the iOS
+    // press vocabulary. Android keeps the M3 InkSparkle.
+    splashFactory: defaultTargetPlatform == TargetPlatform.iOS
+        ? NoSplash.splashFactory
+        : InkSparkle.splashFactory,
     scaffoldBackgroundColor: colorScheme.surfaceContainerLowest,
     cardTheme: CardThemeData(
       color: colorScheme.surface,
@@ -80,4 +87,21 @@ ThemeData buildDarkTheme({
 }) {
   final scheme = _buildDarkScheme(seedColor, dynamicColor: dynamicColor);
   return _buildThemeData(scheme);
+}
+
+/// Bridges the resolved Material [Theme] into the Cupertino theme.
+///
+/// Used as the app-level `MaterialApp.builder`. Without this, Cupertino
+/// surfaces resolve their colors against the platform brightness only — a
+/// user-picked dark theme on a light device would keep light Cupertino
+/// chrome (large-title nav bars) over dark content.
+Widget bridgeCupertinoTheme(BuildContext context, Widget? child) {
+  return CupertinoTheme(
+    data: CupertinoThemeData(
+      brightness: Theme.of(context).brightness,
+      primaryColor: Theme.of(context).colorScheme.primary,
+      textTheme: CupertinoTheme.of(context).textTheme,
+    ),
+    child: child!,
+  );
 }

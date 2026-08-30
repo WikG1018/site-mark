@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Segmented selection that follows each platform's control shape.
 ///
@@ -38,7 +39,11 @@ class AdaptiveSegmentedButton<T extends Object> extends StatelessWidget {
     return CupertinoSlidingSegmentedControl<T>(
       groupValue: selected.isEmpty ? null : selected.single,
       onValueChanged: (value) {
-        if (value != null) onSelectionChanged({value});
+        if (value == null) return;
+        // The sliding control has no built-in selection haptic; native iOS
+        // segmented controls tick on every change.
+        HapticFeedback.selectionClick();
+        onSelectionChanged({value});
       },
       children: {
         for (final segment in segments)

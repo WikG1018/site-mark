@@ -52,17 +52,22 @@ void showAppToast(
   _dismissTimer?.cancel();
   _removeCurrent();
   final overlay = Overlay.of(context, rootOverlay: true);
-  final entry = OverlayEntry(
+  OverlayEntry? entry;
+  entry = OverlayEntry(
     builder: (entryContext) => _ToastCapsule(
       message: message,
       action: action,
       duration: duration,
-      onDismiss: _removeCurrent,
+      // Only the toast that is still current may tear down the slot — a
+      // replacement shown while this one fades out must survive.
+      onDismiss: () {
+        if (identical(_currentEntry, entry)) _removeCurrent();
+      },
     ),
   );
   _currentEntry = entry;
   overlay.insert(entry);
-  _dismissTimer = Timer(duration, _removeCurrent);
+  _dismissTimer = Timer(duration, () => _animatedDismiss?.call());
 }
 
 /// Immediately hides the visible toast, whichever platform is showing it.
@@ -80,12 +85,16 @@ void hideAppToast() {
     }
     return;
   }
-  _removeCurrent();
+  _animatedDismiss?.call();
 }
 
 OverlayEntry? _currentEntry;
 Timer? _dismissTimer;
 ScaffoldMessengerState? _materialMessenger;
+
+/// Set by the visible capsule so timer/hide paths fade out instead of
+/// yanking the capsule off screen.
+void Function()? _animatedDismiss;
 
 void _removeCurrent() {
   _dismissTimer?.cancel();
@@ -120,6 +129,7 @@ class _ToastCapsuleState extends State<_ToastCapsule>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, value: 1);
+    _animatedDismiss = _dismissAnimated;
   }
 
   @override
@@ -134,8 +144,25 @@ class _ToastCapsuleState extends State<_ToastCapsule>
     }
   }
 
+  void _dismissAnimated() {
+    if (!mounted) {
+      widget.onDismiss();
+      return;
+    }
+    if (MediaQuery.disableAnimationsOf(context)) {
+      widget.onDismiss();
+      return;
+    }
+    _controller
+      ..duration = AppMotion.short4
+      ..reverse().whenComplete(widget.onDismiss);
+  }
+
   @override
   void dispose() {
+    if (identical(_animatedDismiss, _dismissAnimated)) {
+      _animatedDismiss = null;
+    }
     _controller.dispose();
     super.dispose();
   }
@@ -176,7 +203,7 @@ class _ToastCapsuleState extends State<_ToastCapsule>
                         TextButton(
                           onPressed: () {
                             widget.action!.onPressed();
-                            widget.onDismiss();
+                            _dismissAnimated();
                           },
                           child: Text(widget.action!.label),
                         ),

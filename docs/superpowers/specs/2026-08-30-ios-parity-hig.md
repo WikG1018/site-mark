@@ -97,3 +97,18 @@
 | 依赖 | 补 `cupertino_icons`(此前 `CupertinoIcons` 字形在任何平台都不渲染) |
 
 验收同第二批:CI 双绿、Android 分支行为零变化(既有用例不改即过)、iOS 关键界面无头真渲染走查确认。
+
+## 追加(2026-08-31 第四批,Phase 8):苹果官方 App 质感
+
+用户要求把 iOS 版本做到视觉与流畅体验如苹果官方 App,不需要用户协助的部分全部先做掉。
+
+| 项 | 方案 |
+| --- | --- |
+| 深色模式 | 全表面深色走查;修复大标题导航栏不随主题(应用内手选深色时浅色栏压深色内容)——`MaterialApp.builder` 桥接 `CupertinoTheme` 亮度与主色,`bridgeCupertinoTheme` 可测函数 + 双亮度回归用例 |
+| 按压语言 | iOS `NoSplash`(去墨水涟漪,按压高亮代替),Android 保持 `InkSparkle` |
+| 触感反馈 | 滑动分段控件选中 `selectionClick`(原生分段标准反馈) |
+| 动效 | Toast 胶囊退场淡出;连发场景下仅"当前"胶囊可拆除槽位(竞态防护) |
+| 键盘 | 全部记录/项目列表拖拽收起搜索键盘(`keyboardDismissBehavior.onDrag`,iOS 惯例) |
+| 评估不做 | 下拉刷新(Android 无此交互,单侧加入引入分叉;分页控制器改造风险大于收益) |
+
+验收同前批:CI 双绿、Android 分支行为零变化、无头真渲染深浅双色走查确认。

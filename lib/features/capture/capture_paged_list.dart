@@ -352,6 +352,9 @@ class _CapturePagedListState extends State<CapturePagedList> {
             CustomScrollView(
               key: _viewportKey,
               controller: _scrollController,
+              // iOS pattern: dragging the results pulls the search
+              // keyboard down with the finger.
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               slivers: [
                 ...widget.sliversBefore,
                 SliverToBoxAdapter(
