@@ -1,13 +1,14 @@
 # SiteMark 当前产品边界与总体架构
 
-> 状态：Android v1.0.8 当前设计 + HarmonyOS NEXT 原生模拟器验证版
-> 适用版本：Android v1.0.8；HarmonyOS native 1.0.0 开发版
+> 状态：Android v1.0.8 当前设计 + HarmonyOS NEXT 原生模拟器验证版 + iOS Flutter 复用适配中
+> 适用版本：Android v1.0.8；HarmonyOS native 1.0.0 开发版；iOS Phase 0–3
 > 本文描述已落地的产品边界；阶段性计划保留在 `docs/superpowers/` 供追溯。
 
 ## 1. 产品定位
 
-SiteMark（工程印记）是面向工程现场记录的 Android 水印相机。应用负责项目、
+SiteMark（工程印记）是面向工程现场记录的水印相机。应用负责项目、
 现场信息、记录管理和水印处理，实际拍照交给手机系统或厂商相机完成。
+产品线见第 9 节（HarmonyOS NEXT 原生）与第 10 节（iOS，Flutter 复用）。
 
 当前产品边界：
 
@@ -18,7 +19,8 @@ SiteMark（工程印记）是面向工程现场记录的 Android 水印相机。
 - 水印成片发布到系统相册 `Pictures/SiteMark`；
 - 支持单项目、多项目备份与恢复；所选记录分享 ZIP 仅用于对外发送，不能恢复；
 - 提供本机诊断包，诊断记录不自动上传，且不包含工程内容、照片、位置或文件标识；
-- 不支持 iOS、多人协作、云同步、图库导入和自由拖拽式水印模板。
+- iOS 版适配进行中（Flutter 复用线，尚无签名发布，见第 10 节）；
+- 不支持多人协作、云同步、图库导入和自由拖拽式水印模板。
 
 ## 2. 用户主流程
 
@@ -38,8 +40,9 @@ SiteMark（工程印记）是面向工程现场记录的 Android 水印相机。
 | --- | --- | --- |
 | Flutter 应用层 | Flutter、Material 3、Riverpod、GoRouter | 页面、导航、中英文、主题、表单状态、记录交互 |
 | 数据层 | Drift、SQLite | 项目、设置、拍摄记录、项目内模板、状态流转、筛选与迁移 |
-| 后台任务层 | WorkManager、Dart 后台 isolate | 串行任务、失败重试、启动与重启恢复 |
+| 后台任务层 | WorkManager、Dart 后台 isolate | 串行任务、失败重试、启动与重启恢复；iOS 由 BGTaskScheduler 机会性补拍承接（见第 10 节） |
 | Android 集成层 | Kotlin、Pigeon、FlutterPlugin、ActivityAware | 系统相机、ContentProvider、EXIF 检查、前台定位、MediaStore |
+| iOS 集成层 | Swift、Pigeon、BGTaskScheduler、PHPhotoLibrary | 系统相机桥、EXIF/GPS 检查、前台定位、相册发布与删除、存档、内存压力（见第 10 节） |
 | 图像核心层 | Rust、flutter_rust_bridge | EXIF 方向、SHA-256、全分辨率水印、CSV/JSON/ZIP 导出 |
 
 Flutter 与 Rust 之间只传文件路径和结构化参数，不把整张全分辨率图片作为 Dart
@@ -150,3 +153,25 @@ v1.0.0 必须通过 Flutter 全量测试与静态分析、Rust fmt/Clippy/全量
 鸿蒙数据安全语义继续使用稳定 `captureId` 而不是照片编号或文件名识别发布记录。新发布 URI 先写耐久日记，RDB 提交时同事务加入旧 URI 清理任务；清理前查询全库引用，日记只能按期望 URI 条件清除。
 
 当前完成的是 DevEco API 22 x86_64 模拟器级功能回归和双 ABI 构建；正式签名、HarmonyOS NEXT 真机 CameraPicker/相册授权和高像素性能尚待复验。实测限制以 [`ohos-native/docs/deltas.md`](../ohos-native/docs/deltas.md) 为准。
+
+## 10. iOS 适配（Flutter 复用线）
+
+iOS 是第三条产品线，走 Flutter 复用：`lib/` UI 与业务逻辑、`rust/` 图像核心、
+数据库 schema 与备份格式全量复用，平台能力由仓库内 Swift 插件
+`packages/sitemark_system_api`（Pigeon `SiteMarkSystemApi` 全 14 方法 + `sitemark/memory_pressure`
+通道）承接，包名 `io.github.wikg1018.sitemark`，最低 iOS 14.0。设计、分期与已接受
+偏差见 `docs/superpowers/specs/2026-08-30-ios-adaptation-design.md` 及对应计划文档。
+
+- **拍摄与存储**：相机走系统相机桥，原图写入 Application Support/originals（与
+  Dart 侧 `getApplicationSupportDirectory()` 同一目录），发布 journal 为同目录 JSON；
+  成片经 `PHPhotoLibrary` 发布，`localIdentifier` 承担 URI 角色，相册内文件名由系统决定。
+- **成片删除**：`PHAsset` 删除会弹系统确认框；界面文案统一按“可能弹出系统确认”表述，
+  不做平台分支。
+- **后台处理**：前台轮询与 Android 完全一致；后台只注册一个 BGProcessingTask
+  （identifier 与 Info.plist `BGTaskSchedulerPermittedIdentifiers`、AppDelegate 注册
+  三方精确一致，后台模式仅 `processing`），触发时重新入队未完成记录并再次提交下一轮
+  请求。系统机会性调度，不保证拍完立刻处理；诊断页“平台差异”卡片如实展示。
+- **权限面**：仅相机、前台定位、相册添加与读取（用于自有成片替换/删除）四项用途描述；
+  不申请麦克风、蓝牙、本地网络、追踪或 Always 定位。
+- **构建与门禁**：CI macos-15 job 跑 Swift XCTest + `flutter build ios --no-codesign` +
+  PlistBuddy 元数据门禁；尚无签名与 TestFlight，发布未接入 release.yml。

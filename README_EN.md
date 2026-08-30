@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.13`, targetSdk 37 / Android 17), and the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP). Both product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.13`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS version reuses the shared Flutter codebase (adaptation in progress, no signed release yet). All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -215,10 +215,10 @@ Camera permission is held by the external system camera app; SiteMark provides t
 
 ## Current limitations
 
-- The downloadable stable version supports Android 12 and later only; the HarmonyOS NEXT native version is a Pre-release unsigned HAP and is not on any app store yet;
-- No iOS version, cloud sync, multi-user collaboration, or importing from the device gallery;
+- The downloadable stable version supports Android 12 and later only; the HarmonyOS NEXT native version is a Pre-release unsigned HAP and is not on any app store yet; the iOS version is in adaptation and has no installable signed package yet;
+- No cloud sync, multi-user collaboration, or importing from the device gallery;
 - The watermark is not a free-drag template;
-- Background task timing is still subject to Android and vendor scheduling policies;
+- Background task timing is still subject to Android and vendor scheduling policies; on iOS, background catch-up is scheduled opportunistically by the system and is not guaranteed to run right after a capture;
 - SHA-256 is for local consistency checks and does not represent forensic identification, trusted timestamps, or third-party evidence;
 - Compatibility with more vendor cameras still needs feedback from real devices.
 
@@ -230,9 +230,10 @@ Camera permission is held by the external system camera app; SiteMark provides t
 | Data | Drift, SQLite | Projects, settings, capture records, per-project templates, status transitions, filters, and database migrations |
 | Background work | Kotlin, WorkManager, Dart background isolate | Persistent processing queue, failure retries, launch and restart resume |
 | Android integration | Kotlin, Pigeon, Intent, ContentProvider, LocationManager, MediaStore | System camera, optional foreground location, image checks, and gallery publishing |
+| iOS integration | Swift, Pigeon, BGTaskScheduler, PHPhotoLibrary | System camera bridge, optional foreground location, image checks, gallery publishing/deletion, opportunistic background catch-up (in adaptation) |
 | Image & archive | Rust, flutter_rust_bridge | EXIF orientation, full-resolution watermarking, SHA-256, CSV/JSON/ZIP, and backup verification |
 
-The HarmonyOS NEXT native line uses Stage + ArkTS + ArkUI, RelationalStore, Preferences, CameraPicker, and PhotoAccessHelper, and calls the same `sitemark_core` Rust crate through a C ABI + C++ N-API. The two product lines share business semantics and the image/archive algorithms, but not the UI SDK or database files.
+The HarmonyOS NEXT native line uses Stage + ArkTS + ArkUI, RelationalStore, Preferences, CameraPicker, and PhotoAccessHelper, and calls the same `sitemark_core` Rust crate through a C ABI + C++ N-API. The two product lines share business semantics and the image/archive algorithms, but not the UI SDK or database files. The iOS line reuses the same Flutter UI, business logic, and Rust core; platform capabilities are provided by the in-repo Swift plugin (Pigeon + BGTaskScheduler), sharing business semantics, the database schema, and backup formats with Android — see section 10 of [Current product boundaries and overall architecture](docs/current-product-architecture.md).
 
 Current maintained product and technical notes:
 

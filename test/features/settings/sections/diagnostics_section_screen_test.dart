@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,6 +50,13 @@ void main() {
           expect(find.textContaining('清除本机诊断记录'), findsNothing);
         }
 
+        // The platform-differences card pushed the actions below the fold in
+        // the default test viewport; bring the button into view before
+        // tapping.
+        await tester.ensureVisible(
+          find.text(strings.generateAndShareDiagnosticBundle),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.text(strings.generateAndShareDiagnosticBundle));
         await tester.pumpAndSettle();
         expect(find.text(strings.shareDiagnosticBundleTitle), findsOneWidget);
@@ -61,6 +69,8 @@ void main() {
 
         await tester.tap(find.text(strings.cancel));
         await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text(strings.clearLocalDiagnostics));
+        await tester.pumpAndSettle();
         await tester.tap(find.text(strings.clearLocalDiagnostics));
         await tester.pumpAndSettle();
         expect(find.text(strings.clearDiagnosticsTitle), findsOneWidget);
@@ -71,4 +81,59 @@ void main() {
       },
     );
   }
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets(
+      '${locale.languageCode} describes platform behavior differences honestly',
+      (tester) async {
+        await pumpScreen(tester, locale);
+        final strings = AppStrings(locale);
+
+        expect(find.text(strings.platformDifferences), findsOneWidget);
+        expect(
+          find.text(strings.backgroundProcessingDescription),
+          findsOneWidget,
+        );
+        // The unified copy must promise neither "always confirms" nor "never
+        // confirms": only iOS pops the system dialog, so both platforms read
+        // the same "may confirm" wording.
+        expect(
+          find.text(strings.photoLibraryDeleteConfirmationNote),
+          findsOneWidget,
+        );
+        expect(find.text(strings.locationAccuracyNote), findsOneWidget);
+        // The iOS-specific scheduling note must not leak onto other platforms
+        // (asserted by the platform-branch tests below).
+        expect(find.text(strings.backgroundProcessingIosNote), findsNothing);
+      },
+    );
+  }
+
+  testWidgets('iOS discloses the opportunistic background scheduling', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await pumpScreen(tester, const Locale('zh'));
+      final strings = AppStrings(const Locale('zh'));
+
+      expect(find.text(strings.backgroundProcessingIosNote), findsOneWidget);
+    } finally {
+      // Reset before the binding's invariant check runs (addTearDown fires
+      // after it, which would fail the run).
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Android does not show the iOS scheduling note', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await pumpScreen(tester, const Locale('zh'));
+      final strings = AppStrings(const Locale('zh'));
+
+      expect(find.text(strings.backgroundProcessingIosNote), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }

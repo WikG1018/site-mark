@@ -6,6 +6,7 @@ import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/notification_service.dart';
+import 'package:workmanager/workmanager.dart';
 
 void main() {
   late AppDatabase database;
@@ -289,6 +290,141 @@ void main() {
       },
     );
   });
+  group('iOS background catch-up wiring', () {
+    test(
+      'isCaptureTaskName accepts both the Android task name and the iOS uniqueName',
+      () {
+        // workmanager_apple dispatches by uniqueName, so on iOS a one-off
+        // capture job arrives as the serial-queue name instead of
+        // [captureProcessingTask]. The BGProcessingTask itself is handled by
+        // a dedicated branch and must not count as a capture job.
+        expect(isCaptureTaskName(captureProcessingTask), isTrue);
+        expect(isCaptureTaskName(captureProcessingQueue), isTrue);
+        expect(isCaptureTaskName(iosCaptureProcessingBgTask), isFalse);
+        expect(isCaptureTaskName('unrelated.task'), isFalse);
+        expect(isCaptureTaskName(''), isFalse);
+      },
+    );
+
+    test(
+      'background reconcile re-enqueues pending captures and re-arms the task',
+      () async {
+        await seedCaptured('capture-1');
+        await seedCaptured('capture-2');
+        await database.markRendering(
+          captureId: 'capture-2',
+          originalSha256:
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        );
+
+        final backgroundClient = _RecordingBackgroundWorkClient();
+        await reconcilePendingCapturesForBackground(
+          database: database,
+          client: backgroundClient,
+        );
+
+        expect(backgroundClient.appendCalls, hasLength(2));
+        for (final call in backgroundClient.appendCalls) {
+          expect(call.queueName, captureProcessingQueue);
+          expect(call.taskName, captureProcessingTask);
+          expect(call.tag, 'capture:${call.captureId}');
+        }
+        // BGTaskScheduler requests are one-shot: the run must submit the
+        // next request before returning.
+        expect(backgroundClient.reconcileScheduled, 1);
+      },
+    );
+
+    test('background reconcile re-arms even when nothing is pending', () async {
+      final backgroundClient = _RecordingBackgroundWorkClient();
+      await reconcilePendingCapturesForBackground(
+        database: database,
+        client: backgroundClient,
+      );
+
+      expect(backgroundClient.appendCalls, isEmpty);
+      expect(backgroundClient.reconcileScheduled, 1);
+    });
+  });
+
+  group('WorkmanagerBackgroundWorkClient', () {
+    test(
+      'initialize registers the iOS processing task under the plist identifier',
+      () async {
+        final workmanager = _RecordingWorkmanager();
+        final iosClient = WorkmanagerBackgroundWorkClient(
+          workmanager: workmanager,
+          isIos: true,
+        );
+
+        await iosClient.initialize(() {});
+
+        expect(workmanager.initializeCalls, 1);
+        expect(workmanager.processingTaskRegistrations, hasLength(1));
+        expect(workmanager.processingTaskRegistrations.single, (
+          iosCaptureProcessingBgTask,
+          iosCaptureProcessingBgTask,
+        ));
+      },
+    );
+
+    test('initialize skips BGTaskScheduler registration off iOS', () async {
+      final workmanager = _RecordingWorkmanager();
+      final androidClient = WorkmanagerBackgroundWorkClient(
+        workmanager: workmanager,
+        isIos: false,
+      );
+
+      await androidClient.initialize(() {});
+
+      expect(workmanager.initializeCalls, 1);
+      expect(workmanager.processingTaskRegistrations, isEmpty);
+    });
+
+    test('scheduleBackgroundReconcile only submits on iOS', () async {
+      final workmanager = _RecordingWorkmanager();
+      final androidClient = WorkmanagerBackgroundWorkClient(
+        workmanager: workmanager,
+        isIos: false,
+      );
+      final iosClient = WorkmanagerBackgroundWorkClient(
+        workmanager: workmanager,
+        isIos: true,
+      );
+
+      await androidClient.scheduleBackgroundReconcile();
+      expect(workmanager.processingTaskRegistrations, isEmpty);
+
+      await iosClient.scheduleBackgroundReconcile();
+      expect(workmanager.processingTaskRegistrations, hasLength(1));
+    });
+
+    test(
+      'appendCapture registers a one-off task on the serial queue',
+      () async {
+        final workmanager = _RecordingWorkmanager();
+        final client = WorkmanagerBackgroundWorkClient(
+          workmanager: workmanager,
+          isIos: false,
+        );
+
+        await client.appendCapture(
+          queueName: captureProcessingQueue,
+          taskName: captureProcessingTask,
+          captureId: 'capture-1',
+          tag: 'capture:capture-1',
+        );
+
+        final registration = workmanager.oneOffRegistrations.single;
+        expect(registration.uniqueName, captureProcessingQueue);
+        expect(registration.taskName, captureProcessingTask);
+        expect(registration.inputData, {'captureId': 'capture-1'});
+        expect(registration.tag, 'capture:capture-1');
+        // Serial chaining relies on the append policy staying in place.
+        expect(registration.existingWorkPolicy, ExistingWorkPolicy.append);
+      },
+    );
+  });
 }
 
 class _AppendCall {
@@ -310,6 +446,7 @@ class _RecordingBackgroundWorkClient implements BackgroundWorkClient {
   bool initialized = false;
   int initializeCalls = 0;
   int initializeFailures = 0;
+  int reconcileScheduled = 0;
   Completer<void>? initializeGate;
   void Function()? dispatcher;
 
@@ -323,6 +460,11 @@ class _RecordingBackgroundWorkClient implements BackgroundWorkClient {
       initializeFailures--;
       throw StateError('transient initialization failure');
     }
+  }
+
+  @override
+  Future<void> scheduleBackgroundReconcile() async {
+    reconcileScheduled++;
   }
 
   @override
@@ -387,4 +529,109 @@ class _RecordingCompletionNotificationService
   Future<void> setLocale(String? localeCode) async {
     localeValues.add(localeCode);
   }
+}
+
+class _OneOffRegistration {
+  _OneOffRegistration({
+    required this.uniqueName,
+    required this.taskName,
+    required this.inputData,
+    required this.tag,
+    required this.existingWorkPolicy,
+  });
+
+  final String uniqueName;
+  final String taskName;
+  final Map<String, dynamic>? inputData;
+  final String? tag;
+  final ExistingWorkPolicy? existingWorkPolicy;
+}
+
+/// Records the workmanager calls [WorkmanagerBackgroundWorkClient] makes so
+/// the iOS BGTaskScheduler wiring can be asserted without the plugin.
+class _RecordingWorkmanager implements Workmanager {
+  int initializeCalls = 0;
+  final List<(String uniqueName, String taskName)> processingTaskRegistrations =
+      [];
+  final List<_OneOffRegistration> oneOffRegistrations = [];
+
+  @override
+  Future<void> initialize(
+    Function callbackDispatcher, {
+    bool isInDebugMode = false,
+  }) async {
+    initializeCalls++;
+  }
+
+  @override
+  void executeTask(BackgroundTaskHandler backgroundTaskHandler) {}
+
+  @override
+  Future<void> registerOneOffTask(
+    String uniqueName,
+    String taskName, {
+    Map<String, dynamic>? inputData,
+    Duration? initialDelay,
+    Constraints? constraints,
+    ExistingWorkPolicy? existingWorkPolicy,
+    BackoffPolicy? backoffPolicy,
+    Duration? backoffPolicyDelay,
+    String? tag,
+    OutOfQuotaPolicy? outOfQuotaPolicy,
+  }) async {
+    oneOffRegistrations.add(
+      _OneOffRegistration(
+        uniqueName: uniqueName,
+        taskName: taskName,
+        inputData: inputData,
+        tag: tag,
+        existingWorkPolicy: existingWorkPolicy,
+      ),
+    );
+  }
+
+  @override
+  Future<void> registerPeriodicTask(
+    String uniqueName,
+    String taskName, {
+    Duration? frequency,
+    Duration? flexInterval,
+    Map<String, dynamic>? inputData,
+    Duration? initialDelay,
+    Constraints? constraints,
+    ExistingPeriodicWorkPolicy? existingWorkPolicy,
+    BackoffPolicy? backoffPolicy,
+    Duration? backoffPolicyDelay,
+    String? tag,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<bool> isScheduledByUniqueName(String uniqueName) async {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> registerProcessingTask(
+    String uniqueName,
+    String taskName, {
+    Duration? initialDelay,
+    Map<String, dynamic>? inputData,
+    Constraints? constraints,
+  }) async {
+    processingTaskRegistrations.add((uniqueName, taskName));
+  }
+
+  @override
+  Future<void> cancelByUniqueName(String uniqueName) async {}
+
+  @override
+  Future<void> cancelByTag(String tag) async {}
+
+  @override
+  Future<void> cancelAll() async {}
+
+  @override
+  Future<String> printScheduledTasks() async => '';
 }

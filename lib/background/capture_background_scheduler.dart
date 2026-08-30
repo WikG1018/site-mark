@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/platform/local_notification_service.dart';
@@ -14,6 +16,17 @@ const captureProcessingTask = 'sitemark.processCapture';
 /// serial chain so renders/publishes never run concurrently, preserving the
 /// photo-number sequence and MediaStore overwrite semantics.
 const captureProcessingQueue = 'sitemark-render-queue';
+
+/// BGTaskScheduler identifier of the opportunistic iOS catch-up task.
+///
+/// iOS requires an exact three-way match between this constant, the
+/// `BGTaskSchedulerPermittedIdentifiers` entry in `ios/Runner/Info.plist`, and
+/// the `WorkmanagerPlugin.registerBGProcessingTask(withIdentifier:)` call in
+/// `ios/Runner/AppDelegate.swift`. workmanager also delivers the fired task to
+/// [captureCallbackDispatcher] under this name: workmanager_apple dispatches
+/// by uniqueName, not by the taskName argument.
+const iosCaptureProcessingBgTask =
+    'io.github.wikg1018.sitemark.capture-processing';
 
 /// Lowest-level bridge to the platform work scheduler.
 ///
@@ -32,6 +45,14 @@ abstract interface class BackgroundWorkClient {
     required String captureId,
     required String tag,
   });
+
+  /// (Re-)arms the platform's opportunistic background catch-up task.
+  ///
+  /// Enqueued chain work already survives process death on Android, so this
+  /// is a no-op there. On iOS the BGTaskScheduler request is consumed when
+  /// the task fires, so every foreground session and every background run
+  /// must submit the next request.
+  Future<void> scheduleBackgroundReconcile();
 }
 
 /// Coordinates foreground enqueue/reconcile requests against a
@@ -122,10 +143,12 @@ final class PersistentCaptureBackgroundScheduler
 /// Input data carries the `captureId` so the dispatcher knows which record to
 /// process.
 class WorkmanagerBackgroundWorkClient implements BackgroundWorkClient {
-  WorkmanagerBackgroundWorkClient({Workmanager? workmanager})
-    : _workmanager = workmanager ?? Workmanager();
+  WorkmanagerBackgroundWorkClient({Workmanager? workmanager, bool? isIos})
+    : _workmanager = workmanager ?? Workmanager(),
+      _isIos = isIos ?? Platform.isIOS;
 
   final Workmanager _workmanager;
+  final bool _isIos;
   bool _initialized = false;
 
   @override
@@ -133,6 +156,11 @@ class WorkmanagerBackgroundWorkClient implements BackgroundWorkClient {
     if (_initialized) return;
     // isInDebugMode is deprecated and has no effect; omit it.
     await _workmanager.initialize(dispatcher);
+    // iOS keeps no persistent WorkManager queue, so the opportunistic
+    // BGProcessingTask must be submitted once per session from the
+    // foreground isolate; the identifier itself is registered natively in
+    // AppDelegate before launch finishes.
+    await scheduleBackgroundReconcile();
     _initialized = true;
   }
 
@@ -159,6 +187,17 @@ class WorkmanagerBackgroundWorkClient implements BackgroundWorkClient {
       constraints: Constraints(networkType: NetworkType.notRequired),
       backoffPolicy: BackoffPolicy.exponential,
       backoffPolicyDelay: const Duration(seconds: 30),
+    );
+  }
+
+  @override
+  Future<void> scheduleBackgroundReconcile() async {
+    if (!_isIos) return;
+    // The uniqueName doubles as the BGTaskScheduler identifier and must
+    // exactly match Info.plist and the AppDelegate registration.
+    await _workmanager.registerProcessingTask(
+      iosCaptureProcessingBgTask,
+      iosCaptureProcessingBgTask,
     );
   }
 }
@@ -240,6 +279,40 @@ Future<void> _notifyCaptureReady(AppDatabase database, String captureId) async {
   }
 }
 
+/// Whether [taskName] names a capture-processing job this dispatcher runs.
+///
+/// Android delivers the taskName argument given at registration
+/// ([captureProcessingTask]); workmanager_apple delivers the uniqueName, so
+/// jobs on the serial chain arrive as [captureProcessingQueue].
+@visibleForTesting
+bool isCaptureTaskName(String taskName) =>
+    taskName == captureProcessingTask || taskName == captureProcessingQueue;
+
+/// Re-enqueues every capture awaiting processing and re-arms the iOS
+/// background catch-up task.
+///
+/// Runs inside the dispatcher's BGProcessingTask branch as the opportunistic
+/// equivalent of [PersistentCaptureBackgroundScheduler.reconcilePending]:
+/// each pending capture is re-enqueued as a one-off job and processed by the
+/// same idempotent processor. Kept top-level with injected collaborators so
+/// the behavior is testable without the workmanager singleton.
+@visibleForTesting
+Future<void> reconcilePendingCapturesForBackground({
+  required AppDatabase database,
+  required BackgroundWorkClient client,
+}) async {
+  final pending = await database.capturesAwaitingProcessing();
+  for (final record in pending) {
+    await client.appendCapture(
+      queueName: captureProcessingQueue,
+      taskName: captureProcessingTask,
+      captureId: record.id,
+      tag: 'capture:${record.id}',
+    );
+  }
+  await client.scheduleBackgroundReconcile();
+}
+
 /// WorkManager entry point invoked from a background isolate.
 ///
 /// Returns `true` (success) for every non-retry outcome so later work in the
@@ -251,7 +324,22 @@ void captureCallbackDispatcher() {
     AppDatabase? database;
     try {
       WidgetsFlutterBinding.ensureInitialized();
-      if (taskName != captureProcessingTask) return true;
+      if (taskName == iosCaptureProcessingBgTask) {
+        // Opportunistic iOS catch-up (see the design doc's background
+        // scheduling downgrade): reconcile pending captures, then re-arm the
+        // BGTaskScheduler request this run consumed. Android never dispatches
+        // this name.
+        database = AppDatabase();
+        await reconcilePendingCapturesForBackground(
+          database: database,
+          client: WorkmanagerBackgroundWorkClient(),
+        );
+        return true;
+      }
+      // iOS dispatches by uniqueName, so a one-off capture job arrives as
+      // [captureProcessingQueue] instead of [captureProcessingTask] (see
+      // [isCaptureTaskName]).
+      if (!isCaptureTaskName(taskName)) return true;
       final captureId = inputData?['captureId'] as String?;
       if (captureId == null || captureId.isEmpty) return true;
       database = AppDatabase();
