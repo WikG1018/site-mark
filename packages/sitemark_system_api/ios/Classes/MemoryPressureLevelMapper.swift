@@ -9,7 +9,9 @@ import Foundation
 /// broadcasts that have no iOS equivalent. DispatchSource's WARNING/CRITICAL
 /// are the closest iOS signals and map onto `trim` / `kill` respectively.
 public enum MemoryPressureLevelMapper {
-    public static func levelName(for event: DispatchSourceMemoryPressureEvent) -> String? {
+    // The nested Swift spelling (not the C typealias) keeps this file
+    // compilable for both the macOS host tests and the iOS pod.
+    public static func levelName(for event: DispatchSource.MemoryPressureEvent) -> String? {
         if event.contains(.critical) {
             return "kill"
         }

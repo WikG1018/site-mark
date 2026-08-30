@@ -15,7 +15,7 @@ public class MemoryPressurePlugin {
     static let channelName = "sitemark/memory_pressure"
 
     private var channel: FlutterMethodChannel?
-    private var source: DispatchSourceMemoryPressureSource?
+    private var source: DispatchSource.MemoryPressureSourceObject?
     private var nextEventId: Int64 = 0
 
     func attach(messenger: FlutterBinaryMessenger) {

@@ -6,7 +6,7 @@ final class MemoryPressureLevelMapperTests: XCTestCase {
     func testWarningMapsToTheTrimLevel() {
         XCTAssertEqual(
             MemoryPressureLevelMapper.levelName(
-                for: DispatchSourceMemoryPressureEvent(rawValue: DispatchSourceMemoryPressureEvent
+                for: DispatchSource.MemoryPressureEvent(rawValue: DispatchSource.MemoryPressureEvent
                     .warning.rawValue)),
             "trim")
     }
@@ -14,22 +14,22 @@ final class MemoryPressureLevelMapperTests: XCTestCase {
     func testCriticalMapsToTheKillLevel() {
         XCTAssertEqual(
             MemoryPressureLevelMapper.levelName(
-                for: DispatchSourceMemoryPressureEvent(rawValue: DispatchSourceMemoryPressureEvent
+                for: DispatchSource.MemoryPressureEvent(rawValue: DispatchSource.MemoryPressureEvent
                     .critical.rawValue)),
             "kill")
     }
 
     func testCriticalWinsWhenBothFlagsAreSet() {
-        let both = DispatchSourceMemoryPressureEvent(
-            rawValue: DispatchSourceMemoryPressureEvent.warning.rawValue
-                | DispatchSourceMemoryPressureEvent.critical.rawValue)
+        let both = DispatchSource.MemoryPressureEvent(
+            rawValue: DispatchSource.MemoryPressureEvent.warning.rawValue
+                | DispatchSource.MemoryPressureEvent.critical.rawValue)
         XCTAssertEqual(MemoryPressureLevelMapper.levelName(for: both), "kill")
     }
 
     func testNormalMapsToNoLevel() {
         XCTAssertNil(
             MemoryPressureLevelMapper.levelName(
-                for: DispatchSourceMemoryPressureEvent(rawValue: DispatchSourceMemoryPressureEvent
+                for: DispatchSource.MemoryPressureEvent(rawValue: DispatchSource.MemoryPressureEvent
                     .normal.rawValue)))
     }
 }
