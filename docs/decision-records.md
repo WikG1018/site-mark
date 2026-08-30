@@ -243,6 +243,13 @@ CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用
 与 iOS 26/27(Liquid Glass 世代)方向一致,维持既有实现。
 品牌视觉变更时需同步刷新 iOS `AppIcon.appiconset` 与 `assets/branding/`。
 
+2026-08-31 追加(Phase 7–8):iOS 界面形态全量落地——动作菜单呈现 `CupertinoActionSheet`,
+全部提示呈现玻璃胶囊 Toast(不再使用 Material SnackBar),大标题导航覆盖包括三个主标签页
+在内的全部页面,层级推入路由使用 `CupertinoPage`(边缘滑动返回),深色模式经
+`MaterialApp.builder` 桥接 `CupertinoTheme` 亮度全表面正确(修复应用内手选深色时导航栏
+仍为浅色的问题)。本批早前"不做 iOS 专属导航重构"的表述已被 2026-08-30 用户方向调整
+取代:导航形态按 iOS 调整,同时保持 Android 分支行为零变化。
+
 ## 决策变更规则
 
 - 不直接删除已经发布版本遵循的决策；
