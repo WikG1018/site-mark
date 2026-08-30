@@ -18,7 +18,14 @@ let package = Package(
         .target(
             name: "SiteMarkSystemApiCore",
             path: "Classes",
-            exclude: ["SystemApi.g.swift"]
+            exclude: [
+                // Pigeon glue and the Flutter plugin classes import Flutter
+                // and are compiled only inside the CocoaPods plugin target.
+                "SystemApi.g.swift",
+                "SiteMarkSystemPlugin.swift",
+                "MemoryPressurePlugin.swift",
+                "IOSSystemApi.swift",
+            ]
         ),
         .testTarget(
             name: "SiteMarkSystemApiCoreTests",

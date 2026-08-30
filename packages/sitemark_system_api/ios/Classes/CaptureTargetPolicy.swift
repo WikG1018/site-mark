@@ -17,6 +17,14 @@ public enum PolicyError: Error, Equatable {
     case backupSourceEmpty
     case invalidBackupFilename
     case unableToPersistPublishJournal
+    case privateStorageRequired
+    case privateFileMissingOrEmpty
+    case invalidPublishedImageName
+    case imageNotDecodable
+    case cameraCaptureAlreadyActive
+    case archiveSaveAlreadyActive
+    case locationRequestAlreadyActive
+    case foregroundRequired
 }
 
 /// Pure rules for naming and judging camera capture targets inside the
