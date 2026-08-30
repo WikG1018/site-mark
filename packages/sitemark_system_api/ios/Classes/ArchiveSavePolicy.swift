@@ -57,7 +57,7 @@ public enum ArchiveSavePolicy {
     // path/forbidden set / \ : * ? " < > |. ICU's \p{Cc} keeps the rule
     // identical on iOS.
     private static let forbiddenNameRegex = try! NSRegularExpression(
-        pattern: #"[\\p{Cc}/\\:*?"<>|]"#)
+        pattern: #"[\p{Cc}/\\:*?"<>|]"#)
 
     private static func containsForbiddenCharacter(_ name: String) -> Bool {
         let range = NSRange(name.startIndex..., in: name)
