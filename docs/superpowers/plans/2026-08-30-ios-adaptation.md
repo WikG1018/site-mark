@@ -125,7 +125,7 @@
 4. 动效:Toast 胶囊退场淡出(含连发竞态防护:仅"当前"胶囊可拆除槽位)。
 5. 键盘:主列表(全部记录/项目列表)拖拽收起搜索键盘(iOS 惯例)。
 
-实施记录（2026-08-31,PR #__PR__):**深色走查抓到真 bug**——大标题导航栏不随应用主题变深(浅色栏+近白大标题压在深色内容上,对比度不可读);根因是 Cupertino 表面按平台亮度解析动态色,应用内手选深色而系统浅色时同样触发。修复:`MaterialApp.builder` 桥接 `CupertinoTheme`(brightness/primaryColor 随 Material 解析值),抽为 `app_theme.dart` 的 `bridgeCupertinoTheme` 并新增双亮度回归测试;对话框/动作表/Toast 走查本就正确,无需改。其余:iOS `NoSplash`(`_buildThemeData` 平台分支)、`AdaptiveSegmentedButton` 选中触感、Toast 退场动画(识别 + 竞态防护后既有 5 个 Toast 用例零改动通过)、records/project 列表 `keyboardDismissBehavior.onDrag`。评估后不做:下拉刷新(Android 侧无此交互,单侧加入引入分叉;分页控制器改造风险大于收益,留待真机试用后定夺)。走查 6 张图(5 深 1 浅回归)确认;harness 不入库。全量 `flutter test` 1045 通过(新增桥接 2 用例)、`dart analyze` 0 issue、`dart format` 0 diff。
+实施记录（2026-08-31,PR #128):**深色走查抓到真 bug**——大标题导航栏不随应用主题变深(浅色栏+近白大标题压在深色内容上,对比度不可读);根因是 Cupertino 表面按平台亮度解析动态色,应用内手选深色而系统浅色时同样触发。修复:`MaterialApp.builder` 桥接 `CupertinoTheme`(brightness/primaryColor 随 Material 解析值),抽为 `app_theme.dart` 的 `bridgeCupertinoTheme` 并新增双亮度回归测试;对话框/动作表/Toast 走查本就正确,无需改。其余:iOS `NoSplash`(`_buildThemeData` 平台分支)、`AdaptiveSegmentedButton` 选中触感、Toast 退场动画(识别 + 竞态防护后既有 5 个 Toast 用例零改动通过)、records/project 列表 `keyboardDismissBehavior.onDrag`。评估后不做:下拉刷新(Android 侧无此交互,单侧加入引入分叉;分页控制器改造风险大于收益,留待真机试用后定夺)。走查 6 张图(5 深 1 浅回归)确认;harness 不入库。全量 `flutter test` 1045 通过(新增桥接 2 用例)、`dart analyze` 0 issue、`dart format` 0 diff。
 
 ## 文件结构（预期新增/修改）
 
