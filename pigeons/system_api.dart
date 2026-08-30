@@ -8,6 +8,7 @@ import 'package:pigeon/pigeon.dart';
     kotlinOut:
         'packages/sitemark_system_api/android/src/main/kotlin/io/github/wikg1018/sitemark/system/SystemApi.g.kt',
     kotlinOptions: KotlinOptions(package: 'io.github.wikg1018.sitemark.system'),
+    swiftOut: 'packages/sitemark_system_api/ios/Classes/SystemApi.g.swift',
   ),
 )
 enum CameraOutcome { captured, cancelled, failed }

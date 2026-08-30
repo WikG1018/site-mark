@@ -44,6 +44,8 @@
 
 验收：CI 绿；策略与 journal 行为有测试覆盖；Pigeon 生成物与手写代码分离清晰。
 
+实施记录（2026-08-30，PR #121）：6 个 Kotlin 类完成对齐移植（4 策略类 + PublishJournalStore + SafeMediaPublisher），新增 `JournalFilePersistence`（Application Support JSON 原子写后端）；XCTest 32/32 在 CI macos-15 通过（SPM `swift test`，含跨实例并发清除回归测试）。Pigeon `swiftOut` 生成物入 drift 检查，dart/kotlin 产物零漂移。两处 CI 修正：SPM 包必须显式声明平台下限（tools-5.9 默认 macOS 10.13 早于抛错版 FileHandle API，声明 macOS 13 / iOS 14）；Swift raw string 里 `\p{Cc}` 只写一层反斜杠（多写会把字面 `p` 拉进字符类，误杀合法文件名）。设计偏差 4 条已在 PR 声明：核心层恢复类型命名 `RecoveredJournalEntry` 避让 Pigeon 生成类型（2b 插件层映射）、iOS 删除允许列表改为 PHAsset localIdentifier 形状校验、Android URI 授权旗标无 iOS 对应物未移植、journal 持久化协议化为 `JournalPersistence`。podspec 已就位但插件平台声明留待 2b，iOS Runner 构建不受影响。
+
 ### Phase 2b — Pigeon Swift 桥：系统交互层
 
 1. `SiteMarkSystemPlugin` 全量接线：相机（`UIImagePickerController` + 沙盒 marker 恢复）、定位（`CLLocationManager` 一次性 + `CLGeocoder`，`timeoutMillis` 驱动）、`inspectImage`（`CGImageSource`）、`publishJpeg`（`PHPhotoLibrary` 创建资产）、`saveArchive`（`UIDocumentPickerViewController`）、`deletePublishedImage`（`PHAsset` 删除 + 系统确认差异按设计处理）、`openApplicationSettings`。
