@@ -126,3 +126,24 @@ SQLite；模板批量写入使用数据库事务，恢复项目在提交完成�
 当前持久化诊断覆盖备份、恢复与删除操作结果，以固定错误码、数量和耗时记录；不记录
 项目名称、模板值、数据库路径、SQL、原始异常或堆栈。恢复的数据库和文件回滚仍由持久化
 标记、所有权令牌和幂等清理保证，不依赖诊断事件完成。
+
+## 8. iOS 平台差异
+
+iOS 线（Phase 0–3 落地后）复用同一套 Dart 状态机、串行处理顺序、幂等语义与数据库
+schema；上述各节描述的行为在 iOS 上逐条成立，仅承载机制随平台能力替换：
+
+| 环节 | Android 机制 | iOS 机制 |
+| --- | --- | --- |
+| 私有原图 | `getApplicationSupportDirectory()/originals/<captureId>.jpg` | 同一路径（iOS 上即 `<App>/Library/Application Support/originals/`，与 Swift 侧 `IOSSystemApi` 相同目录） |
+| 发布 journal | 私有目录 JSON | Application Support 下 JSON（同语义：captureId 键控、条件清除、同 capture 折叠） |
+| 水印成片发布 | MediaStore 插入，返回 URI | `PHPhotoLibrary` 创建资产，`localIdentifier` 承担 URI 角色；相册内文件名由系统决定，不可强制写入 |
+| 成片删除 | ContentResolver 直接删除 | `PHAsset` 删除，**系统会弹确认框**；UI 文案统一按“可能弹出系统确认”表述，不做平台分支 |
+| 后台串行链 | WorkManager 链，进程死亡后仍持久 | 无 WorkManager 等价物；前台逐张入队即时执行，应用未运行时由 BGProcessingTask 机会性补拍 |
+
+后台补拍的 iOS 形态：前台轮询路径两端完全一致；后台侧只注册一个 BGProcessingTask
+（identifier `io.github.wikg1018.sitemark.capture-processing`，与 Info.plist
+`BGTaskSchedulerPermittedIdentifiers`、AppDelegate 注册三方精确一致；后台模式仅
+`processing`，不申请 audio/location/fetch）。任务触发时重新入队所有
+`captured`/`rendering` 记录（走同一条幂等处理管线）并再次提交下一轮请求。系统在设备
+空闲时机会性调度，不保证拍完立刻处理，低电量会进一步推迟；该限制如实展示在诊断页
+“平台差异”卡片，不模拟 Android 的调度节奏，也不做静默推送唤醒。

@@ -168,6 +168,17 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :NSPhotoLibraryAddUsageDescription" "$PLIST" >/dev/null
           test -z "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$PLIST" 2>/dev/null)"
           test -z "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$PLIST" 2>/dev/null)"
+          # Background task wiring: exactly one permitted identifier matching
+          # the Dart/AppDelegate constant, and only the processing mode.
+          # PlistBuddy prints arrays as "Array {\n    element\n}" — strip the
+          # wrapper before matching/counting.
+          plist_array_items() {
+            /usr/libexec/PlistBuddy -c "Print :$1" "$PLIST" | sed -e 's/^[[:space:]]*//' -e '/^Array {$/d' -e '/^}$/d'
+          }
+          test "$(plist_array_items BGTaskSchedulerPermittedIdentifiers | grep -c .)" -eq 1
+          plist_array_items BGTaskSchedulerPermittedIdentifiers | grep -Fx "io.github.wikg1018.sitemark.capture-processing"
+          test "$(plist_array_items UIBackgroundModes | grep -c .)" -eq 1
+          plist_array_items UIBackgroundModes | grep -Fx "processing"
       - name: Upload unsigned iOS app artifact
         uses: actions/upload-artifact@v6
         with:

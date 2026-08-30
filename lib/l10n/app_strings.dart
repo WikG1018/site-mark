@@ -814,6 +814,19 @@ class AppStrings {
   String get clearDiagnosticsContent => _english
       ? 'Only local diagnostic events will be cleared. Photos, projects, and backups are not deleted.'
       : '只清除本机诊断事件，不会删除照片、项目或备份。';
+  String get platformDifferences => _english ? 'Platform differences' : '平台差异';
+  String get backgroundProcessingDescription => _english
+      ? 'Watermark processing finishes automatically in the background; photos that are not yet processed are caught up in the background.'
+      : '水印处理在拍摄后自动于后台完成，未完成的照片会在后台继续补拍。';
+  String get backgroundProcessingIosNote => _english
+      ? 'On iOS, background catch-up is scheduled opportunistically by the system when the device is idle; it is not guaranteed to run right after a capture.'
+      : '在 iOS 上，后台补拍由系统安排在设备空闲时机会性执行，不保证拍完立刻处理。';
+  String get photoLibraryDeleteConfirmationNote => _english
+      ? 'A system confirmation dialog may appear when photos are deleted from the photo library.'
+      : '删除系统相册中的照片时，可能弹出系统确认框。';
+  String get locationAccuracyNote => _english
+      ? 'Location precision depends on the system authorization; the system may only provide an approximate location.'
+      : '定位精度由系统授权决定，系统可能只提供模糊位置。';
   String get backupWaitForProcessingTitle =>
       _english ? 'Wait for photos to finish processing' : '请等待照片处理完成';
   String backupWaitForProcessingMessage(int count) => _english

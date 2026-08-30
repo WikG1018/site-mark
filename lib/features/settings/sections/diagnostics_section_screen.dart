@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
@@ -37,6 +38,37 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
                   Text(strings.diagnosticsStoredLocally),
                   const SizedBox(height: 6),
                   Text(strings.diagnosticBundlePrivacyNotice),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Platform behavior differences (background scheduling downgrade,
+          // photo-library deletion confirmation, approximate location). The
+          // deletion wording stays uniform on every platform — only iOS pops
+          // the system dialog, so "may confirm" is the honest common ground;
+          // the iOS-specific scheduling note is the one content branch.
+          Card(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    strings.platformDifferences,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(strings.backgroundProcessingDescription),
+                  if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                    const SizedBox(height: 6),
+                    Text(strings.backgroundProcessingIosNote),
+                  ],
+                  const SizedBox(height: 6),
+                  Text(strings.photoLibraryDeleteConfirmationNote),
+                  const SizedBox(height: 6),
+                  Text(strings.locationAccuracyNote),
                 ],
               ),
             ),
