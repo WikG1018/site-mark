@@ -137,4 +137,215 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets('iOS raw inner list scroll collapses the large title', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdaptivePageScaffold.raw(
+            title: '大标题',
+            iosBodyPadding: EdgeInsets.zero,
+            body: ListView(
+              children: [
+                for (var i = 0; i < 40; i++)
+                  SizedBox(height: 80, child: Text('item-$i')),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.text('item-0'), const Offset(0, -800));
+      await tester.pumpAndSettle();
+
+      final nested = tester.state<NestedScrollViewState>(
+        find.byType(NestedScrollView),
+      );
+      expect(nested.outerController.offset, greaterThan(0));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('nested inner controller is the primary under NestedScrollView', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+      ScrollController? found;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdaptivePageScaffold.raw(
+            title: '标题',
+            iosBodyPadding: EdgeInsets.zero,
+            body: Builder(
+              builder: (context) {
+                found = nestedInnerScrollControllerOf(context);
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(found, isNotNull);
+      expect(
+        found,
+        same(
+          tester
+              .state<NestedScrollViewState>(find.byType(NestedScrollView))
+              .innerController,
+        ),
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('nested inner controller is null on Material platforms', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      ScrollController? found;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdaptivePageScaffold.raw(
+            title: '标题',
+            body: Builder(
+              builder: (context) {
+                found = nestedInnerScrollControllerOf(context);
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(found, isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets(
+    'iOS boxed scaffold keeps CustomScrollView not NestedScrollView',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        tester.view.physicalSize = const Size(1170, 2532);
+        tester.view.devicePixelRatio = 3.0;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: AdaptivePageScaffold(title: '页面标题', body: Text('正文')),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(CustomScrollView), findsOneWidget);
+        expect(find.byType(NestedScrollView), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets('iOS raw explicit inner controller collapses the large title', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdaptivePageScaffold.raw(
+            title: '大标题',
+            iosBodyPadding: EdgeInsets.zero,
+            body: Builder(
+              builder: (context) {
+                return ListView(
+                  controller: nestedInnerScrollControllerOf(context),
+                  children: [
+                    for (var i = 0; i < 40; i++)
+                      SizedBox(height: 80, child: Text('item-$i')),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.text('item-0'), const Offset(0, -800));
+      await tester.pumpAndSettle();
+
+      final nested = tester.state<NestedScrollViewState>(
+        find.byType(NestedScrollView),
+      );
+      expect(nested.outerController.offset, greaterThan(0));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('jumpNestedScrollViewsToTop expands the large title', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdaptivePageScaffold.raw(
+            title: '大标题',
+            iosBodyPadding: EdgeInsets.zero,
+            body: Builder(
+              builder: (context) {
+                return ListView(
+                  children: [
+                    for (var i = 0; i < 40; i++)
+                      SizedBox(height: 80, child: Text('item-$i')),
+                    TextButton(
+                      onPressed: () => jumpNestedScrollViewsToTop(context),
+                      child: const Text('回顶'),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.text('item-0'), const Offset(0, -800));
+      await tester.pumpAndSettle();
+      final nested = tester.state<NestedScrollViewState>(
+        find.byType(NestedScrollView),
+      );
+      expect(nested.outerController.offset, greaterThan(0));
+
+      jumpNestedScrollViewsToTop(tester.element(find.byType(ListView)));
+      await tester.pumpAndSettle();
+      expect(nested.innerController.offset, 0);
+      expect(nested.outerController.offset, 0);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }
