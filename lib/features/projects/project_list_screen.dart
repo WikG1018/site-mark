@@ -32,6 +32,8 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
     for (final status in ProjectLifecycleStatus.values)
       status: ScrollController(),
   };
+  final _nestedOffsets = <Object, ({double outer, double inner})>{};
+  Object? _lastNestedBucket;
   bool _searching = false;
   String _query = '';
 
@@ -148,6 +150,58 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
       return;
     }
     setState(() => _status = selected);
+  }
+
+  Object _nestedBucket({required bool searching}) {
+    return searching ? 'search' : _status;
+  }
+
+  void _syncNestedTabOffsets(BuildContext context, {required bool searching}) {
+    final nested = nestedScrollViewStateOf(context);
+    if (nested == null) {
+      return;
+    }
+    final bucket = _nestedBucket(searching: searching);
+    if (_lastNestedBucket == bucket) {
+      return;
+    }
+    if (_lastNestedBucket != null) {
+      _nestedOffsets[_lastNestedBucket!] = (
+        outer: nested.outerController.hasClients
+            ? nested.outerController.offset
+            : 0,
+        inner: nested.innerController.hasClients
+            ? nested.innerController.offset
+            : 0,
+      );
+    }
+    final previous = _lastNestedBucket;
+    _lastNestedBucket = bucket;
+    if (previous == null) {
+      return;
+    }
+    final saved = _nestedOffsets[bucket] ?? (outer: 0.0, inner: 0.0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !nested.mounted) {
+        return;
+      }
+      if (nested.outerController.hasClients) {
+        nested.outerController.jumpTo(
+          saved.outer.clamp(
+            0.0,
+            nested.outerController.position.maxScrollExtent,
+          ),
+        );
+      }
+      if (nested.innerController.hasClients) {
+        nested.innerController.jumpTo(
+          saved.inner.clamp(
+            0.0,
+            nested.innerController.position.maxScrollExtent,
+          ),
+        );
+      }
+    });
   }
 
   String _statusLabel(AppStrings strings, ProjectLifecycleStatus status) {
@@ -277,6 +331,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                       ),
                     );
                   }
+                  _syncNestedTabOffsets(context, searching: searching);
                   if (!snapshot.hasData) {
                     final skeletonCount = adaptiveSkeletonCount(
                       viewportHeight: constraints.maxHeight,
@@ -322,7 +377,9 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                           ? 'project-list-search'
                           : 'project-list-${_status.name}',
                     ),
-                    controller: listController,
+                    controller:
+                        nestedInnerScrollControllerOf(context) ??
+                        listController,
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: EdgeInsets.fromLTRB(

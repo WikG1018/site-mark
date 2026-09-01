@@ -62,32 +62,65 @@ class AdaptivePageScaffold extends StatelessWidget {
         floatingActionButton: floatingActionButton,
       );
     }
+    final navBar = CupertinoSliverNavigationBar(
+      largeTitle: titleWidget ?? Text(title),
+      trailing: actions == null
+          ? null
+          : Row(mainAxisSize: MainAxisSize.min, children: actions!),
+    );
+    final Widget scrollBody = _wrapBodyInList
+        ? CustomScrollView(
+            slivers: [
+              navBar,
+              SliverPadding(
+                padding: iosBodyPadding,
+                sliver: SliverToBoxAdapter(child: body),
+              ),
+            ],
+          )
+        : NestedScrollView(
+            headerSliverBuilder: (context, innerBoxIsScrolled) => [navBar],
+            body: Padding(padding: iosBodyPadding, child: body),
+          );
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          CupertinoSliverNavigationBar(
-            largeTitle: titleWidget ?? Text(title),
-            trailing: actions == null
-                ? null
-                : Row(mainAxisSize: MainAxisSize.min, children: actions!),
-          ),
-          // Boxed bodies size themselves intrinsically; raw bodies own their
-          // scrolling and need the bounded height of the remaining viewport —
-          // a SliverToBoxAdapter would hand them unbounded height and break
-          // every fill-style layout (LayoutBuilder/Stack/ListView) inside.
-          _wrapBodyInList
-              ? SliverPadding(
-                  padding: iosBodyPadding,
-                  sliver: SliverToBoxAdapter(child: body),
-                )
-              : SliverPadding(
-                  padding: iosBodyPadding,
-                  sliver: SliverFillRemaining(child: body),
-                ),
-        ],
-      ),
+      body: scrollBody,
       bottomNavigationBar: bottomNavigationBar,
       floatingActionButton: floatingActionButton,
     );
   }
+}
+
+NestedScrollViewState? nestedScrollViewStateOf(BuildContext context) {
+  return context.findAncestorStateOfType<NestedScrollViewState>();
+}
+
+ScrollController? nestedInnerScrollControllerOf(BuildContext context) {
+  if (nestedScrollViewStateOf(context) == null) {
+    return null;
+  }
+  return PrimaryScrollController.maybeOf(context);
+}
+
+void jumpNestedScrollViewsToTop(BuildContext context) {
+  final nested = nestedScrollViewStateOf(context);
+  if (nested == null) {
+    return;
+  }
+  void jump() {
+    if (!nested.mounted) {
+      return;
+    }
+    void jumpController(ScrollController controller) {
+      if (!controller.hasClients) {
+        return;
+      }
+      controller.jumpTo(controller.position.minScrollExtent);
+    }
+
+    jumpController(nested.innerController);
+    jumpController(nested.outerController);
+  }
+
+  jump();
+  WidgetsBinding.instance.addPostFrameCallback((_) => jump());
 }

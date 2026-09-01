@@ -630,6 +630,11 @@ extension IOSSystemApi: CLLocationManagerDelegate {
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         guard let callback = permissionCallback else { return }
+        guard LocationPermissionRequestPolicy.shouldCompleteInFlightRequest(
+            status: manager.authorizationStatus)
+        else {
+            return
+        }
         permissionCallback = nil
         callback(.success(Self.mappedPermissionState(manager.authorizationStatus)))
     }

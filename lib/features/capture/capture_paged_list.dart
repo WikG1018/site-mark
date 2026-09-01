@@ -7,6 +7,7 @@ import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/adaptive_skeleton_count.dart';
@@ -69,9 +70,10 @@ class _CapturePagedListState extends State<CapturePagedList> {
   final GlobalKey _viewportKey = GlobalKey();
   final Map<String, GlobalKey> _rowKeys = <String, GlobalKey>{};
   final Map<String, String> _rowGroups = <String, String>{};
-  late final ScrollController _scrollController = ScrollController(
+  late final ScrollController _ownedScrollController = ScrollController(
     keepScrollOffset: true,
   );
+  ScrollController? _activeScrollController;
   StreamSubscription<List<CaptureSummary>>? _watchedRowsSubscription;
   List<String> _watchedIds = const [];
   CaptureListQuery? _visibleQuery;
@@ -85,8 +87,25 @@ class _CapturePagedListState extends State<CapturePagedList> {
     super.initState();
     _visibleQuery = widget.controller.state.query;
     widget.controller.addListener(_onPagerChanged);
-    _scrollController.addListener(_onScroll);
     _syncWatchedRows();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _bindScrollController();
+  }
+
+  ScrollController get _scrollController =>
+      _activeScrollController ?? _ownedScrollController;
+
+  void _bindScrollController() {
+    final next =
+        nestedInnerScrollControllerOf(context) ?? _ownedScrollController;
+    if (identical(next, _activeScrollController)) return;
+    _activeScrollController?.removeListener(_onScroll);
+    _activeScrollController = next;
+    next.addListener(_onScroll);
   }
 
   @override
@@ -120,8 +139,8 @@ class _CapturePagedListState extends State<CapturePagedList> {
       _lastReportedGroup = null;
       widget.controller.setAtTop(true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scrollController.hasClients) {
-          _scrollController.jumpTo(0);
+        if (mounted) {
+          _jumpToTop();
         }
       });
     }
@@ -301,9 +320,18 @@ class _CapturePagedListState extends State<CapturePagedList> {
     });
   }
 
+  void _jumpToTop() {
+    jumpNestedScrollViewsToTop(context);
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.position.minScrollExtent);
+    }
+  }
+
   Future<void> _acceptNewer() async {
     widget.controller.setAtTop(true);
-    if (_scrollController.hasClients) {
+    if (nestedScrollViewStateOf(context) != null) {
+      _jumpToTop();
+    } else if (_scrollController.hasClients) {
       final duration = AppMotion.durationOf(context, AppMotion.short4);
       if (duration == Duration.zero) {
         _scrollController.jumpTo(0);
@@ -321,8 +349,8 @@ class _CapturePagedListState extends State<CapturePagedList> {
   @override
   void dispose() {
     widget.controller.removeListener(_onPagerChanged);
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
+    _activeScrollController?.removeListener(_onScroll);
+    _ownedScrollController.dispose();
     _watchGeneration++;
     final subscription = _watchedRowsSubscription;
     _watchedRowsSubscription = null;
