@@ -6,15 +6,21 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_dart_regexp_whitespace`, `is_dart_trim_whitespace`, `is_leap_year`, `is_valid_exported_timestamp`, `is_valid_lifecycle_status`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `normalize_lifecycle_fields`, `normalized_template_name`, `open_zip`, `parse_two_digits`, `read_project_bundle_manifest`, `read_project_manifest`, `safe_archive_component`, `safe_photo_number_component`, `template_name_key`, `tokenize`, `trimmed_template_field`, `unix_time_millis`, `validate_archive_templates`, `validate_project_bundle`, `validate_render_request`, `verify_file`, `wrap_text`, `zip_failure`
+// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `commit_render_temporary`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_dart_regexp_whitespace`, `is_dart_trim_whitespace`, `is_leap_year`, `is_valid_exported_timestamp`, `is_valid_lifecycle_status`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `normalize_lifecycle_fields`, `normalized_template_name`, `open_zip`, `parse_two_digits`, `read_project_bundle_manifest`, `read_project_manifest`, `read_text_failure`, `render_photo_with_before_commit`, `safe_archive_component`, `safe_photo_number_component`, `template_name_key`, `tokenize`, `trimmed_template_field`, `unix_time_millis`, `validate_archive_templates`, `validate_project_bundle`, `validate_render_request`, `validate_source_dimensions`, `validate_source_format`, `verify_file`, `wrap_text`, `zip_failure`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestCaptureTemplate`, `ManifestPhoto`, `ManifestWatermark`, `ProjectBundleManifestEntry`, `ProjectBundleManifest`, `ProjectManifestFile`, `SelectionManifestProject`, `SelectionManifest`, `WatermarkLabels`, `WatermarkLayout`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 Future<String> sha256File({required String path}) =>
     RustLib.instance.api.crateApiImageCoreSha256File(path: path);
 
 Future<RenderPhotoResult> renderPhoto({required RenderPhotoRequest request}) =>
     RustLib.instance.api.crateApiImageCoreRenderPhoto(request: request);
+
+Future<ExportDiagnosticBundleResult> exportDiagnosticBundle({
+  required ExportDiagnosticBundleRequest request,
+}) => RustLib.instance.api.crateApiImageCoreExportDiagnosticBundle(
+  request: request,
+);
 
 Future<ExportProjectResult> exportProject({
   required ExportProjectRequest request,
@@ -55,9 +61,10 @@ Future<ProjectArchivePreview> readProjectArchive({required String zipPath}) =>
 /// Extracts one photo (and its original when requested) from a backup ZIP.
 ///
 /// Everything lands in `<destination>.tmp` first; only after the original's
-/// SHA-256 verifies are the files atomically renamed into place. Any failure
-/// removes every temporary file, so a failed extraction never leaves
-/// half-written files behind for the caller to clean up.
+/// SHA-256 verifies are the files atomically renamed into place. A failure
+/// before the first rename removes every temporary file; once the rendered
+/// photo has been committed, a later failure leaves it in place and cleans up
+/// the original's temporary file.
 Future<ExtractedArchivePhoto> extractArchivePhoto({
   required ExtractArchivePhotoRequest request,
 }) =>
@@ -239,6 +246,62 @@ class ExportCaptureTemplate {
           photographer == other.photographer &&
           createdAt == other.createdAt &&
           updatedAt == other.updatedAt;
+}
+
+class ExportDiagnosticBundleRequest {
+  final String outputZipPath;
+  final String summary;
+  final String environmentJson;
+  final String eventsJsonl;
+  final String manifestJson;
+
+  const ExportDiagnosticBundleRequest({
+    required this.outputZipPath,
+    required this.summary,
+    required this.environmentJson,
+    required this.eventsJsonl,
+    required this.manifestJson,
+  });
+
+  @override
+  int get hashCode =>
+      outputZipPath.hashCode ^
+      summary.hashCode ^
+      environmentJson.hashCode ^
+      eventsJsonl.hashCode ^
+      manifestJson.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportDiagnosticBundleRequest &&
+          runtimeType == other.runtimeType &&
+          outputZipPath == other.outputZipPath &&
+          summary == other.summary &&
+          environmentJson == other.environmentJson &&
+          eventsJsonl == other.eventsJsonl &&
+          manifestJson == other.manifestJson;
+}
+
+class ExportDiagnosticBundleResult {
+  final String outputZipPath;
+  final String archiveSha256;
+
+  const ExportDiagnosticBundleResult({
+    required this.outputZipPath,
+    required this.archiveSha256,
+  });
+
+  @override
+  int get hashCode => outputZipPath.hashCode ^ archiveSha256.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportDiagnosticBundleResult &&
+          runtimeType == other.runtimeType &&
+          outputZipPath == other.outputZipPath &&
+          archiveSha256 == other.archiveSha256;
 }
 
 class ExportPhotoRecord {
