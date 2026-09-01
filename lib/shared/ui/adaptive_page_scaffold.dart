@@ -71,13 +71,23 @@ class AdaptivePageScaffold extends StatelessWidget {
                 ? null
                 : Row(mainAxisSize: MainAxisSize.min, children: actions!),
           ),
-          SliverPadding(
-            padding: iosBodyPadding,
-            sliver: SliverToBoxAdapter(child: body),
-          ),
+          // Boxed bodies size themselves intrinsically; raw bodies own their
+          // scrolling and need the bounded height of the remaining viewport —
+          // a SliverToBoxAdapter would hand them unbounded height and break
+          // every fill-style layout (LayoutBuilder/Stack/ListView) inside.
+          _wrapBodyInList
+              ? SliverPadding(
+                  padding: iosBodyPadding,
+                  sliver: SliverToBoxAdapter(child: body),
+                )
+              : SliverPadding(
+                  padding: iosBodyPadding,
+                  sliver: SliverFillRemaining(child: body),
+                ),
         ],
       ),
       bottomNavigationBar: bottomNavigationBar,
+      floatingActionButton: floatingActionButton,
     );
   }
 }

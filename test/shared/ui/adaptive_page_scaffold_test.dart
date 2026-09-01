@@ -74,4 +74,67 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets('iOS raw scaffold renders floatingActionButton', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: AdaptivePageScaffold.raw(
+            title: '标题',
+            body: Text('正文'),
+            floatingActionButton: FloatingActionButton(
+              key: Key('probe-fab'),
+              onPressed: null,
+              child: Icon(Icons.add),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('probe-fab')), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('iOS raw scaffold lays out a fill-style stack body', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdaptivePageScaffold.raw(
+            title: '标题',
+            iosBodyPadding: EdgeInsets.zero,
+            body: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(child: ListView(children: const [Text('内容')])),
+                const Positioned(
+                  left: 14,
+                  right: 14,
+                  bottom: 12,
+                  child: Text('悬浮 Dock'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('内容'), findsOneWidget);
+      expect(find.text('悬浮 Dock'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }
