@@ -3,3 +3,4 @@ pub mod api;
 pub mod ffi;
 #[cfg(feature = "flutter")]
 mod frb_generated;
+pub mod nas;

@@ -8,20 +8,45 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 
 [features]
 default = ["flutter"]
-flutter = ["dep:flutter_rust_bridge"]
+# The Flutter feature enables WebDAV-over-TLS: cargokit compiles the rustls
+# ring backend against the NDK / Xcode toolchains. The HarmonyOS build
+# (--no-default-features --features ohos-native) must stay C-free — the
+# build-rust.ps1 pipeline only wires a linker, not a C compiler — so there
+# WebDAV runs over plain HTTP while SFTP and SMB provide encrypted transport.
+flutter = ["dep:flutter_rust_bridge", "dep:rustls", "ureq/tls"]
 ohos-native = []
 
 [dependencies]
 ab_glyph = "0.2.32"
+async-trait = "0.1"
+base64 = "0.22"
 csv = "1.4.0"
 flutter_rust_bridge = { version = "=2.12.0", optional = true }
 hex = "0.4.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 imageproc = { version = "0.27.0", default-features = false, features = ["text"] }
+russh = "0.46"
+russh-sftp = "2.4"
+rustls = { version = "0.23.19", optional = true, default-features = false, features = [
+    "ring",
+    "std",
+    "tls12",
+] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 sha2 = "0.11.0"
+smb2 = "0.20"
+tokio = { version = "1", default-features = false, features = [
+    "rt-multi-thread",
+    "net",
+    "time",
+    "io-util",
+    "sync",
+    "macros",
+] }
+ureq = { version = "2.10", default-features = false }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
