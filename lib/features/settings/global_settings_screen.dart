@@ -87,6 +87,14 @@ class GlobalSettingsScreen extends ConsumerWidget {
                 route: '/settings/storage',
               ),
               SettingsEntry(
+                key: const Key('settings-entry-nas-sync'),
+                icon: Icons.dns_outlined,
+                title: strings.nasSync,
+                subtitle: strings.nasSyncSubtitle,
+                reserveSubtitleSpace: true,
+                route: '/settings/nas-sync',
+              ),
+              SettingsEntry(
                 key: const Key('settings-entry-diagnostics'),
                 icon: Icons.health_and_safety_outlined,
                 title: strings.diagnosticsAndFeedback,

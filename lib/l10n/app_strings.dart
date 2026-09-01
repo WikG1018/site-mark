@@ -865,6 +865,89 @@ class AppStrings {
   String get createProjectFailed => _english
       ? 'Could not create the project. Please try again.'
       : '项目创建失败，请稍后重试';
+
+  // NAS sync (settings, data & safety)
+  String get nasSync => _english ? 'NAS sync' : 'NAS 同步';
+  String get nasSyncSubtitle => _english
+      ? 'Auto-upload watermarked photos to your NAS'
+      : '把水印成片自动上传到你的 NAS';
+  String get nasEnable => _english ? 'Enable NAS sync' : '启用 NAS 同步';
+  String get nasProtocol => _english ? 'Protocol' : '协议';
+  String get nasProtocolWebdav => 'WebDAV';
+  String get nasProtocolSftp => 'SFTP';
+  String get nasProtocolSmb => 'SMB';
+  String get nasHost => _english ? 'Server address' : '服务器地址';
+  String get nasHostHint => _english ? 'e.g. 192.168.1.10' : '例如 192.168.1.10';
+  String get nasPort => _english ? 'Port (optional)' : '端口（可选）';
+  String get nasPortHintWebdav => _english ? '80 or 443' : '80 或 443';
+  String get nasPortHintSftp => _english ? '22' : '22';
+  String get nasPortHintSmb => _english ? '445' : '445';
+  String get nasUsername => _english ? 'Username' : '用户名';
+  String get nasPassword => _english ? 'Password' : '密码';
+  String get nasRootPath => _english ? 'Root path' : '根目录';
+  String get nasRootPathHint => _english
+      ? 'e.g. /SiteMark'
+      : '例如 /SiteMark';
+  String get nasSmbRootPathHint => _english
+      ? 'Start with the share name, e.g. /media/SiteMark'
+      : '以共享名开头，例如 /media/SiteMark';
+  String get nasSecureTls => _english ? 'Use HTTPS' : '使用 HTTPS';
+  String get nasAcceptInvalidTls => _english
+      ? 'Accept self-signed certificates'
+      : '接受自签名证书';
+  String get nasWifiOnly => _english ? 'Upload on Wi-Fi only' : '仅 Wi-Fi 上传';
+  String get nasTestConnection => _english ? 'Test connection' : '测试连接';
+  String get nasTestSucceeded =>
+      _english ? 'Connection successful' : '连接成功';
+  String get nasSave => _english ? 'Save' : '保存';
+  String get nasSaved => _english ? 'Saved' : '已保存';
+  String get nasRetryFailed => _english
+      ? 'Retry failed uploads'
+      : '重试失败的上传';
+  String get nasPrivacyNote => _english
+      ? 'Uploads go only to the NAS you configure. Passwords stay in system secure storage and never enter backups or diagnostics.'
+      : '上传仅面向你配置的 NAS。密码保存在系统安全存储，不会进入备份或诊断。';
+  String get nasFingerprintTitle => _english
+      ? 'Verify server fingerprint'
+      : '验证服务器指纹';
+  String nasFingerprintBody(String fingerprint) => _english
+      ? 'First connection to this SFTP server. Verify the host key fingerprint before trusting it:\n\n$fingerprint'
+      : '首次连接该 SFTP 服务器。请核对主机密钥指纹后再信任：\n\n$fingerprint';
+  String get nasFingerprintAccept =>
+      _english ? 'Trust and continue' : '信任并继续';
+  String get nasHostRequired =>
+      _english ? 'Enter the server address first' : '请先填写服务器地址';
+  String nasQueueSummary(int pending, int failed, int uploaded) => _english
+      ? 'Pending $pending · Failed $failed · Uploaded $uploaded'
+      : '待上传 $pending · 失败 $failed · 已上传 $uploaded';
+  String get nasErrorConnectionFailed => _english
+      ? 'Cannot reach the server. Check the address and network.'
+      : '无法连接服务器，请检查地址和网络。';
+  String get nasErrorAuthFailed => _english
+      ? 'Incorrect username or password'
+      : '用户名或密码不正确';
+  String get nasErrorTimeout => _english ? 'Connection timed out' : '连接超时';
+  String get nasErrorTlsError => _english
+      ? 'TLS or certificate error'
+      : 'TLS 或证书错误';
+  String get nasErrorTlsUnsupported => _english
+      ? 'WebDAV over HTTPS is unavailable on this platform. Use HTTP, SFTP or SMB.'
+      : '当前平台的 WebDAV 暂不支持 HTTPS，可改用 HTTP 或 SFTP/SMB。';
+  String get nasErrorHostKeyChanged => _english
+      ? 'The server fingerprint changed. Run the connection test again to confirm.'
+      : '服务器指纹已变化，请重新测试连接并确认。';
+  String get nasErrorProtocolError => _english
+      ? 'The server returned an unexpected response'
+      : '服务器响应异常';
+  String get nasErrorQuotaInsufficient => _english
+      ? 'The NAS is out of storage space'
+      : 'NAS 存储空间不足';
+  String get nasErrorPathInvalid =>
+      _english ? 'Invalid remote path' : '远程路径无效';
+  String get nasErrorLocalIo =>
+      _english ? 'The local photo file is missing' : '本地照片文件缺失';
+  String get nasErrorConfigInvalid =>
+      _english ? 'The configuration is incomplete' : '配置不完整';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

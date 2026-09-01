@@ -728,7 +728,10 @@ void main() {
 
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
-    expect(find.text('新建项目水印默认值'), findsOneWidget);
+    // Back must land on the settings menu again. The page restores its
+    // scroll offset, so assert a landmark near the restored viewport
+    // instead of the first capture-group row.
+    expect(find.text('外观'), findsOneWidget);
     await disposeApp(tester);
   });
 
