@@ -8,6 +8,24 @@ import 'package:sitemark/domain/nas_sync.dart';
 /// `failed`. The user can always retry explicitly, which resets the budget.
 const int kNasMaxUploadAttempts = 5;
 
+NasSyncConfig _defaultNasSyncConfig() {
+  final now = DateTime.now();
+  return NasSyncConfig(
+    id: 'global',
+    protocol: 'webdav',
+    host: '',
+    port: null,
+    username: '',
+    rootPath: '/',
+    secureTls: true,
+    acceptInvalidTls: false,
+    knownSftpFingerprint: null,
+    wifiOnly: true,
+    enabled: false,
+    updatedAt: now,
+  );
+}
+
 /// Data access for the NAS sync feature (decision D-023).
 ///
 /// The remote surface is deliberately minimal: configuration as one
@@ -15,17 +33,15 @@ const int kNasMaxUploadAttempts = 5;
 /// overwriting. Passwords never pass through here — they live in secure
 /// storage and are joined per upload.
 extension NasSyncDatabase on AppDatabase {
-  /// The singleton configuration row, creating it on first use.
+  /// The singleton configuration row. Read-only: when the row does not
+  /// exist yet (sync was never configured), the in-memory defaults are
+  /// returned instead of writing. A write on every read would re-trigger
+  /// drift's statement-level watch and loop forever.
   Future<NasSyncConfig> nasSyncConfig() async {
-    await into(nasSyncConfigs).insert(
-      NasSyncConfigsCompanion.insert(
-        id: const Value('global'),
-        updatedAt: Value(DateTime.now()),
-      ),
-      onConflict: DoNothing(),
-    );
-    return (select(nasSyncConfigs)..where((row) => row.id.equals('global')))
-        .getSingle();
+    final row = await (select(
+      nasSyncConfigs,
+    )..where((row) => row.id.equals('global'))).getSingleOrNull();
+    return row ?? _defaultNasSyncConfig();
   }
 
   /// Persists the singleton configuration row (upsert by id).
@@ -61,11 +77,13 @@ extension NasSyncDatabase on AppDatabase {
   }
 
   /// Emits the configuration on every change — the settings screen mirrors
-  /// it and the coordinator reacts to enable/disable flips.
+  /// it and the coordinator reacts to enable/disable flips. Before the row
+  /// exists, defaults are emitted (as one `null`-to-default mapping, without
+  /// writing).
   Stream<NasSyncConfig> watchNasSyncConfig() {
     return (select(nasSyncConfigs)..where((row) => row.id.equals('global')))
         .watchSingleOrNull()
-        .asyncMap((row) => row ?? nasSyncConfig());
+        .map((row) => row ?? _defaultNasSyncConfig());
   }
 
   /// Enqueues one capture as pending. Insert-only: an existing state (for
@@ -83,7 +101,9 @@ extension NasSyncDatabase on AppDatabase {
     final readyQuery = selectOnly(captureRecords)
       ..addColumns([captureRecords.id])
       ..where(captureRecords.status.equals(CaptureStatus.ready.name));
-    final readyIds = await readyQuery.map((row) => row.read(captureRecords.id)!).get();
+    final readyIds = await readyQuery
+        .map((row) => row.read(captureRecords.id)!)
+        .get();
     for (final captureId in readyIds) {
       await upsertNasUploadPending(captureId);
     }
@@ -104,11 +124,10 @@ extension NasSyncDatabase on AppDatabase {
 
   /// Every upload state, newest activity first (settings surface).
   Future<List<NasUploadState>> allNasUploadStates() {
-    return (select(nasUploadStates)
-          ..orderBy([
-            (row) => OrderingTerm.desc(row.lastAttemptAt),
-            (row) => OrderingTerm.desc(row.uploadedAt),
-          ]))
+    return (select(nasUploadStates)..orderBy([
+          (row) => OrderingTerm.desc(row.lastAttemptAt),
+          (row) => OrderingTerm.desc(row.uploadedAt),
+        ]))
         .get();
   }
 
@@ -116,15 +135,14 @@ extension NasSyncDatabase on AppDatabase {
   /// budget is exhausted; below the budget it stays pending for the next
   /// trigger (new capture, app start, or config change).
   Future<void> markNasUploadFailed(String captureId, String failureCode) async {
-    final state = await (select(nasUploadStates)
-          ..where((row) => row.captureId.equals(captureId)))
-        .getSingleOrNull();
+    final state = await (select(
+      nasUploadStates,
+    )..where((row) => row.captureId.equals(captureId))).getSingleOrNull();
     if (state == null) return;
     final attempts = state.attempts + 1;
-    await (update(nasUploadStates)..where((row) => row.captureId.equals(
-          captureId,
-        )))
-        .write(
+    await (update(
+      nasUploadStates,
+    )..where((row) => row.captureId.equals(captureId))).write(
       NasUploadStatesCompanion(
         status: Value(
           attempts >= kNasMaxUploadAttempts
@@ -142,9 +160,9 @@ extension NasSyncDatabase on AppDatabase {
   /// (for example after a re-render) overwrites the remote file and simply
   /// refreshes this row.
   Future<void> markNasUploaded(String captureId) async {
-    await (update(nasUploadStates)
-            ..where((row) => row.captureId.equals(captureId)))
-        .write(
+    await (update(
+      nasUploadStates,
+    )..where((row) => row.captureId.equals(captureId))).write(
       NasUploadStatesCompanion(
         status: Value(NasUploadStatus.uploaded),
         failureCode: Value(null),
@@ -157,9 +175,9 @@ extension NasSyncDatabase on AppDatabase {
   /// User-initiated retry: resets the budget and parks the state back in
   /// pending. Only meaningful for failed rows but harmless otherwise.
   Future<void> resetNasUploadForRetry(String captureId) async {
-    await (update(nasUploadStates)
-            ..where((row) => row.captureId.equals(captureId)))
-        .write(
+    await (update(
+      nasUploadStates,
+    )..where((row) => row.captureId.equals(captureId))).write(
       const NasUploadStatesCompanion(
         status: Value(NasUploadStatus.pending),
         attempts: Value(0),
