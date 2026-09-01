@@ -24,7 +24,7 @@ export interface CaptureWorkflowDatabase {
 const DATABASE_NAME: string = 'sitemark_native.db';
 // Bump when a change alters the persisted schema. Stores opened from an older
 // build run the pending SCHEMA_MIGRATIONS steps before the new value is written.
-const DATABASE_SCHEMA_VERSION: number = 14;
+const DATABASE_SCHEMA_VERSION: number = 15;
 const DEFAULT_PAGE_SIZE: number = 50;
 
 interface SchemaMigration {
@@ -35,7 +35,39 @@ interface SchemaMigration {
 // Non-idempotent upgrade steps (ALTER TABLE, backfills) for stores created by
 // an older build. Append-only: never edit or reorder committed entries. Fresh
 // stores skip them because SCHEMA_STATEMENTS already create the current schema.
-const SCHEMA_MIGRATIONS: SchemaMigration[] = [];
+const SCHEMA_MIGRATIONS: SchemaMigration[] = [
+  {
+    // NAS sync (decision D-023): configuration singleton plus per-capture
+    // upload bookkeeping. IF NOT EXISTS keeps the steps idempotent; both
+    // tables start empty — captures are enqueued once the user enables
+    // sync, via the catch-up scan.
+    version: 15,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS nas_sync_config (
+        id TEXT PRIMARY KEY NOT NULL DEFAULT 'global',
+        protocol TEXT NOT NULL DEFAULT 'webdav' CHECK(protocol IN ('webdav','sftp','smb')),
+        host TEXT NOT NULL DEFAULT '',
+        port INTEGER,
+        username TEXT NOT NULL DEFAULT '',
+        root_path TEXT NOT NULL DEFAULT '/',
+        secure_tls INTEGER NOT NULL DEFAULT 1 CHECK(secure_tls IN (0,1)),
+        accept_invalid_tls INTEGER NOT NULL DEFAULT 0 CHECK(accept_invalid_tls IN (0,1)),
+        known_sftp_fingerprint TEXT,
+        wifi_only INTEGER NOT NULL DEFAULT 1 CHECK(wifi_only IN (0,1)),
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+        updated_at INTEGER
+      )`,
+      `CREATE TABLE IF NOT EXISTS nas_upload_state (
+        capture_id TEXT PRIMARY KEY NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','uploaded','failed')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        failure_code TEXT,
+        last_attempt_at INTEGER,
+        uploaded_at INTEGER
+      )`,
+    ],
+  },
+];
 
 const SCHEMA_STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS projects (
@@ -157,7 +189,29 @@ const SCHEMA_STATEMENTS: string[] = [
     duration_ms INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   )`,
-  'CREATE INDEX IF NOT EXISTS diagnostic_events_created_idx ON diagnostic_events(created_at DESC)'
+  'CREATE INDEX IF NOT EXISTS diagnostic_events_created_idx ON diagnostic_events(created_at DESC)',
+  `CREATE TABLE IF NOT EXISTS nas_sync_config (
+    id TEXT PRIMARY KEY NOT NULL DEFAULT 'global',
+    protocol TEXT NOT NULL DEFAULT 'webdav' CHECK(protocol IN ('webdav','sftp','smb')),
+    host TEXT NOT NULL DEFAULT '',
+    port INTEGER,
+    username TEXT NOT NULL DEFAULT '',
+    root_path TEXT NOT NULL DEFAULT '/',
+    secure_tls INTEGER NOT NULL DEFAULT 1 CHECK(secure_tls IN (0,1)),
+    accept_invalid_tls INTEGER NOT NULL DEFAULT 0 CHECK(accept_invalid_tls IN (0,1)),
+    known_sftp_fingerprint TEXT,
+    wifi_only INTEGER NOT NULL DEFAULT 1 CHECK(wifi_only IN (0,1)),
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+    updated_at INTEGER
+  )`,
+  `CREATE TABLE IF NOT EXISTS nas_upload_state (
+    capture_id TEXT PRIMARY KEY NOT NULL REFERENCES captures(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','uploaded','failed')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    failure_code TEXT,
+    last_attempt_at INTEGER,
+    uploaded_at INTEGER
+  )`
 ];
 
 function parseCaptureStatus(value: string): CaptureStatus {
@@ -1263,6 +1317,213 @@ export class AppDatabase implements CaptureWorkflowDatabase {
 
   async clearDiagnostics(): Promise<void> {
     await this.store.executeSql('DELETE FROM diagnostic_events');
+  }
+
+  // ---- NAS sync (decision D-023) -------------------------------------
+  // Reads never write: a write-per-read on nas_sync_config would re-trigger
+  // every statement-level watcher and spin. Missing rows fall back to the
+  // in-memory defaults; only saveNasSyncConfig persists.
+
+  async nasSyncConfig(): Promise<NasSyncConfigRecord> {
+    const rows = await this.store.querySql(
+      'SELECT id,protocol,host,port,username,root_path,secure_tls,accept_invalid_tls,' +
+      'known_sftp_fingerprint,wifi_only,enabled,updated_at FROM nas_sync_config WHERE id=? LIMIT 1',
+      ['global']);
+    try {
+      if (!rows.goToFirstRow()) {
+        return new NasSyncConfigRecord();
+      }
+      const fingerprintIdx = rows.getColumnIndex('known_sftp_fingerprint');
+      const portIdx = rows.getColumnIndex('port');
+      return new NasSyncConfigRecord(
+        rows.getString(rows.getColumnIndex('protocol')),
+        rows.getString(rows.getColumnIndex('host')),
+        rows.isColumnNull(portIdx) ? null : rows.getLong(portIdx),
+        rows.getString(rows.getColumnIndex('username')),
+        rows.getString(rows.getColumnIndex('root_path')),
+        rows.getLong(rows.getColumnIndex('secure_tls')) === 1,
+        rows.getLong(rows.getColumnIndex('accept_invalid_tls')) === 1,
+        rows.isColumnNull(fingerprintIdx) ? null : rows.getString(fingerprintIdx),
+        rows.getLong(rows.getColumnIndex('wifi_only')) === 1,
+        rows.getLong(rows.getColumnIndex('enabled')) === 1,
+        rows.getLong(rows.getColumnIndex('updated_at'))
+      );
+    } finally {
+      rows.close();
+    }
+  }
+
+  async saveNasSyncConfig(config: NasSyncConfigRecord): Promise<void> {
+    await this.store.executeSql(
+      `INSERT OR REPLACE INTO nas_sync_config
+        (id,protocol,host,port,username,root_path,secure_tls,accept_invalid_tls,
+         known_sftp_fingerprint,wifi_only,enabled,updated_at)
+       VALUES('global',?,?,?,?,?,?,?,?,?,?,?)`,
+      [config.protocol, config.host, config.port, config.username, config.rootPath,
+        config.secureTls ? 1 : 0, config.acceptInvalidTls ? 1 : 0,
+        config.knownSftpFingerprint, config.wifiOnly ? 1 : 0,
+        config.enabled ? 1 : 0, Date.now()]);
+  }
+
+  /** Insert-only enqueue: an existing state (e.g. uploaded) is never downgraded. */
+  async upsertNasUploadPending(captureId: string): Promise<void> {
+    await this.store.executeSql(
+      "INSERT OR IGNORE INTO nas_upload_state(capture_id) VALUES(?)", [captureId]);
+  }
+
+  /** Enqueues every ready capture without a state yet (catch-up scan). */
+  async enqueueReadyCapturesForNas(): Promise<number> {
+    const rows = await this.store.querySql(
+      "SELECT c.id FROM captures c LEFT JOIN nas_upload_state n ON n.capture_id=c.id " +
+      "WHERE c.status='ready' AND n.capture_id IS NULL");
+    let enqueued = 0;
+    try {
+      while (rows.goToNextRow()) {
+        const captureId = rows.getString(rows.getColumnIndex('id'));
+        await this.upsertNasUploadPending(captureId);
+        enqueued++;
+      }
+      return enqueued;
+    } finally {
+      rows.close();
+    }
+  }
+
+  async pendingNasUploads(): Promise<NasUploadStateRecord[]> {
+    const rows = await this.store.querySql(
+      "SELECT capture_id,attempts FROM nas_upload_state " +
+      "WHERE status='pending' AND attempts < ? ORDER BY last_attempt_at ASC LIMIT 20",
+      [NAS_MAX_UPLOAD_ATTEMPTS]);
+    const result: NasUploadStateRecord[] = [];
+    try {
+      while (rows.goToNextRow()) {
+        result.push(new NasUploadStateRecord(
+          rows.getString(rows.getColumnIndex('capture_id')),
+          'pending',
+          rows.getLong(rows.getColumnIndex('attempts'))));
+      }
+      return result;
+    } finally {
+      rows.close();
+    }
+  }
+
+  async countNasUploadStates(): Promise<NasUploadCounts> {
+    const rows = await this.store.querySql(
+      'SELECT status, COUNT(*) AS n FROM nas_upload_state GROUP BY status');
+    const counts = new NasUploadCounts(0, 0, 0);
+    try {
+      while (rows.goToNextRow()) {
+        const status = rows.getString(rows.getColumnIndex('status'));
+        const n = rows.getLong(rows.getColumnIndex('n'));
+        if (status === 'pending') {
+          counts.pending = n;
+        } else if (status === 'failed') {
+          counts.failed = n;
+        } else if (status === 'uploaded') {
+          counts.uploaded = n;
+        }
+      }
+      return counts;
+    } finally {
+      rows.close();
+    }
+  }
+
+  async markNasUploadFailed(captureId: string, failureCode: string): Promise<void> {
+    const rows = await this.store.querySql(
+      'SELECT attempts FROM nas_upload_state WHERE capture_id=?', [captureId]);
+    let attempts = 0;
+    try {
+      if (rows.goToFirstRow()) {
+        attempts = rows.getLong(rows.getColumnIndex('attempts')) + 1;
+      } else {
+        return;
+      }
+    } finally {
+      rows.close();
+    }
+    const status = attempts >= NAS_MAX_UPLOAD_ATTEMPTS ? 'failed' : 'pending';
+    await this.store.executeSql(
+      'UPDATE nas_upload_state SET attempts=?, status=?, failure_code=?, last_attempt_at=? WHERE capture_id=?',
+      [attempts, status, failureCode, Date.now(), captureId]);
+  }
+
+  async markNasUploaded(captureId: string): Promise<void> {
+    const now = Date.now();
+    await this.store.executeSql(
+      "UPDATE nas_upload_state SET status='uploaded', failure_code=NULL, uploaded_at=?, last_attempt_at=? WHERE capture_id=?",
+      [now, now, captureId]);
+  }
+
+  async resetNasUploadForRetry(captureId: string): Promise<void> {
+    await this.store.executeSql(
+      "UPDATE nas_upload_state SET status='pending', attempts=0, failure_code=NULL WHERE capture_id=?",
+      [captureId]);
+  }
+
+  async resetFailedNasUploads(): Promise<void> {
+    await this.store.executeSql(
+      "UPDATE nas_upload_state SET status='pending', attempts=0, failure_code=NULL WHERE status='failed'");
+  }
+}
+
+/** Automatic attempt budget per capture; parks the state in 'failed' beyond it. */
+export const NAS_MAX_UPLOAD_ATTEMPTS: number = 5;
+
+/** The singleton NAS configuration row. Passwords never live here. */
+export class NasSyncConfigRecord {
+  protocol: string = 'webdav';
+  host: string = '';
+  port: number | null = null;
+  username: string = '';
+  rootPath: string = '/';
+  secureTls: boolean = true;
+  acceptInvalidTls: boolean = false;
+  knownSftpFingerprint: string | null = null;
+  wifiOnly: boolean = true;
+  enabled: boolean = false;
+  updatedAt: number = 0;
+
+  constructor(protocol: string = 'webdav', host: string = '', port: number | null = null,
+    username: string = '', rootPath: string = '/', secureTls: boolean = true,
+    acceptInvalidTls: boolean = false, knownSftpFingerprint: string | null = null,
+    wifiOnly: boolean = true, enabled: boolean = false, updatedAt: number = 0) {
+    this.protocol = protocol;
+    this.host = host;
+    this.port = port;
+    this.username = username;
+    this.rootPath = rootPath;
+    this.secureTls = secureTls;
+    this.acceptInvalidTls = acceptInvalidTls;
+    this.knownSftpFingerprint = knownSftpFingerprint;
+    this.wifiOnly = wifiOnly;
+    this.enabled = enabled;
+    this.updatedAt = updatedAt;
+  }
+}
+
+export class NasUploadStateRecord {
+  captureId: string;
+  status: string;
+  attempts: number;
+
+  constructor(captureId: string, status: string, attempts: number) {
+    this.captureId = captureId;
+    this.status = status;
+    this.attempts = attempts;
+  }
+}
+
+export class NasUploadCounts {
+  pending: number;
+  failed: number;
+  uploaded: number;
+
+  constructor(pending: number, failed: number, uploaded: number) {
+    this.pending = pending;
+    this.failed = failed;
+    this.uploaded = uploaded;
   }
 }
 
