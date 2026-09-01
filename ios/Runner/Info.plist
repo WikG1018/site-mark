@@ -10,6 +10,14 @@
 	<string>SiteMark</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<!-- D-023: NAS sync talks to user-configured servers. Local-network NAS
+	     boxes commonly serve plain HTTP, so allow unencrypted ATS for local
+	     network resources only; remote targets are expected to use HTTPS. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
