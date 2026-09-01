@@ -16,11 +16,15 @@ final class LocationPermissionRequestPolicyTests: XCTestCase {
                 status: .denied))
     }
 
+    // authorizedWhenInUse is iOS-only: CoreLocation marks it unavailable on
+    // macOS, the host the package's `swift test` suite compiles on.
+    #if os(iOS)
     func testAuthorizedWhenInUseCompletesInFlightRequest() {
         XCTAssertTrue(
             LocationPermissionRequestPolicy.shouldCompleteInFlightRequest(
                 status: .authorizedWhenInUse))
     }
+    #endif
 
     func testRestrictedCompletesInFlightRequest() {
         XCTAssertTrue(
