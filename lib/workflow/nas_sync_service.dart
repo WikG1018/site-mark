@@ -50,8 +50,10 @@ abstract interface class NasConnectivity {
 class ConnectivityNasConnectivity implements NasConnectivity {
   @override
   Future<bool> allowsUpload({required bool wifiOnly}) async {
-    final results = await Connectivity().checkConnectivity();
-    final types = results.toSet();
+    // connectivity_plus stays on 6.x: the 7.x iOS implementation calls
+    // NWPath.isUltraConstrained, which only exists in the iOS 26 SDK and
+    // breaks every build on Xcode 16 (see ci.yml's macos-15 runner).
+    final types = (await Connectivity().checkConnectivity()).toSet();
     if (wifiOnly) {
       return types.contains(ConnectivityResult.wifi) ||
           types.contains(ConnectivityResult.ethernet);
