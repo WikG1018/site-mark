@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.13`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.14`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -10,14 +10,14 @@ English | [简体中文](README.md)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.13-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.13)
-[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.6-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.6)
+[![Latest](https://img.shields.io/badge/latest-v1.0.14-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.14)
+[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.7-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.7)
 
-**Current stable version (Latest): [`v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.13)**
+**Current stable version (Latest): [`v1.0.14`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.14)**
 
-**Current HarmonyOS native version: [`native-v1.0.6`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.6) (HarmonyOS NEXT, unsigned HAP)**
+**Current HarmonyOS native version: [`native-v1.0.7`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.7) (HarmonyOS NEXT, unsigned HAP)**
 
-Requires Android 12 (API 31) or later. `v1.0.13` is set as Latest: on top of the v1.0.11 baseline (targetSdk 37 / Android 17), it fixes the fullscreen photo viewer, where a photo zoomed with a two-finger pinch could not be dragged with one finger to reach the corners, and adds an English README. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
+Requires Android 12 (API 31) or later. `v1.0.14` is set as Latest: all three product lines gain an optional NAS sync feature (WebDAV/SFTP/SMB, off by default, talking only to the server you configure, with passwords in system secure storage); the packages declare `INTERNET` / `ACCESS_NETWORK_STATE` (plus `GET_NETWORK_INFO` on HarmonyOS) solely for it. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
 
 ## Download
 
@@ -25,16 +25,16 @@ Requires Android 12 (API 31) or later. `v1.0.13` is set as Latest: on top of the
 
 | Package | Applies to | Download |
 | --- | --- | --- |
-| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.13-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/sitemark-v1.0.13-arm64.apk) |
-| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.13-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/sitemark-v1.0.13-universal.apk) |
-| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/SHA256SUMS.txt) |
+| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.14-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.14/sitemark-v1.0.14-arm64.apk) |
+| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.14-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.14/sitemark-v1.0.14-universal.apk) |
+| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.14/SHA256SUMS.txt) |
 
-### HarmonyOS native (native-v1.0.6)
+### HarmonyOS native (native-v1.0.7)
 
 | Package | Applies to / notes | Download |
 | --- | --- | --- |
-| HarmonyOS HAP | **Unsigned**; sign it yourself in a DevEco/hdc environment before installing. A production signature requires an AGC release certificate (see `tool/ohos-native/sign-hap.ps1`). The published HAP is a debug build variant (an unsigned release build cannot be installed directly) | [sitemark-native-v1.0.6-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.6/sitemark-native-v1.0.6-unsigned.hap) |
-| HarmonyOS SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.6/SHA256SUMS.txt) |
+| HarmonyOS HAP | **Unsigned**; sign it yourself in a DevEco/hdc environment before installing. A production signature requires an AGC release certificate (see `tool/ohos-native/sign-hap.ps1`). The published HAP is a debug build variant (an unsigned release build cannot be installed directly) | [sitemark-native-v1.0.7-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.7/sitemark-native-v1.0.7-unsigned.hap) |
+| HarmonyOS SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.7/SHA256SUMS.txt) |
 
 > [!WARNING]
 > Uninstalling SiteMark deletes the app database, the app-private original photos, and the private watermark files. Watermarked photos already published to the system gallery `Pictures/SiteMark` are usually kept. Before uninstalling, switching devices, or resolving a signature conflict, open "Settings → Backup & restore" first, back up the important projects, and store the ZIP files in a safe place.
@@ -43,7 +43,7 @@ Requires Android 12 (API 31) or later. `v1.0.13` is set as Latest: on top of the
 
 `ohos-native/` is an independent Stage + ArkTS + ArkUI implementation. It does not use the community Flutter HarmonyOS adaptation layer and evolves on the same single branch as the Android version. It already runs the main flows — projects, capture processing, record management, watermarking, backup & restore, storage, and diagnostics — on the DevEco NEXT emulator, and it reuses the same Rust core as the Android version for image and ZIP rules.
 
-The current release provides an unsigned HAP of `native-v1.0.6` (see the download table above). **No signed HarmonyOS package is available yet, and the app is not on Huawei AppGallery**; the camera, gallery permissions, and performance still need to be re-verified on HarmonyOS NEXT real devices. Do not interpret the emulator results as an AppGallery release.
+The current release provides an unsigned HAP of `native-v1.0.7` (see the download table above). **No signed HarmonyOS package is available yet, and the app is not on Huawei AppGallery**; the camera, gallery permissions, and performance still need to be re-verified on HarmonyOS NEXT real devices. Do not interpret the emulator results as an AppGallery release.
 
 - [HarmonyOS native version: overview and build](ohos-native/README.md)
 - [Platform deltas and verification boundaries](ohos-native/docs/deltas.md)
@@ -68,7 +68,8 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releases) for the full notes.
 
-- **v1.0.13 / native-v1.0.6** (Latest): fixed the fullscreen photo viewer, where a photo zoomed with a two-finger pinch could not be dragged with one finger to reach the corners (fixed on both Android and HarmonyOS native); added an English README with language switching.
+- **v1.0.14 / native-v1.0.7** (Latest): all three product lines gain an optional NAS sync (WebDAV/SFTP/SMB, off by default, talking only to the user-configured server, passwords in system secure storage); the Android/iOS database migrates to v14 (NAS config and upload bookkeeping tables), the HarmonyOS RDB to v15; uploads run on a serial queue with a 5-attempt budget, and the first SFTP connection verifies the host key fingerprint.
+- **v1.0.13 / native-v1.0.6**: fixed the fullscreen photo viewer, where a photo zoomed with a two-finger pinch could not be dragged with one finger to reach the corners (fixed on both Android and HarmonyOS native); added an English README with language switching.
 - **v1.0.12 / native-v1.0.5** (Pre-release): full dual-platform audit fixes (read-only batch bypass, cross-platform watermark domain unification, dark-mode contrast, cold-start notification routing, draft durability).
 - **v1.0.11**: targetSdk raised to Android 17 (API 37) with compileSdk 37; reviewed the Android 17 targeted behavior changes (large-screen orientation/resizability rules, tighter background activity launches, local network permission, background audio, MessageQueue, native library loading) — none affect this offline app, runtime behavior matches API 36, and real-device regression passed.
 - **v1.0.10** (Pre-release): fixed system back in selection mode on the all-records and project-records pages exiting straight to the launcher; back now first clears the selection (search and filters are handled at the same layer).
@@ -265,7 +266,7 @@ The release gates for the current version include:
 
 When HarmonyOS native code is involved, the checks additionally cover the HarmonyOS manifest's minimal permission set and dual-ABI configuration, and run Rust Clippy/tests for the `ohos-native` feature separately. ArkTS tests and HAP packaging need the DevEco Studio SDK and are currently verified in a local DevEco environment.
 
-Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.13` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
+Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.14` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
 
 ## Local build
 

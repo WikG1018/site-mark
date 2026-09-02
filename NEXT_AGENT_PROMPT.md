@@ -26,7 +26,7 @@
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | Android `io.github.wikg1018.sitemark`；鸿蒙原生 `io.github.wikg1018.sitemark.native` |
 | 默认基础分支 | `main`（唯一开发分支，Android 与鸿蒙原生同线演进；见第 0 节） |
-| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.6`）；Android 见 `pubspec.yaml`（`1.0.13+28`） |
+| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.7`）；Android 见 `pubspec.yaml`（`1.0.14+29`） |
 | 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中；iOS 复用线 Phase 0–3、5–8 已全部合入（Swift 桥/BGTaskScheduler/界面全量 iOS 26/27 形态/深色桥接），仅剩 Phase 4（TestFlight/签名）等 Apple Developer 账号与真机验证项 |
 | 数据库 | 鸿蒙 RDB 契约测试见 `tool/test_ohos_capture_database_contract*`；Android Drift schema 见 `lib/data/app_database.dart` |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
@@ -144,7 +144,7 @@ cargo test --manifest-path rust/Cargo.toml
 ## 7. 发布与维护（背景）
 
 - 发布步骤与自动化门禁：`docs/release-checklist.md`。  
-- **`v1.0.13` 是 Latest**（全屏查看器单指拖动修复随本版发布）；`native-v1.0.6` 为当前鸿蒙原生发布（未签名 HAP）。后续发版按清单完成拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。
+- **`v1.0.14` 是 Latest**（三端可选 NAS 同步随本版发布，D-023 修订）；`native-v1.0.7` 为当前鸿蒙原生发布（未签名 HAP）。后续发版按清单完成拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。
 - **iOS 第三条产品线：** Phase 0–3、5–8 已全部合入 `main`（PR #119–#128，含实施记录见 `docs/superpowers/plans/2026-08-30-ios-adaptation.md`）。下一步是 Phase 4（TestFlight/签名），在用户提供 Apple Developer 账号之前不启动；真机项（深色启动屏/滑动手感/相机实拍）待设备。  
 - **NAS 同步（D-023 修订，三线功能）：** Android/iOS 走 flutter_rust_bridge，鸿蒙走 JSON C ABI；schema Android/iOS v14、鸿蒙 RDB v15。鸿蒙端 WebDAV 仅明文 HTTP（`ohos-native` feature 保持无 C 依赖，TLS 被编译门控排除，HTTPS 返回 `tls_unsupported`）；SFTP/SMB 三线全加密。上传为串行队列 + 5 次尝试预算，失败可手动重试。  
 - Agent **默认不**创建 GitHub Release、不上传签名密钥、不在未授权时合并 `main`。
