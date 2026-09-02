@@ -12,6 +12,7 @@ import { PreferencesCaptureKillDraftStorage, PreferencesCaptureSessionStorage,
 import { PublishJournalStore } from '../data/prefs/PublishJournalStore';
 import { RestoreJournalStore } from '../data/prefs/RestoreJournalStore';
 import { CaptureProcessor } from '../feature/capture/CaptureProcessor';
+import { NasSyncService } from '../core/sync/NasSyncService';
 import { CaptureWorkflow } from '../feature/capture/CaptureWorkflow';
 import { StartupRecovery } from './StartupRecovery';
 import { CaptureStatus } from '../domain/StateMachine';
@@ -52,6 +53,7 @@ export class AppRuntime {
   readonly screenState: ScreenStateStore;
   readonly uiMemory: UiMemoryCoordinator;
   readonly captureKillDraft: CaptureKillDraftStore;
+  readonly nasSync: NasSyncService;
 
   selectedProjectId: string = '';
   selectedCaptureId: string = '';
@@ -70,7 +72,12 @@ export class AppRuntime {
     this.notifications = new CompletionNotifications(context);
     const processor = new CaptureProcessor(database, this.pipeline, this.services, context.filesDir,
       (_captureId: string, _succeeded: boolean): void => this.notifyDataChanged(), this.notifications);
-    this.queue = new SerialCaptureQueue((captureId: string): Promise<void> => processor.process(captureId));
+    this.nasSync = new NasSyncService(database);
+    // Observer pattern: the NAS queue is refreshed after every processed
+    // capture. The service no-ops immediately unless sync is enabled, so
+    // the capture pipeline itself stays NAS-unaware.
+    this.queue = new SerialCaptureQueue((captureId: string): Promise<void> =>
+      processor.process(captureId).finally(() => this.nasSync.syncNow()));
     this.suspendWindow = new SuspendDelayWindow('process captured photos', requestSystemSuspendDelay,
       cancelSystemSuspendDelay, (): boolean => this.queue.isBusy());
     this.queue.setDrainedListener((): void => this.suspendWindow.release());
@@ -99,6 +106,8 @@ export class AppRuntime {
     const runtime = new AppRuntime(context, database);
     await runtime.applyAppearance();
     await runtime.startupRecovery.run();
+    // Catch-up scan + drain for the NAS queue (no-op when sync is off).
+    runtime.nasSync.syncNow();
     if (AppRuntime.current === null) {
       AppRuntime.current = runtime;
     }

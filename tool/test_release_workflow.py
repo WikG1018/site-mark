@@ -8,12 +8,19 @@ CI_WORKFLOW = REPOSITORY_ROOT / ".github" / "workflows" / "ci.yml"
 APP_GRADLE = REPOSITORY_ROOT / "android" / "app" / "build.gradle.kts"
 EXPECTED_TARGET_SDK = "37"
 
-FORBIDDEN_PERMISSIONS = (
+# D-023: INTERNET and ACCESS_NETWORK_STATE are required since the opt-in
+# NAS sync feature (WebDAV upload to a user-configured server). They are the
+# ONLY network permissions allowed; every broader or unrelated one stays
+# forbidden.
+REQUIRED_PERMISSIONS = (
     "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE",
+)
+
+FORBIDDEN_PERMISSIONS = (
     "android.permission.CAMERA",
     "android.permission.ACCESS_BACKGROUND_LOCATION",
     "android.permission.READ_MEDIA_IMAGES",
-    "android.permission.ACCESS_NETWORK_STATE",
     "android.permission.WRITE_EXTERNAL_STORAGE",
     "android.permission.READ_EXTERNAL_STORAGE",
     "android.permission.MANAGE_EXTERNAL_STORAGE",
@@ -45,10 +52,17 @@ class ReleaseWorkflowTest(unittest.TestCase):
 
         self.assertIn("APK metadata check failed:", workflow)
 
-    def test_release_forbids_network_camera_and_broad_storage_permissions(self) -> None:
+    def test_release_forbids_camera_and_broad_storage_permissions(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 
         for permission in FORBIDDEN_PERMISSIONS:
+            with self.subTest(permission=permission):
+                self.assertIn(permission, workflow)
+
+    def test_release_requires_exactly_the_nas_sync_network_permissions(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+
+        for permission in REQUIRED_PERMISSIONS:
             with self.subTest(permission=permission):
                 self.assertIn(permission, workflow)
 
@@ -59,6 +73,13 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("build/app/outputs/flutter-apk/app-release.apk", workflow)
         self.assertIn("build-tools/36.0.0/aapt2", workflow)
         for permission in FORBIDDEN_PERMISSIONS:
+            with self.subTest(permission=permission):
+                self.assertIn(permission, workflow)
+
+    def test_ci_requires_exactly_the_nas_sync_network_permissions(self) -> None:
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+
+        for permission in REQUIRED_PERMISSIONS:
             with self.subTest(permission=permission):
                 self.assertIn(permission, workflow)
 

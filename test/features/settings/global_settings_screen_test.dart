@@ -129,7 +129,7 @@ void main() {
     await pumpSettings(tester);
 
     expect(find.byType(GlassSurface), findsNWidgets(3));
-    expect(find.byType(Divider), findsNWidgets(6));
+    expect(find.byType(Divider), findsNWidgets(7));
     for (final surface in tester.widgetList<GlassSurface>(
       find.byType(GlassSurface),
     )) {
@@ -137,7 +137,7 @@ void main() {
     }
   });
 
-  testWidgets('contains exactly three groups and the nine expected routes', (
+  testWidgets('contains exactly three groups and the ten expected routes', (
     tester,
   ) async {
     await pumpSettings(tester);
@@ -149,20 +149,21 @@ void main() {
     ];
     for (final key in groupKeys) {
       final group = tester.widget<SettingsGroup>(find.byKey(key));
-      expect(group.children, hasLength(3));
+      expect(group.children.length, inInclusiveRange(3, 4));
       expect(group.children, everyElement(isA<SettingsEntry>()));
     }
 
     final entries = tester.widgetList<SettingsEntry>(
       find.byType(SettingsEntry),
     );
-    expect(entries, hasLength(9));
+    expect(entries, hasLength(10));
     expect(entries.map((entry) => entry.route), [
       '/settings/watermark',
       '/settings/location',
       '/settings/notification',
       '/settings/backup-restore',
       '/settings/storage',
+      '/settings/nas-sync',
       '/settings/diagnostics',
       '/settings/appearance',
       '/settings/language',
@@ -172,7 +173,12 @@ void main() {
       entries
           .where((entry) => entry.reserveSubtitleSpace)
           .map((entry) => entry.route),
-      ['/settings/notification', '/settings/storage', '/settings/language'],
+      [
+        '/settings/notification',
+        '/settings/storage',
+        '/settings/nas-sync',
+        '/settings/language',
+      ],
     );
   });
 

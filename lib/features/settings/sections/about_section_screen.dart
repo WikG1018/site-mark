@@ -9,7 +9,7 @@ import 'package:sitemark/shared/ui/adaptive_toast.dart';
 
 /// Fallback version/build used when [PackageInfo.fromPlatform] fails (e.g. in
 /// unit tests where no platform plugin is available).
-const _fallbackPackageInfo = (version: '1.0.13', buildNumber: '28');
+const _fallbackPackageInfo = (version: '1.0.14', buildNumber: '29');
 
 class AboutSectionScreen extends ConsumerStatefulWidget {
   const AboutSectionScreen({super.key});

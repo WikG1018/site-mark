@@ -25,6 +25,7 @@ import 'package:sitemark/features/settings/sections/backup_restore_section_scree
 import 'package:sitemark/features/settings/sections/diagnostics_section_screen.dart';
 import 'package:sitemark/features/settings/sections/language_section_screen.dart';
 import 'package:sitemark/features/settings/sections/location_section_screen.dart';
+import 'package:sitemark/features/settings/sections/nas_sync_section_screen.dart';
 import 'package:sitemark/features/settings/sections/notification_section_screen.dart';
 import 'package:sitemark/features/settings/sections/storage_section_screen.dart';
 import 'package:sitemark/features/settings/sections/watermark_defaults_section_screen.dart';
@@ -56,6 +57,7 @@ import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
+import 'package:sitemark/workflow/nas_sync_service.dart';
 import 'package:sitemark/workflow/project_lifecycle_service.dart';
 import 'package:sitemark/app_theme.dart';
 import 'package:sitemark/shared/theme/accent_swatches.dart';
@@ -154,6 +156,30 @@ final projectBundlePipelineProvider = Provider<ProjectBundlePipeline>(
 final captureOutputPathsProvider = Provider<CaptureOutputPaths>(
   (ref) => AppCaptureOutputPaths(),
 );
+
+final nasCredentialStoreProvider = Provider<NasCredentialStore>((ref) {
+  return SecureStorageNasCredentials();
+});
+
+final nasConnectivityProvider = Provider<NasConnectivity>((ref) {
+  return ConnectivityNasConnectivity();
+});
+
+final nasUploaderProvider = Provider<NasUploader>((ref) {
+  return RustNasUploader();
+});
+
+final nasSyncCoordinatorProvider = Provider<NasSyncCoordinator>((ref) {
+  final coordinator = NasSyncCoordinator(
+    ref.watch(databaseProvider),
+    ref.watch(nasCredentialStoreProvider),
+    ref.watch(nasConnectivityProvider),
+    ref.watch(nasUploaderProvider),
+    ref.watch(captureOutputPathsProvider),
+  );
+  ref.onDispose(coordinator.dispose);
+  return coordinator;
+});
 
 final projectExportPathsProvider = Provider<ProjectExportPaths>(
   (ref) => AppProjectExportPaths(),
@@ -664,6 +690,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                   ),
                   GoRoute(
                     parentNavigatorKey: rootNavigatorKey,
+                    path: 'nas-sync',
+                    pageBuilder: (context, state) =>
+                        _sharedAxisPage(state, const NasSyncSectionScreen()),
+                  ),
+                  GoRoute(
+                    parentNavigatorKey: rootNavigatorKey,
                     path: 'about',
                     pageBuilder: (context, state) =>
                         _sharedAxisPage(state, const AboutSectionScreen()),
@@ -738,6 +770,15 @@ class _SiteMarkAppState extends ConsumerState<SiteMarkApp>
       if (!mounted) return;
       if (ref.read(startupRecoveryEnabledProvider)) {
         await ref.read(appStartupRecoveryProvider).run();
+      }
+      if (!mounted) return;
+      // Starts the NAS upload observers (config + capture watchers). The
+      // queue drains only when the user enabled NAS sync.
+      try {
+        await ref.read(nasSyncCoordinatorProvider).start();
+      } catch (_) {
+        // The coordinator is only an observer; a failed start retries on
+        // the next config or capture change via the settings surface.
       }
       if (!mounted) return;
       // Wire completion notifications: taps (including the cold-start

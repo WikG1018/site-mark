@@ -6,6 +6,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:sitemark/data/conditional_polling_stream.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
+import 'package:sitemark/domain/nas_sync.dart';
 import 'package:sitemark/domain/photo_number.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
@@ -44,6 +45,24 @@ class CaptureStatusConverter extends TypeConverter<CaptureStatus, String> {
 
   @override
   String toSql(CaptureStatus value) => value.name;
+}
+
+/// Unknown or corrupted upload states degrade to `failed` so they are never
+/// silently auto-retried; the user can always retry them explicitly.
+class NasUploadStatusConverter extends TypeConverter<NasUploadStatus, String> {
+  const NasUploadStatusConverter();
+
+  @override
+  NasUploadStatus fromSql(String fromDb) {
+    try {
+      return NasUploadStatus.values.byName(fromDb);
+    } on ArgumentError {
+      return NasUploadStatus.failed;
+    }
+  }
+
+  @override
+  String toSql(NasUploadStatus value) => value.name;
 }
 
 class Projects extends Table {
@@ -218,6 +237,72 @@ class CaptureMediaCleanups extends Table {
   Set<Column<Object>> get primaryKey => {publishedUri};
 }
 
+/// Singleton row (id = 'global') describing the user-configured NAS target.
+///
+/// The password is deliberately absent: it lives only in secure storage
+/// (Keystore/Keychain) and is passed per upload, never persisted here.
+@DataClassName('NasSyncConfig')
+class NasSyncConfigs extends Table {
+  TextColumn get id => text().withDefault(const Constant('global'))();
+
+  /// webdav | sftp | smb (see Rust NasProtocol).
+  TextColumn get protocol => text().withDefault(const Constant('webdav'))();
+
+  TextColumn get host => text().withDefault(const Constant(''))();
+  IntColumn get port => integer().nullable()();
+  TextColumn get username => text().withDefault(const Constant(''))();
+
+  /// WebDAV/SFTP: server path prefix such as `/SiteMark`. SMB: `/share`
+  /// plus optional sub-directories such as `/media/SiteMark`.
+  TextColumn get rootPath => text().withDefault(const Constant('/'))();
+
+  /// WebDAV only: attempt HTTPS. SFTP is always encrypted, SMB negotiates
+  /// its own crypto.
+  BoolColumn get secureTls => boolean().withDefault(const Constant(true))();
+
+  /// WebDAV only: accept self-signed or mismatched certificates.
+  BoolColumn get acceptInvalidTls =>
+      boolean().withDefault(const Constant(false))();
+
+  /// SFTP host key fingerprint the user accepted (TOFU). A mismatch aborts
+  /// uploads until the user re-accepts via the connection test.
+  TextColumn get knownSftpFingerprint => text().nullable()();
+
+  BoolColumn get wifiOnly => boolean().withDefault(const Constant(true))();
+  BoolColumn get enabled => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Per-capture upload bookkeeping for the NAS queue. Created lazily once a
+/// capture becomes ready (or on the catch-up scan when sync is enabled).
+///
+/// No path or host columns: the remote location is derived from the config
+/// and the project name at upload time, and diagnostics never carry either.
+@DataClassName('NasUploadState')
+class NasUploadStates extends Table {
+  TextColumn get captureId =>
+      text().references(CaptureRecords, #id, onDelete: KeyAction.cascade)();
+
+  /// pending | uploaded | failed (see NasUploadStatus).
+  TextColumn get status => text()
+      .map(const NasUploadStatusConverter())
+      .withDefault(const Constant('pending'))();
+
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+
+  /// Category code from the Rust core (nas:{code_name}); never raw errors.
+  TextColumn get failureCode => text().nullable()();
+
+  DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+  DateTimeColumn get uploadedAt => dateTime().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {captureId};
+}
+
 @DriftDatabase(
   tables: [
     Projects,
@@ -225,6 +310,8 @@ class CaptureMediaCleanups extends Table {
     AppSettings,
     CaptureTemplates,
     CaptureMediaCleanups,
+    NasSyncConfigs,
+    NasUploadStates,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -263,7 +350,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -379,6 +466,13 @@ class AppDatabase extends _$AppDatabase {
             captureMediaCleanups.stalledAt,
           );
         }
+      }
+      if (from < 14) {
+        // NAS sync (D-023): configuration singleton plus per-capture upload
+        // bookkeeping. Both start empty — existing captures are only
+        // enqueued once the user enables sync, via the catch-up scan.
+        await migrator.createTable(nasSyncConfigs);
+        await migrator.createTable(nasUploadStates);
       }
       await _ensureGlobalSettingsRow(this);
     },

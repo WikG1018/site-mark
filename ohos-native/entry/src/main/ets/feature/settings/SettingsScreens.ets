@@ -185,6 +185,11 @@ export struct SettingsView {
               subtitle: tr('查看应用内原图、成片和导出占用', 'Review private originals, images, and exports'),
               showDivider: true,
               action: (): void => { this.pathStack.pushPathByName(Routes.STORAGE, null); } })
+            SettingRow({ icon: '⌂', title: tr('NAS 同步', 'NAS sync'),
+              subtitle: tr('把水印成片自动上传到你的 NAS',
+                'Auto-upload watermarked photos to your NAS'),
+              showDivider: true,
+              action: (): void => { this.pathStack.pushPathByName(Routes.NAS_SYNC, null); } })
             SettingRow({ icon: '◇', title: tr('诊断与反馈', 'Diagnostics and feedback'),
               subtitle: tr('本机生成隐私安全的诊断包，不会自动上传',
                 'Create a privacy-safe diagnostic bundle locally; nothing is uploaded automatically'),

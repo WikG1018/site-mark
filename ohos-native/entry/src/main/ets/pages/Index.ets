@@ -12,6 +12,7 @@ import { ProjectDetailScreen, ProjectEditorScreen, ProjectListView,
   ProjectSettingsScreen } from '../feature/projects/ProjectScreens';
 import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, SettingsView,
   StorageScreen } from '../feature/settings/SettingsScreens';
+import { NasSyncScreen } from '../feature/settings/NasSyncScreen';
 import { UiTokens } from '../shared/UiTokens';
 import { AccentSwatches } from '../shared/AccentSwatches';
 import { AppText, tr } from '../shared/AppText';
@@ -334,6 +335,8 @@ struct Index {
       BackupScreen();
     } else if (routeName === Routes.STORAGE) {
       StorageScreen();
+    } else if (routeName === Routes.NAS_SYNC) {
+      NasSyncScreen();
     } else if (routeName === Routes.DIAGNOSTICS) {
       DiagnosticsScreen();
     } else if (routeName === Routes.APPEARANCE) {

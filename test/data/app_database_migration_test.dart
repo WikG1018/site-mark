@@ -2,6 +2,8 @@ import 'package:drift/drift.dart' show QueryExecutor, Variable;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/data/nas_sync_database.dart';
+import 'package:sitemark/domain/nas_sync.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -1100,7 +1102,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV10Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 13);
+    expect(database.schemaVersion, 14);
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);
@@ -1110,7 +1112,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV11Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 13);
+    expect(database.schemaVersion, 14);
     // The v11 lifecycle columns survive the v11→v12-only upgrade path.
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
@@ -1142,7 +1144,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV12Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 13);
+    expect(database.schemaVersion, 14);
 
     // The seeded v12 task survives with a FULL budget: retry count 0 and
     // not stalled, so automatic processing keeps serving it.
@@ -1164,6 +1166,45 @@ void main() {
     expect(updated?.lastAttemptAt, isNotNull);
     expect(updated?.stalledAt, isNull);
     expect(await database.stalledSupersededCleanups(), isEmpty);
+  });
+
+  test('v12 to v14 migration creates the NAS sync tables', () async {
+    final database = AppDatabase.forTesting(openMigratedV12Fixture());
+    addTearDown(database.close);
+
+    expect(database.schemaVersion, 14);
+
+    // Pre-existing data survives the two-step upgrade.
+    expect(
+      (await database.projectById('existing'))!.lifecycleStatus,
+      ProjectLifecycleStatus.active,
+    );
+
+    // Both NAS tables start empty — existing captures are only enqueued
+    // once the user enables sync, via the catch-up scan.
+    final config = await database.nasSyncConfig();
+    expect(config, isNotNull);
+    expect(config.enabled, isFalse);
+    expect(config.protocol, 'webdav');
+    expect(config.wifiOnly, isTrue);
+    expect(config.knownSftpFingerprint, isNull);
+    expect(await database.allNasUploadStates(), isEmpty);
+
+    // The upload bookkeeping is live: seed one ready capture (the fixture
+    // has none) and enqueue it as pending.
+    final seededAt = DateTime.utc(2026, 8, 3).millisecondsSinceEpoch ~/ 1000;
+    await database.customStatement(
+      "INSERT INTO captures (id, project_id, work_location, work_content, "
+      "photographer, original_path, status, created_at) VALUES "
+      "('capture-nas', 'existing', '部位', '内容', '张三', '/tmp/o.jpg', "
+      "'ready', ?)",
+      [seededAt],
+    );
+    await database.upsertNasUploadPending('capture-nas');
+    final states = await database.allNasUploadStates();
+    expect(states.single.captureId, 'capture-nas');
+    expect(states.single.status, NasUploadStatus.pending);
+    expect(states.single.attempts, 0);
   });
 
   test(
@@ -1188,7 +1229,7 @@ void main() {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 13);
+    expect(database.schemaVersion, 14);
     final project = await database.createProject(id: 'fresh', name: '新项目');
     expect(project.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);

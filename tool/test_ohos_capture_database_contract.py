@@ -301,5 +301,72 @@ class HarmonyCaptureDatabaseContractTest(unittest.TestCase):
         self.assertEqual(row, ("new description", "topRight", 0.6, 22, 1.3))
 
 
+def nas_table_sql() -> list[str]:
+    """The two NAS DDL statements from both SCHEMA_STATEMENTS and the v15 migration."""
+    statements = re.findall(r"`(CREATE TABLE IF NOT EXISTS nas_\w+ \(.*?\))`", source(), re.S)
+    return statements
+
+
+class HarmonyNasSyncContractTest(unittest.TestCase):
+    """The ohos NAS tables (D-023) mirror the Flutter line's v14 schema."""
+
+    def test_nas_tables_declared_for_fresh_and_migrated_stores(self) -> None:
+        statements = nas_table_sql()
+        # Declared once for fresh stores and once (idempotently) in the v15 migration.
+        self.assertEqual(len(statements), 4, statements)
+        for statement in statements:
+            self.assertIn("CREATE TABLE IF NOT EXISTS", statement)
+
+    def test_nas_config_table_enforces_singleton_and_defaults(self) -> None:
+        connection = sqlite3.connect(":memory:")
+        for statement in nas_table_sql():
+            if "nas_sync_config" in statement:
+                connection.execute(statement)
+        connection.execute(
+            "INSERT INTO nas_sync_config(id) VALUES('global')")
+        # The app only ever addresses id='global'; a second write with the
+        # same id is an upsert, a different id would break the singleton
+        # contract — the primary key at least keeps rows unique.
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO nas_sync_config(id) VALUES('global')")
+        # Defaults mirror the Flutter line's config row.
+        row = connection.execute(
+            "SELECT protocol, host, secure_tls, accept_invalid_tls, wifi_only, enabled "
+            "FROM nas_sync_config WHERE id='global'").fetchone()
+        self.assertEqual(row, ("webdav", "", 1, 0, 1, 0))
+        # Protocol vocabulary is closed.
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO nas_sync_config(id, protocol) VALUES('other', 'ftp')")
+
+    def test_nas_upload_state_rejects_unknown_status_and_orphans(self) -> None:
+        connection = sqlite3.connect(":memory:")
+        connection.execute(
+            "CREATE TABLE captures(id TEXT PRIMARY KEY, status TEXT)")
+        for statement in nas_table_sql():
+            if "nas_upload_state" in statement:
+                connection.execute(statement)
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute(
+            "INSERT INTO captures(id, status) VALUES('c1', 'ready')")
+        connection.execute(
+            "INSERT INTO nas_upload_state(capture_id) VALUES('c1')")
+        row = connection.execute(
+            "SELECT status, attempts, failure_code FROM nas_upload_state WHERE capture_id='c1'"
+        ).fetchone()
+        self.assertEqual(row, ("pending", 0, None))
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO nas_upload_state(capture_id, status) VALUES('c1', 'queued')")
+        # FK: a state cannot outlive its capture (no diagnostics leak).
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO nas_upload_state(capture_id) VALUES('missing')")
+
+    def test_schema_version_bumped_to_fifteen(self) -> None:
+        self.assertIn("DATABASE_SCHEMA_VERSION: number = 15", source())
+
+
 if __name__ == "__main__":
     unittest.main()

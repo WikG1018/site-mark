@@ -3991,6 +3991,1177 @@ class CaptureMediaCleanupsCompanion
   }
 }
 
+class $NasSyncConfigsTable extends NasSyncConfigs
+    with TableInfo<$NasSyncConfigsTable, NasSyncConfig> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $NasSyncConfigsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('global'),
+  );
+  static const VerificationMeta _protocolMeta = const VerificationMeta(
+    'protocol',
+  );
+  @override
+  late final GeneratedColumn<String> protocol = GeneratedColumn<String>(
+    'protocol',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('webdav'),
+  );
+  static const VerificationMeta _hostMeta = const VerificationMeta('host');
+  @override
+  late final GeneratedColumn<String> host = GeneratedColumn<String>(
+    'host',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _portMeta = const VerificationMeta('port');
+  @override
+  late final GeneratedColumn<int> port = GeneratedColumn<int>(
+    'port',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _usernameMeta = const VerificationMeta(
+    'username',
+  );
+  @override
+  late final GeneratedColumn<String> username = GeneratedColumn<String>(
+    'username',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _rootPathMeta = const VerificationMeta(
+    'rootPath',
+  );
+  @override
+  late final GeneratedColumn<String> rootPath = GeneratedColumn<String>(
+    'root_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('/'),
+  );
+  static const VerificationMeta _secureTlsMeta = const VerificationMeta(
+    'secureTls',
+  );
+  @override
+  late final GeneratedColumn<bool> secureTls = GeneratedColumn<bool>(
+    'secure_tls',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("secure_tls" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _acceptInvalidTlsMeta = const VerificationMeta(
+    'acceptInvalidTls',
+  );
+  @override
+  late final GeneratedColumn<bool> acceptInvalidTls = GeneratedColumn<bool>(
+    'accept_invalid_tls',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("accept_invalid_tls" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _knownSftpFingerprintMeta =
+      const VerificationMeta('knownSftpFingerprint');
+  @override
+  late final GeneratedColumn<String> knownSftpFingerprint =
+      GeneratedColumn<String>(
+        'known_sftp_fingerprint',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _wifiOnlyMeta = const VerificationMeta(
+    'wifiOnly',
+  );
+  @override
+  late final GeneratedColumn<bool> wifiOnly = GeneratedColumn<bool>(
+    'wifi_only',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("wifi_only" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _enabledMeta = const VerificationMeta(
+    'enabled',
+  );
+  @override
+  late final GeneratedColumn<bool> enabled = GeneratedColumn<bool>(
+    'enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    protocol,
+    host,
+    port,
+    username,
+    rootPath,
+    secureTls,
+    acceptInvalidTls,
+    knownSftpFingerprint,
+    wifiOnly,
+    enabled,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'nas_sync_configs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<NasSyncConfig> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('protocol')) {
+      context.handle(
+        _protocolMeta,
+        protocol.isAcceptableOrUnknown(data['protocol']!, _protocolMeta),
+      );
+    }
+    if (data.containsKey('host')) {
+      context.handle(
+        _hostMeta,
+        host.isAcceptableOrUnknown(data['host']!, _hostMeta),
+      );
+    }
+    if (data.containsKey('port')) {
+      context.handle(
+        _portMeta,
+        port.isAcceptableOrUnknown(data['port']!, _portMeta),
+      );
+    }
+    if (data.containsKey('username')) {
+      context.handle(
+        _usernameMeta,
+        username.isAcceptableOrUnknown(data['username']!, _usernameMeta),
+      );
+    }
+    if (data.containsKey('root_path')) {
+      context.handle(
+        _rootPathMeta,
+        rootPath.isAcceptableOrUnknown(data['root_path']!, _rootPathMeta),
+      );
+    }
+    if (data.containsKey('secure_tls')) {
+      context.handle(
+        _secureTlsMeta,
+        secureTls.isAcceptableOrUnknown(data['secure_tls']!, _secureTlsMeta),
+      );
+    }
+    if (data.containsKey('accept_invalid_tls')) {
+      context.handle(
+        _acceptInvalidTlsMeta,
+        acceptInvalidTls.isAcceptableOrUnknown(
+          data['accept_invalid_tls']!,
+          _acceptInvalidTlsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('known_sftp_fingerprint')) {
+      context.handle(
+        _knownSftpFingerprintMeta,
+        knownSftpFingerprint.isAcceptableOrUnknown(
+          data['known_sftp_fingerprint']!,
+          _knownSftpFingerprintMeta,
+        ),
+      );
+    }
+    if (data.containsKey('wifi_only')) {
+      context.handle(
+        _wifiOnlyMeta,
+        wifiOnly.isAcceptableOrUnknown(data['wifi_only']!, _wifiOnlyMeta),
+      );
+    }
+    if (data.containsKey('enabled')) {
+      context.handle(
+        _enabledMeta,
+        enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  NasSyncConfig map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return NasSyncConfig(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      protocol: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}protocol'],
+      )!,
+      host: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host'],
+      )!,
+      port: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}port'],
+      ),
+      username: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}username'],
+      )!,
+      rootPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}root_path'],
+      )!,
+      secureTls: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}secure_tls'],
+      )!,
+      acceptInvalidTls: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}accept_invalid_tls'],
+      )!,
+      knownSftpFingerprint: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}known_sftp_fingerprint'],
+      ),
+      wifiOnly: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}wifi_only'],
+      )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+    );
+  }
+
+  @override
+  $NasSyncConfigsTable createAlias(String alias) {
+    return $NasSyncConfigsTable(attachedDatabase, alias);
+  }
+}
+
+class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
+  final String id;
+
+  /// webdav | sftp | smb (see Rust NasProtocol).
+  final String protocol;
+  final String host;
+  final int? port;
+  final String username;
+
+  /// WebDAV/SFTP: server path prefix such as `/SiteMark`. SMB: `/share`
+  /// plus optional sub-directories such as `/media/SiteMark`.
+  final String rootPath;
+
+  /// WebDAV only: attempt HTTPS. SFTP is always encrypted, SMB negotiates
+  /// its own crypto.
+  final bool secureTls;
+
+  /// WebDAV only: accept self-signed or mismatched certificates.
+  final bool acceptInvalidTls;
+
+  /// SFTP host key fingerprint the user accepted (TOFU). A mismatch aborts
+  /// uploads until the user re-accepts via the connection test.
+  final String? knownSftpFingerprint;
+  final bool wifiOnly;
+  final bool enabled;
+  final DateTime? updatedAt;
+  const NasSyncConfig({
+    required this.id,
+    required this.protocol,
+    required this.host,
+    this.port,
+    required this.username,
+    required this.rootPath,
+    required this.secureTls,
+    required this.acceptInvalidTls,
+    this.knownSftpFingerprint,
+    required this.wifiOnly,
+    required this.enabled,
+    this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['protocol'] = Variable<String>(protocol);
+    map['host'] = Variable<String>(host);
+    if (!nullToAbsent || port != null) {
+      map['port'] = Variable<int>(port);
+    }
+    map['username'] = Variable<String>(username);
+    map['root_path'] = Variable<String>(rootPath);
+    map['secure_tls'] = Variable<bool>(secureTls);
+    map['accept_invalid_tls'] = Variable<bool>(acceptInvalidTls);
+    if (!nullToAbsent || knownSftpFingerprint != null) {
+      map['known_sftp_fingerprint'] = Variable<String>(knownSftpFingerprint);
+    }
+    map['wifi_only'] = Variable<bool>(wifiOnly);
+    map['enabled'] = Variable<bool>(enabled);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
+    return map;
+  }
+
+  NasSyncConfigsCompanion toCompanion(bool nullToAbsent) {
+    return NasSyncConfigsCompanion(
+      id: Value(id),
+      protocol: Value(protocol),
+      host: Value(host),
+      port: port == null && nullToAbsent ? const Value.absent() : Value(port),
+      username: Value(username),
+      rootPath: Value(rootPath),
+      secureTls: Value(secureTls),
+      acceptInvalidTls: Value(acceptInvalidTls),
+      knownSftpFingerprint: knownSftpFingerprint == null && nullToAbsent
+          ? const Value.absent()
+          : Value(knownSftpFingerprint),
+      wifiOnly: Value(wifiOnly),
+      enabled: Value(enabled),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+    );
+  }
+
+  factory NasSyncConfig.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return NasSyncConfig(
+      id: serializer.fromJson<String>(json['id']),
+      protocol: serializer.fromJson<String>(json['protocol']),
+      host: serializer.fromJson<String>(json['host']),
+      port: serializer.fromJson<int?>(json['port']),
+      username: serializer.fromJson<String>(json['username']),
+      rootPath: serializer.fromJson<String>(json['rootPath']),
+      secureTls: serializer.fromJson<bool>(json['secureTls']),
+      acceptInvalidTls: serializer.fromJson<bool>(json['acceptInvalidTls']),
+      knownSftpFingerprint: serializer.fromJson<String?>(
+        json['knownSftpFingerprint'],
+      ),
+      wifiOnly: serializer.fromJson<bool>(json['wifiOnly']),
+      enabled: serializer.fromJson<bool>(json['enabled']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'protocol': serializer.toJson<String>(protocol),
+      'host': serializer.toJson<String>(host),
+      'port': serializer.toJson<int?>(port),
+      'username': serializer.toJson<String>(username),
+      'rootPath': serializer.toJson<String>(rootPath),
+      'secureTls': serializer.toJson<bool>(secureTls),
+      'acceptInvalidTls': serializer.toJson<bool>(acceptInvalidTls),
+      'knownSftpFingerprint': serializer.toJson<String?>(knownSftpFingerprint),
+      'wifiOnly': serializer.toJson<bool>(wifiOnly),
+      'enabled': serializer.toJson<bool>(enabled),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+    };
+  }
+
+  NasSyncConfig copyWith({
+    String? id,
+    String? protocol,
+    String? host,
+    Value<int?> port = const Value.absent(),
+    String? username,
+    String? rootPath,
+    bool? secureTls,
+    bool? acceptInvalidTls,
+    Value<String?> knownSftpFingerprint = const Value.absent(),
+    bool? wifiOnly,
+    bool? enabled,
+    Value<DateTime?> updatedAt = const Value.absent(),
+  }) => NasSyncConfig(
+    id: id ?? this.id,
+    protocol: protocol ?? this.protocol,
+    host: host ?? this.host,
+    port: port.present ? port.value : this.port,
+    username: username ?? this.username,
+    rootPath: rootPath ?? this.rootPath,
+    secureTls: secureTls ?? this.secureTls,
+    acceptInvalidTls: acceptInvalidTls ?? this.acceptInvalidTls,
+    knownSftpFingerprint: knownSftpFingerprint.present
+        ? knownSftpFingerprint.value
+        : this.knownSftpFingerprint,
+    wifiOnly: wifiOnly ?? this.wifiOnly,
+    enabled: enabled ?? this.enabled,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+  );
+  NasSyncConfig copyWithCompanion(NasSyncConfigsCompanion data) {
+    return NasSyncConfig(
+      id: data.id.present ? data.id.value : this.id,
+      protocol: data.protocol.present ? data.protocol.value : this.protocol,
+      host: data.host.present ? data.host.value : this.host,
+      port: data.port.present ? data.port.value : this.port,
+      username: data.username.present ? data.username.value : this.username,
+      rootPath: data.rootPath.present ? data.rootPath.value : this.rootPath,
+      secureTls: data.secureTls.present ? data.secureTls.value : this.secureTls,
+      acceptInvalidTls: data.acceptInvalidTls.present
+          ? data.acceptInvalidTls.value
+          : this.acceptInvalidTls,
+      knownSftpFingerprint: data.knownSftpFingerprint.present
+          ? data.knownSftpFingerprint.value
+          : this.knownSftpFingerprint,
+      wifiOnly: data.wifiOnly.present ? data.wifiOnly.value : this.wifiOnly,
+      enabled: data.enabled.present ? data.enabled.value : this.enabled,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NasSyncConfig(')
+          ..write('id: $id, ')
+          ..write('protocol: $protocol, ')
+          ..write('host: $host, ')
+          ..write('port: $port, ')
+          ..write('username: $username, ')
+          ..write('rootPath: $rootPath, ')
+          ..write('secureTls: $secureTls, ')
+          ..write('acceptInvalidTls: $acceptInvalidTls, ')
+          ..write('knownSftpFingerprint: $knownSftpFingerprint, ')
+          ..write('wifiOnly: $wifiOnly, ')
+          ..write('enabled: $enabled, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    protocol,
+    host,
+    port,
+    username,
+    rootPath,
+    secureTls,
+    acceptInvalidTls,
+    knownSftpFingerprint,
+    wifiOnly,
+    enabled,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is NasSyncConfig &&
+          other.id == this.id &&
+          other.protocol == this.protocol &&
+          other.host == this.host &&
+          other.port == this.port &&
+          other.username == this.username &&
+          other.rootPath == this.rootPath &&
+          other.secureTls == this.secureTls &&
+          other.acceptInvalidTls == this.acceptInvalidTls &&
+          other.knownSftpFingerprint == this.knownSftpFingerprint &&
+          other.wifiOnly == this.wifiOnly &&
+          other.enabled == this.enabled &&
+          other.updatedAt == this.updatedAt);
+}
+
+class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
+  final Value<String> id;
+  final Value<String> protocol;
+  final Value<String> host;
+  final Value<int?> port;
+  final Value<String> username;
+  final Value<String> rootPath;
+  final Value<bool> secureTls;
+  final Value<bool> acceptInvalidTls;
+  final Value<String?> knownSftpFingerprint;
+  final Value<bool> wifiOnly;
+  final Value<bool> enabled;
+  final Value<DateTime?> updatedAt;
+  final Value<int> rowid;
+  const NasSyncConfigsCompanion({
+    this.id = const Value.absent(),
+    this.protocol = const Value.absent(),
+    this.host = const Value.absent(),
+    this.port = const Value.absent(),
+    this.username = const Value.absent(),
+    this.rootPath = const Value.absent(),
+    this.secureTls = const Value.absent(),
+    this.acceptInvalidTls = const Value.absent(),
+    this.knownSftpFingerprint = const Value.absent(),
+    this.wifiOnly = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  NasSyncConfigsCompanion.insert({
+    this.id = const Value.absent(),
+    this.protocol = const Value.absent(),
+    this.host = const Value.absent(),
+    this.port = const Value.absent(),
+    this.username = const Value.absent(),
+    this.rootPath = const Value.absent(),
+    this.secureTls = const Value.absent(),
+    this.acceptInvalidTls = const Value.absent(),
+    this.knownSftpFingerprint = const Value.absent(),
+    this.wifiOnly = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  static Insertable<NasSyncConfig> custom({
+    Expression<String>? id,
+    Expression<String>? protocol,
+    Expression<String>? host,
+    Expression<int>? port,
+    Expression<String>? username,
+    Expression<String>? rootPath,
+    Expression<bool>? secureTls,
+    Expression<bool>? acceptInvalidTls,
+    Expression<String>? knownSftpFingerprint,
+    Expression<bool>? wifiOnly,
+    Expression<bool>? enabled,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (protocol != null) 'protocol': protocol,
+      if (host != null) 'host': host,
+      if (port != null) 'port': port,
+      if (username != null) 'username': username,
+      if (rootPath != null) 'root_path': rootPath,
+      if (secureTls != null) 'secure_tls': secureTls,
+      if (acceptInvalidTls != null) 'accept_invalid_tls': acceptInvalidTls,
+      if (knownSftpFingerprint != null)
+        'known_sftp_fingerprint': knownSftpFingerprint,
+      if (wifiOnly != null) 'wifi_only': wifiOnly,
+      if (enabled != null) 'enabled': enabled,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  NasSyncConfigsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? protocol,
+    Value<String>? host,
+    Value<int?>? port,
+    Value<String>? username,
+    Value<String>? rootPath,
+    Value<bool>? secureTls,
+    Value<bool>? acceptInvalidTls,
+    Value<String?>? knownSftpFingerprint,
+    Value<bool>? wifiOnly,
+    Value<bool>? enabled,
+    Value<DateTime?>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return NasSyncConfigsCompanion(
+      id: id ?? this.id,
+      protocol: protocol ?? this.protocol,
+      host: host ?? this.host,
+      port: port ?? this.port,
+      username: username ?? this.username,
+      rootPath: rootPath ?? this.rootPath,
+      secureTls: secureTls ?? this.secureTls,
+      acceptInvalidTls: acceptInvalidTls ?? this.acceptInvalidTls,
+      knownSftpFingerprint: knownSftpFingerprint ?? this.knownSftpFingerprint,
+      wifiOnly: wifiOnly ?? this.wifiOnly,
+      enabled: enabled ?? this.enabled,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (protocol.present) {
+      map['protocol'] = Variable<String>(protocol.value);
+    }
+    if (host.present) {
+      map['host'] = Variable<String>(host.value);
+    }
+    if (port.present) {
+      map['port'] = Variable<int>(port.value);
+    }
+    if (username.present) {
+      map['username'] = Variable<String>(username.value);
+    }
+    if (rootPath.present) {
+      map['root_path'] = Variable<String>(rootPath.value);
+    }
+    if (secureTls.present) {
+      map['secure_tls'] = Variable<bool>(secureTls.value);
+    }
+    if (acceptInvalidTls.present) {
+      map['accept_invalid_tls'] = Variable<bool>(acceptInvalidTls.value);
+    }
+    if (knownSftpFingerprint.present) {
+      map['known_sftp_fingerprint'] = Variable<String>(
+        knownSftpFingerprint.value,
+      );
+    }
+    if (wifiOnly.present) {
+      map['wifi_only'] = Variable<bool>(wifiOnly.value);
+    }
+    if (enabled.present) {
+      map['enabled'] = Variable<bool>(enabled.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NasSyncConfigsCompanion(')
+          ..write('id: $id, ')
+          ..write('protocol: $protocol, ')
+          ..write('host: $host, ')
+          ..write('port: $port, ')
+          ..write('username: $username, ')
+          ..write('rootPath: $rootPath, ')
+          ..write('secureTls: $secureTls, ')
+          ..write('acceptInvalidTls: $acceptInvalidTls, ')
+          ..write('knownSftpFingerprint: $knownSftpFingerprint, ')
+          ..write('wifiOnly: $wifiOnly, ')
+          ..write('enabled: $enabled, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $NasUploadStatesTable extends NasUploadStates
+    with TableInfo<$NasUploadStatesTable, NasUploadState> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $NasUploadStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _captureIdMeta = const VerificationMeta(
+    'captureId',
+  );
+  @override
+  late final GeneratedColumn<String> captureId = GeneratedColumn<String>(
+    'capture_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES captures (id) ON DELETE CASCADE',
+    ),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<NasUploadStatus, String> status =
+      GeneratedColumn<String>(
+        'status',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('pending'),
+      ).withConverter<NasUploadStatus>($NasUploadStatesTable.$converterstatus);
+  static const VerificationMeta _attemptsMeta = const VerificationMeta(
+    'attempts',
+  );
+  @override
+  late final GeneratedColumn<int> attempts = GeneratedColumn<int>(
+    'attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _failureCodeMeta = const VerificationMeta(
+    'failureCode',
+  );
+  @override
+  late final GeneratedColumn<String> failureCode = GeneratedColumn<String>(
+    'failure_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastAttemptAtMeta = const VerificationMeta(
+    'lastAttemptAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastAttemptAt =
+      GeneratedColumn<DateTime>(
+        'last_attempt_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _uploadedAtMeta = const VerificationMeta(
+    'uploadedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> uploadedAt = GeneratedColumn<DateTime>(
+    'uploaded_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    captureId,
+    status,
+    attempts,
+    failureCode,
+    lastAttemptAt,
+    uploadedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'nas_upload_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<NasUploadState> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('capture_id')) {
+      context.handle(
+        _captureIdMeta,
+        captureId.isAcceptableOrUnknown(data['capture_id']!, _captureIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_captureIdMeta);
+    }
+    if (data.containsKey('attempts')) {
+      context.handle(
+        _attemptsMeta,
+        attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta),
+      );
+    }
+    if (data.containsKey('failure_code')) {
+      context.handle(
+        _failureCodeMeta,
+        failureCode.isAcceptableOrUnknown(
+          data['failure_code']!,
+          _failureCodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_attempt_at')) {
+      context.handle(
+        _lastAttemptAtMeta,
+        lastAttemptAt.isAcceptableOrUnknown(
+          data['last_attempt_at']!,
+          _lastAttemptAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('uploaded_at')) {
+      context.handle(
+        _uploadedAtMeta,
+        uploadedAt.isAcceptableOrUnknown(data['uploaded_at']!, _uploadedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {captureId};
+  @override
+  NasUploadState map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return NasUploadState(
+      captureId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}capture_id'],
+      )!,
+      status: $NasUploadStatesTable.$converterstatus.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}status'],
+        )!,
+      ),
+      attempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempts'],
+      )!,
+      failureCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}failure_code'],
+      ),
+      lastAttemptAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_attempt_at'],
+      ),
+      uploadedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}uploaded_at'],
+      ),
+    );
+  }
+
+  @override
+  $NasUploadStatesTable createAlias(String alias) {
+    return $NasUploadStatesTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<NasUploadStatus, String> $converterstatus =
+      const NasUploadStatusConverter();
+}
+
+class NasUploadState extends DataClass implements Insertable<NasUploadState> {
+  final String captureId;
+
+  /// pending | uploaded | failed (see NasUploadStatus).
+  final NasUploadStatus status;
+  final int attempts;
+
+  /// Category code from the Rust core (nas:{code_name}); never raw errors.
+  final String? failureCode;
+  final DateTime? lastAttemptAt;
+  final DateTime? uploadedAt;
+  const NasUploadState({
+    required this.captureId,
+    required this.status,
+    required this.attempts,
+    this.failureCode,
+    this.lastAttemptAt,
+    this.uploadedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['capture_id'] = Variable<String>(captureId);
+    {
+      map['status'] = Variable<String>(
+        $NasUploadStatesTable.$converterstatus.toSql(status),
+      );
+    }
+    map['attempts'] = Variable<int>(attempts);
+    if (!nullToAbsent || failureCode != null) {
+      map['failure_code'] = Variable<String>(failureCode);
+    }
+    if (!nullToAbsent || lastAttemptAt != null) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt);
+    }
+    if (!nullToAbsent || uploadedAt != null) {
+      map['uploaded_at'] = Variable<DateTime>(uploadedAt);
+    }
+    return map;
+  }
+
+  NasUploadStatesCompanion toCompanion(bool nullToAbsent) {
+    return NasUploadStatesCompanion(
+      captureId: Value(captureId),
+      status: Value(status),
+      attempts: Value(attempts),
+      failureCode: failureCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failureCode),
+      lastAttemptAt: lastAttemptAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAttemptAt),
+      uploadedAt: uploadedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(uploadedAt),
+    );
+  }
+
+  factory NasUploadState.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return NasUploadState(
+      captureId: serializer.fromJson<String>(json['captureId']),
+      status: serializer.fromJson<NasUploadStatus>(json['status']),
+      attempts: serializer.fromJson<int>(json['attempts']),
+      failureCode: serializer.fromJson<String?>(json['failureCode']),
+      lastAttemptAt: serializer.fromJson<DateTime?>(json['lastAttemptAt']),
+      uploadedAt: serializer.fromJson<DateTime?>(json['uploadedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'captureId': serializer.toJson<String>(captureId),
+      'status': serializer.toJson<NasUploadStatus>(status),
+      'attempts': serializer.toJson<int>(attempts),
+      'failureCode': serializer.toJson<String?>(failureCode),
+      'lastAttemptAt': serializer.toJson<DateTime?>(lastAttemptAt),
+      'uploadedAt': serializer.toJson<DateTime?>(uploadedAt),
+    };
+  }
+
+  NasUploadState copyWith({
+    String? captureId,
+    NasUploadStatus? status,
+    int? attempts,
+    Value<String?> failureCode = const Value.absent(),
+    Value<DateTime?> lastAttemptAt = const Value.absent(),
+    Value<DateTime?> uploadedAt = const Value.absent(),
+  }) => NasUploadState(
+    captureId: captureId ?? this.captureId,
+    status: status ?? this.status,
+    attempts: attempts ?? this.attempts,
+    failureCode: failureCode.present ? failureCode.value : this.failureCode,
+    lastAttemptAt: lastAttemptAt.present
+        ? lastAttemptAt.value
+        : this.lastAttemptAt,
+    uploadedAt: uploadedAt.present ? uploadedAt.value : this.uploadedAt,
+  );
+  NasUploadState copyWithCompanion(NasUploadStatesCompanion data) {
+    return NasUploadState(
+      captureId: data.captureId.present ? data.captureId.value : this.captureId,
+      status: data.status.present ? data.status.value : this.status,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+      failureCode: data.failureCode.present
+          ? data.failureCode.value
+          : this.failureCode,
+      lastAttemptAt: data.lastAttemptAt.present
+          ? data.lastAttemptAt.value
+          : this.lastAttemptAt,
+      uploadedAt: data.uploadedAt.present
+          ? data.uploadedAt.value
+          : this.uploadedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NasUploadState(')
+          ..write('captureId: $captureId, ')
+          ..write('status: $status, ')
+          ..write('attempts: $attempts, ')
+          ..write('failureCode: $failureCode, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('uploadedAt: $uploadedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    captureId,
+    status,
+    attempts,
+    failureCode,
+    lastAttemptAt,
+    uploadedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is NasUploadState &&
+          other.captureId == this.captureId &&
+          other.status == this.status &&
+          other.attempts == this.attempts &&
+          other.failureCode == this.failureCode &&
+          other.lastAttemptAt == this.lastAttemptAt &&
+          other.uploadedAt == this.uploadedAt);
+}
+
+class NasUploadStatesCompanion extends UpdateCompanion<NasUploadState> {
+  final Value<String> captureId;
+  final Value<NasUploadStatus> status;
+  final Value<int> attempts;
+  final Value<String?> failureCode;
+  final Value<DateTime?> lastAttemptAt;
+  final Value<DateTime?> uploadedAt;
+  final Value<int> rowid;
+  const NasUploadStatesCompanion({
+    this.captureId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.failureCode = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.uploadedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  NasUploadStatesCompanion.insert({
+    required String captureId,
+    this.status = const Value.absent(),
+    this.attempts = const Value.absent(),
+    this.failureCode = const Value.absent(),
+    this.lastAttemptAt = const Value.absent(),
+    this.uploadedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : captureId = Value(captureId);
+  static Insertable<NasUploadState> custom({
+    Expression<String>? captureId,
+    Expression<String>? status,
+    Expression<int>? attempts,
+    Expression<String>? failureCode,
+    Expression<DateTime>? lastAttemptAt,
+    Expression<DateTime>? uploadedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (captureId != null) 'capture_id': captureId,
+      if (status != null) 'status': status,
+      if (attempts != null) 'attempts': attempts,
+      if (failureCode != null) 'failure_code': failureCode,
+      if (lastAttemptAt != null) 'last_attempt_at': lastAttemptAt,
+      if (uploadedAt != null) 'uploaded_at': uploadedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  NasUploadStatesCompanion copyWith({
+    Value<String>? captureId,
+    Value<NasUploadStatus>? status,
+    Value<int>? attempts,
+    Value<String?>? failureCode,
+    Value<DateTime?>? lastAttemptAt,
+    Value<DateTime?>? uploadedAt,
+    Value<int>? rowid,
+  }) {
+    return NasUploadStatesCompanion(
+      captureId: captureId ?? this.captureId,
+      status: status ?? this.status,
+      attempts: attempts ?? this.attempts,
+      failureCode: failureCode ?? this.failureCode,
+      lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
+      uploadedAt: uploadedAt ?? this.uploadedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (captureId.present) {
+      map['capture_id'] = Variable<String>(captureId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(
+        $NasUploadStatesTable.$converterstatus.toSql(status.value),
+      );
+    }
+    if (attempts.present) {
+      map['attempts'] = Variable<int>(attempts.value);
+    }
+    if (failureCode.present) {
+      map['failure_code'] = Variable<String>(failureCode.value);
+    }
+    if (lastAttemptAt.present) {
+      map['last_attempt_at'] = Variable<DateTime>(lastAttemptAt.value);
+    }
+    if (uploadedAt.present) {
+      map['uploaded_at'] = Variable<DateTime>(uploadedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NasUploadStatesCompanion(')
+          ..write('captureId: $captureId, ')
+          ..write('status: $status, ')
+          ..write('attempts: $attempts, ')
+          ..write('failureCode: $failureCode, ')
+          ..write('lastAttemptAt: $lastAttemptAt, ')
+          ..write('uploadedAt: $uploadedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4002,6 +5173,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $CaptureMediaCleanupsTable captureMediaCleanups =
       $CaptureMediaCleanupsTable(this);
+  late final $NasSyncConfigsTable nasSyncConfigs = $NasSyncConfigsTable(this);
+  late final $NasUploadStatesTable nasUploadStates = $NasUploadStatesTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4012,6 +5187,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     appSettings,
     captureTemplates,
     captureMediaCleanups,
+    nasSyncConfigs,
+    nasUploadStates,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -4028,6 +5205,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('capture_templates', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'captures',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('nas_upload_states', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -4670,6 +5854,26 @@ final class $$CaptureRecordsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<$NasUploadStatesTable, List<NasUploadState>>
+  _nasUploadStatesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.nasUploadStates,
+    aliasName: 'captures__id__nas_upload_states__capture_id',
+  );
+
+  $$NasUploadStatesTableProcessedTableManager get nasUploadStatesRefs {
+    final manager = $$NasUploadStatesTableTableManager(
+      $_db,
+      $_db.nasUploadStates,
+    ).filter((f) => f.captureId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _nasUploadStatesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$CaptureRecordsTableFilterComposer
@@ -4813,6 +6017,31 @@ class $$CaptureRecordsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> nasUploadStatesRefs(
+    Expression<bool> Function($$NasUploadStatesTableFilterComposer f) f,
+  ) {
+    final $$NasUploadStatesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.nasUploadStates,
+      getReferencedColumn: (t) => t.captureId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NasUploadStatesTableFilterComposer(
+            $db: $db,
+            $table: $db.nasUploadStates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 }
 
@@ -5086,6 +6315,31 @@ class $$CaptureRecordsTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> nasUploadStatesRefs<T extends Object>(
+    Expression<T> Function($$NasUploadStatesTableAnnotationComposer a) f,
+  ) {
+    final $$NasUploadStatesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.nasUploadStates,
+      getReferencedColumn: (t) => t.captureId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$NasUploadStatesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.nasUploadStates,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$CaptureRecordsTableTableManager
@@ -5101,7 +6355,7 @@ class $$CaptureRecordsTableTableManager
           $$CaptureRecordsTableUpdateCompanionBuilder,
           (CaptureRecord, $$CaptureRecordsTableReferences),
           CaptureRecord,
-          PrefetchHooks Function({bool projectId})
+          PrefetchHooks Function({bool projectId, bool nasUploadStatesRefs})
         > {
   $$CaptureRecordsTableTableManager(
     _$AppDatabase db,
@@ -5228,48 +6482,74 @@ class $$CaptureRecordsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({projectId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (projectId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.projectId,
-                                referencedTable: $$CaptureRecordsTableReferences
-                                    ._projectIdTable(db),
-                                referencedColumn:
-                                    $$CaptureRecordsTableReferences
-                                        ._projectIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
+          prefetchHooksCallback:
+              ({projectId = false, nasUploadStatesRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (nasUploadStatesRefs) db.nasUploadStates,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (projectId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.projectId,
+                                    referencedTable:
+                                        $$CaptureRecordsTableReferences
+                                            ._projectIdTable(db),
+                                    referencedColumn:
+                                        $$CaptureRecordsTableReferences
+                                            ._projectIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (nasUploadStatesRefs)
+                        await $_getPrefetchedData<
+                          CaptureRecord,
+                          $CaptureRecordsTable,
+                          NasUploadState
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CaptureRecordsTableReferences
+                              ._nasUploadStatesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CaptureRecordsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).nasUploadStatesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.captureId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -5286,7 +6566,7 @@ typedef $$CaptureRecordsTableProcessedTableManager =
       $$CaptureRecordsTableUpdateCompanionBuilder,
       (CaptureRecord, $$CaptureRecordsTableReferences),
       CaptureRecord,
-      PrefetchHooks Function({bool projectId})
+      PrefetchHooks Function({bool projectId, bool nasUploadStatesRefs})
     >;
 typedef $$AppSettingsTableCreateCompanionBuilder =
     AppSettingsCompanion Function({
@@ -6305,6 +7585,698 @@ typedef $$CaptureMediaCleanupsTableProcessedTableManager =
       CaptureMediaCleanup,
       PrefetchHooks Function()
     >;
+typedef $$NasSyncConfigsTableCreateCompanionBuilder =
+    NasSyncConfigsCompanion Function({
+      Value<String> id,
+      Value<String> protocol,
+      Value<String> host,
+      Value<int?> port,
+      Value<String> username,
+      Value<String> rootPath,
+      Value<bool> secureTls,
+      Value<bool> acceptInvalidTls,
+      Value<String?> knownSftpFingerprint,
+      Value<bool> wifiOnly,
+      Value<bool> enabled,
+      Value<DateTime?> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$NasSyncConfigsTableUpdateCompanionBuilder =
+    NasSyncConfigsCompanion Function({
+      Value<String> id,
+      Value<String> protocol,
+      Value<String> host,
+      Value<int?> port,
+      Value<String> username,
+      Value<String> rootPath,
+      Value<bool> secureTls,
+      Value<bool> acceptInvalidTls,
+      Value<String?> knownSftpFingerprint,
+      Value<bool> wifiOnly,
+      Value<bool> enabled,
+      Value<DateTime?> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$NasSyncConfigsTableFilterComposer
+    extends Composer<_$AppDatabase, $NasSyncConfigsTable> {
+  $$NasSyncConfigsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get protocol => $composableBuilder(
+    column: $table.protocol,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get host => $composableBuilder(
+    column: $table.host,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get port => $composableBuilder(
+    column: $table.port,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rootPath => $composableBuilder(
+    column: $table.rootPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get secureTls => $composableBuilder(
+    column: $table.secureTls,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get acceptInvalidTls => $composableBuilder(
+    column: $table.acceptInvalidTls,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get knownSftpFingerprint => $composableBuilder(
+    column: $table.knownSftpFingerprint,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get wifiOnly => $composableBuilder(
+    column: $table.wifiOnly,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$NasSyncConfigsTableOrderingComposer
+    extends Composer<_$AppDatabase, $NasSyncConfigsTable> {
+  $$NasSyncConfigsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get protocol => $composableBuilder(
+    column: $table.protocol,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get host => $composableBuilder(
+    column: $table.host,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get port => $composableBuilder(
+    column: $table.port,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get username => $composableBuilder(
+    column: $table.username,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rootPath => $composableBuilder(
+    column: $table.rootPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get secureTls => $composableBuilder(
+    column: $table.secureTls,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get acceptInvalidTls => $composableBuilder(
+    column: $table.acceptInvalidTls,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get knownSftpFingerprint => $composableBuilder(
+    column: $table.knownSftpFingerprint,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get wifiOnly => $composableBuilder(
+    column: $table.wifiOnly,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$NasSyncConfigsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $NasSyncConfigsTable> {
+  $$NasSyncConfigsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get protocol =>
+      $composableBuilder(column: $table.protocol, builder: (column) => column);
+
+  GeneratedColumn<String> get host =>
+      $composableBuilder(column: $table.host, builder: (column) => column);
+
+  GeneratedColumn<int> get port =>
+      $composableBuilder(column: $table.port, builder: (column) => column);
+
+  GeneratedColumn<String> get username =>
+      $composableBuilder(column: $table.username, builder: (column) => column);
+
+  GeneratedColumn<String> get rootPath =>
+      $composableBuilder(column: $table.rootPath, builder: (column) => column);
+
+  GeneratedColumn<bool> get secureTls =>
+      $composableBuilder(column: $table.secureTls, builder: (column) => column);
+
+  GeneratedColumn<bool> get acceptInvalidTls => $composableBuilder(
+    column: $table.acceptInvalidTls,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get knownSftpFingerprint => $composableBuilder(
+    column: $table.knownSftpFingerprint,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get wifiOnly =>
+      $composableBuilder(column: $table.wifiOnly, builder: (column) => column);
+
+  GeneratedColumn<bool> get enabled =>
+      $composableBuilder(column: $table.enabled, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$NasSyncConfigsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $NasSyncConfigsTable,
+          NasSyncConfig,
+          $$NasSyncConfigsTableFilterComposer,
+          $$NasSyncConfigsTableOrderingComposer,
+          $$NasSyncConfigsTableAnnotationComposer,
+          $$NasSyncConfigsTableCreateCompanionBuilder,
+          $$NasSyncConfigsTableUpdateCompanionBuilder,
+          (
+            NasSyncConfig,
+            BaseReferences<_$AppDatabase, $NasSyncConfigsTable, NasSyncConfig>,
+          ),
+          NasSyncConfig,
+          PrefetchHooks Function()
+        > {
+  $$NasSyncConfigsTableTableManager(
+    _$AppDatabase db,
+    $NasSyncConfigsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$NasSyncConfigsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$NasSyncConfigsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$NasSyncConfigsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> protocol = const Value.absent(),
+                Value<String> host = const Value.absent(),
+                Value<int?> port = const Value.absent(),
+                Value<String> username = const Value.absent(),
+                Value<String> rootPath = const Value.absent(),
+                Value<bool> secureTls = const Value.absent(),
+                Value<bool> acceptInvalidTls = const Value.absent(),
+                Value<String?> knownSftpFingerprint = const Value.absent(),
+                Value<bool> wifiOnly = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => NasSyncConfigsCompanion(
+                id: id,
+                protocol: protocol,
+                host: host,
+                port: port,
+                username: username,
+                rootPath: rootPath,
+                secureTls: secureTls,
+                acceptInvalidTls: acceptInvalidTls,
+                knownSftpFingerprint: knownSftpFingerprint,
+                wifiOnly: wifiOnly,
+                enabled: enabled,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> protocol = const Value.absent(),
+                Value<String> host = const Value.absent(),
+                Value<int?> port = const Value.absent(),
+                Value<String> username = const Value.absent(),
+                Value<String> rootPath = const Value.absent(),
+                Value<bool> secureTls = const Value.absent(),
+                Value<bool> acceptInvalidTls = const Value.absent(),
+                Value<String?> knownSftpFingerprint = const Value.absent(),
+                Value<bool> wifiOnly = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => NasSyncConfigsCompanion.insert(
+                id: id,
+                protocol: protocol,
+                host: host,
+                port: port,
+                username: username,
+                rootPath: rootPath,
+                secureTls: secureTls,
+                acceptInvalidTls: acceptInvalidTls,
+                knownSftpFingerprint: knownSftpFingerprint,
+                wifiOnly: wifiOnly,
+                enabled: enabled,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$NasSyncConfigsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $NasSyncConfigsTable,
+      NasSyncConfig,
+      $$NasSyncConfigsTableFilterComposer,
+      $$NasSyncConfigsTableOrderingComposer,
+      $$NasSyncConfigsTableAnnotationComposer,
+      $$NasSyncConfigsTableCreateCompanionBuilder,
+      $$NasSyncConfigsTableUpdateCompanionBuilder,
+      (
+        NasSyncConfig,
+        BaseReferences<_$AppDatabase, $NasSyncConfigsTable, NasSyncConfig>,
+      ),
+      NasSyncConfig,
+      PrefetchHooks Function()
+    >;
+typedef $$NasUploadStatesTableCreateCompanionBuilder =
+    NasUploadStatesCompanion Function({
+      required String captureId,
+      Value<NasUploadStatus> status,
+      Value<int> attempts,
+      Value<String?> failureCode,
+      Value<DateTime?> lastAttemptAt,
+      Value<DateTime?> uploadedAt,
+      Value<int> rowid,
+    });
+typedef $$NasUploadStatesTableUpdateCompanionBuilder =
+    NasUploadStatesCompanion Function({
+      Value<String> captureId,
+      Value<NasUploadStatus> status,
+      Value<int> attempts,
+      Value<String?> failureCode,
+      Value<DateTime?> lastAttemptAt,
+      Value<DateTime?> uploadedAt,
+      Value<int> rowid,
+    });
+
+final class $$NasUploadStatesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $NasUploadStatesTable, NasUploadState> {
+  $$NasUploadStatesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $CaptureRecordsTable _captureIdTable(_$AppDatabase db) => db
+      .captureRecords
+      .createAlias('nas_upload_states__capture_id__captures__id');
+
+  $$CaptureRecordsTableProcessedTableManager get captureId {
+    final $_column = $_itemColumn<String>('capture_id')!;
+
+    final manager = $$CaptureRecordsTableTableManager(
+      $_db,
+      $_db.captureRecords,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_captureIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$NasUploadStatesTableFilterComposer
+    extends Composer<_$AppDatabase, $NasUploadStatesTable> {
+  $$NasUploadStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnWithTypeConverterFilters<NasUploadStatus, NasUploadStatus, String>
+  get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get failureCode => $composableBuilder(
+    column: $table.failureCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get uploadedAt => $composableBuilder(
+    column: $table.uploadedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CaptureRecordsTableFilterComposer get captureId {
+    final $$CaptureRecordsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.captureId,
+      referencedTable: $db.captureRecords,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CaptureRecordsTableFilterComposer(
+            $db: $db,
+            $table: $db.captureRecords,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$NasUploadStatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $NasUploadStatesTable> {
+  $$NasUploadStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get failureCode => $composableBuilder(
+    column: $table.failureCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get uploadedAt => $composableBuilder(
+    column: $table.uploadedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CaptureRecordsTableOrderingComposer get captureId {
+    final $$CaptureRecordsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.captureId,
+      referencedTable: $db.captureRecords,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CaptureRecordsTableOrderingComposer(
+            $db: $db,
+            $table: $db.captureRecords,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$NasUploadStatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $NasUploadStatesTable> {
+  $$NasUploadStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumnWithTypeConverter<NasUploadStatus, String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+
+  GeneratedColumn<String> get failureCode => $composableBuilder(
+    column: $table.failureCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAttemptAt => $composableBuilder(
+    column: $table.lastAttemptAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get uploadedAt => $composableBuilder(
+    column: $table.uploadedAt,
+    builder: (column) => column,
+  );
+
+  $$CaptureRecordsTableAnnotationComposer get captureId {
+    final $$CaptureRecordsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.captureId,
+      referencedTable: $db.captureRecords,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CaptureRecordsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.captureRecords,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$NasUploadStatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $NasUploadStatesTable,
+          NasUploadState,
+          $$NasUploadStatesTableFilterComposer,
+          $$NasUploadStatesTableOrderingComposer,
+          $$NasUploadStatesTableAnnotationComposer,
+          $$NasUploadStatesTableCreateCompanionBuilder,
+          $$NasUploadStatesTableUpdateCompanionBuilder,
+          (NasUploadState, $$NasUploadStatesTableReferences),
+          NasUploadState,
+          PrefetchHooks Function({bool captureId})
+        > {
+  $$NasUploadStatesTableTableManager(
+    _$AppDatabase db,
+    $NasUploadStatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$NasUploadStatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$NasUploadStatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$NasUploadStatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> captureId = const Value.absent(),
+                Value<NasUploadStatus> status = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<String?> failureCode = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<DateTime?> uploadedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => NasUploadStatesCompanion(
+                captureId: captureId,
+                status: status,
+                attempts: attempts,
+                failureCode: failureCode,
+                lastAttemptAt: lastAttemptAt,
+                uploadedAt: uploadedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String captureId,
+                Value<NasUploadStatus> status = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+                Value<String?> failureCode = const Value.absent(),
+                Value<DateTime?> lastAttemptAt = const Value.absent(),
+                Value<DateTime?> uploadedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => NasUploadStatesCompanion.insert(
+                captureId: captureId,
+                status: status,
+                attempts: attempts,
+                failureCode: failureCode,
+                lastAttemptAt: lastAttemptAt,
+                uploadedAt: uploadedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$NasUploadStatesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({captureId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (captureId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.captureId,
+                                referencedTable:
+                                    $$NasUploadStatesTableReferences
+                                        ._captureIdTable(db),
+                                referencedColumn:
+                                    $$NasUploadStatesTableReferences
+                                        ._captureIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$NasUploadStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $NasUploadStatesTable,
+      NasUploadState,
+      $$NasUploadStatesTableFilterComposer,
+      $$NasUploadStatesTableOrderingComposer,
+      $$NasUploadStatesTableAnnotationComposer,
+      $$NasUploadStatesTableCreateCompanionBuilder,
+      $$NasUploadStatesTableUpdateCompanionBuilder,
+      (NasUploadState, $$NasUploadStatesTableReferences),
+      NasUploadState,
+      PrefetchHooks Function({bool captureId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6319,4 +8291,8 @@ class $AppDatabaseManager {
       $$CaptureTemplatesTableTableManager(_db, _db.captureTemplates);
   $$CaptureMediaCleanupsTableTableManager get captureMediaCleanups =>
       $$CaptureMediaCleanupsTableTableManager(_db, _db.captureMediaCleanups);
+  $$NasSyncConfigsTableTableManager get nasSyncConfigs =>
+      $$NasSyncConfigsTableTableManager(_db, _db.nasSyncConfigs);
+  $$NasUploadStatesTableTableManager get nasUploadStates =>
+      $$NasUploadStatesTableTableManager(_db, _db.nasUploadStates);
 }

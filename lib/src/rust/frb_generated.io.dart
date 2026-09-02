@@ -4,10 +4,12 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/image_core.dart';
+import 'api/nas.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
 import 'frb_generated.dart';
+import 'nas.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
@@ -39,6 +41,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExportDiagnosticBundleRequest
+  dco_decode_box_autoadd_export_diagnostic_bundle_request(dynamic raw);
+
+  @protected
   ExportProjectBundleRequest
   dco_decode_box_autoadd_export_project_bundle_request(dynamic raw);
 
@@ -64,10 +70,29 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_box_autoadd_f_64(dynamic raw);
 
   @protected
+  NasConfig dco_decode_box_autoadd_nas_config(dynamic raw);
+
+  @protected
+  NasUploadRequest dco_decode_box_autoadd_nas_upload_request(dynamic raw);
+
+  @protected
   RenderPhotoRequest dco_decode_box_autoadd_render_photo_request(dynamic raw);
 
   @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw);
+
+  @protected
   ExportCaptureTemplate dco_decode_export_capture_template(dynamic raw);
+
+  @protected
+  ExportDiagnosticBundleRequest dco_decode_export_diagnostic_bundle_request(
+    dynamic raw,
+  );
+
+  @protected
+  ExportDiagnosticBundleResult dco_decode_export_diagnostic_bundle_result(
+    dynamic raw,
+  );
 
   @protected
   ExportPhotoRecord dco_decode_export_photo_record(dynamic raw);
@@ -143,6 +168,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ProjectBundleSource> dco_decode_list_project_bundle_source(dynamic raw);
 
   @protected
+  NasConfig dco_decode_nas_config(dynamic raw);
+
+  @protected
+  NasError dco_decode_nas_error(dynamic raw);
+
+  @protected
+  NasErrorCode dco_decode_nas_error_code(dynamic raw);
+
+  @protected
+  NasProtocol dco_decode_nas_protocol(dynamic raw);
+
+  @protected
+  NasTestDetails dco_decode_nas_test_details(dynamic raw);
+
+  @protected
+  NasUploadRequest dco_decode_nas_upload_request(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
@@ -151,6 +194,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
 
   @protected
   ProjectArchivePreview dco_decode_project_archive_preview(dynamic raw);
@@ -171,6 +217,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RenderPhotoResult dco_decode_render_photo_result(dynamic raw);
+
+  @protected
+  int dco_decode_u_16(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -211,6 +260,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExportDiagnosticBundleRequest
+  sse_decode_box_autoadd_export_diagnostic_bundle_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ExportProjectBundleRequest
   sse_decode_box_autoadd_export_project_bundle_request(
     SseDeserializer deserializer,
@@ -242,12 +297,33 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
 
   @protected
+  NasConfig sse_decode_box_autoadd_nas_config(SseDeserializer deserializer);
+
+  @protected
+  NasUploadRequest sse_decode_box_autoadd_nas_upload_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RenderPhotoRequest sse_decode_box_autoadd_render_photo_request(
     SseDeserializer deserializer,
   );
 
   @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
+
+  @protected
   ExportCaptureTemplate sse_decode_export_capture_template(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ExportDiagnosticBundleRequest sse_decode_export_diagnostic_bundle_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ExportDiagnosticBundleResult sse_decode_export_diagnostic_bundle_result(
     SseDeserializer deserializer,
   );
 
@@ -345,6 +421,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  NasConfig sse_decode_nas_config(SseDeserializer deserializer);
+
+  @protected
+  NasError sse_decode_nas_error(SseDeserializer deserializer);
+
+  @protected
+  NasErrorCode sse_decode_nas_error_code(SseDeserializer deserializer);
+
+  @protected
+  NasProtocol sse_decode_nas_protocol(SseDeserializer deserializer);
+
+  @protected
+  NasTestDetails sse_decode_nas_test_details(SseDeserializer deserializer);
+
+  @protected
+  NasUploadRequest sse_decode_nas_upload_request(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
@@ -355,6 +449,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
   ProjectArchivePreview sse_decode_project_archive_preview(
@@ -385,6 +482,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RenderPhotoResult sse_decode_render_photo_result(
     SseDeserializer deserializer,
   );
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -429,6 +529,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_export_diagnostic_bundle_request(
+    ExportDiagnosticBundleRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_export_project_bundle_request(
     ExportProjectBundleRequest self,
     SseSerializer serializer,
@@ -462,14 +568,41 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_nas_config(
+    NasConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_nas_upload_request(
+    NasUploadRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_render_photo_request(
     RenderPhotoRequest self,
     SseSerializer serializer,
   );
 
   @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
+
+  @protected
   void sse_encode_export_capture_template(
     ExportCaptureTemplate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_export_diagnostic_bundle_request(
+    ExportDiagnosticBundleRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_export_diagnostic_bundle_result(
+    ExportDiagnosticBundleResult self,
     SseSerializer serializer,
   );
 
@@ -588,6 +721,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_nas_config(NasConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_nas_error(NasError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_nas_error_code(NasErrorCode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_nas_protocol(NasProtocol self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_nas_test_details(
+    NasTestDetails self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_nas_upload_request(
+    NasUploadRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
@@ -598,6 +755,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_project_archive_preview(
@@ -634,6 +794,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     RenderPhotoResult self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

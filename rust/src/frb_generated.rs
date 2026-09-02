@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 776968485;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -168109353;
 
 // Section: executor
 
@@ -46,6 +46,41 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__image_core__export_diagnostic_bundle_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "export_diagnostic_bundle",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request = <crate::api::image_core::ExportDiagnosticBundleRequest>::sse_decode(
+                &mut deserializer,
+            );
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::image_core::export_diagnostic_bundle(api_request)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__image_core__export_project_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -247,6 +282,72 @@ fn wire__crate__api__simple__init_app_impl(
                     let output_ok = Result::<_, ()>::Ok({
                         crate::api::simple::init_app();
                     })?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__nas__nas_test_connection_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "nas_test_connection",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_config = <crate::nas::NasConfig>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::nas::NasError>((move || {
+                    let output_ok = crate::api::nas::nas_test_connection(api_config)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__nas__nas_upload_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "nas_upload",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request = <crate::api::nas::NasUploadRequest>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::nas::NasError>((move || {
+                    let output_ok = crate::api::nas::nas_upload(api_request)?;
                     Ok(output_ok)
                 })())
             }
@@ -490,6 +591,36 @@ impl SseDecode for crate::api::image_core::ExportCaptureTemplate {
             photographer: var_photographer,
             created_at: var_createdAt,
             updated_at: var_updatedAt,
+        };
+    }
+}
+
+impl SseDecode for crate::api::image_core::ExportDiagnosticBundleRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_outputZipPath = <String>::sse_decode(deserializer);
+        let mut var_summary = <String>::sse_decode(deserializer);
+        let mut var_environmentJson = <String>::sse_decode(deserializer);
+        let mut var_eventsJsonl = <String>::sse_decode(deserializer);
+        let mut var_manifestJson = <String>::sse_decode(deserializer);
+        return crate::api::image_core::ExportDiagnosticBundleRequest {
+            output_zip_path: var_outputZipPath,
+            summary: var_summary,
+            environment_json: var_environmentJson,
+            events_jsonl: var_eventsJsonl,
+            manifest_json: var_manifestJson,
+        };
+    }
+}
+
+impl SseDecode for crate::api::image_core::ExportDiagnosticBundleResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_outputZipPath = <String>::sse_decode(deserializer);
+        let mut var_archiveSha256 = <String>::sse_decode(deserializer);
+        return crate::api::image_core::ExportDiagnosticBundleResult {
+            output_zip_path: var_outputZipPath,
+            archive_sha256: var_archiveSha256,
         };
     }
 }
@@ -806,6 +937,100 @@ impl SseDecode for Vec<crate::api::image_core::ProjectBundleSource> {
     }
 }
 
+impl SseDecode for crate::nas::NasConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_protocol = <crate::nas::NasProtocol>::sse_decode(deserializer);
+        let mut var_host = <String>::sse_decode(deserializer);
+        let mut var_port = <Option<u16>>::sse_decode(deserializer);
+        let mut var_username = <String>::sse_decode(deserializer);
+        let mut var_password = <String>::sse_decode(deserializer);
+        let mut var_rootPath = <String>::sse_decode(deserializer);
+        let mut var_secureTls = <bool>::sse_decode(deserializer);
+        let mut var_acceptInvalidTls = <bool>::sse_decode(deserializer);
+        let mut var_knownSftpFingerprint = <Option<String>>::sse_decode(deserializer);
+        return crate::nas::NasConfig {
+            protocol: var_protocol,
+            host: var_host,
+            port: var_port,
+            username: var_username,
+            password: var_password,
+            root_path: var_rootPath,
+            secure_tls: var_secureTls,
+            accept_invalid_tls: var_acceptInvalidTls,
+            known_sftp_fingerprint: var_knownSftpFingerprint,
+        };
+    }
+}
+
+impl SseDecode for crate::nas::NasError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_code = <crate::nas::NasErrorCode>::sse_decode(deserializer);
+        return crate::nas::NasError { code: var_code };
+    }
+}
+
+impl SseDecode for crate::nas::NasErrorCode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::nas::NasErrorCode::ConfigInvalid,
+            1 => crate::nas::NasErrorCode::ConnectionFailed,
+            2 => crate::nas::NasErrorCode::AuthFailed,
+            3 => crate::nas::NasErrorCode::Timeout,
+            4 => crate::nas::NasErrorCode::TlsError,
+            5 => crate::nas::NasErrorCode::TlsUnsupported,
+            6 => crate::nas::NasErrorCode::HostKeyChanged,
+            7 => crate::nas::NasErrorCode::ProtocolError,
+            8 => crate::nas::NasErrorCode::QuotaInsufficient,
+            9 => crate::nas::NasErrorCode::PathInvalid,
+            10 => crate::nas::NasErrorCode::LocalIo,
+            _ => unreachable!("Invalid variant for NasErrorCode: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::nas::NasProtocol {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::nas::NasProtocol::Webdav,
+            1 => crate::nas::NasProtocol::Sftp,
+            2 => crate::nas::NasProtocol::Smb,
+            _ => unreachable!("Invalid variant for NasProtocol: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::nas::NasTestDetails {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sftpFingerprint = <Option<String>>::sse_decode(deserializer);
+        return crate::nas::NasTestDetails {
+            sftp_fingerprint: var_sftpFingerprint,
+        };
+    }
+}
+
+impl SseDecode for crate::api::nas::NasUploadRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_config = <crate::nas::NasConfig>::sse_decode(deserializer);
+        let mut var_projectKey = <String>::sse_decode(deserializer);
+        let mut var_fileName = <String>::sse_decode(deserializer);
+        let mut var_localPath = <String>::sse_decode(deserializer);
+        return crate::api::nas::NasUploadRequest {
+            config: var_config,
+            project_key: var_projectKey,
+            file_name: var_fileName,
+            local_path: var_localPath,
+        };
+    }
+}
+
 impl SseDecode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -835,6 +1060,17 @@ impl SseDecode for Option<f64> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<f64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<u16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u16>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -982,6 +1218,13 @@ impl SseDecode for crate::api::image_core::RenderPhotoResult {
     }
 }
 
+impl SseDecode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u16::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1022,41 +1265,49 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__image_core__export_project_impl(port, ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__image_core__export_project_bundle_impl(
+        1 => wire__crate__api__image_core__export_diagnostic_bundle_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        3 => wire__crate__api__image_core__export_selection_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__image_core__extract_archive_photo_impl(
+        2 => wire__crate__api__image_core__export_project_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__image_core__export_project_bundle_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        5 => wire__crate__api__image_core__extract_project_bundle_entry_impl(
+        4 => wire__crate__api__image_core__export_selection_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__image_core__extract_archive_photo_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        6 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__image_core__read_project_archive_impl(
+        6 => wire__crate__api__image_core__extract_project_bundle_entry_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        8 => wire__crate__api__image_core__read_project_bundle_impl(
+        7 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__nas__nas_test_connection_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__nas__nas_upload_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__image_core__read_project_archive_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__image_core__render_photo_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__image_core__sha256_file_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__image_core__read_project_bundle_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        12 => wire__crate__api__image_core__render_photo_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__image_core__sha256_file_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1177,6 +1428,51 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExportCaptureTemp
     for crate::api::image_core::ExportCaptureTemplate
 {
     fn into_into_dart(self) -> crate::api::image_core::ExportCaptureTemplate {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportDiagnosticBundleRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.output_zip_path.into_into_dart().into_dart(),
+            self.summary.into_into_dart().into_dart(),
+            self.environment_json.into_into_dart().into_dart(),
+            self.events_jsonl.into_into_dart().into_dart(),
+            self.manifest_json.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ExportDiagnosticBundleRequest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExportDiagnosticBundleRequest>
+    for crate::api::image_core::ExportDiagnosticBundleRequest
+{
+    fn into_into_dart(self) -> crate::api::image_core::ExportDiagnosticBundleRequest {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportDiagnosticBundleResult {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.output_zip_path.into_into_dart().into_dart(),
+            self.archive_sha256.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image_core::ExportDiagnosticBundleResult
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExportDiagnosticBundleResult>
+    for crate::api::image_core::ExportDiagnosticBundleResult
+{
+    fn into_into_dart(self) -> crate::api::image_core::ExportDiagnosticBundleResult {
         self
     }
 }
@@ -1420,6 +1716,118 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image_core::ExtractedArchiveP
     for crate::api::image_core::ExtractedArchivePhoto
 {
     fn into_into_dart(self) -> crate::api::image_core::ExtractedArchivePhoto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::nas::NasConfig {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.protocol.into_into_dart().into_dart(),
+            self.host.into_into_dart().into_dart(),
+            self.port.into_into_dart().into_dart(),
+            self.username.into_into_dart().into_dart(),
+            self.password.into_into_dart().into_dart(),
+            self.root_path.into_into_dart().into_dart(),
+            self.secure_tls.into_into_dart().into_dart(),
+            self.accept_invalid_tls.into_into_dart().into_dart(),
+            self.known_sftp_fingerprint.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::nas::NasConfig {}
+impl flutter_rust_bridge::IntoIntoDart<crate::nas::NasConfig> for crate::nas::NasConfig {
+    fn into_into_dart(self) -> crate::nas::NasConfig {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::nas::NasError {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [self.code.into_into_dart().into_dart()].into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::nas::NasError {}
+impl flutter_rust_bridge::IntoIntoDart<crate::nas::NasError> for crate::nas::NasError {
+    fn into_into_dart(self) -> crate::nas::NasError {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::nas::NasErrorCode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::ConfigInvalid => 0.into_dart(),
+            Self::ConnectionFailed => 1.into_dart(),
+            Self::AuthFailed => 2.into_dart(),
+            Self::Timeout => 3.into_dart(),
+            Self::TlsError => 4.into_dart(),
+            Self::TlsUnsupported => 5.into_dart(),
+            Self::HostKeyChanged => 6.into_dart(),
+            Self::ProtocolError => 7.into_dart(),
+            Self::QuotaInsufficient => 8.into_dart(),
+            Self::PathInvalid => 9.into_dart(),
+            Self::LocalIo => 10.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::nas::NasErrorCode {}
+impl flutter_rust_bridge::IntoIntoDart<crate::nas::NasErrorCode> for crate::nas::NasErrorCode {
+    fn into_into_dart(self) -> crate::nas::NasErrorCode {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::nas::NasProtocol {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Webdav => 0.into_dart(),
+            Self::Sftp => 1.into_dart(),
+            Self::Smb => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::nas::NasProtocol {}
+impl flutter_rust_bridge::IntoIntoDart<crate::nas::NasProtocol> for crate::nas::NasProtocol {
+    fn into_into_dart(self) -> crate::nas::NasProtocol {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::nas::NasTestDetails {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [self.sftp_fingerprint.into_into_dart().into_dart()].into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::nas::NasTestDetails {}
+impl flutter_rust_bridge::IntoIntoDart<crate::nas::NasTestDetails> for crate::nas::NasTestDetails {
+    fn into_into_dart(self) -> crate::nas::NasTestDetails {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::nas::NasUploadRequest {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.config.into_into_dart().into_dart(),
+            self.project_key.into_into_dart().into_dart(),
+            self.file_name.into_into_dart().into_dart(),
+            self.local_path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::nas::NasUploadRequest
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::nas::NasUploadRequest>
+    for crate::api::nas::NasUploadRequest
+{
+    fn into_into_dart(self) -> crate::api::nas::NasUploadRequest {
         self
     }
 }
@@ -1670,6 +2078,25 @@ impl SseEncode for crate::api::image_core::ExportCaptureTemplate {
     }
 }
 
+impl SseEncode for crate::api::image_core::ExportDiagnosticBundleRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.output_zip_path, serializer);
+        <String>::sse_encode(self.summary, serializer);
+        <String>::sse_encode(self.environment_json, serializer);
+        <String>::sse_encode(self.events_jsonl, serializer);
+        <String>::sse_encode(self.manifest_json, serializer);
+    }
+}
+
+impl SseEncode for crate::api::image_core::ExportDiagnosticBundleResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.output_zip_path, serializer);
+        <String>::sse_encode(self.archive_sha256, serializer);
+    }
+}
+
 impl SseEncode for crate::api::image_core::ExportPhotoRecord {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1883,6 +2310,87 @@ impl SseEncode for Vec<crate::api::image_core::ProjectBundleSource> {
     }
 }
 
+impl SseEncode for crate::nas::NasConfig {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::nas::NasProtocol>::sse_encode(self.protocol, serializer);
+        <String>::sse_encode(self.host, serializer);
+        <Option<u16>>::sse_encode(self.port, serializer);
+        <String>::sse_encode(self.username, serializer);
+        <String>::sse_encode(self.password, serializer);
+        <String>::sse_encode(self.root_path, serializer);
+        <bool>::sse_encode(self.secure_tls, serializer);
+        <bool>::sse_encode(self.accept_invalid_tls, serializer);
+        <Option<String>>::sse_encode(self.known_sftp_fingerprint, serializer);
+    }
+}
+
+impl SseEncode for crate::nas::NasError {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::nas::NasErrorCode>::sse_encode(self.code, serializer);
+    }
+}
+
+impl SseEncode for crate::nas::NasErrorCode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::nas::NasErrorCode::ConfigInvalid => 0,
+                crate::nas::NasErrorCode::ConnectionFailed => 1,
+                crate::nas::NasErrorCode::AuthFailed => 2,
+                crate::nas::NasErrorCode::Timeout => 3,
+                crate::nas::NasErrorCode::TlsError => 4,
+                crate::nas::NasErrorCode::TlsUnsupported => 5,
+                crate::nas::NasErrorCode::HostKeyChanged => 6,
+                crate::nas::NasErrorCode::ProtocolError => 7,
+                crate::nas::NasErrorCode::QuotaInsufficient => 8,
+                crate::nas::NasErrorCode::PathInvalid => 9,
+                crate::nas::NasErrorCode::LocalIo => 10,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::nas::NasProtocol {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::nas::NasProtocol::Webdav => 0,
+                crate::nas::NasProtocol::Sftp => 1,
+                crate::nas::NasProtocol::Smb => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::nas::NasTestDetails {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<String>>::sse_encode(self.sftp_fingerprint, serializer);
+    }
+}
+
+impl SseEncode for crate::api::nas::NasUploadRequest {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::nas::NasConfig>::sse_encode(self.config, serializer);
+        <String>::sse_encode(self.project_key, serializer);
+        <String>::sse_encode(self.file_name, serializer);
+        <String>::sse_encode(self.local_path, serializer);
+    }
+}
+
 impl SseEncode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1909,6 +2417,16 @@ impl SseEncode for Option<f64> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <f64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u16>::sse_encode(value, serializer);
         }
     }
 }
@@ -1999,6 +2517,13 @@ impl SseEncode for crate::api::image_core::RenderPhotoResult {
         <String>::sse_encode(self.output_sha256, serializer);
         <u32>::sse_encode(self.width, serializer);
         <u32>::sse_encode(self.height, serializer);
+    }
+}
+
+impl SseEncode for u16 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u16::<NativeEndian>(self).unwrap();
     }
 }
 

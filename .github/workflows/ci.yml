@@ -106,12 +106,21 @@ jobs:
           test -x "$AAPT2"
           test -f "$APK"
           PERMISSIONS="$($AAPT2 dump permissions "$APK")"
-          for FORBIDDEN in \
+          # D-023: INTERNET/ACCESS_NETWORK_STATE are required for the opt-in
+          # NAS sync (WebDAV to a user-configured server) and must be present;
+          # everything broader stays forbidden.
+          for REQUIRED in \
             android.permission.INTERNET \
+            android.permission.ACCESS_NETWORK_STATE; do
+            if ! grep -Fq "$REQUIRED" <<<"$PERMISSIONS"; then
+              echo "APK is missing required permission $REQUIRED" >&2
+              exit 1
+            fi
+          done
+          for FORBIDDEN in \
             android.permission.CAMERA \
             android.permission.ACCESS_BACKGROUND_LOCATION \
             android.permission.READ_MEDIA_IMAGES \
-            android.permission.ACCESS_NETWORK_STATE \
             android.permission.WRITE_EXTERNAL_STORAGE \
             android.permission.READ_EXTERNAL_STORAGE \
             android.permission.MANAGE_EXTERNAL_STORAGE \
@@ -161,8 +170,12 @@ jobs:
         run: |
           PLIST="build/ios/iphoneos/Runner.app/Info.plist"
           test -f "$PLIST"
+          # Compare against pubspec.yaml so the gate never drifts from the
+          # version bump (it was previously pinned to the last release).
+          EXPECTED_VERSION="$(sed -n 's/^version: \([0-9.]*\)+[0-9]*$/\1/p' pubspec.yaml)"
+          test -n "$EXPECTED_VERSION"
           /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST" | grep -Fx "SiteMark"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST" | grep -Fx "1.0.13"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST" | grep -Fx "$EXPECTED_VERSION"
           /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$PLIST" >/dev/null
           /usr/libexec/PlistBuddy -c "Print :NSLocationWhenInUseUsageDescription" "$PLIST" >/dev/null
           /usr/libexec/PlistBuddy -c "Print :NSPhotoLibraryAddUsageDescription" "$PLIST" >/dev/null

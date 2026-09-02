@@ -8,6 +8,7 @@ export class Routes {
   static readonly PHOTO_VIEWER: string = 'photoViewer';
   static readonly BACKUP: string = 'backup';
   static readonly STORAGE: string = 'storage';
+  static readonly NAS_SYNC: string = 'nasSync';
   static readonly DIAGNOSTICS: string = 'diagnostics';
   static readonly APPEARANCE: string = 'appearance';
   static readonly ABOUT: string = 'about';

@@ -2,22 +2,22 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.13`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.14`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
 ![HarmonyOS native](https://img.shields.io/badge/HarmonyOS-native%20ArkTS-E60012)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
-![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.13-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.13)
-[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.6-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.6)
+![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
+[![Latest](https://img.shields.io/badge/latest-v1.0.14-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.14)
+[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.7-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.7)
 
-**Current stable version (Latest): [`v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.13)**
+**Current stable version (Latest): [`v1.0.14`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.14)**
 
-**Current HarmonyOS native version: [`native-v1.0.6`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.6) (HarmonyOS NEXT, unsigned HAP)**
+**Current HarmonyOS native version: [`native-v1.0.7`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.7) (HarmonyOS NEXT, unsigned HAP)**
 
-Requires Android 12 (API 31) or later. `v1.0.13` is set as Latest: on top of the v1.0.11 baseline (targetSdk 37 / Android 17), it fixes the fullscreen photo viewer, where a photo zoomed with a two-finger pinch could not be dragged with one finger to reach the corners, and adds an English README. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
+Requires Android 12 (API 31) or later. `v1.0.14` is set as Latest: all three product lines gain an optional NAS sync feature (WebDAV/SFTP/SMB, off by default, talking only to the server you configure, with passwords in system secure storage); the packages declare `INTERNET` / `ACCESS_NETWORK_STATE` (plus `GET_NETWORK_INFO` on HarmonyOS) solely for it. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
 
 ## Download
 
@@ -25,16 +25,16 @@ Requires Android 12 (API 31) or later. `v1.0.13` is set as Latest: on top of the
 
 | Package | Applies to | Download |
 | --- | --- | --- |
-| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.13-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/sitemark-v1.0.13-arm64.apk) |
-| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.13-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/sitemark-v1.0.13-universal.apk) |
-| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.13/SHA256SUMS.txt) |
+| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.14-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.14/sitemark-v1.0.14-arm64.apk) |
+| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.14-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.14/sitemark-v1.0.14-universal.apk) |
+| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.14/SHA256SUMS.txt) |
 
-### HarmonyOS native (native-v1.0.6)
+### HarmonyOS native (native-v1.0.7)
 
 | Package | Applies to / notes | Download |
 | --- | --- | --- |
-| HarmonyOS HAP | **Unsigned**; sign it yourself in a DevEco/hdc environment before installing. A production signature requires an AGC release certificate (see `tool/ohos-native/sign-hap.ps1`). The published HAP is a debug build variant (an unsigned release build cannot be installed directly) | [sitemark-native-v1.0.6-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.6/sitemark-native-v1.0.6-unsigned.hap) |
-| HarmonyOS SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.6/SHA256SUMS.txt) |
+| HarmonyOS HAP | **Unsigned**; sign it yourself in a DevEco/hdc environment before installing. A production signature requires an AGC release certificate (see `tool/ohos-native/sign-hap.ps1`). The published HAP is a debug build variant (an unsigned release build cannot be installed directly) | [sitemark-native-v1.0.7-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.7/sitemark-native-v1.0.7-unsigned.hap) |
+| HarmonyOS SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.7/SHA256SUMS.txt) |
 
 > [!WARNING]
 > Uninstalling SiteMark deletes the app database, the app-private original photos, and the private watermark files. Watermarked photos already published to the system gallery `Pictures/SiteMark` are usually kept. Before uninstalling, switching devices, or resolving a signature conflict, open "Settings → Backup & restore" first, back up the important projects, and store the ZIP files in a safe place.
@@ -43,7 +43,7 @@ Requires Android 12 (API 31) or later. `v1.0.13` is set as Latest: on top of the
 
 `ohos-native/` is an independent Stage + ArkTS + ArkUI implementation. It does not use the community Flutter HarmonyOS adaptation layer and evolves on the same single branch as the Android version. It already runs the main flows — projects, capture processing, record management, watermarking, backup & restore, storage, and diagnostics — on the DevEco NEXT emulator, and it reuses the same Rust core as the Android version for image and ZIP rules.
 
-The current release provides an unsigned HAP of `native-v1.0.6` (see the download table above). **No signed HarmonyOS package is available yet, and the app is not on Huawei AppGallery**; the camera, gallery permissions, and performance still need to be re-verified on HarmonyOS NEXT real devices. Do not interpret the emulator results as an AppGallery release.
+The current release provides an unsigned HAP of `native-v1.0.7` (see the download table above). **No signed HarmonyOS package is available yet, and the app is not on Huawei AppGallery**; the camera, gallery permissions, and performance still need to be re-verified on HarmonyOS NEXT real devices. Do not interpret the emulator results as an AppGallery release.
 
 - [HarmonyOS native version: overview and build](ohos-native/README.md)
 - [Platform deltas and verification boundaries](ohos-native/docs/deltas.md)
@@ -68,7 +68,8 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releases) for the full notes.
 
-- **v1.0.13 / native-v1.0.6** (Latest): fixed the fullscreen photo viewer, where a photo zoomed with a two-finger pinch could not be dragged with one finger to reach the corners (fixed on both Android and HarmonyOS native); added an English README with language switching.
+- **v1.0.14 / native-v1.0.7** (Latest): all three product lines gain an optional NAS sync (WebDAV/SFTP/SMB, off by default, talking only to the user-configured server, passwords in system secure storage); the Android/iOS database migrates to v14 (NAS config and upload bookkeeping tables), the HarmonyOS RDB to v15; uploads run on a serial queue with a 5-attempt budget, and the first SFTP connection verifies the host key fingerprint.
+- **v1.0.13 / native-v1.0.6**: fixed the fullscreen photo viewer, where a photo zoomed with a two-finger pinch could not be dragged with one finger to reach the corners (fixed on both Android and HarmonyOS native); added an English README with language switching.
 - **v1.0.12 / native-v1.0.5** (Pre-release): full dual-platform audit fixes (read-only batch bypass, cross-platform watermark domain unification, dark-mode contrast, cold-start notification routing, draft durability).
 - **v1.0.11**: targetSdk raised to Android 17 (API 37) with compileSdk 37; reviewed the Android 17 targeted behavior changes (large-screen orientation/resizability rules, tighter background activity launches, local network permission, background audio, MessageQueue, native library loading) — none affect this offline app, runtime behavior matches API 36, and real-device regression passed.
 - **v1.0.10** (Pre-release): fixed system back in selection mode on the all-records and project-records pages exiting straight to the launcher; back now first clears the selection (search and filters are handled at the same layer).
@@ -89,8 +90,9 @@ See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releas
 | Batch actions | Checkboxes overlay thumbnails without squeezing photos or text; multi-select replaces the top-level dock with a compact floating dock of icons and text; supports select-all/clear over the current filter results, export, save again, clear originals, and deleting whole records |
 | Watermark | Project name, site fields, time, and optional location; supports position, opacity, font size, and accent color |
 | Projects | Lifecycle, pinning, duplicate/safe filename conflict protection; rename, delete, and per-project watermark settings |
-| Settings | The top-level page is grouped into "Capture & records / Data & safety / App", centralizing watermark defaults, location, notifications, backup & restore, storage, diagnostics, language, appearance, and about |
+| Settings | The top-level page is grouped into "Capture & records / Data & safety / App", centralizing watermark defaults, location, notifications, backup & restore, storage, NAS sync, diagnostics, language, appearance, and about |
 | Data safety | Project backup & restore, original photo SHA-256 verification, restore transaction with file rollback, cleanup after abnormal interruptions |
+| NAS sync | Optional feature (off by default): uploads watermarked photos to your own WebDAV / SFTP / SMB server; optional Wi-Fi-only gate, automatic retries with a 5-attempt budget, SFTP host-fingerprint verification (TOFU); passwords stay in system secure storage and never enter backups, diagnostics, or the database |
 | Polish | Glass navigation and cards, stable hierarchy-respecting page transitions, image hero animations, back logic without hidden list flicker, reduced-motion support, and record/full-screen image lists that keep loading more |
 
 ## Product positioning
@@ -99,7 +101,7 @@ I built SiteMark because recording on a jobsite takes more than stamping text on
 
 I deliberately did not re-implement a camera or embed a third-party camera SDK — manufacturers have spent years tuning their own lenses, and an app-level rework only makes things worse. SiteMark invokes the system/vendor camera through standard platform APIs, leaving focus, HDR, stabilization, and image quality to the system, and does three things itself: engineering fields before the shot, local watermarking after it, and record/project management.
 
-The published APK has no ads, accounts, cloud sync, or analytics uploads, and it never requests the network permission; repository links open in the external browser. Offline is not a slogan here — it is a hard boundary.
+The published APK has no ads, accounts, third-party cloud sync, or analytics uploads; repository links open in the external browser. The only network surface is the NAS sync you configure and enable yourself (WebDAV/SFTP/SMB, see D-023 in `docs/decision-records.md`): uploads go exclusively to the server you enter, and the feature is off by default. Offline remains the default state — the network is an exception the user explicitly opens.
 
 ## Quick start
 
@@ -209,11 +211,11 @@ Privacy boundaries:
 | `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION` | Optional foreground location; used only when you request it, and declining does not block taking photos |
 | `POST_NOTIFICATIONS` | Android 13+ notifications for finished background processing |
 | `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE` | WorkManager local background processing, retries, and resume |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | Optional NAS sync (WebDAV/SFTP/SMB); only used to reach the NAS server you configure after enabling the feature, plus network-state checks for the Wi-Fi-only gate |
 
 The released APK does not request:
 
 - `CAMERA`;
-- `INTERNET`, `ACCESS_NETWORK_STATE`;
 - `ACCESS_BACKGROUND_LOCATION`;
 - `READ_MEDIA_IMAGES` or the legacy broad storage permission.
 
@@ -222,7 +224,7 @@ Camera permission is held by the external system camera app; SiteMark provides t
 ## Current limitations
 
 - The downloadable stable version supports Android 12 and later only; the HarmonyOS NEXT native version is a Pre-release unsigned HAP and is not on any app store yet; the iOS version is fully adapted but has no signed release yet (waiting on an Apple Developer account), so no installable package exists;
-- No cloud sync, multi-user collaboration, or importing from the device gallery;
+- No third-party cloud sync, multi-user collaboration, or importing from the device gallery; NAS sync only targets the server you host yourself;
 - The watermark is not a free-drag template;
 - Background task timing is still subject to Android and vendor scheduling policies; on iOS, background catch-up is scheduled opportunistically by the system and is not guaranteed to run right after a capture;
 - SHA-256 is for local consistency checks and does not represent forensic identification, trusted timestamps, or third-party evidence;
@@ -264,7 +266,7 @@ The release gates for the current version include:
 
 When HarmonyOS native code is involved, the checks additionally cover the HarmonyOS manifest's minimal permission set and dual-ABI configuration, and run Rust Clippy/tests for the `ohos-native` feature separately. ArkTS tests and HAP packaging need the DevEco Studio SDK and are currently verified in a local DevEco environment.
 
-Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.13` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
+Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.14` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
 
 ## Local build
 

@@ -4,11 +4,13 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/image_core.dart';
+import 'api/nas.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'nas.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Main entrypoint of the Rust API
@@ -66,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 776968485;
+  int get rustContentHash => -168109353;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -78,6 +80,10 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<ExportDiagnosticBundleResult> crateApiImageCoreExportDiagnosticBundle({
+    required ExportDiagnosticBundleRequest request,
+  });
+
   Future<ExportProjectResult> crateApiImageCoreExportProject({
     required ExportProjectRequest request,
   });
@@ -99,6 +105,12 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<void> crateApiSimpleInitApp();
+
+  Future<NasTestDetails> crateApiNasNasTestConnection({
+    required NasConfig config,
+  });
+
+  Future<void> crateApiNasNasUpload({required NasUploadRequest request});
 
   Future<ProjectArchivePreview> crateApiImageCoreReadProjectArchive({
     required String zipPath,
@@ -124,6 +136,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<ExportDiagnosticBundleResult> crateApiImageCoreExportDiagnosticBundle({
+    required ExportDiagnosticBundleRequest request,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_export_diagnostic_bundle_request(
+            request,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_export_diagnostic_bundle_result,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiImageCoreExportDiagnosticBundleConstMeta,
+        argValues: [request],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiImageCoreExportDiagnosticBundleConstMeta =>
+      const TaskConstMeta(
+        debugName: "export_diagnostic_bundle",
+        argNames: ["request"],
+      );
+
+  @override
   Future<ExportProjectResult> crateApiImageCoreExportProject({
     required ExportProjectRequest request,
   }) {
@@ -135,7 +183,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 2,
             port: port_,
           );
         },
@@ -168,7 +216,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 3,
             port: port_,
           );
         },
@@ -201,7 +249,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -234,7 +282,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -270,7 +318,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 6,
             port: port_,
           );
         },
@@ -300,7 +348,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -319,6 +367,67 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<NasTestDetails> crateApiNasNasTestConnection({
+    required NasConfig config,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_nas_config(config, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_nas_test_details,
+          decodeErrorData: sse_decode_nas_error,
+        ),
+        constMeta: kCrateApiNasNasTestConnectionConstMeta,
+        argValues: [config],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiNasNasTestConnectionConstMeta =>
+      const TaskConstMeta(
+        debugName: "nas_test_connection",
+        argNames: ["config"],
+      );
+
+  @override
+  Future<void> crateApiNasNasUpload({required NasUploadRequest request}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_nas_upload_request(request, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_nas_error,
+        ),
+        constMeta: kCrateApiNasNasUploadConstMeta,
+        argValues: [request],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiNasNasUploadConstMeta =>
+      const TaskConstMeta(debugName: "nas_upload", argNames: ["request"]);
+
+  @override
   Future<ProjectArchivePreview> crateApiImageCoreReadProjectArchive({
     required String zipPath,
   }) {
@@ -330,7 +439,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 10,
             port: port_,
           );
         },
@@ -363,7 +472,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 11,
             port: port_,
           );
         },
@@ -396,7 +505,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 12,
             port: port_,
           );
         },
@@ -424,7 +533,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 13,
             port: port_,
           );
         },
@@ -516,6 +625,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportDiagnosticBundleRequest
+  dco_decode_box_autoadd_export_diagnostic_bundle_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_export_diagnostic_bundle_request(raw);
+  }
+
+  @protected
   ExportProjectBundleRequest
   dco_decode_box_autoadd_export_project_bundle_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -559,9 +675,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NasConfig dco_decode_box_autoadd_nas_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_nas_config(raw);
+  }
+
+  @protected
+  NasUploadRequest dco_decode_box_autoadd_nas_upload_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_nas_upload_request(raw);
+  }
+
+  @protected
   RenderPhotoRequest dco_decode_box_autoadd_render_photo_request(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_render_photo_request(raw);
+  }
+
+  @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -577,6 +711,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       photographer: dco_decode_String(arr[3]),
       createdAt: dco_decode_String(arr[4]),
       updatedAt: dco_decode_String(arr[5]),
+    );
+  }
+
+  @protected
+  ExportDiagnosticBundleRequest dco_decode_export_diagnostic_bundle_request(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return ExportDiagnosticBundleRequest(
+      outputZipPath: dco_decode_String(arr[0]),
+      summary: dco_decode_String(arr[1]),
+      environmentJson: dco_decode_String(arr[2]),
+      eventsJsonl: dco_decode_String(arr[3]),
+      manifestJson: dco_decode_String(arr[4]),
+    );
+  }
+
+  @protected
+  ExportDiagnosticBundleResult dco_decode_export_diagnostic_bundle_result(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ExportDiagnosticBundleResult(
+      outputZipPath: dco_decode_String(arr[0]),
+      archiveSha256: dco_decode_String(arr[1]),
     );
   }
 
@@ -819,6 +984,69 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NasConfig dco_decode_nas_config(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return NasConfig(
+      protocol: dco_decode_nas_protocol(arr[0]),
+      host: dco_decode_String(arr[1]),
+      port: dco_decode_opt_box_autoadd_u_16(arr[2]),
+      username: dco_decode_String(arr[3]),
+      password: dco_decode_String(arr[4]),
+      rootPath: dco_decode_String(arr[5]),
+      secureTls: dco_decode_bool(arr[6]),
+      acceptInvalidTls: dco_decode_bool(arr[7]),
+      knownSftpFingerprint: dco_decode_opt_String(arr[8]),
+    );
+  }
+
+  @protected
+  NasError dco_decode_nas_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return NasError(code: dco_decode_nas_error_code(arr[0]));
+  }
+
+  @protected
+  NasErrorCode dco_decode_nas_error_code(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return NasErrorCode.values[raw as int];
+  }
+
+  @protected
+  NasProtocol dco_decode_nas_protocol(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return NasProtocol.values[raw as int];
+  }
+
+  @protected
+  NasTestDetails dco_decode_nas_test_details(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return NasTestDetails(sftpFingerprint: dco_decode_opt_String(arr[0]));
+  }
+
+  @protected
+  NasUploadRequest dco_decode_nas_upload_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return NasUploadRequest(
+      config: dco_decode_nas_config(arr[0]),
+      projectKey: dco_decode_String(arr[1]),
+      fileName: dco_decode_String(arr[2]),
+      localPath: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
@@ -837,6 +1065,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   double? dco_decode_opt_box_autoadd_f_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_f_64(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_16(raw);
   }
 
   @protected
@@ -943,6 +1177,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       width: dco_decode_u_32(arr[2]),
       height: dco_decode_u_32(arr[3]),
     );
+  }
+
+  @protected
+  int dco_decode_u_16(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
   }
 
   @protected
@@ -1064,6 +1304,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportDiagnosticBundleRequest
+  sse_decode_box_autoadd_export_diagnostic_bundle_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_export_diagnostic_bundle_request(deserializer));
+  }
+
+  @protected
   ExportProjectBundleRequest
   sse_decode_box_autoadd_export_project_bundle_request(
     SseDeserializer deserializer,
@@ -1113,11 +1362,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NasConfig sse_decode_box_autoadd_nas_config(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_nas_config(deserializer));
+  }
+
+  @protected
+  NasUploadRequest sse_decode_box_autoadd_nas_upload_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_nas_upload_request(deserializer));
+  }
+
+  @protected
   RenderPhotoRequest sse_decode_box_autoadd_render_photo_request(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_render_photo_request(deserializer));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_16(deserializer));
   }
 
   @protected
@@ -1138,6 +1407,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       photographer: var_photographer,
       createdAt: var_createdAt,
       updatedAt: var_updatedAt,
+    );
+  }
+
+  @protected
+  ExportDiagnosticBundleRequest sse_decode_export_diagnostic_bundle_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_outputZipPath = sse_decode_String(deserializer);
+    var var_summary = sse_decode_String(deserializer);
+    var var_environmentJson = sse_decode_String(deserializer);
+    var var_eventsJsonl = sse_decode_String(deserializer);
+    var var_manifestJson = sse_decode_String(deserializer);
+    return ExportDiagnosticBundleRequest(
+      outputZipPath: var_outputZipPath,
+      summary: var_summary,
+      environmentJson: var_environmentJson,
+      eventsJsonl: var_eventsJsonl,
+      manifestJson: var_manifestJson,
+    );
+  }
+
+  @protected
+  ExportDiagnosticBundleResult sse_decode_export_diagnostic_bundle_result(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_outputZipPath = sse_decode_String(deserializer);
+    var var_archiveSha256 = sse_decode_String(deserializer);
+    return ExportDiagnosticBundleResult(
+      outputZipPath: var_outputZipPath,
+      archiveSha256: var_archiveSha256,
     );
   }
 
@@ -1456,6 +1757,74 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NasConfig sse_decode_nas_config(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_protocol = sse_decode_nas_protocol(deserializer);
+    var var_host = sse_decode_String(deserializer);
+    var var_port = sse_decode_opt_box_autoadd_u_16(deserializer);
+    var var_username = sse_decode_String(deserializer);
+    var var_password = sse_decode_String(deserializer);
+    var var_rootPath = sse_decode_String(deserializer);
+    var var_secureTls = sse_decode_bool(deserializer);
+    var var_acceptInvalidTls = sse_decode_bool(deserializer);
+    var var_knownSftpFingerprint = sse_decode_opt_String(deserializer);
+    return NasConfig(
+      protocol: var_protocol,
+      host: var_host,
+      port: var_port,
+      username: var_username,
+      password: var_password,
+      rootPath: var_rootPath,
+      secureTls: var_secureTls,
+      acceptInvalidTls: var_acceptInvalidTls,
+      knownSftpFingerprint: var_knownSftpFingerprint,
+    );
+  }
+
+  @protected
+  NasError sse_decode_nas_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_code = sse_decode_nas_error_code(deserializer);
+    return NasError(code: var_code);
+  }
+
+  @protected
+  NasErrorCode sse_decode_nas_error_code(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return NasErrorCode.values[inner];
+  }
+
+  @protected
+  NasProtocol sse_decode_nas_protocol(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return NasProtocol.values[inner];
+  }
+
+  @protected
+  NasTestDetails sse_decode_nas_test_details(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sftpFingerprint = sse_decode_opt_String(deserializer);
+    return NasTestDetails(sftpFingerprint: var_sftpFingerprint);
+  }
+
+  @protected
+  NasUploadRequest sse_decode_nas_upload_request(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_config = sse_decode_nas_config(deserializer);
+    var var_projectKey = sse_decode_String(deserializer);
+    var var_fileName = sse_decode_String(deserializer);
+    var var_localPath = sse_decode_String(deserializer);
+    return NasUploadRequest(
+      config: var_config,
+      projectKey: var_projectKey,
+      fileName: var_fileName,
+      localPath: var_localPath,
+    );
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1486,6 +1855,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_f_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_16(deserializer));
     } else {
       return null;
     }
@@ -1638,6 +2018,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_u_16(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint16();
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -1732,6 +2118,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_export_diagnostic_bundle_request(
+    ExportDiagnosticBundleRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_export_diagnostic_bundle_request(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_export_project_bundle_request(
     ExportProjectBundleRequest self,
     SseSerializer serializer,
@@ -1783,12 +2178,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_nas_config(
+    NasConfig self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_nas_config(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_nas_upload_request(
+    NasUploadRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_nas_upload_request(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_render_photo_request(
     RenderPhotoRequest self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_render_photo_request(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_16(self, serializer);
   }
 
   @protected
@@ -1803,6 +2222,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.photographer, serializer);
     sse_encode_String(self.createdAt, serializer);
     sse_encode_String(self.updatedAt, serializer);
+  }
+
+  @protected
+  void sse_encode_export_diagnostic_bundle_request(
+    ExportDiagnosticBundleRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.outputZipPath, serializer);
+    sse_encode_String(self.summary, serializer);
+    sse_encode_String(self.environmentJson, serializer);
+    sse_encode_String(self.eventsJsonl, serializer);
+    sse_encode_String(self.manifestJson, serializer);
+  }
+
+  @protected
+  void sse_encode_export_diagnostic_bundle_result(
+    ExportDiagnosticBundleResult self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.outputZipPath, serializer);
+    sse_encode_String(self.archiveSha256, serializer);
   }
 
   @protected
@@ -2045,6 +2487,59 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_nas_config(NasConfig self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_nas_protocol(self.protocol, serializer);
+    sse_encode_String(self.host, serializer);
+    sse_encode_opt_box_autoadd_u_16(self.port, serializer);
+    sse_encode_String(self.username, serializer);
+    sse_encode_String(self.password, serializer);
+    sse_encode_String(self.rootPath, serializer);
+    sse_encode_bool(self.secureTls, serializer);
+    sse_encode_bool(self.acceptInvalidTls, serializer);
+    sse_encode_opt_String(self.knownSftpFingerprint, serializer);
+  }
+
+  @protected
+  void sse_encode_nas_error(NasError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_nas_error_code(self.code, serializer);
+  }
+
+  @protected
+  void sse_encode_nas_error_code(NasErrorCode self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_nas_protocol(NasProtocol self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_nas_test_details(
+    NasTestDetails self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_opt_String(self.sftpFingerprint, serializer);
+  }
+
+  @protected
+  void sse_encode_nas_upload_request(
+    NasUploadRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_nas_config(self.config, serializer);
+    sse_encode_String(self.projectKey, serializer);
+    sse_encode_String(self.fileName, serializer);
+    sse_encode_String(self.localPath, serializer);
+  }
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2074,6 +2569,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_f_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_16(self, serializer);
     }
   }
 
@@ -2170,6 +2675,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.outputSha256, serializer);
     sse_encode_u_32(self.width, serializer);
     sse_encode_u_32(self.height, serializer);
+  }
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint16(self);
   }
 
   @protected
