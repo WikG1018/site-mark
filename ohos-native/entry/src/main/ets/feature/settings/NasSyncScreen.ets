@@ -89,12 +89,29 @@ export struct NasSyncScreen {
     return config;
   }
 
+  /**
+   * Ports outside 1–65535 never reach the Rust core: its u16 decoding
+   * would surface as an opaque error instead of this friendly message.
+   */
+  private hasPortError(): boolean {
+    const text = this.portText.trim();
+    if (text.length === 0) {
+      return false;
+    }
+    const port = Number.parseInt(text, 10);
+    return !Number.isFinite(port) || port < 1 || port > 65535;
+  }
+
   private async save(): Promise<void> {
     if (this.database === null) {
       return;
     }
     if (this.host.trim().length === 0) {
       this.showToast(tr('请先填写服务器地址', 'Enter the server address first'), true);
+      return;
+    }
+    if (this.hasPortError()) {
+      this.showToast(tr('端口需在 1–65535 之间', 'Port must be between 1 and 65535'), true);
       return;
     }
     this.busy = true;
@@ -124,6 +141,10 @@ export struct NasSyncScreen {
     }
     if (this.host.trim().length === 0) {
       this.showToast(tr('请先填写服务器地址', 'Enter the server address first'), true);
+      return;
+    }
+    if (this.hasPortError()) {
+      this.showToast(tr('端口需在 1–65535 之间', 'Port must be between 1 and 65535'), true);
       return;
     }
     this.busy = true;

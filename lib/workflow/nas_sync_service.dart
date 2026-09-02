@@ -120,6 +120,11 @@ class RustNasUploader implements NasUploader {
       return null;
     } on rust.NasError catch (error) {
       return error.code.name;
+    } on Object {
+      // Anything outside the Rust taxonomy (bridge/decode breakage, e.g. a
+      // port that survived client validation) must not escape as an
+      // unhandled async error — the queue records it and moves on.
+      return 'protocol_error';
     }
   }
 }
@@ -175,6 +180,7 @@ class NasSyncCoordinator {
   final _stateController = StreamController<NasSyncSnapshot>.broadcast();
   bool _started = false;
   bool _syncing = false;
+  final _deferredThisCycle = <String>{};
   StreamSubscription? _configSubscription;
   StreamSubscription? _captureUpdatesSubscription;
 
@@ -243,11 +249,18 @@ class NasSyncCoordinator {
         if (queue.isEmpty) break;
 
         // Re-query after every item so fresh state (user edits, deletions)
-        // is honored and ordering stays deterministic.
-        await _uploadOne(config, queue.first.captureId);
+        // is honored and ordering stays deterministic. A capture that is
+        // not ready yet (still processing) is deferred, not failed — once
+        // every queued item is deferred this cycle, stop and wait for the
+        // capture-completed trigger instead of spinning.
+        final first = queue.first.captureId;
+        if (_deferredThisCycle.contains(first)) break;
+        final progressed = await _uploadOne(config, first);
+        if (!progressed) _deferredThisCycle.add(first);
         await _emit();
       }
     } finally {
+      _deferredThisCycle.clear();
       _syncing = false;
       await _emit();
     }
@@ -255,36 +268,48 @@ class NasSyncCoordinator {
 
   /// Uploads one capture. Local errors (missing photo number, missing file,
   /// missing password) map into the Rust failure taxonomy so the settings
-  /// surface shows one consistent vocabulary.
-  Future<void> _uploadOne(NasSyncConfig config, String captureId) async {
+  /// surface shows one consistent vocabulary. Returns false when the row
+  /// was only deferred (capture not ready yet) — the drain treats that as
+  /// "no progress" and stops once every queued item defers.
+  Future<bool> _uploadOne(NasSyncConfig config, String captureId) async {
     final capture = await _captureById(captureId);
     if (capture == null) {
       await _database.markNasUploadFailed(captureId, 'path_invalid');
-      return;
+      return true;
     }
     if (capture.status != CaptureStatus.ready) {
-      // The capture changed while queued; drop the stale job silently.
-      return;
+      // The capture changed while queued; keep the job pending and let the
+      // processing-completed table update re-trigger the drain.
+      await _database.deferNasUpload(captureId);
+      return false;
     }
     final photoNumber = capture.photoNumber;
     if (photoNumber == null || photoNumber.isEmpty) {
       await _database.markNasUploadFailed(captureId, 'path_invalid');
-      return;
+      return true;
     }
     final project = await _database.projectById(capture.projectId);
     if (project == null) {
       await _database.markNasUploadFailed(captureId, 'path_invalid');
-      return;
+      return true;
     }
     final localPath = await _outputPaths.renderedPhotoPath(captureId);
     if (!await File(localPath).exists()) {
       await _database.markNasUploadFailed(captureId, 'local_io');
-      return;
+      return true;
     }
-    final password = await _credentials.read();
-    if (password == null || password.isEmpty) {
+    String password;
+    try {
+      password = await _credentials.read() ?? '';
+    } on Object {
+      // Secure-storage breakage must burn a retry budget like any other
+      // failure, not bubble out of the drain loop.
       await _database.markNasUploadFailed(captureId, 'config_invalid');
-      return;
+      return true;
+    }
+    if (password.isEmpty) {
+      await _database.markNasUploadFailed(captureId, 'config_invalid');
+      return true;
     }
     final failureCode = await _uploader.upload(
       NasUploadJob(
@@ -300,6 +325,7 @@ class NasSyncCoordinator {
     } else {
       await _database.markNasUploadFailed(captureId, failureCode);
     }
+    return true;
   }
 
   Future<CaptureRecord?> _captureById(String captureId) {

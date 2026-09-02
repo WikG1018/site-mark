@@ -897,6 +897,12 @@ class AppStrings {
   String get nasTestSucceeded => _english ? 'Connection successful' : '连接成功';
   String get nasSave => _english ? 'Save' : '保存';
   String get nasSaved => _english ? 'Saved' : '已保存';
+  String get nasSaveFailed =>
+      _english ? 'Saving failed; try again later' : '保存失败，请稍后重试';
+  String get nasPortInvalid =>
+      _english ? 'Port must be between 1 and 65535' : '端口需在 1–65535 之间';
+  String get nasPasswordKeepHint =>
+      _english ? 'Leave blank to keep the saved password' : '留空则继续使用已保存的密码';
   String get nasRetryFailed => _english ? 'Retry failed uploads' : '重试失败的上传';
   String get nasPrivacyNote => _english
       ? 'Uploads go only to the NAS you configure. Passwords stay in system secure storage and never enter backups or diagnostics.'
