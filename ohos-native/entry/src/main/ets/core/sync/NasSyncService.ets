@@ -7,54 +7,73 @@ import { AppDatabase, NasSyncConfigRecord, NasUploadCounts } from '../../data/da
 const LOG_DOMAIN: number = 0x5100;
 const LOG_TAG: string = 'NasSync';
 
-/** JSON C ABI operation names (see rust/src/ffi/mod.rs). */
+interface NativeResponse<T> {
+  ok: boolean;
+  value: T | null;
+  error: string | null;
+}
+
+interface NasTestDetailsValue {
+  sftp_fingerprint: string | null;
+}
+
+/** Result of a connection probe: a failure category, or the observed host key. */
+export class NasTestOutcome {
+  constructor(
+    readonly failure: string | null,
+    readonly sftpFingerprint: string | null) {
+  }
+}
+
+/**
+ * Thin wrapper over the JSON C ABI envelope (see rust/src/ffi/mod.rs):
+ * the request is `{operation, payload}` and operation failures come back
+ * as `ok:false` with a `nas:{code}` error string — `call()` itself only
+ * rejects on transport-level breakage.
+ */
 export class NasNativeBridge {
-  async testConnection(config: NasSyncConfigRecord, password: string): Promise<string | null> {
-    const payload: Record<string, Object | null> = {
-      protocol: config.protocol,
-      host: config.host,
-      port: config.port,
-      username: config.username,
-      password: password,
-      root_path: config.rootPath,
-      secure_tls: config.secureTls,
-      accept_invalid_tls: config.acceptInvalidTls,
-      known_sftp_fingerprint: config.knownSftpFingerprint
-    };
-    try {
-      const encoded = JSON.stringify(payload);
-      await sitemarkNative.callRaw('nasTestConnection', encoded);
-      return null;
-    } catch (error) {
-      return nasFailureCode((error as Error).message);
+  private async call<T>(operation: string, payload: Record<string, Object | null>): Promise<NativeResponse<T>> {
+    const request = `{"operation":${JSON.stringify(operation)},"payload":${JSON.stringify(payload)}}`;
+    const encoded = await sitemarkNative.call(request);
+    return JSON.parse(encoded) as NativeResponse<T>;
+  }
+
+  async testConnection(config: NasSyncConfigRecord, password: string): Promise<NasTestOutcome> {
+    const response = await this.call<NasTestDetailsValue>('nasTestConnection', nasConfigPayload(config, password));
+    if (!response.ok) {
+      return new NasTestOutcome(nasFailureCode(response.error ?? 'protocol_error'), null);
     }
+    const details = response.value;
+    return new NasTestOutcome(null, details === null ? null : details.sftp_fingerprint);
   }
 
   async upload(config: NasSyncConfigRecord, password: string, localPath: string,
     projectKey: string, fileName: string): Promise<string | null> {
-    const payload: Record<string, Object | null> = {
-      config: {
-        protocol: config.protocol,
-        host: config.host,
-        port: config.port,
-        username: config.username,
-        password: password,
-        root_path: config.rootPath,
-        secure_tls: config.secureTls,
-        accept_invalid_tls: config.acceptInvalidTls,
-        known_sftp_fingerprint: config.knownSftpFingerprint
-      },
+    const response = await this.call<Object>('nasUpload', {
+      config: nasConfigPayload(config, password),
       project_key: projectKey,
       file_name: fileName,
       local_path: localPath
-    };
-    try {
-      await sitemarkNative.callRaw('nasUpload', JSON.stringify(payload));
+    });
+    if (response.ok) {
       return null;
-    } catch (error) {
-      return nasFailureCode((error as Error).message);
     }
+    return nasFailureCode(response.error ?? 'protocol_error');
   }
+}
+
+function nasConfigPayload(config: NasSyncConfigRecord, password: string): Record<string, Object | null> {
+  return {
+    protocol: config.protocol,
+    host: config.host,
+    port: config.port,
+    username: config.username,
+    password: password,
+    root_path: config.rootPath,
+    secure_tls: config.secureTls,
+    accept_invalid_tls: config.acceptInvalidTls,
+    known_sftp_fingerprint: config.knownSftpFingerprint
+  };
 }
 
 /**

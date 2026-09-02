@@ -19,7 +19,6 @@ ohos-native = []
 [dependencies]
 ab_glyph = "0.2.32"
 async-trait = "0.1"
-base64 = "0.22"
 csv = "1.4.0"
 flutter_rust_bridge = { version = "=2.12.0", optional = true }
 hex = "0.4.3"

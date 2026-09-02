@@ -176,14 +176,8 @@ void main() {
       uploader: uploader,
     );
     addTearDown(coordinator.dispose);
-    // ignore: avoid_print
-    print('A: start begin');
     await coordinator.start();
-    // ignore: avoid_print
-    print('B: start done');
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    // ignore: avoid_print
-    print('C: delay done');
 
     expect(uploader.jobs, isEmpty);
     expect((await database.allNasUploadStates()), isEmpty);

@@ -132,20 +132,47 @@ export struct NasSyncScreen {
       const config = this.buildConfig();
       const stored = await runtime.nasSync.secrets.read();
       const password = this.password.length > 0 ? this.password : (stored ?? '');
-      const failure = await runtime.nasSync.bridge.testConnection(config, password);
-      if (failure === 'host_key_changed' || failure === 'protocol_error') {
-        // The Rust test reports the observed fingerprint through the same
-        // channel; without it the user re-tests after re-accepting in the
-        // app dialog. v1 keeps the flow simple: surface the category.
+      const outcome = await runtime.nasSync.bridge.testConnection(config, password);
+      if (outcome.failure !== null) {
+        this.showToast(this.failureText(outcome.failure), true);
+        return;
       }
-      this.showToast(failure === null ? tr('连接成功', 'Connection successful') :
-        this.failureText(failure), failure !== null);
+      if (outcome.sftpFingerprint !== null && outcome.sftpFingerprint !== this.knownFingerprint) {
+        if (!await this.confirmFingerprint(outcome.sftpFingerprint)) {
+          return;
+        }
+        this.knownFingerprint = outcome.sftpFingerprint;
+      }
+      this.showToast(tr('连接成功', 'Connection successful'), false);
     } catch (error) {
       hilog.error(LOG_DOMAIN, LOG_TAG, 'nas test failed: %{public}s', (error as Error).message);
       this.showToast(tr('测试失败，请稍后重试', 'The test failed; try again later'), true);
     } finally {
       this.busy = false;
     }
+  }
+
+  /** Trust-on-first-use gate: the SFTP host key fingerprint must be confirmed before it is stored. */
+  private confirmFingerprint(fingerprint: string): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      AlertDialog.show({
+        title: tr('验证服务器指纹', 'Verify server fingerprint'),
+        message: tr(
+          `首次连接该 SFTP 服务器。请核对主机密钥指纹后再信任：\n\n${fingerprint}`,
+          `First connection to this SFTP server. Verify the host key fingerprint before trusting it:\n\n${fingerprint}`),
+        autoCancel: true,
+        secondaryButton: {
+          value: tr('取消', 'Cancel'),
+          action: () => resolve(false)
+        },
+        primaryButton: {
+          value: tr('信任并继续', 'Trust and continue'),
+          fontColor: UiTokens.PRIMARY,
+          action: () => resolve(true)
+        },
+        cancel: () => resolve(false)
+      });
+    });
   }
 
   private failureText(code: string): string {
