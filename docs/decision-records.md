@@ -250,31 +250,45 @@ CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用
 仍为浅色的问题)。本批早前"不做 iOS 专属导航重构"的表述已被 2026-08-30 用户方向调整
 取代:导航形态按 iOS 调整,同时保持 Android 分支行为零变化。
 
-## D-023 NAS 同步：受控网络面（WebDAV，用户自配服务器）
+## D-023 NAS 同步：受控网络面（WebDAV/SFTP/SMB，用户自配服务器）
 
-**状态：已接受（2026-08-31，用户提出"拍照自动接入个人群晖类 NAS"后批准）**
+**状态：已接受（2026-08-31 首批，仅 WebDAV/Android+iOS；2026-09-02 修订：
+扩展为三协议 × 三产品线，HarmonyOS 一并纳入）**
 
 这条决策修订了"无网络发布面"边界（D-00x 系列中的离线原则）——这是本应用第一次
 申请网络权限，变更范围被刻意压到最小：
 
 - **唯一网络面**：NAS 同步。应用只向用户在设置中明确配置的服务器发起连接
-  （v1 仅 WebDAV：PUT/MKCOL/HEAD），不连接任何第三方服务，无遥测、无检查更新、
-  无在线内容。不配置即不存在任何网络行为（默认关闭）。
+  （WebDAV：PUT/MKCOL/HEAD/DELETE；SFTP：SFTP 子系统；SMB：SMB2/3），不连接
+  任何第三方服务，无遥测、无检查更新、无在线内容。不配置即不存在任何网络行为
+  （默认关闭）。
+- **三端共用一个 Rust 核心**：协议客户端只实现一次（`sitemark_core` 的 `nas`
+  模块：WebDAV 基于 ureq、SFTP 基于 russh、SMB 基于纯 Rust smb2），经
+  flutter_rust_bridge 服务 Android/iOS、经既有 JSON C ABI 服务鸿蒙。远程路径
+  规则、路径段校验和错误分类全部收敛在核心里，三端行为一致；错误只传
+  分类码（`nas:{code}`），服务器原始串不进任何 UI。
+- **鸿蒙线的 WebDAV 限制**：为保持鸿蒙 Rust 构建零 C 依赖（`build-rust.ps1`
+  只接链接器、不接 C 编译器），`ohos-native` feature 不编译 WebDAV 的 TLS
+  后端——鸿蒙上 WebDAV 仅明文 HTTP，SFTP 与 SMB 本身即为加密传输。测试连接
+  在鸿蒙请求 HTTPS 时返回 `tls_unsupported` 分类码。
 - **权限**：`INTERNET` + `ACCESS_NETWORK_STATE`（后者同时服务"仅 Wi‑Fi 上传"
-  偏好的连通性判定）。CI/release 门禁从"禁止这两个权限"改为"必须有这两个权限、
-  且不得出现其余网络/相机/存储权限"。
+  偏好的连通性判定）；鸿蒙新增 `GET_NETWORK_INFO`（normal 级）。CI/release
+  门禁从"禁止网络权限"改为"必须有这两个权限、且不得出现其余网络/相机/存储权限"。
 - **明文 HTTP**：局域网 NAS 常见明文 HTTP，Android `usesCleartextTraffic=true`、
   iOS `NSAllowsLocalNetworking`。代价与理由：应用内除 NAS 同步外不存在任何网络
   调用点（构造性保证），明文只影响用户自选的局域网目标；设置中提供"允许自签名
-  证书"开关。
-- **凭据**：密码存系统安全存储（Android Keystore / iOS Keychain），不进数据库、
-  不进备份 ZIP、不进诊断包。
-- **上传内容（v1）**：水印成片 JPEG（渲染完成后幂等上传），远程路径
-  `{根目录}/{项目文件键}/{照片编号}.jpg`；原图、数据库、诊断不出设备。
+  证书"开关（iOS/Android 的 WebDAV 线，基于 rustls 的显式接受验证器）。
+- **SFTP 主机密钥**：信任于首次使用（TOFU）在 Rust 侧强制——首次连接返回指纹
+  交用户确认保存，此后指纹不匹配即拒绝上传（`host_key_changed`），需要重新
+  测试连接确认。
+- **凭据**：密码存系统安全存储（Android Keystore / iOS Keychain / 鸿蒙资产
+  存储资产库），不进数据库、不进备份 ZIP、不进诊断包。
+- **上传内容（v1）**：水印成片 JPEG（渲染完成后幂等上传，覆盖写收敛重试），
+  远程路径 `{根目录}/{项目文件键}/{照片编号}.jpg`；原图、数据库、诊断不出设备。
+  单条记录串行队列 + 5 次自动重试预算，耗尽后停在 failed，由用户显式重试。
 - **不承诺的**：不做云同步语义（无双向同步、无冲突合并——NAS 侧是导出副本）；
-  远程访问（WireGuard/Tailscale/QuickConnect）由用户自行解决；HarmonyOS 原生线
-  暂不实现（独立技术栈，另行决策）。
-- **后续路线**：SFTP（密钥认证，复用 Rust 核心）评估后跟进；SMB 视需求。
+  远程访问（WireGuard/Tailscale/QuickConnect）由用户自行解决；SFTP 密钥认证
+  （当前为用户名/密码）。
 
 ## 决策变更规则
 

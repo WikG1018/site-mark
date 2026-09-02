@@ -9,7 +9,7 @@ English | [简体中文](README.md)
 ![HarmonyOS native](https://img.shields.io/badge/HarmonyOS-native%20ArkTS-E60012)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
-![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
+![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
 [![Latest](https://img.shields.io/badge/latest-v1.0.13-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.13)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.6-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.6)
 
@@ -89,8 +89,9 @@ See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releas
 | Batch actions | Checkboxes overlay thumbnails without squeezing photos or text; multi-select replaces the top-level dock with a compact floating dock of icons and text; supports select-all/clear over the current filter results, export, save again, clear originals, and deleting whole records |
 | Watermark | Project name, site fields, time, and optional location; supports position, opacity, font size, and accent color |
 | Projects | Lifecycle, pinning, duplicate/safe filename conflict protection; rename, delete, and per-project watermark settings |
-| Settings | The top-level page is grouped into "Capture & records / Data & safety / App", centralizing watermark defaults, location, notifications, backup & restore, storage, diagnostics, language, appearance, and about |
+| Settings | The top-level page is grouped into "Capture & records / Data & safety / App", centralizing watermark defaults, location, notifications, backup & restore, storage, NAS sync, diagnostics, language, appearance, and about |
 | Data safety | Project backup & restore, original photo SHA-256 verification, restore transaction with file rollback, cleanup after abnormal interruptions |
+| NAS sync | Optional feature (off by default): uploads watermarked photos to your own WebDAV / SFTP / SMB server; optional Wi-Fi-only gate, automatic retries with a 5-attempt budget, SFTP host-fingerprint verification (TOFU); passwords stay in system secure storage and never enter backups, diagnostics, or the database |
 | Polish | Glass navigation and cards, stable hierarchy-respecting page transitions, image hero animations, back logic without hidden list flicker, reduced-motion support, and record/full-screen image lists that keep loading more |
 
 ## Product positioning
@@ -99,7 +100,7 @@ I built SiteMark because recording on a jobsite takes more than stamping text on
 
 I deliberately did not re-implement a camera or embed a third-party camera SDK — manufacturers have spent years tuning their own lenses, and an app-level rework only makes things worse. SiteMark invokes the system/vendor camera through standard platform APIs, leaving focus, HDR, stabilization, and image quality to the system, and does three things itself: engineering fields before the shot, local watermarking after it, and record/project management.
 
-The published APK has no ads, accounts, cloud sync, or analytics uploads, and it never requests the network permission; repository links open in the external browser. Offline is not a slogan here — it is a hard boundary.
+The published APK has no ads, accounts, third-party cloud sync, or analytics uploads; repository links open in the external browser. The only network surface is the NAS sync you configure and enable yourself (WebDAV/SFTP/SMB, see D-023 in `docs/decision-records.md`): uploads go exclusively to the server you enter, and the feature is off by default. Offline remains the default state — the network is an exception the user explicitly opens.
 
 ## Quick start
 
@@ -209,11 +210,11 @@ Privacy boundaries:
 | `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION` | Optional foreground location; used only when you request it, and declining does not block taking photos |
 | `POST_NOTIFICATIONS` | Android 13+ notifications for finished background processing |
 | `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE` | WorkManager local background processing, retries, and resume |
+| `INTERNET`, `ACCESS_NETWORK_STATE` | Optional NAS sync (WebDAV/SFTP/SMB); only used to reach the NAS server you configure after enabling the feature, plus network-state checks for the Wi-Fi-only gate |
 
 The released APK does not request:
 
 - `CAMERA`;
-- `INTERNET`, `ACCESS_NETWORK_STATE`;
 - `ACCESS_BACKGROUND_LOCATION`;
 - `READ_MEDIA_IMAGES` or the legacy broad storage permission.
 
@@ -222,7 +223,7 @@ Camera permission is held by the external system camera app; SiteMark provides t
 ## Current limitations
 
 - The downloadable stable version supports Android 12 and later only; the HarmonyOS NEXT native version is a Pre-release unsigned HAP and is not on any app store yet; the iOS version is fully adapted but has no signed release yet (waiting on an Apple Developer account), so no installable package exists;
-- No cloud sync, multi-user collaboration, or importing from the device gallery;
+- No third-party cloud sync, multi-user collaboration, or importing from the device gallery; NAS sync only targets the server you host yourself;
 - The watermark is not a free-drag template;
 - Background task timing is still subject to Android and vendor scheduling policies; on iOS, background catch-up is scheduled opportunistically by the system and is not guaranteed to run right after a capture;
 - SHA-256 is for local consistency checks and does not represent forensic identification, trusted timestamps, or third-party evidence;

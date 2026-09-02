@@ -16,7 +16,7 @@ single branch.
 ![HarmonyOS native](https://img.shields.io/badge/HarmonyOS-native%20ArkTS-E60012)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
-![No network permission](https://img.shields.io/badge/Network_permission-none-176B55)
+![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
 [![Latest](https://img.shields.io/badge/latest-v1.0.13-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.13)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.6-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.6)
 
@@ -97,8 +97,9 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 | 批量操作 | 复选框覆盖缩略图，不挤压照片和文字；多选时以带图标与文字的紧凑悬浮 Dock 替换一级导航；支持按当前筛选结果全选/取消全选、导出、再次保存、清理原图和删除整条记录 |
 | 水印 | 项目名称、现场字段、时间和可选位置；支持位置、透明度、字体大小和强调色 |
 | 项目 | 生命周期、置顶、同名/安全文件名冲突保护；支持重命名、删除和项目级水印设置 |
-| 设置 | 一级页按“拍摄与记录 / 数据与安全 / 应用”分组，集中进入水印默认值、定位、通知、备份恢复、存储、诊断、语言、外观与关于 |
+| 设置 | 一级页按“拍摄与记录 / 数据与安全 / 应用”分组，集中进入水印默认值、定位、通知、备份恢复、存储、NAS 同步、诊断、语言、外观与关于 |
 | 数据安全 | 项目备份恢复、原图 SHA-256 校验、恢复事务与文件回滚、异常中断清理 |
+| NAS 同步 | 可选功能（默认关闭）：把水印成片上传到你自建的 WebDAV / SFTP / SMB 服务器；仅 Wi-Fi 可选、失败自动重试（5 次预算）、SFTP 主机指纹核对（TOFU）；密码只存系统安全存储，不进备份、诊断或数据库 |
 | 体验 | 玻璃材质导航与卡片、稳定且符合层级关系的页面转场、图片 Hero 动画、无隐藏列表闪现的返回逻辑、减少动画适配，以及可继续加载的记录和全屏图片列表 |
 
 ## 产品定位
@@ -107,7 +108,7 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 
 我刻意不在应用里重新实现相机，也不嵌第三方相机 SDK——厂商对着自家镜头调校了多年，应用层重做一遍只会更差。SiteMark 通过系统标准能力调用手机系统/厂商相机，把对焦、HDR、防抖和画质留给系统；自己只做三件事：拍摄前的工程信息、拍摄后的本地水印处理、以及记录与项目备份。
 
-发布 APK 没有广告、账号、云同步或统计上传，也不申请网络权限；点击 GitHub 仓库链接时交给外部浏览器处理。离线不是营销词，是硬边界。
+发布 APK 没有广告、账号、第三方云同步或统计上传；点击 GitHub 仓库链接时交给外部浏览器处理。唯一的网络出口是你主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB，见 `docs/decision-records.md` D-023）：上传只发往你自己填写的服务器，默认关闭。离线仍是默认状态，网络是用户手中显式打开的例外。
 
 ## 快速使用
 
@@ -217,11 +218,11 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 | `ACCESS_COARSE_LOCATION`、`ACCESS_FINE_LOCATION` | 可选前台定位；仅在用户主动请求时使用，拒绝后仍可拍照 |
 | `POST_NOTIFICATIONS` | Android 13+ 后台处理完成通知 |
 | `WAKE_LOCK`、`RECEIVE_BOOT_COMPLETED`、`FOREGROUND_SERVICE` | WorkManager 本地后台处理、重试和恢复 |
+| `INTERNET`、`ACCESS_NETWORK_STATE` | 可选 NAS 同步（WebDAV/SFTP/SMB）；仅在你配置并启用后访问你自己的 NAS 服务器，Wi-Fi 限制判定也用到网络状态 |
 
 发布 APK 不申请：
 
 - `CAMERA`；
-- `INTERNET`、`ACCESS_NETWORK_STATE`；
 - `ACCESS_BACKGROUND_LOCATION`；
 - `READ_MEDIA_IMAGES` 或传统广泛存储权限。
 
@@ -230,7 +231,7 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 ## 当前限制
 
 - 当前可下载稳定版仅支持 Android 12 及以上系统；HarmonyOS NEXT 原生版仅有 Pre-release 的未签名 HAP，尚未上架应用市场；iOS 版已完成适配但尚无签名发布（等 Apple Developer 账号），当前无可安装包；
-- 不提供云同步、多人协作或图库图片导入；
+- 不提供第三方云同步、多人协作或图库图片导入；NAS 同步只面向你自己搭建的服务器；
 - 水印不是自由拖拽模板；
 - 后台任务执行时机仍受 Android 和厂商系统调度策略影响；iOS 上由系统机会性调度后台补拍，不保证拍完立刻处理；
 - SHA-256 用于本地一致性核对，不代表司法鉴定、可信时间戳或第三方存证；
