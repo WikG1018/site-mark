@@ -1,8 +1,11 @@
 // lib/features/settings/sections/nas_sync_section_screen.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/nas_sync_database.dart';
+import 'package:sitemark/domain/nas_sync.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
@@ -11,6 +14,7 @@ import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/src/rust/api/nas.dart' as rust_api;
 import 'package:sitemark/src/rust/nas.dart' as rust;
+import 'package:sitemark/workflow/nas_sync_service.dart' show NasSyncSnapshot;
 
 /// NAS sync configuration (settings, data & safety). The password lives in
 /// secure storage only — the form keeps it in memory and writes it through
@@ -39,15 +43,26 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
   bool _passwordSet = false;
   bool _loaded = false;
   bool _saving = false;
+  bool _testing = false;
+  bool _retrying = false;
+  int _pendingCount = 0;
+  int _failedCount = 0;
+  int _uploadedCount = 0;
+  StreamSubscription? _stateSubscription;
 
   @override
   void initState() {
     super.initState();
+    _stateSubscription = ref
+        .read(nasSyncCoordinatorProvider)
+        .state
+        .listen(_applySnapshot);
     _load();
   }
 
   @override
   void dispose() {
+    _stateSubscription?.cancel();
     _hostController.dispose();
     _portController.dispose();
     _usernameController.dispose();
@@ -56,10 +71,20 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
     super.dispose();
   }
 
+  void _applySnapshot(NasSyncSnapshot snapshot) {
+    if (!mounted) return;
+    setState(() {
+      _pendingCount = snapshot.pendingCount;
+      _failedCount = snapshot.failedCount;
+      _uploadedCount = snapshot.uploadedCount;
+    });
+  }
+
   Future<void> _load() async {
     final database = ref.read(databaseProvider);
     final config = await database.nasSyncConfig();
     final password = await ref.read(nasCredentialStoreProvider).read();
+    final states = await database.allNasUploadStates();
     if (!mounted) return;
     setState(() {
       _protocol = config.protocol;
@@ -73,6 +98,15 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
       _enabled = config.enabled;
       _knownFingerprint = config.knownSftpFingerprint;
       _passwordSet = password != null && password.isNotEmpty;
+      _pendingCount = states
+          .where((row) => row.status == NasUploadStatus.pending)
+          .length;
+      _failedCount = states
+          .where((row) => row.status == NasUploadStatus.failed)
+          .length;
+      _uploadedCount = states
+          .where((row) => row.status == NasUploadStatus.uploaded)
+          .length;
       _loaded = true;
     });
   }
@@ -148,7 +182,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             controller: _passwordController,
             decoration: InputDecoration(
               labelText: strings.nasPassword,
-              helperText: _passwordSet ? null : strings.nasPassword,
+              helperText: _passwordSet ? strings.nasPasswordKeepHint : null,
             ),
             obscureText: true,
             autocorrect: false,
@@ -188,7 +222,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
               Expanded(
                 child: OutlinedButton.icon(
                   key: const Key('nas-test-connection-button'),
-                  onPressed: _saving ? null : () => _testConnection(strings),
+                  onPressed: _busy ? null : () => _testConnection(strings),
                   icon: const Icon(Icons.wifi_tethering),
                   label: Text(strings.nasTestConnection),
                 ),
@@ -197,12 +231,28 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
               Expanded(
                 child: FilledButton.icon(
                   key: const Key('nas-save-button'),
-                  onPressed: _saving ? null : () => _save(strings),
+                  onPressed: _busy ? null : () => _save(strings),
                   icon: const Icon(Icons.save_outlined),
                   label: Text(strings.nasSave),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            strings.nasQueueSummary(
+              _pendingCount,
+              _failedCount,
+              _uploadedCount,
+            ),
+            key: const Key('nas-queue-summary'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            key: const Key('nas-retry-button'),
+            onPressed: _failedCount > 0 && !_busy ? () => _retryFailed() : null,
+            child: Text(strings.nasRetryFailed),
           ),
           const SizedBox(height: 8),
           Text(
@@ -248,13 +298,34 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
     knownSftpFingerprint: _knownFingerprint,
   );
 
+  bool get _busy => _saving || _testing || _retrying;
+
+  /// Ports outside 1–65535 never reach Rust: u16 decoding would surface as
+  /// an opaque transport error instead of a friendly message.
+  bool _hasPortError() {
+    final text = _portController.text.trim();
+    if (text.isEmpty) return false;
+    final port = int.tryParse(text);
+    return port == null || port < 1 || port > 65535;
+  }
+
   Future<void> _testConnection(AppStrings strings) async {
     final host = _hostController.text.trim();
     if (host.isEmpty) {
-      if (mounted) showAppToast(context, strings.nasHostRequired);
+      showAppToast(context, strings.nasHostRequired);
       return;
     }
-    final password = _passwordController.text;
+    if (_hasPortError()) {
+      showAppToast(context, strings.nasPortInvalid);
+      return;
+    }
+    setState(() => _testing = true);
+    // The probe must reflect what uploads would actually use: an untouched
+    // password field means the stored credential, not an empty one.
+    var password = _passwordController.text;
+    if (password.isEmpty) {
+      password = await ref.read(nasCredentialStoreProvider).read() ?? '';
+    }
     final config = _configFromForm(password);
     String? failure;
     try {
@@ -267,8 +338,13 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
       }
     } on rust.NasError catch (error) {
       failure = error.code.name;
+    } on Object {
+      // Anything outside the Rust taxonomy (bridge/transport breakage)
+      // degrades to the same friendly category as a protocol error.
+      failure = 'protocol_error';
     }
     if (!mounted) return;
+    setState(() => _testing = false);
     showAppToast(
       context,
       failure == null ? strings.nasTestSucceeded : _errorText(strings, failure),
@@ -305,38 +381,64 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
       showAppToast(context, strings.nasHostRequired);
       return;
     }
+    if (_hasPortError()) {
+      showAppToast(context, strings.nasPortInvalid);
+      return;
+    }
     setState(() => _saving = true);
-    final database = ref.read(databaseProvider);
-    await database.saveNasSyncConfig(
-      protocol: _protocol,
-      host: host,
-      port: _parsedPort(),
-      username: _usernameController.text.trim(),
-      rootPath: _rootController.text.trim().isEmpty
-          ? '/'
-          : _rootController.text.trim(),
-      secureTls: _secureTls,
-      acceptInvalidTls: _acceptInvalidTls,
-      knownSftpFingerprint: _knownFingerprint,
-      wifiOnly: _wifiOnly,
-      enabled: _enabled,
-    );
-    final store = ref.read(nasCredentialStoreProvider);
-    final password = _passwordController.text;
-    if (password.isNotEmpty) {
-      await store.write(password);
-    } else if (!_passwordSet) {
-      await store.delete();
+    try {
+      final database = ref.read(databaseProvider);
+      await database.saveNasSyncConfig(
+        protocol: _protocol,
+        host: host,
+        port: _parsedPort(),
+        username: _usernameController.text.trim(),
+        rootPath: _rootController.text.trim().isEmpty
+            ? '/'
+            : _rootController.text.trim(),
+        secureTls: _secureTls,
+        acceptInvalidTls: _acceptInvalidTls,
+        knownSftpFingerprint: _knownFingerprint,
+        wifiOnly: _wifiOnly,
+        enabled: _enabled,
+      );
+      final store = ref.read(nasCredentialStoreProvider);
+      final password = _passwordController.text;
+      if (password.isNotEmpty) {
+        await store.write(password);
+      } else if (!_passwordSet) {
+        await store.delete();
+      }
+    } on Object {
+      if (!mounted) return;
+      showAppToast(context, strings.nasSaveFailed);
+      return;
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
     if (!mounted) return;
-    setState(() => _saving = false);
     showAppToast(context, strings.nasSaved);
   }
 
   Future<void> _setEnabled(bool value) async {
+    // Enabling with no target would flip the switch while nothing was
+    // persisted; keep the switch off until a host exists.
+    if (value && _hostController.text.trim().isEmpty) {
+      showAppToast(context, AppStrings.of(context).nasHostRequired);
+      return;
+    }
     setState(() => _enabled = value);
     // Persist immediately: the toggle is the master switch of the queue.
     await _save(AppStrings.of(context));
+  }
+
+  Future<void> _retryFailed() async {
+    setState(() => _retrying = true);
+    try {
+      await ref.read(nasSyncCoordinatorProvider).retryFailedUploads();
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
   }
 
   String _errorText(AppStrings strings, String code) => switch (code) {

@@ -71,7 +71,10 @@ void main() {
     await documents.delete(recursive: true);
   });
 
-  Future<void> seedReadyCapture(String id) async {
+  Future<void> seedReadyCapture(
+    String id, {
+    CaptureStatus status = CaptureStatus.ready,
+  }) async {
     try {
       await database.createProject(id: 'p1', name: '云湖之城');
     } on ProjectNameConflictException {
@@ -88,7 +91,7 @@ void main() {
             workContent: '安装检查',
             photographer: 'Builder',
             originalPath: '/private/$id.jpg',
-            status: CaptureStatus.ready,
+            status: status,
             createdAt: DateTime(2026, 9, 1),
           ),
         );
@@ -131,6 +134,40 @@ void main() {
       await subscription.cancel();
     }
   }
+
+  test('defers a capture that is not ready without burning attempts', () async {
+    // The deferral path guards the drain against spinning forever when a
+    // queued capture leaves the ready state between enqueue and upload.
+    await seedReadyCapture('a', status: CaptureStatus.rendering);
+    await database.upsertNasUploadPending('a');
+    final uploader = _FakeUploader();
+    final coordinator = buildCoordinator(
+      connectivity: _FakeConnectivity(true),
+      uploader: uploader,
+    );
+    addTearDown(coordinator.dispose);
+
+    await database.saveNasSyncConfig(
+      protocol: 'webdav',
+      host: 'nas.local',
+      port: null,
+      username: 'builder',
+      rootPath: '/SiteMark',
+      secureTls: false,
+      acceptInvalidTls: false,
+      knownSftpFingerprint: null,
+      wifiOnly: true,
+      enabled: true,
+    );
+    await coordinator.start();
+    await pumpUntil(coordinator, (s) => !s.active && s.pendingCount == 1);
+
+    expect(uploader.jobs, isEmpty);
+    final states = await database.allNasUploadStates();
+    expect(states.single.status, NasUploadStatus.pending);
+    expect(states.single.attempts, 0);
+    expect(states.single.lastAttemptAt, isNotNull);
+  });
 
   test('uploads every ready capture serially when enabled', () async {
     await seedReadyCapture('a');

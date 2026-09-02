@@ -131,6 +131,16 @@ extension NasSyncDatabase on AppDatabase {
         .get();
   }
 
+  /// Defers a queued capture whose upload was not attempted (for example
+  /// the capture is still processing): only the ordering timestamp moves,
+  /// so the row goes to the back of the queue without burning any of the
+  /// retry budget.
+  Future<void> deferNasUpload(String captureId) async {
+    await (update(nasUploadStates)
+          ..where((row) => row.captureId.equals(captureId)))
+        .write(NasUploadStatesCompanion(lastAttemptAt: Value(DateTime.now())));
+  }
+
   /// Records a failed attempt. The state parks in `failed` once the retry
   /// budget is exhausted; below the budget it stays pending for the next
   /// trigger (new capture, app start, or config change).

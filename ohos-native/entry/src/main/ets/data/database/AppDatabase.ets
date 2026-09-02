@@ -1456,6 +1456,17 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       [now, now, captureId]);
   }
 
+  /**
+   * Defers a queued capture whose upload was not attempted (still
+   * processing): only the ordering timestamp moves, so the row goes to the
+   * back of the queue without burning any retry budget.
+   */
+  async deferNasUpload(captureId: string): Promise<void> {
+    await this.store.executeSql(
+      'UPDATE nas_upload_state SET last_attempt_at=? WHERE capture_id=?',
+      [Date.now(), captureId]);
+  }
+
   async resetNasUploadForRetry(captureId: string): Promise<void> {
     await this.store.executeSql(
       "UPDATE nas_upload_state SET status='pending', attempts=0, failure_code=NULL WHERE capture_id=?",

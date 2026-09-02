@@ -189,6 +189,7 @@ export class NasSyncService {
       return;
     }
     this.syncing = true;
+    const deferredThisCycle = new Set<string>();
     try {
       while (true) {
         const config = await this.database.nasSyncConfig();
@@ -202,13 +203,17 @@ export class NasSyncService {
         if (queue.length === 0) {
           return;
         }
-        const rerunBefore = this.rerunQueued;
-        this.rerunQueued = false;
-        await this.uploadOne(config, queue[0].captureId);
-        if (!rerunBefore && !this.rerunQueued) {
-          continue;
+        // A capture still processing is deferred, not failed; once every
+        // queued item deferred this cycle, stop and wait for the next
+        // trigger instead of spinning on the same row forever.
+        const first = queue[0].captureId;
+        if (deferredThisCycle.has(first)) {
+          return;
         }
-        return;
+        const progressed = await this.uploadOne(config, first);
+        if (!progressed) {
+          deferredThisCycle.add(first);
+        }
       }
     } catch (error) {
       // The queue is a background observer; failures surface through the
@@ -224,29 +229,45 @@ export class NasSyncService {
     }
   }
 
-  private async uploadOne(config: NasSyncConfigRecord, captureId: string): Promise<void> {
+  /**
+   * Uploads one capture. Returns false when the row was only deferred
+   * (capture not ready yet) — the drain treats that as no progress.
+   */
+  private async uploadOne(config: NasSyncConfigRecord, captureId: string): Promise<boolean> {
     const capture = await this.database.captureById(captureId);
-    if (capture === null || capture.status !== 'ready' || capture.photoNumber === null) {
+    if (capture === null) {
       await this.database.markNasUploadFailed(captureId, 'path_invalid');
-      return;
+      return true;
+    }
+    if (capture.status !== 'ready') {
+      // The capture changed while queued; keep the job pending and let
+      // the next capture commit re-trigger the drain.
+      await this.database.deferNasUpload(captureId);
+      return false;
+    }
+    if (capture.photoNumber === null || capture.photoNumber.length === 0) {
+      await this.database.markNasUploadFailed(captureId, 'path_invalid');
+      return true;
     }
     const project = await this.database.projectById(capture.projectId);
     if (project === null) {
       await this.database.markNasUploadFailed(captureId, 'path_invalid');
-      return;
+      return true;
     }
     const password = await this.secrets.read();
     if (password === null || password.length === 0) {
       await this.database.markNasUploadFailed(captureId, 'config_invalid');
-      return;
+      return true;
     }
     const failureCode = await this.bridge.upload(config, password,
-      capture.renderedPath, sanitizeProjectKey(project.name), `${capture.photoNumber}.jpg`);
+      capture.renderedPath, sanitizeProjectKey(project.name),
+      `${capture.photoNumber}.jpg`);
     if (failureCode === null) {
       await this.database.markNasUploaded(captureId);
     } else {
       await this.database.markNasUploadFailed(captureId, failureCode);
     }
+    return true;
   }
 
   async counts(): Promise<NasUploadCounts> {
