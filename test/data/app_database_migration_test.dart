@@ -1184,7 +1184,7 @@ void main() {
     // once the user enables sync, via the catch-up scan.
     final config = await database.nasSyncConfig();
     expect(config, isNotNull);
-    expect(config!.enabled, isFalse);
+    expect(config.enabled, isFalse);
     expect(config.protocol, 'webdav');
     expect(config.wifiOnly, isTrue);
     expect(config.knownSftpFingerprint, isNull);

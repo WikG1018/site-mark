@@ -11,8 +11,6 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/workflow/nas_sync_service.dart';
 
 class _FakeCredentials implements NasCredentialStore {
-  _FakeCredentials([this.password]);
-
   String? password;
 
   @override
