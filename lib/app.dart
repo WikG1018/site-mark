@@ -691,10 +691,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     parentNavigatorKey: rootNavigatorKey,
                     path: 'nas-sync',
-                    pageBuilder: (context, state) => _sharedAxisPage(
-                      state,
-                      const NasSyncSectionScreen(),
-                    ),
+                    pageBuilder: (context, state) =>
+                        _sharedAxisPage(state, const NasSyncSectionScreen()),
                   ),
                   GoRoute(
                     parentNavigatorKey: rootNavigatorKey,

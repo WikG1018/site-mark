@@ -82,22 +82,30 @@ void main() {
   });
 
   group('upload queue', () {
-    test('enqueueReadyCapturesForNas enqueues only ready captures once',
-        () async {
-      await seedProject();
-      await seedCapture('ready-1');
-      await seedCapture('ready-2');
-      await seedCapture('rendering', status: CaptureStatus.rendering);
-      await seedCapture('failed', status: CaptureStatus.failed);
+    test(
+      'enqueueReadyCapturesForNas enqueues only ready captures once',
+      () async {
+        await seedProject();
+        await seedCapture('ready-1');
+        await seedCapture('ready-2');
+        await seedCapture('rendering', status: CaptureStatus.rendering);
+        await seedCapture('failed', status: CaptureStatus.failed);
 
-      await database.enqueueReadyCapturesForNas();
-      // Re-running must not duplicate or reset anything.
-      await database.enqueueReadyCapturesForNas();
+        await database.enqueueReadyCapturesForNas();
+        // Re-running must not duplicate or reset anything.
+        await database.enqueueReadyCapturesForNas();
 
-      final states = await database.allNasUploadStates();
-      expect(states.map((row) => row.captureId), unorderedEquals(['ready-1', 'ready-2']));
-      expect(states.every((row) => row.status == NasUploadStatus.pending), isTrue);
-    });
+        final states = await database.allNasUploadStates();
+        expect(
+          states.map((row) => row.captureId),
+          unorderedEquals(['ready-1', 'ready-2']),
+        );
+        expect(
+          states.every((row) => row.status == NasUploadStatus.pending),
+          isTrue,
+        );
+      },
+    );
 
     test('re-enqueue never downgrades an uploaded state', () async {
       await seedProject();
@@ -112,56 +120,58 @@ void main() {
       expect(state.status, NasUploadStatus.uploaded);
     });
 
-    test('pendingNasUploads excludes exhausted, failed and uploaded rows',
-        () async {
-      await seedProject();
-      await seedCapture('a');
-      await seedCapture('b');
-      await seedCapture('c');
-      await seedCapture('d');
-      for (final id in ['a', 'b', 'c', 'd']) {
-        await database.upsertNasUploadPending(id);
-      }
+    test(
+      'pendingNasUploads excludes exhausted, failed and uploaded rows',
+      () async {
+        await seedProject();
+        await seedCapture('a');
+        await seedCapture('b');
+        await seedCapture('c');
+        await seedCapture('d');
+        for (final id in ['a', 'b', 'c', 'd']) {
+          await database.upsertNasUploadPending(id);
+        }
 
-      // a: uploaded. b: budget exhausted. c: fresh. d: failed directly.
-      await database.markNasUploaded('a');
-      for (var i = 0; i < kNasMaxUploadAttempts; i++) {
-        await database.markNasUploadFailed('b', 'connection_failed');
-      }
-      await (database.update(database.nasUploadStates)
-            ..where((row) => row.captureId.equals('d')))
-          .write(
-        const NasUploadStatesCompanion(
-          status: Value(NasUploadStatus.failed),
-        ),
-      );
+        // a: uploaded. b: budget exhausted. c: fresh. d: failed directly.
+        await database.markNasUploaded('a');
+        for (var i = 0; i < kNasMaxUploadAttempts; i++) {
+          await database.markNasUploadFailed('b', 'connection_failed');
+        }
+        await (database.update(
+          database.nasUploadStates,
+        )..where((row) => row.captureId.equals('d'))).write(
+          const NasUploadStatesCompanion(status: Value(NasUploadStatus.failed)),
+        );
 
-      final pending = await database.pendingNasUploads();
-      expect(pending.map((row) => row.captureId), ['c']);
-    });
+        final pending = await database.pendingNasUploads();
+        expect(pending.map((row) => row.captureId), ['c']);
+      },
+    );
 
-    test('markNasUploadFailed bumps attempts and parks at the budget',
-        () async {
-      await seedProject();
-      await seedCapture('x');
-      await database.upsertNasUploadPending('x');
+    test(
+      'markNasUploadFailed bumps attempts and parks at the budget',
+      () async {
+        await seedProject();
+        await seedCapture('x');
+        await database.upsertNasUploadPending('x');
 
-      await database.markNasUploadFailed('x', 'auth_failed');
-      var state = (await database.allNasUploadStates()).single;
-      expect(state.attempts, 1);
-      expect(state.status, NasUploadStatus.pending);
-      expect(state.failureCode, 'auth_failed');
-      expect(state.lastAttemptAt, isNotNull);
-
-      for (var i = 0; i < kNasMaxUploadAttempts - 1; i++) {
         await database.markNasUploadFailed('x', 'auth_failed');
-      }
-      state = (await database.allNasUploadStates()).single;
-      expect(state.attempts, kNasMaxUploadAttempts);
-      expect(state.status, NasUploadStatus.failed);
-      // Exhausted rows are no longer served automatically.
-      expect(await database.pendingNasUploads(), isEmpty);
-    });
+        var state = (await database.allNasUploadStates()).single;
+        expect(state.attempts, 1);
+        expect(state.status, NasUploadStatus.pending);
+        expect(state.failureCode, 'auth_failed');
+        expect(state.lastAttemptAt, isNotNull);
+
+        for (var i = 0; i < kNasMaxUploadAttempts - 1; i++) {
+          await database.markNasUploadFailed('x', 'auth_failed');
+        }
+        state = (await database.allNasUploadStates()).single;
+        expect(state.attempts, kNasMaxUploadAttempts);
+        expect(state.status, NasUploadStatus.failed);
+        // Exhausted rows are no longer served automatically.
+        expect(await database.pendingNasUploads(), isEmpty);
+      },
+    );
 
     test('resetNasUploadForRetry re-arms a failed row', () async {
       await seedProject();

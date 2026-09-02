@@ -97,10 +97,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             value: _enabled,
             onChanged: (value) => _setEnabled(value),
           ),
-          ListTile(
-            dense: true,
-            title: Text(strings.nasProtocol),
-          ),
+          ListTile(dense: true, title: Text(strings.nasProtocol)),
           AdaptiveSegmentedButton<String>(
             key: const Key('nas-protocol-segmented'),
             segments: [
@@ -112,10 +109,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
                 value: 'sftp',
                 label: Text(strings.nasProtocolSftp),
               ),
-              ButtonSegment(
-                value: 'smb',
-                label: Text(strings.nasProtocolSmb),
-              ),
+              ButtonSegment(value: 'smb', label: Text(strings.nasProtocolSmb)),
             ],
             selected: {_protocol},
             onSelectionChanged: (value) =>
@@ -180,8 +174,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
               SwitchListTile.adaptive(
                 title: Text(strings.nasAcceptInvalidTls),
                 value: _acceptInvalidTls,
-                onChanged: (value) =>
-                    setState(() => _acceptInvalidTls = value),
+                onChanged: (value) => setState(() => _acceptInvalidTls = value),
               ),
           ],
           SwitchListTile.adaptive(
@@ -212,8 +205,10 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(strings.nasPrivacyNote,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            strings.nasPrivacyNote,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 16),
         ],
       ),
@@ -221,10 +216,10 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
   }
 
   String _portHint(AppStrings strings) => switch (_protocol) {
-        'sftp' => strings.nasPortHintSftp,
-        'smb' => strings.nasPortHintSmb,
-        _ => strings.nasPortHintWebdav,
-      };
+    'sftp' => strings.nasPortHintSftp,
+    'smb' => strings.nasPortHintSmb,
+    _ => strings.nasPortHintWebdav,
+  };
 
   String _rootHint(AppStrings strings) =>
       _protocol == 'smb' ? strings.nasSmbRootPathHint : strings.nasRootPathHint;
@@ -236,22 +231,22 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
   }
 
   rust.NasConfig _configFromForm(String password) => rust.NasConfig(
-        protocol: switch (_protocol) {
-          'sftp' => rust.NasProtocol.sftp,
-          'smb' => rust.NasProtocol.smb,
-          _ => rust.NasProtocol.webdav,
-        },
-        host: _hostController.text.trim(),
-        port: _parsedPort(),
-        username: _usernameController.text.trim(),
-        password: password,
-        rootPath: _rootController.text.trim().isEmpty
-            ? '/'
-            : _rootController.text.trim(),
-        secureTls: _secureTls,
-        acceptInvalidTls: _acceptInvalidTls,
-        knownSftpFingerprint: _knownFingerprint,
-      );
+    protocol: switch (_protocol) {
+      'sftp' => rust.NasProtocol.sftp,
+      'smb' => rust.NasProtocol.smb,
+      _ => rust.NasProtocol.webdav,
+    },
+    host: _hostController.text.trim(),
+    port: _parsedPort(),
+    username: _usernameController.text.trim(),
+    password: password,
+    rootPath: _rootController.text.trim().isEmpty
+        ? '/'
+        : _rootController.text.trim(),
+    secureTls: _secureTls,
+    acceptInvalidTls: _acceptInvalidTls,
+    knownSftpFingerprint: _knownFingerprint,
+  );
 
   Future<void> _testConnection(AppStrings strings) async {
     final host = _hostController.text.trim();
@@ -345,16 +340,16 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
   }
 
   String _errorText(AppStrings strings, String code) => switch (code) {
-        'connection_failed' => strings.nasErrorConnectionFailed,
-        'auth_failed' => strings.nasErrorAuthFailed,
-        'timeout' => strings.nasErrorTimeout,
-        'tls_error' => strings.nasErrorTlsError,
-        'tls_unsupported' => strings.nasErrorTlsUnsupported,
-        'host_key_changed' => strings.nasErrorHostKeyChanged,
-        'quota_insufficient' => strings.nasErrorQuotaInsufficient,
-        'path_invalid' => strings.nasErrorPathInvalid,
-        'local_io' => strings.nasErrorLocalIo,
-        'config_invalid' => strings.nasErrorConfigInvalid,
-        _ => strings.nasErrorProtocolError,
-      };
+    'connection_failed' => strings.nasErrorConnectionFailed,
+    'auth_failed' => strings.nasErrorAuthFailed,
+    'timeout' => strings.nasErrorTimeout,
+    'tls_error' => strings.nasErrorTlsError,
+    'tls_unsupported' => strings.nasErrorTlsUnsupported,
+    'host_key_changed' => strings.nasErrorHostKeyChanged,
+    'quota_insufficient' => strings.nasErrorQuotaInsufficient,
+    'path_invalid' => strings.nasErrorPathInvalid,
+    'local_io' => strings.nasErrorLocalIo,
+    'config_invalid' => strings.nasErrorConfigInvalid,
+    _ => strings.nasErrorProtocolError,
+  };
 }

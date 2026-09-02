@@ -2559,7 +2559,6 @@ version = "0.1.0"
 dependencies = [
  "ab_glyph",
  "async-trait",
- "base64",
  "csv",
  "flutter_rust_bridge",
  "hex",

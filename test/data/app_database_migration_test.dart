@@ -1175,8 +1175,10 @@ void main() {
     expect(database.schemaVersion, 14);
 
     // Pre-existing data survives the two-step upgrade.
-    expect((await database.projectById('existing'))!.lifecycleStatus,
-        ProjectLifecycleStatus.active);
+    expect(
+      (await database.projectById('existing'))!.lifecycleStatus,
+      ProjectLifecycleStatus.active,
+    );
 
     // Both NAS tables start empty — existing captures are only enqueued
     // once the user enables sync, via the catch-up scan.

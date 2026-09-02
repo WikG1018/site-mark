@@ -27,7 +27,7 @@ v1.0 真机回归勾选表见 [`verification-v1.0.0-device.md`](verification-v1.
 - 标签发布时构建正式签名的 arm64 与 universal APK。
 - 使用 `apksigner` 验证两个 APK 的签名有效且证书一致。
 - 使用 `aapt2` 验证包名、版本号、版本代码、最低/目标 Android 版本和 ABI。
-- 验证发布 APK 不含网络、相机、后台定位或广泛读取相册权限。
+- 验证发布 APK 包含 NAS 同步所需的 `INTERNET` / `ACCESS_NETWORK_STATE`（D-023 修订），且不含相机、后台定位或广泛读取相册权限。
 - iOS（Phase 1 起）：`ci.yml` 的 `ios` job 在 macOS runner 执行 `flutter build ios --no-codesign --release` 并校验 Info.plist 权限声明，产物留档；TestFlight / App Store 发版检查待 Apple Developer 账号到位后另立章节。
 - iOS 应用图标与 Android 同源：`ios/Runner/Assets.xcassets/AppIcon.appiconset` 使用
   `tool/generate_launcher_icon.py` 产出的 `assets/branding/sitemark-icon.png`

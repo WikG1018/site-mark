@@ -287,10 +287,9 @@ class NasUploadStates extends Table {
       text().references(CaptureRecords, #id, onDelete: KeyAction.cascade)();
 
   /// pending | uploaded | failed (see NasUploadStatus).
-  TextColumn get status =>
-      text().map(const NasUploadStatusConverter()).withDefault(
-            const Constant('pending'),
-          )();
+  TextColumn get status => text()
+      .map(const NasUploadStatusConverter())
+      .withDefault(const Constant('pending'))();
 
   IntColumn get attempts => integer().withDefault(const Constant(0))();
 
