@@ -1,7 +1,7 @@
 # SiteMark 当前产品边界与总体架构
 
-> 状态：Android v1.0.16 当前设计 + HarmonyOS NEXT 原生（native-v1.0.8）+ iOS Flutter 复用（签名待补）
-> 适用版本：Android v1.0.16；HarmonyOS native 1.0.8；iOS Phase 0–3、5–8 已落地，Phase 4 待 Apple Developer 账号
+> 状态：Android v1.0.17 当前设计 + HarmonyOS NEXT 原生（native-v1.0.9）+ iOS Flutter 复用（签名待补）
+> 适用版本：Android v1.0.17；HarmonyOS native 1.0.9；iOS Phase 0–3、5–8 已落地，Phase 4 待 Apple Developer 账号
 > 本文描述已落地的产品边界；阶段性计划保留在 `docs/superpowers/` 供追溯。
 
 ## 1. 产品定位

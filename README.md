@@ -2,10 +2,10 @@
 
 [English](README_EN.md) | 简体中文
 
-> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.16`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.17`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
-(Latest `v1.0.16`, targeting Android 17), a native HarmonyOS NEXT implementation published
+(Latest `v1.0.17`, targeting Android 17), a native HarmonyOS NEXT implementation published
 alongside it, and an iOS build on the shared Flutter codebase that is fully adapted
 (iOS 26/27-style UI, background catch-up, dark mode) and awaits an Apple Developer
 account for signed distribution — no installable package yet. All product lines live on a
@@ -17,14 +17,14 @@ single branch.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.16-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.16)
-[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.8-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.8)
+[![Latest](https://img.shields.io/badge/latest-v1.0.17-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.17)
+[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.9-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.9)
 
-**当前稳定版本（Latest）：[`v1.0.16`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.16)**
+**当前稳定版本（Latest）：[`v1.0.17`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.17)**
 
-**鸿蒙原生版当前版本：[`native-v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.8)（HarmonyOS NEXT，未签名 HAP）**
+**鸿蒙原生版当前版本：[`native-v1.0.9`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.9)（HarmonyOS NEXT，未签名 HAP）**
 
-支持 Android 12（API 31）及以上系统。`v1.0.16` 已设为 Latest：优化 NAS 同步设置页的表单排版（字段间距、分组节奏、协议标签与分段按钮对齐全局设置规范）。功能基线与 v1.0.15 一致：三端可选 NAS 同步（WebDAV/SFTP/SMB，默认关闭，密码只存系统安全存储）、队列计数与失败重试入口、审查修复全部包含。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.17` 已设为 Latest：关于页与隐私声明对齐可选 NAS 同步；鸿蒙补上设置表单间距与协议分段；修复 NAS 队列、Android 17 局域网权限与指纹落盘；仅 Wi-Fi 恢复后自动续传，鸿蒙队列计数实时刷新。功能基线仍是三端可选 NAS 同步（WebDAV/SFTP/SMB，默认关闭，密码只存系统安全存储）。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 
 ## 下载
@@ -33,16 +33,16 @@ single branch.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.16-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.16/sitemark-v1.0.16-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.16-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.16/sitemark-v1.0.16-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.16/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.17-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.17/sitemark-v1.0.17-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.17-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.17/sitemark-v1.0.17-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.17/SHA256SUMS.txt) |
 
-### 鸿蒙原生版（native-v1.0.8）
+### 鸿蒙原生版（native-v1.0.9）
 
 | 安装包 | 适用设备/说明 | 下载 |
 | --- | --- | --- |
-| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [sitemark-native-v1.0.8-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.8/sitemark-native-v1.0.8-unsigned.hap) |
-| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.8/SHA256SUMS.txt) |
+| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [sitemark-native-v1.0.9-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.9/sitemark-native-v1.0.9-unsigned.hap) |
+| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.9/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -51,7 +51,7 @@ single branch.
 
 `ohos-native/` 是独立的 Stage + ArkTS + ArkUI 实现，不使用社区 Flutter 鸿蒙适配层，与 Android 版同仓库单分支演进。它已在 DevEco NEXT 模拟器跑通项目、拍摄处理、记录管理、水印、备份恢复、存储与诊断主流程，图像与 ZIP 规则复用 Android 版的同一 Rust 核心。
 
-当前提供 `native-v1.0.8` 的 unsigned HAP（见上方下载表），**尚未提供签名的鸿蒙安装包，也未上架华为应用市场**；真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成应用市场发布。
+当前提供 `native-v1.0.9` 的 unsigned HAP（见上方下载表），**尚未提供签名的鸿蒙安装包，也未上架华为应用市场**；真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成应用市场发布。
 
 - [鸿蒙原生版说明与构建](ohos-native/README.md)
 - [平台差异与验证边界](ohos-native/docs/deltas.md)
@@ -76,7 +76,8 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
-- **v1.0.16**（Latest）：NAS 同步设置页表单排版优化——字段间距、分组节奏，协议标签与分段按钮对齐全局设置规范（48dp 触达高度）；Android-only，功能与 v1.0.15 一致。
+- **v1.0.17 / native-v1.0.9**（Latest）：关于页与首启隐私声明对齐可选 NAS 同步；鸿蒙 NAS 设置表单补上间距与协议分段；修复队列入队、debug INTERNET、Android 17 局域网运行时权限、指纹信任落盘；仅 Wi-Fi 恢复后自动续传；鸿蒙队列计数实时刷新。
+- **v1.0.16**：NAS 同步设置页表单排版优化——字段间距、分组节奏，协议标签与分段按钮对齐全局设置规范（48dp 触达高度）；Android-only，功能与 v1.0.15 一致。
 - **v1.0.15 / native-v1.0.8**：NAS 全面审查修复——设置页新增上传队列计数与“重试失败的上传”入口；测试连接在密码留空时使用已保存密码；端口越界在保存/测试前拦截；处理中的记录延后排队而不消耗重试预算（防空转）；上传与凭据读取异常兜底为分类错误。
 - **v1.0.14 / native-v1.0.7**：三端新增可选 NAS 同步（WebDAV/SFTP/SMB，默认关闭，仅访问用户自配服务器，密码存系统安全存储）；Android/iOS 数据库迁移至 v14（NAS 配置与上传簿记表），鸿蒙 RDB 迁移至 v15；上传走串行队列 + 5 次尝试预算，SFTP 首连核对主机指纹。
 - **v1.0.13 / native-v1.0.6**：修复全屏照片查看器双指缩放后无法单指拖动查看角落的问题（Android 与鸿蒙原生同修）；README 新增英文版并支持中英切换。
@@ -276,7 +277,7 @@ HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Prefere
 
 涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.16` 已设为 Latest；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.17` 已设为 Latest；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
