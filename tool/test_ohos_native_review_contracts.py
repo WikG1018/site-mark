@@ -106,7 +106,7 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         source = read(ETS / "core" / "sync" / "NasSyncService.ets")
         self.assertIn("enqueueReadyCapturesForNas()", source)
         self.assertIn("util.TextEncoder", source)
-        self.assertIn("util.TextDecoder", source)
+        self.assertIn("util.TextDecoder.create('utf-8')", source)
         self.assertNotIn("String.fromCharCode", source)
 
     def test_nas_sync_service_uses_arkts_legal_constructors_and_asset_maps(self) -> None:
@@ -135,6 +135,58 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         self.assertIn("this.setEnabled(value)", source)
         self.assertIn("WebDAV 仅支持 HTTP", source)
         self.assertNotIn("使用 HTTPS", source)
+
+    def test_nas_port_rejects_partial_numeric_text(self) -> None:
+        source = read(ETS / "feature" / "settings" / "NasSyncScreen.ets")
+        body = method_body(source, "private hasPortError", "private async setEnabled")
+        self.assertIn("/^[0-9]+$/", body)
+
+    def test_nas_settings_persists_sftp_fingerprint_on_trust(self) -> None:
+        source = read(ETS / "feature" / "settings" / "NasSyncScreen.ets")
+        trust = source.index("this.knownFingerprint = outcome.sftpFingerprint")
+        save = source.index("saveNasSyncConfig", trust)
+        self.assertLess(trust, save)
+
+    def test_nas_save_allows_disable_when_host_is_empty(self) -> None:
+        source = read(ETS / "feature" / "settings" / "NasSyncScreen.ets")
+        body = method_body(source, "private async save()", "private async testConnection")
+        self.assertIn("this.syncEnabled", body)
+        self.assertRegex(
+            body,
+            re.compile(r"host\.trim\(\)\.length === 0 && this\.syncEnabled"),
+        )
+
+    def test_nas_drain_requeues_instead_of_returning_while_syncing(self) -> None:
+        source = read(ETS / "core" / "sync" / "NasSyncService.ets")
+        body = method_body(source, "async syncNow()", "private async uploadOne")
+        self.assertIn("this.rerunQueued = true", body)
+        # Idle exits must break so the post-finally rerun runs.
+        self.assertIn("break;", body)
+        self.assertNotRegex(
+            body,
+            re.compile(r"if \(queue\.length === 0\) \{\s*return;"),
+        )
+
+    def test_nas_enqueue_closes_result_set_before_inserts(self) -> None:
+        source = read(ETS / "data" / "database" / "AppDatabase.ets")
+        body = method_body(
+            source,
+            "async enqueueReadyCapturesForNas()",
+            "async pendingNasUploads()",
+        )
+        close = body.index("rows.close()")
+        upsert = body.rindex("upsertNasUploadPending")
+        self.assertLess(close, upsert)
+
+    def test_nas_payload_forces_webdav_http(self) -> None:
+        source = read(ETS / "core" / "sync" / "NasSyncService.ets")
+        body = method_body(source, "function nasConfigPayload", "function nasFailureCode")
+        self.assertIn("protocol === 'webdav'", body)
+        self.assertIn("false", body)
+
+    def test_restore_rearms_nas_drain(self) -> None:
+        source = read(ETS / "feature" / "backup" / "RestoreService.ets")
+        self.assertIn("nasSync.syncNow()", source)
 
 
 if __name__ == "__main__":

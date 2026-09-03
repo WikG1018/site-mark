@@ -180,6 +180,7 @@ class NasSyncCoordinator {
   final _stateController = StreamController<NasSyncSnapshot>.broadcast();
   bool _started = false;
   bool _syncing = false;
+  bool _rerunQueued = false;
   final _deferredThisCycle = <String>{};
   StreamSubscription? _configSubscription;
   StreamSubscription? _captureUpdatesSubscription;
@@ -237,7 +238,10 @@ class NasSyncCoordinator {
   }
 
   Future<void> _drainQueue() async {
-    if (_syncing) return;
+    if (_syncing) {
+      _rerunQueued = true;
+      return;
+    }
     _syncing = true;
     await _emit();
     try {
@@ -266,6 +270,10 @@ class NasSyncCoordinator {
       _deferredThisCycle.clear();
       _syncing = false;
       await _emit();
+    }
+    if (_rerunQueued) {
+      _rerunQueued = false;
+      await _drainQueue();
     }
   }
 

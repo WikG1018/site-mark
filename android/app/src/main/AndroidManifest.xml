@@ -13,9 +13,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Android 17 (targetSdk 37) blocks LAN sockets until this nearby-devices
-         permission is declared and granted. Required for WebDAV/SFTP/SMB to a
-         LAN NAS; apps targeting API 36 and below still get it implicitly with
-         INTERNET. -->
+         permission is declared and granted at runtime from the NAS settings
+         screen. Required for WebDAV/SFTP/SMB to a LAN NAS; apps targeting
+         API 36 and below still get it implicitly with INTERNET. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />

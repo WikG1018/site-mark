@@ -10,7 +10,9 @@ import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/nas_sync.dart';
 import 'package:sitemark/features/settings/sections/nas_sync_section_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/workflow/local_network_permission.dart';
 import 'package:sitemark/workflow/nas_sync_service.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
 class _FakeCredentials implements NasCredentialStore {
   String? password;
@@ -99,6 +101,9 @@ void main() {
           nasCredentialStoreProvider.overrideWithValue(credentials),
           nasConnectivityProvider.overrideWithValue(_FakeConnectivity()),
           nasUploaderProvider.overrideWithValue(uploader),
+          localNetworkPermissionProvider.overrideWithValue(
+            const GrantingLocalNetworkPermission(),
+          ),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -222,6 +227,55 @@ void main() {
     expect(saved.port, 8443);
   });
 
+  testWidgets('rejects a port that is only partially numeric', (tester) async {
+    await pumpScreen(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('nas-host-field')),
+      'nas.local',
+    );
+    await tester.enterText(find.byKey(const Key('nas-port-field')), '8080abc');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('nas-save-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nas-save-button')));
+    await tester.pumpAndSettle();
+
+    final blocked = await database.nasSyncConfig();
+    expect(blocked.host, isEmpty);
+    expect(find.text('端口需在 1–65535 之间'), findsOneWidget);
+  });
+
+  testWidgets('disabling with a cleared host still persists enabled=false', (
+    tester,
+  ) async {
+    await database.saveNasSyncConfig(
+      protocol: 'webdav',
+      host: 'nas.local',
+      port: null,
+      username: 'builder',
+      rootPath: '/SiteMark',
+      secureTls: false,
+      acceptInvalidTls: false,
+      knownSftpFingerprint: null,
+      wifiOnly: true,
+      enabled: true,
+    );
+    await pumpScreen(tester);
+
+    await tester.enterText(find.byKey(const Key('nas-host-field')), '');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('nas-enable-switch')));
+    await tester.pumpAndSettle();
+
+    final config = await database.nasSyncConfig();
+    expect(config.enabled, isFalse);
+    final switchWidget = tester.widget<SwitchListTile>(
+      find.byKey(const Key('nas-enable-switch')),
+    );
+    expect(switchWidget.value, isFalse);
+  });
+
   testWidgets('shows the queue summary and retries failed uploads', (
     tester,
   ) async {
@@ -252,4 +306,62 @@ void main() {
     );
     expect(resetButton.onPressed, isNull);
   });
+
+  testWidgets(
+    'refuses to save a LAN host when local-network permission is denied',
+    (tester) async {
+      final permission = _DeniedLocalNetworkPermission();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(database),
+            nasCredentialStoreProvider.overrideWithValue(credentials),
+            nasConnectivityProvider.overrideWithValue(_FakeConnectivity()),
+            nasUploaderProvider.overrideWithValue(uploader),
+            localNetworkPermissionProvider.overrideWithValue(permission),
+          ],
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const NasSyncSectionScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('nas-host-field')),
+        '192.168.1.10',
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('nas-save-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('nas-save-button')));
+      await tester.pumpAndSettle();
+
+      expect(permission.requestCount, 1);
+      expect((await database.nasSyncConfig()).host, isEmpty);
+      expect(find.textContaining('本地网络权限'), findsOneWidget);
+    },
+  );
+}
+
+class _DeniedLocalNetworkPermission implements LocalNetworkPermission {
+  int requestCount = 0;
+
+  @override
+  Future<LocationPermissionState> current() async =>
+      LocationPermissionState.denied;
+
+  @override
+  Future<LocationPermissionState> request() async {
+    requestCount++;
+    return LocationPermissionState.denied;
+  }
 }

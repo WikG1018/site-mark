@@ -1376,17 +1376,18 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     const rows = await this.store.querySql(
       "SELECT c.id FROM captures c LEFT JOIN nas_upload_state n ON n.capture_id=c.id " +
       "WHERE c.status='ready' AND n.capture_id IS NULL");
-    let enqueued = 0;
+    const ids: Array<string> = [];
     try {
       while (rows.goToNextRow()) {
-        const captureId = rows.getString(rows.getColumnIndex('id'));
-        await this.upsertNasUploadPending(captureId);
-        enqueued++;
+        ids.push(rows.getString(rows.getColumnIndex('id')));
       }
-      return enqueued;
     } finally {
       rows.close();
     }
+    for (let i = 0; i < ids.length; i++) {
+      await this.upsertNasUploadPending(ids[i]);
+    }
+    return ids.length;
   }
 
   async pendingNasUploads(): Promise<NasUploadStateRecord[]> {

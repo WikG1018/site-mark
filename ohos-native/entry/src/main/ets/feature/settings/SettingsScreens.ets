@@ -768,8 +768,8 @@ export struct AboutScreen {
             Text(tr('工程印记 · 鸿蒙原生版', 'SiteMark · Native HarmonyOS')).fontSize(18)
               .fontWeight(FontWeight.Medium)
             Text(this.versionLabel).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
-            Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无第三方云同步；照片和项目数据在本机处理。',
-              'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or third-party cloud sync; photos and project data are processed on-device.'))
+            Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无第三方云同步；照片和项目数据在本机处理。可选 NAS 默认同步关闭。',
+              'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or third-party cloud sync; photos and project data are processed on-device. Optional NAS sync stays off by default.'))
               .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).textAlign(TextAlign.Center)
             Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
             Button(tr('GitHub 代码仓库\ngithub.com/WikG1018/site-mark',

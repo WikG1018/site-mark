@@ -221,7 +221,7 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 | `ACCESS_COARSE_LOCATION`、`ACCESS_FINE_LOCATION` | 可选前台定位；仅在用户主动请求时使用，拒绝后仍可拍照 |
 | `POST_NOTIFICATIONS` | Android 13+ 后台处理完成通知 |
 | `WAKE_LOCK`、`RECEIVE_BOOT_COMPLETED`、`FOREGROUND_SERVICE` | WorkManager 本地后台处理、重试和恢复 |
-| `INTERNET`、`ACCESS_NETWORK_STATE`、`ACCESS_LOCAL_NETWORK` | 可选 NAS 同步（WebDAV/SFTP/SMB）；仅在你配置并启用后访问你自己的 NAS 服务器。网络状态用于 Wi-Fi 限制；Android 17 局域网 NAS 需要本地网络权限 |
+| `INTERNET`、`ACCESS_NETWORK_STATE`、`ACCESS_LOCAL_NETWORK` | 可选 NAS 同步（WebDAV/SFTP/SMB）；仅在你配置并启用后访问你自己的 NAS 服务器。网络状态用于 Wi-Fi 限制；Android 17 局域网 NAS 需声明并在设置页申请本地网络权限 |
 
 发布 APK 不申请：
 

@@ -626,6 +626,11 @@ protocol SiteMarkSystemApi {
   func finishCameraCapture(captureId: String, keepOriginal: Bool) throws
   func getLocationPermissionState() throws -> LocationPermissionState
   func requestLocationPermission(completion: @escaping (Result<LocationPermissionState, Error>) -> Void)
+  /// Android 17 LAN NAS (ACCESS_LOCAL_NETWORK). Older Android and iOS
+  /// report [LocationPermissionState.granted] — iOS prompts via Info.plist
+  /// on first local-network use.
+  func getLocalNetworkPermissionState() throws -> LocationPermissionState
+  func requestLocalNetworkPermission(completion: @escaping (Result<LocationPermissionState, Error>) -> Void)
   func openApplicationSettings() throws
   func inspectImage(path: String, completion: @escaping (Result<ImageMetadataResult, Error>) -> Void)
   func requestCurrentLocation(timeoutMillis: Int64, completion: @escaping (Result<LocationResult, Error>) -> Void)
@@ -744,6 +749,37 @@ class SiteMarkSystemApiSetup {
       }
     } else {
       requestLocationPermissionChannel.setMessageHandler(nil)
+    }
+    /// Android 17 LAN NAS (ACCESS_LOCAL_NETWORK). Older Android and iOS
+    /// report [LocationPermissionState.granted] — iOS prompts via Info.plist
+    /// on first local-network use.
+    let getLocalNetworkPermissionStateChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.getLocalNetworkPermissionState\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getLocalNetworkPermissionStateChannel.setMessageHandler { _, reply in
+        do {
+          let result = try api.getLocalNetworkPermissionState()
+          reply(wrapResult(result))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      getLocalNetworkPermissionStateChannel.setMessageHandler(nil)
+    }
+    let requestLocalNetworkPermissionChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestLocalNetworkPermission\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      requestLocalNetworkPermissionChannel.setMessageHandler { _, reply in
+        api.requestLocalNetworkPermission { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      requestLocalNetworkPermissionChannel.setMessageHandler(nil)
     }
     let openApplicationSettingsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.openApplicationSettings\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

@@ -697,6 +697,47 @@ class SiteMarkSystemApi {
     return pigeonVar_replyValue! as LocationPermissionState;
   }
 
+  /// Android 17 LAN NAS (ACCESS_LOCAL_NETWORK). Older Android and iOS
+  /// report [LocationPermissionState.granted] — iOS prompts via Info.plist
+  /// on first local-network use.
+  Future<LocationPermissionState> getLocalNetworkPermissionState() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.getLocalNetworkPermissionState$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as LocationPermissionState;
+  }
+
+  Future<LocationPermissionState> requestLocalNetworkPermission() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestLocalNetworkPermission$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as LocationPermissionState;
+  }
+
   Future<void> openApplicationSettings() async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.openApplicationSettings$pigeonVar_messageChannelSuffix';

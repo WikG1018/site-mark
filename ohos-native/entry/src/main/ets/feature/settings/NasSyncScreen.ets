@@ -99,6 +99,9 @@ export struct NasSyncScreen {
     if (text.length === 0) {
       return false;
     }
+    if (!/^[0-9]+$/.test(text)) {
+      return true;
+    }
     const port = Number.parseInt(text, 10);
     return !Number.isFinite(port) || port < 1 || port > 65535;
   }
@@ -120,7 +123,7 @@ export struct NasSyncScreen {
     if (this.database === null) {
       return;
     }
-    if (this.host.trim().length === 0) {
+    if (this.host.trim().length === 0 && this.syncEnabled) {
       this.showToast(tr('请先填写服务器地址', 'Enter the server address first'), true);
       return;
     }
@@ -150,7 +153,8 @@ export struct NasSyncScreen {
   }
 
   private async testConnection(): Promise<void> {
-    if (this.database === null) {
+    const database = this.database;
+    if (database === null) {
       return;
     }
     if (this.host.trim().length === 0) {
@@ -177,6 +181,7 @@ export struct NasSyncScreen {
           return;
         }
         this.knownFingerprint = outcome.sftpFingerprint;
+        await database.saveNasSyncConfig(this.buildConfig());
       }
       this.showToast(tr('连接成功', 'Connection successful'), false);
     } catch (error) {
@@ -285,7 +290,7 @@ export struct NasSyncScreen {
               label: tr('端口（可选）', 'Port (optional)'),
               value: this.portText,
               placeholder: this.protocol === 'smb' ? '445' :
-                (this.protocol === 'sftp' ? '22' : tr('80 或 443', '80 or 443')),
+                (this.protocol === 'sftp' ? '22' : '80'),
               maxLength: 5,
               fieldEnabled: !this.busy,
               onChange: (value: string): void => { this.portText = value; }

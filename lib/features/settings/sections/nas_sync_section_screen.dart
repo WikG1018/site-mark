@@ -323,6 +323,35 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
     return port == null || port < 1 || port > 65535;
   }
 
+  Future<bool> _ensureLocalNetwork(AppStrings strings, String host) async {
+    final allowed = await ref
+        .read(localNetworkAccessProvider)
+        .ensureForHost(host);
+    if (allowed) return true;
+    if (!mounted) return false;
+    showAppToast(context, strings.nasLocalNetworkRequired);
+    return false;
+  }
+
+  Future<void> _persistFingerprint(String fingerprint) async {
+    await ref
+        .read(databaseProvider)
+        .saveNasSyncConfig(
+          protocol: _protocol,
+          host: _hostController.text.trim(),
+          port: _parsedPort(),
+          username: _usernameController.text.trim(),
+          rootPath: _rootController.text.trim().isEmpty
+              ? '/'
+              : _rootController.text.trim(),
+          secureTls: _secureTls,
+          acceptInvalidTls: _acceptInvalidTls,
+          knownSftpFingerprint: fingerprint,
+          wifiOnly: _wifiOnly,
+          enabled: _enabled,
+        );
+  }
+
   Future<void> _testConnection(AppStrings strings) async {
     final host = _hostController.text.trim();
     if (host.isEmpty) {
@@ -333,6 +362,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
       showAppToast(context, strings.nasPortInvalid);
       return;
     }
+    if (!await _ensureLocalNetwork(strings, host)) return;
     setState(() => _testing = true);
     // The probe must reflect what uploads would actually use: an untouched
     // password field means the stored credential, not an empty one.
@@ -342,13 +372,18 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
     }
     final config = _configFromForm(password);
     String? failure;
+    var cancelled = false;
     try {
       final details = await rust_api.nasTestConnection(config: config);
       final fingerprint = details.sftpFingerprint;
       if (fingerprint != null && fingerprint != _knownFingerprint) {
         final accepted = await _confirmFingerprint(fingerprint, strings);
-        if (!accepted) return;
+        if (!accepted) {
+          cancelled = true;
+          return;
+        }
         setState(() => _knownFingerprint = fingerprint);
+        await _persistFingerprint(fingerprint);
       }
     } on rust.NasError catch (error) {
       failure = error.code.name;
@@ -356,9 +391,10 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
       // Anything outside the Rust taxonomy (bridge/transport breakage)
       // degrades to the same friendly category as a protocol error.
       failure = 'protocol_error';
+    } finally {
+      if (mounted) setState(() => _testing = false);
     }
-    if (!mounted) return;
-    setState(() => _testing = false);
+    if (!mounted || cancelled) return;
     showAppToast(
       context,
       failure == null ? strings.nasTestSucceeded : _errorText(strings, failure),
@@ -391,7 +427,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
 
   Future<void> _save(AppStrings strings) async {
     final host = _hostController.text.trim();
-    if (host.isEmpty) {
+    if (host.isEmpty && _enabled) {
       showAppToast(context, strings.nasHostRequired);
       return;
     }
@@ -399,6 +435,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
       showAppToast(context, strings.nasPortInvalid);
       return;
     }
+    if (host.isNotEmpty && !await _ensureLocalNetwork(strings, host)) return;
     setState(() => _saving = true);
     try {
       final database = ref.read(databaseProvider);

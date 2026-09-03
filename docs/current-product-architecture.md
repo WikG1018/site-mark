@@ -13,7 +13,7 @@ SiteMark（工程印记）是面向工程现场记录的水印相机。应用负
 当前产品边界：
 
 - Android 12（API 31）及以上；界面支持简体中文和英文；
-- 发布 APK 无广告、无账号、无第三方云同步、无统计分析；唯一的网络出口是默认关闭的可选 NAS 同步（WebDAV/SFTP/SMB，用户自行配置服务器，见 `docs/decision-records.md` D-023），发布包仅为此声明 `INTERNET` / `ACCESS_NETWORK_STATE`；
+- 发布 APK 无广告、无账号、无第三方云同步、无统计分析；唯一的网络出口是默认关闭的可选 NAS 同步（WebDAV/SFTP/SMB，用户自行配置服务器，见 `docs/decision-records.md` D-023），发布包仅为此声明 `INTERNET` / `ACCESS_NETWORK_STATE` / `ACCESS_LOCAL_NETWORK`；
 - 使用系统相机，不在应用内实现或集成第三方相机界面；
 - 项目数据库、私有原图和处理中间文件保存在本机；
 - 水印成片发布到系统相册 `Pictures/SiteMark`；
@@ -108,7 +108,7 @@ U+0000 CHECK 和 `(project_id, name_key)` 唯一约束兜底，不负责文本�
 
 唯一的网络出口是默认关闭的可选 NAS 同步（D-023）：发布包为此声明
 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`），
-Android 17 局域网 NAS 另声明 `ACCESS_LOCAL_NETWORK`。GitHub 仓库链接由外部
+Android 17 局域网 NAS 另声明并在设置页运行时申请 `ACCESS_LOCAL_NETWORK`。GitHub 仓库链接由外部
 浏览器打开。SHA-256 用于本地完整性检查和记录追溯，不代表司法鉴定、可信时间戳
 或第三方存证。
 

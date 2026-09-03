@@ -82,6 +82,10 @@ class SiteMarkSystemPlugin :
             api?.onLocationPermissionResult()
             return true
         }
+        if (requestCode == AndroidSystemApi.REQUEST_LOCAL_NETWORK_PERMISSION) {
+            api?.onLocalNetworkPermissionResult()
+            return true
+        }
         return false
     }
 

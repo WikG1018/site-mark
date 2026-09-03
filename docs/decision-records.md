@@ -273,8 +273,10 @@ CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用
   后端——鸿蒙上 WebDAV 仅明文 HTTP，SFTP 与 SMB 本身即为加密传输。测试连接
   在鸿蒙请求 HTTPS 时返回 `tls_unsupported` 分类码。
 - **权限**：`INTERNET` + `ACCESS_NETWORK_STATE`（后者同时服务"仅 Wi‑Fi 上传"
-  偏好的连通性判定）；鸿蒙新增 `GET_NETWORK_INFO`（normal 级）。CI/release
-  门禁从"禁止网络权限"改为"必须有这两个权限、且不得出现其余网络/相机/存储权限"。
+  偏好的连通性判定）；Android 17（targetSdk 37）局域网 NAS 另声明并在设置页
+  运行时申请 `ACCESS_LOCAL_NETWORK`（NEARBY_DEVICES 组；API 36 及以下随
+  `INTERNET` 隐式授予）；鸿蒙新增 `GET_NETWORK_INFO`（normal 级）。CI/release
+  门禁从"禁止网络权限"改为"必须有这些权限、且不得出现其余网络/相机/存储权限"。
 - **明文 HTTP**：局域网 NAS 常见明文 HTTP，Android `usesCleartextTraffic=true`、
   iOS `NSAllowsLocalNetworking`。代价与理由：应用内除 NAS 同步外不存在任何网络
   调用点（构造性保证），明文只影响用户自选的局域网目标；设置中提供"允许自签名
