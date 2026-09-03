@@ -8,6 +8,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
 import 'package:sitemark/navigation/root_navigation_dock.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/adaptive_floating_button.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
@@ -78,44 +79,47 @@ class RootNavigationScaffold extends ConsumerWidget {
         // drops to false on an idle root page, re-arming it when the user
         // enters selection mode races the system and a back press then exits
         // to the launcher instead of cancelling the selection.
-        return PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, result) {
-            if (didPop) return;
-            SystemNavigator.pop();
-          },
-          child: Scaffold(
-            body: FloatingDockLayout(
-              animateDock: path != '/records',
-              dock: showRootNavigation && !hideForSelection
-                  ? GlassSurface(
-                      key: const Key('root-dock'),
-                      borderRadius: BorderRadius.circular(22),
-                      child: SizedBox(
-                        height: floatingDockHeight,
-                        child: RootNavigationDock(
-                          selectedIndex: navigationShell.currentIndex,
-                          onDestinationSelected: (index) =>
-                              navigationShell.goBranch(
-                                index,
-                                initialLocation:
-                                    index == navigationShell.currentIndex,
-                              ),
+        return ScrollChromeHost(
+          resetKey: (path, navigationShell.currentIndex),
+          child: PopScope(
+            canPop: false,
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop) return;
+              SystemNavigator.pop();
+            },
+            child: Scaffold(
+              body: FloatingDockLayout(
+                animateDock: path != '/records',
+                dock: showRootNavigation && !hideForSelection
+                    ? GlassSurface(
+                        key: const Key('root-dock'),
+                        borderRadius: BorderRadius.circular(22),
+                        child: SizedBox(
+                          height: floatingDockHeight,
+                          child: RootNavigationDock(
+                            selectedIndex: navigationShell.currentIndex,
+                            onDestinationSelected: (index) =>
+                                navigationShell.goBranch(
+                                  index,
+                                  initialLocation:
+                                      index == navigationShell.currentIndex,
+                                ),
+                          ),
                         ),
-                      ),
-                    )
-                  : null,
-              floatingActionButton:
-                  showRootNavigation && navigationShell.currentIndex == 0
-                  ? AdaptiveFloatingButton(
-                      key: const Key('new-project-fab'),
-                      heroTag: 'new-project-fab',
-                      onPressed: () => context.push('/projects/new'),
-                      tooltip: strings.newProject,
-                      icon: Icons.add,
-                    )
-                  : null,
-              child: navigationShell,
+                      )
+                    : null,
+                floatingActionButton:
+                    showRootNavigation && navigationShell.currentIndex == 0
+                    ? AdaptiveFloatingButton(
+                        key: const Key('new-project-fab'),
+                        heroTag: 'new-project-fab',
+                        onPressed: () => context.push('/projects/new'),
+                        tooltip: strings.newProject,
+                        icon: Icons.add,
+                      )
+                    : null,
+                child: navigationShell,
+              ),
             ),
           ),
         );

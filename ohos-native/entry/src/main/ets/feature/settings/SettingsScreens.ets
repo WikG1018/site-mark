@@ -17,6 +17,8 @@ import { tr, userFacingMessage } from '../../shared/AppText';
 import { ScreenMessageClock } from '../../shared/Feedback';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
+import { ScrollChromeCoordinator } from '../../shared/ScrollChromePolicy';
+import { MotionPolicy } from '../../shared/MotionPolicy';
 import { ScreenLifecycleActionCoordinator, ScreenRequestCoordinator } from '../../shared/ScreenActionCoordinator';
 import { StableSelectionList } from './SettingsProjectSelection';
 import { settingsBackAccessibilityText, settingsConfirmationButtonHeight, diagnosticsConfirmAccessibilityText }
@@ -44,8 +46,14 @@ export struct SettingsView {
   @State private notificationsBusy: boolean = false;
   @State private notificationMessage: string = '';
   @State private notificationError: boolean = false;
+  @State private chromeVisible: boolean = true;
+  private readonly chromeListener: () => void = (): void => {
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
+  };
 
   aboutToAppear(): void {
+    ScrollChromeCoordinator.shared().subscribe(this.chromeListener);
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
     this.loadCoordinator.activate();
     this.notificationCoordinator.activate();
     this.notificationsBusy = this.notificationCoordinator.isBusy();
@@ -56,6 +64,7 @@ export struct SettingsView {
   aboutToDisappear(): void {
     this.loadCoordinator.deactivate();
     this.notificationCoordinator.invalidate();
+    ScrollChromeCoordinator.shared().unsubscribe(this.chromeListener);
   }
 
   private async loadSettings(): Promise<void> {
@@ -126,6 +135,9 @@ export struct SettingsView {
     Column() {
       AppTopBar({ title: tr('设置', 'Settings'), subtitle: tr('拍摄、数据与应用偏好',
         'Capture, data, and app preferences') })
+        .translate({ y: this.chromeVisible ? 0 : -UiTokens.TOP_BAR_HEIGHT })
+        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+        .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
       Scroll() {
         Column() {
           SectionHeader({ title: tr('拍摄与记录', 'Capture and records') })
@@ -213,6 +225,9 @@ export struct SettingsView {
         .padding({ bottom: RootShellPolicy.contentBottomInset() + this.safeAreaBottomVp })
         .width('100%')
       }.layoutWeight(1)
+      .onDidScroll((xOffset: number, yOffset: number): void => {
+        ScrollChromeCoordinator.shared().applyOffset(yOffset);
+      })
     }
     .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
   }

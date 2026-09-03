@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 
 void main() {
@@ -348,4 +349,52 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets('hideOnScroll slides the app bar off the top', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ScrollChromeHost(
+            resetKey: 0,
+            child: AdaptivePageScaffold.raw(
+              hideOnScroll: true,
+              title: '页面标题',
+              body: _HideOnScrollList(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final shown = tester.getRect(find.byType(AppBar));
+      expect(shown.top, lessThan(8));
+
+      await tester.drag(
+        find.byKey(const Key('probe-list')),
+        const Offset(0, -300),
+      );
+      await tester.pumpAndSettle();
+
+      final hidden = tester.getRect(find.byType(AppBar));
+      expect(hidden.bottom, lessThanOrEqualTo(shown.top + 1));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+}
+
+class _HideOnScrollList extends StatelessWidget {
+  const _HideOnScrollList();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      key: const Key('probe-list'),
+      children: [
+        for (var i = 0; i < 40; i++)
+          SizedBox(height: 80, child: Text('row $i')),
+      ],
+    );
+  }
 }

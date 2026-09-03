@@ -23,6 +23,7 @@ import { ScreenActionCoordinator } from '../shared/ScreenActionCoordinator';
 import { RootBackDispatcher } from '../shared/ScreenUiStabilityCoordinator';
 import { RootLifecycleCoordinator, RootMotionRefreshResult, RootMotionSpec, RootShellPolicy,
   RootTabAction, RootTabCoordinator } from '../shared/RootShellPolicy';
+import { ScrollChromeCoordinator } from '../shared/ScrollChromePolicy';
 import { SAFE_AREA_BOTTOM_VP, SAFE_AREA_TOP_VP, topPaddingVp } from '../shared/SystemBars';
 
 @Entry
@@ -38,6 +39,7 @@ struct Index {
   @State private activeTab: number = 0;
   @State private tabDirection: number = 1;
   @State private selectionMode: boolean = false;
+  @State private chromeVisible: boolean = true;
   @State private appearanceRevision: number = 0;
   @State private motionRevision: number = MotionPolicy.reduceMotion ? -1 : 1;
   @StorageLink(SAFE_AREA_TOP_VP) safeAreaTopVp: number = 0;
@@ -55,7 +57,11 @@ struct Index {
     }
     const runtime = AppRuntime.current;
     this.selectionMode = runtime?.rootSelectionMode ?? false;
+    ScrollChromeCoordinator.shared().setForce('records-selection', this.selectionMode);
     this.appearanceRevision += 1;
+  };
+  private readonly chromeListener: () => void = (): void => {
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
   };
 
   aboutToAppear(): void {
@@ -95,6 +101,10 @@ struct Index {
   private activateRootShell(): void {
     const wasActive = this.rootLifecycle.isActive();
     const generation = this.rootLifecycle.activate();
+    if (!wasActive) {
+      ScrollChromeCoordinator.shared().subscribe(this.chromeListener);
+      this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
+    }
     this.requestMotionPolicyRefresh(generation);
     if (!wasActive) {
       this.resumeStartup(generation);
@@ -262,11 +272,13 @@ struct Index {
       this.consentAction.invalidate();
       this.consentBusy = false;
       this.tabCoordinator.deactivate();
+      ScrollChromeCoordinator.shared().unsubscribe(this.chromeListener);
     }
     this.unsubscribeRuntime();
   }
 
   private switchTab(index: number): void {
+    ScrollChromeCoordinator.shared().reset();
     this.runTabAction(this.tabCoordinator.request(index));
   }
 
@@ -400,6 +412,10 @@ struct Index {
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS + 8)
     .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
+    .translate({ y: this.chromeVisible ? 0 :
+      RootShellPolicy.dockHeight() + RootShellPolicy.dockBottomMargin() + this.safeAreaBottomVp + 24 })
+    .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+    .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
     .transition(panelTransition(28))
   }
 
