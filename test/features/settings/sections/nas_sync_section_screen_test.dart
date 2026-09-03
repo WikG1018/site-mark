@@ -37,6 +37,9 @@ class _FakeCredentials implements NasCredentialStore {
 class _FakeConnectivity implements NasConnectivity {
   @override
   Future<bool> allowsUpload({required bool wifiOnly}) async => false;
+
+  @override
+  Stream<void> get changes => const Stream.empty();
 }
 
 class _FakeUploader implements NasUploader {

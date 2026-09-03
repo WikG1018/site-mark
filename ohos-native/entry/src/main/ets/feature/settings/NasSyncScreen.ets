@@ -39,10 +39,22 @@ export struct NasSyncScreen {
   private passwordStored: boolean = false;
   private knownFingerprint: string | null = null;
   private database: AppDatabase | null = null;
+  private countsListener: ((counts: NasUploadCounts) => void) | null = null;
 
   aboutToAppear(): void {
     this.database = AppRuntime.require().database;
+    this.countsListener = (counts: NasUploadCounts): void => {
+      this.counts = counts;
+    };
+    AppRuntime.require().nasSync.addCountsListener(this.countsListener);
     this.reload();
+  }
+
+  aboutToDisappear(): void {
+    if (this.countsListener !== null) {
+      AppRuntime.require().nasSync.removeCountsListener(this.countsListener);
+      this.countsListener = null;
+    }
   }
 
   private async reload(): Promise<void> {

@@ -180,9 +180,61 @@ export class NasSyncService {
   private readonly database: AppDatabase;
   private syncing: boolean = false;
   private rerunQueued: boolean = false;
+  private netConnection: connection.NetConnection | null = null;
+  private countsListeners: Array<(counts: NasUploadCounts) => void> = [];
 
   constructor(database: AppDatabase) {
     this.database = database;
+  }
+
+  /**
+   * Subscribe to default-net availability and capability flips so a
+   * wifi-only queue parked on mobile resumes when Wi-Fi returns.
+   */
+  start(): void {
+    if (this.netConnection !== null) {
+      return;
+    }
+    const netConnection = connection.createNetConnection();
+    this.netConnection = netConnection;
+    netConnection.on('netAvailable', (): void => {
+      this.syncNow();
+    });
+    netConnection.on('netCapabilitiesChange', (): void => {
+      this.syncNow();
+    });
+    netConnection.on('netLost', (): void => {
+      this.syncNow();
+    });
+    netConnection.register((err: Object) => {
+      if (err) {
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'nas net watch failed');
+      }
+    });
+  }
+
+  addCountsListener(listener: (counts: NasUploadCounts) => void): void {
+    this.countsListeners.push(listener);
+  }
+
+  removeCountsListener(listener: (counts: NasUploadCounts) => void): void {
+    const next: Array<(counts: NasUploadCounts) => void> = [];
+    for (let i = 0; i < this.countsListeners.length; i++) {
+      if (this.countsListeners[i] !== listener) {
+        next.push(this.countsListeners[i]);
+      }
+    }
+    this.countsListeners = next;
+  }
+
+  private async notifyCounts(): Promise<void> {
+    if (this.countsListeners.length === 0) {
+      return;
+    }
+    const counts = await this.counts();
+    for (let i = 0; i < this.countsListeners.length; i++) {
+      this.countsListeners[i](counts);
+    }
   }
 
   static decodeUtf8(bytes: Uint8Array): string {
@@ -254,6 +306,7 @@ export class NasSyncService {
         if (!progressed) {
           deferredThisCycle.add(first);
         }
+        await this.notifyCounts();
       }
     } catch (error) {
       // The queue is a background observer; failures surface through the
@@ -262,6 +315,7 @@ export class NasSyncService {
         (error as Error).message);
     } finally {
       this.syncing = false;
+      await this.notifyCounts();
     }
     if (this.rerunQueued) {
       this.rerunQueued = false;
