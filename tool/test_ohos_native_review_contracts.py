@@ -98,6 +98,15 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         self.assertNotIn("or network permission", index)
         self.assertIn("NAS", index)
 
+    def test_nas_sync_service_uses_arkts_legal_constructors_and_asset_maps(self) -> None:
+        source = read(ETS / "core" / "sync" / "NasSyncService.ets")
+        self.assertNotIn("constructor(private readonly database", source)
+        self.assertNotIn("readonly failure: string | null,", source)
+        self.assertIn("asset.Tag.ALIAS", source)
+        self.assertIn("asset.Tag.SECRET", source)
+        self.assertIn("bearerTypes", source)
+        self.assertNotIn("bearType", source)
+
     def test_nas_settings_exposes_protocol_choice_and_shared_form_fields(self) -> None:
         source = read(ETS / "feature" / "settings" / "NasSyncScreen.ets")
         self.assertIn("LifecycleSegment", source)
