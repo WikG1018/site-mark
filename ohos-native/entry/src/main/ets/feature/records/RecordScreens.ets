@@ -32,6 +32,8 @@ import { DetailMediaSwapCoordinator, RecordBatchLayoutPolicy, RecordRestorePolic
   SystemRecordTimerScheduler } from './RecordUiCoordinator';
 import { ScreenLifecycleActionCoordinator } from '../../shared/ScreenActionCoordinator';
 import { BackAction, BackCoordinator, RootBackDispatcher } from '../../shared/ScreenUiStabilityCoordinator';
+import { ScrollChromeCoordinator } from '../../shared/ScrollChromePolicy';
+import { MotionPolicy } from '../../shared/MotionPolicy';
 
 class RuntimeRecordPageLoader implements CapturePageLoader {
   load(filter: CaptureFilter, cursor: CapturePageCursor | null, pageSize: number): Promise<CapturePage> {
@@ -54,6 +56,7 @@ export struct AllRecordsView {
   @State private batchBusy: boolean = false;
   @State private message: string = '';
   @State private messageError: boolean = false;
+  @State private chromeVisible: boolean = true;
   private readonly messageClock = new ScreenMessageClock();
 
   private setMessage(text: string, isError: boolean = false): void {
@@ -89,6 +92,9 @@ export struct AllRecordsView {
   private readonly memoryListener: (level: number) => void = (_level: number): void => {
     this.pageState.requestSafeReload();
   };
+  private readonly chromeListener: () => void = (): void => {
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
+  };
 
   aboutToAppear(): void {
     const restored = AppRuntime.require().screenState.captures();
@@ -119,6 +125,9 @@ export struct AllRecordsView {
     const runtime = AppRuntime.require();
     runtime.subscribe(this.refreshListener);
     runtime.uiMemory.register(this.memoryListener);
+    ScrollChromeCoordinator.shared().subscribe(this.chromeListener);
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
+    ScrollChromeCoordinator.shared().setForce('records-search', this.searchText.length > 0);
     this.refreshContent();
   }
 
@@ -138,6 +147,9 @@ export struct AllRecordsView {
     this.controller.invalidate();
     AppRuntime.current?.unsubscribe(this.refreshListener);
     AppRuntime.current?.uiMemory.unregister(this.memoryListener);
+    ScrollChromeCoordinator.shared().unsubscribe(this.chromeListener);
+    ScrollChromeCoordinator.shared().setForce('records-search', false);
+    ScrollChromeCoordinator.shared().setForce('records-filter', false);
     if (this.selection.selectionMode) {
       this.selection.exit();
       this.selectionRevision += 1;
@@ -604,6 +616,7 @@ export struct AllRecordsView {
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Column() {
+      Column() {
       AppTopBar({ title: tr('全部记录', 'All records'), subtitle: tr('跨项目搜索与筛选',
         'Search and filter across projects'), actionLabel: this.isSelectionMode() ? tr('完成', 'Done') :
         tr('选择', 'Select'),
@@ -615,7 +628,11 @@ export struct AllRecordsView {
           AppSearchField({ value: this.searchText, placeholder: tr('搜索项目、部位、内容、拍摄人或编号',
             'Search project, location, work, photographer, or number'),
             accessibilityLabel: tr('搜索全部拍摄记录', 'Search all capture records'),
-            onChange: (value: string): void => { this.searchText = value; this.scheduleSearch(); } })
+            onChange: (value: string): void => {
+              this.searchText = value;
+              ScrollChromeCoordinator.shared().setForce('records-search', value.length > 0);
+              this.scheduleSearch();
+            } })
             .enabled(!this.batchBusy)
           Row({ space: 8 }) {
             Column() {
@@ -623,7 +640,10 @@ export struct AllRecordsView {
                 summary: this.firstCaptureDate(),
                 active: this.selectedProjectId.length > 0 || this.yearText !== '' ||
                   this.monthText !== '' || this.dayText !== '',
-                onOpen: (): void => { this.filterOpen = true; } })
+                onOpen: (): void => {
+                  this.filterOpen = true;
+                  ScrollChromeCoordinator.shared().setForce('records-filter', true);
+                } })
                 .enabled(!this.batchBusy)
             }.layoutWeight(1)
             if (this.isSelectionMode()) {
@@ -637,6 +657,11 @@ export struct AllRecordsView {
         }
         .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 8 })
         .width('100%')
+      }
+      .width('100%')
+      .translate({ y: this.chromeVisible ? 0 : -(UiTokens.TOP_BAR_HEIGHT + 108) })
+      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+      .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
         if (this.message.length > 0) {
           Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER :
             UiTokens.PRIMARY).padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 6 })
@@ -688,6 +713,9 @@ export struct AllRecordsView {
             this.batchFontScale(), this.safeAreaBottomVp))
           .cachedCount(4)
           .edgeEffect(EdgeEffect.Spring)
+          .onDidScroll((scrollOffset: number, _scrollState: ScrollState): void => {
+            ScrollChromeCoordinator.shared().applyOffset(scrollOffset);
+          })
           .onScrollIndex((start: number, _end: number): void => {
             if (!this.pageState.canSaveScroll()) return;
             this.savedFirstVisibleIndex = Math.max(0, start);
@@ -709,7 +737,10 @@ export struct AllRecordsView {
       // font scales combined with the bottom safe-area inset.
       height: SheetSize.FIT_CONTENT,
       dragBar: true,
-      onDisappear: (): void => { this.filterOpen = false; },
+      onDisappear: (): void => {
+        this.filterOpen = false;
+        ScrollChromeCoordinator.shared().setForce('records-filter', false);
+      },
     })
   }
 }

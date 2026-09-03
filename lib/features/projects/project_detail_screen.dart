@@ -29,6 +29,7 @@ import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:sitemark/shared/ui/adaptive_floating_button.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 import 'package:sitemark/workflow/project_deletion_service.dart';
@@ -289,101 +290,127 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
               project != null &&
               project.lifecycleStatus == ProjectLifecycleStatus.active &&
               !editing;
-          return AdaptivePageScaffold.raw(
-            title: title,
-            titleWidget: AnimatedSwitcher(
-              key: const Key('capture-search-title-switcher'),
-              duration: AppMotion.durationOf(context, AppMotion.short4),
-              layoutBuilder: (currentChild, previousChildren) => Stack(
-                alignment: Alignment.centerLeft,
-                children: [...previousChildren, ?currentChild],
-              ),
-              child: project != null && _searching
-                  ? CaptureSearchField(
-                      key: const ValueKey('capture-search-title'),
-                      initialText: _searchText,
-                      onChanged: _onSearchChanged,
-                    )
-                  : Text(title, key: const ValueKey('capture-list-title')),
-            ),
-            actions: [
-              if (project != null && !_searching && !editing)
-                IconButton(
-                  key: const Key('search-captures'),
-                  onPressed: () => setState(() => _searching = true),
-                  tooltip: strings.searchCaptures,
-                  icon: const Icon(Icons.search),
-                ),
-              if (project != null && !editing && !_searching)
-                IconButton(
-                  key: const Key('project-actions'),
-                  tooltip: strings.projectActions,
-                  icon: const Icon(Icons.more_vert),
-                  onPressed: () => _showProjectActions(project),
-                ),
-              if (project != null && editing)
-                IconButton(
-                  key: const Key('select-all-captures'),
-                  onPressed: _selectAllLoading ? null : _toggleSelectAll,
-                  tooltip: allEligibleSelected
-                      ? strings.deselectAll
-                      : strings.selectAll,
-                  icon: _selectAllLoading
-                      ? const SizedBox.square(
-                          key: Key('select-all-progress'),
-                          dimension: 20,
-                          child: AdaptiveProgressIndicator(size: 20),
+          return ScrollChromeForce(
+            reason: 'project-detail-search',
+            active: _searching,
+            child: ScrollChromeForce(
+              reason: 'project-detail-selection',
+              active: editing,
+              child: AdaptivePageScaffold.raw(
+                hideOnScroll: true,
+                title: title,
+                titleWidget: AnimatedSwitcher(
+                  key: const Key('capture-search-title-switcher'),
+                  duration: AppMotion.durationOf(context, AppMotion.short4),
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [...previousChildren, ?currentChild],
+                  ),
+                  child: project != null && _searching
+                      ? CaptureSearchField(
+                          key: const ValueKey('capture-search-title'),
+                          initialText: _searchText,
+                          onChanged: _onSearchChanged,
                         )
-                      : Icon(
-                          allEligibleSelected
-                              ? Icons.check_box_outline_blank
-                              : Icons.select_all_outlined,
-                        ),
+                      : Text(title, key: const ValueKey('capture-list-title')),
                 ),
-            ],
-            iosBodyPadding: EdgeInsets.zero,
-            body: FloatingDockLayout(
-              dock: project != null && editing
-                  ? CaptureBatchActionBar(
-                      key: const Key('batch-bar'),
-                      controller: _selectionController,
-                      mediaService: ref.watch(captureMediaServiceProvider),
-                      exportService: ref.watch(projectExportServiceProvider),
-                      shareService: ref.watch(shareFileServiceProvider),
-                    )
-                  : null,
-              child: waitingForProject
-                  ? _projectLoadingList(strings)
-                  : projectLoadFailed
-                  ? _ProjectUnavailableState(
-                      key: const Key('project-load-error'),
-                      icon: Icons.cloud_off_outlined,
-                      message: strings.projectLoadFailed,
-                    )
-                  : projectMissing
-                  ? _ProjectUnavailableState(
-                      key: const Key('project-not-found'),
-                      icon: Icons.folder_off_outlined,
-                      message: strings.projectNotFound,
-                    )
-                  : _projectCaptureList(context, strings, project!, filter),
-            ),
-            floatingActionButton: AnimatedSwitcher(
-              duration: AppMotion.durationOf(context, AppMotion.medium2),
-              switchInCurve: AppMotion.emphasized,
-              switchOutCurve: AppMotion.emphasized,
-              transitionBuilder: (child, animation) =>
-                  ScaleTransition(scale: animation, child: child),
-              child: !canCapture
-                  ? const SizedBox.shrink()
-                  : AdaptiveFloatingButton(
-                      key: const ValueKey('capture-fab'),
-                      heroTag: 'project-capture-fab-${widget.projectId}',
-                      onPressed: () =>
-                          context.push('/projects/${widget.projectId}/capture'),
-                      icon: Icons.photo_camera_outlined,
-                      label: strings.capture,
+                actions: [
+                  if (project != null && !_searching && !editing)
+                    IconButton(
+                      key: const Key('search-captures'),
+                      onPressed: () => setState(() => _searching = true),
+                      tooltip: strings.searchCaptures,
+                      icon: const Icon(Icons.search),
                     ),
+                  if (project != null && !editing && !_searching)
+                    IconButton(
+                      key: const Key('project-actions'),
+                      tooltip: strings.projectActions,
+                      icon: const Icon(Icons.more_vert),
+                      onPressed: () => _showProjectActions(project),
+                    ),
+                  if (project != null && editing)
+                    IconButton(
+                      key: const Key('select-all-captures'),
+                      onPressed: _selectAllLoading ? null : _toggleSelectAll,
+                      tooltip: allEligibleSelected
+                          ? strings.deselectAll
+                          : strings.selectAll,
+                      icon: _selectAllLoading
+                          ? const SizedBox.square(
+                              key: Key('select-all-progress'),
+                              dimension: 20,
+                              child: AdaptiveProgressIndicator(size: 20),
+                            )
+                          : Icon(
+                              allEligibleSelected
+                                  ? Icons.check_box_outline_blank
+                                  : Icons.select_all_outlined,
+                            ),
+                    ),
+                ],
+                iosBodyPadding: EdgeInsets.zero,
+                body: FloatingDockLayout(
+                  dock: project != null && editing
+                      ? CaptureBatchActionBar(
+                          key: const Key('batch-bar'),
+                          controller: _selectionController,
+                          mediaService: ref.watch(captureMediaServiceProvider),
+                          exportService: ref.watch(
+                            projectExportServiceProvider,
+                          ),
+                          shareService: ref.watch(shareFileServiceProvider),
+                        )
+                      : null,
+                  child: waitingForProject
+                      ? _projectLoadingList(strings)
+                      : projectLoadFailed
+                      ? _ProjectUnavailableState(
+                          key: const Key('project-load-error'),
+                          icon: Icons.cloud_off_outlined,
+                          message: strings.projectLoadFailed,
+                        )
+                      : projectMissing
+                      ? _ProjectUnavailableState(
+                          key: const Key('project-not-found'),
+                          icon: Icons.folder_off_outlined,
+                          message: strings.projectNotFound,
+                        )
+                      : _projectCaptureList(context, strings, project!, filter),
+                ),
+                floatingActionButton: AnimatedSlide(
+                  duration: scrollChromeAnimationOf(context),
+                  curve: AppMotion.emphasized,
+                  offset: ScrollChromeScope.visibleOf(context)
+                      ? Offset.zero
+                      : const Offset(0, 2),
+                  child: IgnorePointer(
+                    ignoring: !ScrollChromeScope.visibleOf(context),
+                    child: AnimatedSwitcher(
+                      duration: AppMotion.durationOf(
+                        context,
+                        AppMotion.medium2,
+                      ),
+                      switchInCurve: AppMotion.emphasized,
+                      switchOutCurve: AppMotion.emphasized,
+                      transitionBuilder: (child, animation) =>
+                          ScaleTransition(scale: animation, child: child),
+                      child: !canCapture
+                          ? const SizedBox.shrink()
+                          : AdaptiveFloatingButton(
+                              key: const ValueKey('capture-fab'),
+                              heroTag:
+                                  'project-capture-fab-${widget.projectId}',
+                              onPressed: () => context.push(
+                                '/projects/${widget.projectId}/capture',
+                              ),
+                              icon: Icons.photo_camera_outlined,
+                              label: strings.capture,
+                            ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           );
         },
@@ -424,7 +451,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       skeletonItemCount: 4,
       padding: EdgeInsets.fromLTRB(
         16,
-        4,
+        4 + scrollChromeTopInsetOf(context),
         16,
         floatingDockReservedSpaceOf(context),
       ),

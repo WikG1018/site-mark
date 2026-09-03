@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 
 const double floatingDockHorizontalInset = 14;
 const double floatingDockBottomInset = 12;
@@ -43,6 +44,8 @@ class FloatingDockLayout extends StatelessWidget {
     final duration = animateDock
         ? AppMotion.durationOf(context, AppMotion.medium4)
         : Duration.zero;
+    final chromeVisible = ScrollChromeScope.visibleOf(context);
+    final chromeDuration = scrollChromeAnimationOf(context);
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -55,37 +58,61 @@ class FloatingDockLayout extends StatelessWidget {
                 floatingDockBottomInset +
                 floatingDockHeight +
                 12,
-            child: action,
+            child: _slideChrome(
+              visible: chromeVisible,
+              duration: chromeDuration,
+              hiddenOffset: const Offset(0, 1.8),
+              child: action,
+            ),
           ),
         Positioned(
           left: floatingDockHorizontalInset,
           right: floatingDockHorizontalInset,
           bottom: bottomSafeArea + floatingDockBottomInset,
-          child: AnimatedSwitcher(
-            key: dockKey,
-            duration: duration,
-            switchInCurve: AppMotion.emphasizedDecelerate,
-            switchOutCurve: AppMotion.emphasizedAccelerate,
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, .12),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: child,
+          child: _slideChrome(
+            visible: chromeVisible,
+            duration: chromeDuration,
+            hiddenOffset: const Offset(0, 1.5),
+            child: AnimatedSwitcher(
+              key: dockKey,
+              duration: duration,
+              switchInCurve: AppMotion.emphasizedDecelerate,
+              switchOutCurve: AppMotion.emphasizedAccelerate,
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, .12),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
               ),
+              child: dock == null
+                  ? const SizedBox.shrink(key: ValueKey('floating-dock-empty'))
+                  : SizedBox(
+                      key: ValueKey(('floating-dock-content', dock!.key)),
+                      width: double.infinity,
+                      child: dock,
+                    ),
             ),
-            child: dock == null
-                ? const SizedBox.shrink(key: ValueKey('floating-dock-empty'))
-                : SizedBox(
-                    key: ValueKey(('floating-dock-content', dock!.key)),
-                    width: double.infinity,
-                    child: dock,
-                  ),
           ),
         ),
       ],
     );
   }
+}
+
+Widget _slideChrome({
+  required bool visible,
+  required Duration duration,
+  required Offset hiddenOffset,
+  required Widget child,
+}) {
+  return AnimatedSlide(
+    duration: duration,
+    curve: AppMotion.emphasized,
+    offset: visible ? Offset.zero : hiddenOffset,
+    child: IgnorePointer(ignoring: !visible, child: child),
+  );
 }

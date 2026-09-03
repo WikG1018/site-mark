@@ -24,6 +24,7 @@ import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 
@@ -253,112 +254,131 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _handleRootBack();
       },
-      child: AdaptivePageScaffold.raw(
-        title: strings.allRecords,
-        titleWidget: AnimatedSwitcher(
-          key: const Key('capture-search-title-switcher'),
-          duration: AppMotion.durationOf(context, AppMotion.short4),
-          layoutBuilder: (currentChild, previousChildren) => Stack(
-            alignment: Alignment.centerLeft,
-            children: [...previousChildren, ?currentChild],
-          ),
-          child: _searching
-              ? CaptureSearchField(
-                  key: const ValueKey('capture-search-title'),
-                  initialText: _searchText,
-                  onChanged: _onSearchChanged,
-                )
-              : Text(
-                  strings.allRecords,
-                  key: const ValueKey('capture-list-title'),
-                ),
-        ),
-        actions: [
-          if (!_searching && !editing)
-            IconButton(
-              key: const Key('search-captures'),
-              onPressed: () => setState(() => _searching = true),
-              tooltip: strings.searchCaptures,
-              icon: const Icon(Icons.search),
-            ),
-          if (editing)
-            IconButton(
-              key: const Key('select-all-captures'),
-              onPressed: _selectAllLoading ? null : _toggleSelectAll,
-              tooltip: allEligibleSelected
-                  ? strings.deselectAll
-                  : strings.selectAll,
-              icon: _selectAllLoading
-                  ? const SizedBox.square(
-                      key: Key('select-all-progress'),
-                      dimension: 20,
-                      child: AdaptiveProgressIndicator(size: 20),
-                    )
-                  : Icon(
-                      allEligibleSelected
-                          ? Icons.check_box_outline_blank
-                          : Icons.select_all_outlined,
-                    ),
-            ),
-          if (!_searching || editing)
-            IconButton(
-              key: const Key('edit-captures'),
-              onPressed: () {
-                if (_selectionController.editing) {
-                  _invalidateSelectionRequests();
-                  _selectionController.exit();
-                } else {
-                  _selectionController.enter();
-                }
-              },
-              tooltip: editing ? strings.done : strings.editRecords,
-              icon: AnimatedSwitcher(
-                duration: AppMotion.durationOf(context, AppMotion.short4),
-                child: Icon(
-                  editing ? Icons.done : Icons.edit_outlined,
-                  key: ValueKey(editing),
-                ),
-              ),
-            ),
-        ],
-        iosBodyPadding: EdgeInsets.zero,
-        body: FloatingDockLayout(
-          animateDock: false,
-          dock: editing
-              ? CaptureBatchActionBar(
-                  key: const Key('batch-bar'),
-                  controller: _selectionController,
-                  mediaService: ref.watch(captureMediaServiceProvider),
-                  exportService: ref.watch(projectExportServiceProvider),
-                  shareService: ref.watch(shareFileServiceProvider),
-                )
-              : null,
+      child: ScrollChromeForce(
+        reason: 'records-search',
+        active: _searching,
+        child: ScrollChromeForce(
+          reason: 'records-selection',
+          active: editing,
           child: StreamBuilder<List<Project>>(
             stream: _projectsStream,
             builder: (context, snapshot) {
               final projects = snapshot.data ?? const <Project>[];
-              return Column(
-                children: [
-                  if (!_searching) _filterBar(context, strings, projects),
-                  Expanded(
-                    child: CapturePagedList(
-                      controller: _pagerController,
-                      source: _querySource,
-                      emptyMessage: _hasActiveQuery
-                          ? strings.filteredEmpty
-                          : strings.noCaptures,
-                      itemBuilder: _buildCaptureCard,
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        4,
-                        16,
-                        floatingDockReservedSpaceOf(context),
-                      ),
-                      groupKey: _captureDateKey,
-                      onVisibleGroupChanged: _onVisibleDateChanged,
-                    ),
+              return AdaptivePageScaffold.raw(
+                hideOnScroll: true,
+                title: strings.allRecords,
+                titleWidget: AnimatedSwitcher(
+                  key: const Key('capture-search-title-switcher'),
+                  duration: AppMotion.durationOf(context, AppMotion.short4),
+                  layoutBuilder: (currentChild, previousChildren) => Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [...previousChildren, ?currentChild],
                   ),
+                  child: _searching
+                      ? CaptureSearchField(
+                          key: const ValueKey('capture-search-title'),
+                          initialText: _searchText,
+                          onChanged: _onSearchChanged,
+                        )
+                      : Text(
+                          strings.allRecords,
+                          key: const ValueKey('capture-list-title'),
+                        ),
+                ),
+                actions: [
+                  if (!_searching && !editing)
+                    IconButton(
+                      key: const Key('search-captures'),
+                      onPressed: () => setState(() => _searching = true),
+                      tooltip: strings.searchCaptures,
+                      icon: const Icon(Icons.search),
+                    ),
+                  if (editing)
+                    IconButton(
+                      key: const Key('select-all-captures'),
+                      onPressed: _selectAllLoading ? null : _toggleSelectAll,
+                      tooltip: allEligibleSelected
+                          ? strings.deselectAll
+                          : strings.selectAll,
+                      icon: _selectAllLoading
+                          ? const SizedBox.square(
+                              key: Key('select-all-progress'),
+                              dimension: 20,
+                              child: AdaptiveProgressIndicator(size: 20),
+                            )
+                          : Icon(
+                              allEligibleSelected
+                                  ? Icons.check_box_outline_blank
+                                  : Icons.select_all_outlined,
+                            ),
+                    ),
+                  if (!_searching || editing)
+                    IconButton(
+                      key: const Key('edit-captures'),
+                      onPressed: () {
+                        if (_selectionController.editing) {
+                          _invalidateSelectionRequests();
+                          _selectionController.exit();
+                        } else {
+                          _selectionController.enter();
+                        }
+                      },
+                      tooltip: editing ? strings.done : strings.editRecords,
+                      icon: AnimatedSwitcher(
+                        duration: AppMotion.durationOf(
+                          context,
+                          AppMotion.short4,
+                        ),
+                        child: Icon(
+                          editing ? Icons.done : Icons.edit_outlined,
+                          key: ValueKey(editing),
+                        ),
+                      ),
+                    ),
                 ],
+                bottom: _searching
+                    ? null
+                    : PreferredSize(
+                        preferredSize: const Size.fromHeight(
+                          scrollChromeFilterBarHeight,
+                        ),
+                        child: _filterBar(context, strings, projects),
+                      ),
+                iosBodyPadding: EdgeInsets.zero,
+                body: FloatingDockLayout(
+                  animateDock: false,
+                  dock: editing
+                      ? CaptureBatchActionBar(
+                          key: const Key('batch-bar'),
+                          controller: _selectionController,
+                          mediaService: ref.watch(captureMediaServiceProvider),
+                          exportService: ref.watch(
+                            projectExportServiceProvider,
+                          ),
+                          shareService: ref.watch(shareFileServiceProvider),
+                        )
+                      : null,
+                  child: CapturePagedList(
+                    controller: _pagerController,
+                    source: _querySource,
+                    emptyMessage: _hasActiveQuery
+                        ? strings.filteredEmpty
+                        : strings.noCaptures,
+                    itemBuilder: _buildCaptureCard,
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      4 +
+                          scrollChromeTopInsetOf(
+                            context,
+                            extra: _searching ? 0 : scrollChromeFilterBarHeight,
+                          ),
+                      16,
+                      floatingDockReservedSpaceOf(context),
+                    ),
+                    groupKey: _captureDateKey,
+                    onVisibleGroupChanged: _onVisibleDateChanged,
+                  ),
+                ),
               );
             },
           ),
@@ -474,15 +494,22 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
 
   Future<void> _openFilterSheet(List<Project> projects) async {
     if (_searching) return;
-    final next = await showCaptureFilterSheet(
-      context: context,
-      initial: _filter,
-      projects: projects,
-      options: _dateOptions,
-      optionsLoader: (draft) => _querySource.loadDateOptions(
-        CaptureListQuery(filter: draft, searchText: _searchText),
-      ),
-    );
+    final chrome = ScrollChromeScope.maybeOf(context);
+    chrome?.setForce('records-filter', true);
+    final CaptureFilter? next;
+    try {
+      next = await showCaptureFilterSheet(
+        context: context,
+        initial: _filter,
+        projects: projects,
+        options: _dateOptions,
+        optionsLoader: (draft) => _querySource.loadDateOptions(
+          CaptureListQuery(filter: draft, searchText: _searchText),
+        ),
+      );
+    } finally {
+      chrome?.setForce('records-filter', false);
+    }
     if (!mounted || next == null || _searching) return;
     _onFilterChanged(next);
   }

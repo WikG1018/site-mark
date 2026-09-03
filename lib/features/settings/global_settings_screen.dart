@@ -4,6 +4,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/features/settings/settings_group.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 
@@ -32,12 +33,13 @@ class GlobalSettingsScreen extends ConsumerWidget {
         : formatStorageBytes(storageUsage.totalBytes);
 
     return AdaptivePageScaffold.raw(
+      hideOnScroll: true,
       title: strings.settings,
       iosBodyPadding: EdgeInsets.zero,
       body: ListView(
         padding: EdgeInsets.fromLTRB(
           12,
-          0,
+          scrollChromeTopInsetOf(context),
           12,
           floatingDockReservedSpaceOf(context),
         ),

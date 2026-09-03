@@ -34,6 +34,7 @@ import accentSwatchesTest from './AccentSwatches.test';
 import appearanceSettingsDraftTest from './AppearanceSettingsDraft.test';
 import systemBarsTest from './SystemBars.test';
 import uiTokensTest from './UiTokens.test';
+import scrollChromePolicyTest from './ScrollChromePolicy.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -72,4 +73,5 @@ export default function testsuite(): void {
   appearanceSettingsDraftTest();
   systemBarsTest();
   uiTokensTest();
+  scrollChromePolicyTest();
 }

@@ -10,6 +10,7 @@ import 'package:sitemark/features/projects/project_summary_card.dart';
 import 'package:sitemark/features/projects/project_status_filter_sheet.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 import 'package:sitemark/shared/ui/adaptive_skeleton_count.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
@@ -142,14 +143,19 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
   }
 
   Future<void> _openStatusFilter() async {
-    final selected = await showProjectStatusFilterSheet(
-      context,
-      current: _status,
-    );
+    final chrome = ScrollChromeScope.maybeOf(context);
+    chrome?.setForce('project-filter', true);
+    final ProjectLifecycleStatus? selected;
+    try {
+      selected = await showProjectStatusFilterSheet(context, current: _status);
+    } finally {
+      chrome?.setForce('project-filter', false);
+    }
     if (!mounted || selected == null || selected == _status) {
       return;
     }
-    setState(() => _status = selected);
+    final next = selected;
+    setState(() => _status = next);
   }
 
   Object _nestedBucket({required bool searching}) {
@@ -231,183 +237,189 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _handleRootBack();
       },
-      child: AdaptivePageScaffold.raw(
-        title: strings.appName,
-        titleWidget: SizedBox(
-          height: 44,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _searching
-                ? TextField(
-                    key: const Key('project-search-field'),
-                    controller: _searchController,
-                    focusNode: _searchFocus,
-                    decoration: InputDecoration(
-                      hintText: strings.searchProjectsHint,
-                      border: InputBorder.none,
-                    ),
-                    onChanged: _onSearchChanged,
-                  )
-                : Text(strings.appName, key: const Key('project-title')),
+      child: ScrollChromeForce(
+        reason: 'project-search',
+        active: _searching,
+        child: AdaptivePageScaffold.raw(
+          hideOnScroll: true,
+          title: strings.appName,
+          titleWidget: SizedBox(
+            height: 44,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _searching
+                  ? TextField(
+                      key: const Key('project-search-field'),
+                      controller: _searchController,
+                      focusNode: _searchFocus,
+                      decoration: InputDecoration(
+                        hintText: strings.searchProjectsHint,
+                        border: InputBorder.none,
+                      ),
+                      onChanged: _onSearchChanged,
+                    )
+                  : Text(strings.appName, key: const Key('project-title')),
+            ),
           ),
-        ),
-        actions: [
-          if (_searching)
-            IconButton(
-              key: const Key('project-search-action'),
-              onPressed: _handleSearchAction,
-              tooltip: _query.isNotEmpty ? strings.clear : strings.cancel,
-              icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
-            )
-          else ...[
-            Semantics(
-              key: const Key('project-status-filter'),
-              label:
-                  '${strings.projectStatusFilterTitle}: '
-                  '${_statusLabel(strings, _status)}',
-              button: true,
-              onTap: _openStatusFilter,
-              excludeSemantics: true,
-              child: TextButton.icon(
-                onPressed: _openStatusFilter,
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+          actions: [
+            if (_searching)
+              IconButton(
+                key: const Key('project-search-action'),
+                onPressed: _handleSearchAction,
+                tooltip: _query.isNotEmpty ? strings.clear : strings.cancel,
+                icon: Icon(_query.isNotEmpty ? Icons.clear : Icons.close),
+              )
+            else ...[
+              Semantics(
+                key: const Key('project-status-filter'),
+                label:
+                    '${strings.projectStatusFilterTitle}: '
+                    '${_statusLabel(strings, _status)}',
+                button: true,
+                onTap: _openStatusFilter,
+                excludeSemantics: true,
+                child: TextButton.icon(
+                  onPressed: _openStatusFilter,
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  icon: const Icon(Icons.filter_list, size: 20),
+                  label: Text(_statusLabel(strings, _status)),
                 ),
-                icon: const Icon(Icons.filter_list, size: 20),
-                label: Text(_statusLabel(strings, _status)),
               ),
-            ),
-            IconButton(
-              key: const Key('search-projects'),
-              onPressed: _startSearch,
-              tooltip: strings.searchProjects,
-              icon: AnimatedRotation(
-                turns: _searching ? 0.5 : 0,
-                duration: AppMotion.durationOf(context, AppMotion.short4),
-                child: const Icon(Icons.search),
+              IconButton(
+                key: const Key('search-projects'),
+                onPressed: _startSearch,
+                tooltip: strings.searchProjects,
+                icon: AnimatedRotation(
+                  turns: _searching ? 0.5 : 0,
+                  duration: AppMotion.durationOf(context, AppMotion.short4),
+                  child: const Icon(Icons.search),
+                ),
               ),
-            ),
+            ],
           ],
-        ],
-        iosBodyPadding: EdgeInsets.zero,
-        body: LayoutBuilder(
-          key: const Key('project-list-content'),
-          builder: (context, constraints) =>
-              StreamBuilder<List<ProjectSummary>>(
-                key: ValueKey('project-summaries-$_summaryStreamKey'),
-                stream: stream,
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    final strings = AppStrings.of(context);
-                    return SizedBox(
-                      key: const Key('project-list-error'),
-                      height: constraints.maxHeight * 0.55,
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                strings.projectLoadFailed,
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              FilledButton.tonal(
-                                key: const Key('project-list-retry'),
-                                onPressed: () {
-                                  // Nulling the cached stream forces
-                                  // _summariesFor to re-subscribe on rebuild.
-                                  setState(() {
-                                    _summaryStream = null;
-                                  });
-                                },
-                                child: Text(strings.retry),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-                  _syncNestedTabOffsets(context, searching: searching);
-                  if (!snapshot.hasData) {
-                    final skeletonCount = adaptiveSkeletonCount(
-                      viewportHeight: constraints.maxHeight,
-                      itemExtent: 118,
-                    );
-                    return Skeletonizer(
-                      key: const Key('project-list-skeleton'),
-                      child: ListView.separated(
-                        padding: EdgeInsets.fromLTRB(
-                          16,
-                          16,
-                          16,
-                          floatingDockReservedSpaceOf(
-                            context,
-                            avoidFloatingActionButton: true,
-                          ),
-                        ),
-                        itemCount: skeletonCount,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
-                        itemBuilder: (_, _) => const _ProjectCardSkeleton(),
-                      ),
-                    );
-                  }
-                  final summaries = snapshot.data!;
-                  if (summaries.isEmpty) {
-                    if (_searching && _query.trim().isNotEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Text(
-                            strings.noMatchingProjects,
-                            style: Theme.of(context).textTheme.headlineSmall,
-                            textAlign: TextAlign.center,
+          iosBodyPadding: EdgeInsets.zero,
+          body: LayoutBuilder(
+            key: const Key('project-list-content'),
+            builder: (context, constraints) =>
+                StreamBuilder<List<ProjectSummary>>(
+                  key: ValueKey('project-summaries-$_summaryStreamKey'),
+                  stream: stream,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      final strings = AppStrings.of(context);
+                      return SizedBox(
+                        key: const Key('project-list-error'),
+                        height: constraints.maxHeight * 0.55,
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  strings.projectLoadFailed,
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                FilledButton.tonal(
+                                  key: const Key('project-list-retry'),
+                                  onPressed: () {
+                                    // Nulling the cached stream forces
+                                    // _summariesFor to re-subscribe on rebuild.
+                                    setState(() {
+                                      _summaryStream = null;
+                                    });
+                                  },
+                                  child: Text(strings.retry),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
                     }
-                    return _EmptyState(strings: strings, status: _status);
-                  }
-                  return ListView.separated(
-                    key: PageStorageKey<String>(
-                      searching
-                          ? 'project-list-search'
-                          : 'project-list-${_status.name}',
-                    ),
-                    controller:
-                        nestedInnerScrollControllerOf(context) ??
-                        listController,
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      16,
-                      16,
-                      floatingDockReservedSpaceOf(
-                        context,
-                        avoidFloatingActionButton: true,
-                      ),
-                    ),
-                    itemCount: summaries.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final summary = summaries[index];
-                      return ProjectSummaryCard(
-                        key: Key('project-card-${summary.project.id}'),
-                        summary: summary,
-                        outputPaths: outputPaths,
-                        onOpen: () => context.push(
-                          '/projects/${summary.project.id}',
-                          extra: summary.project,
+                    _syncNestedTabOffsets(context, searching: searching);
+                    if (!snapshot.hasData) {
+                      final skeletonCount = adaptiveSkeletonCount(
+                        viewportHeight: constraints.maxHeight,
+                        itemExtent: 118,
+                      );
+                      return Skeletonizer(
+                        key: const Key('project-list-skeleton'),
+                        child: ListView.separated(
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            16 + scrollChromeTopInsetOf(context),
+                            16,
+                            floatingDockReservedSpaceOf(
+                              context,
+                              avoidFloatingActionButton: true,
+                            ),
+                          ),
+                          itemCount: skeletonCount,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 12),
+                          itemBuilder: (_, _) => const _ProjectCardSkeleton(),
                         ),
                       );
-                    },
-                  );
-                },
-              ),
+                    }
+                    final summaries = snapshot.data!;
+                    if (summaries.isEmpty) {
+                      if (_searching && _query.trim().isNotEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Text(
+                              strings.noMatchingProjects,
+                              style: Theme.of(context).textTheme.headlineSmall,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      }
+                      return _EmptyState(strings: strings, status: _status);
+                    }
+                    return ListView.separated(
+                      key: PageStorageKey<String>(
+                        searching
+                            ? 'project-list-search'
+                            : 'project-list-${_status.name}',
+                      ),
+                      controller:
+                          nestedInnerScrollControllerOf(context) ??
+                          listController,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        16 + scrollChromeTopInsetOf(context),
+                        16,
+                        floatingDockReservedSpaceOf(
+                          context,
+                          avoidFloatingActionButton: true,
+                        ),
+                      ),
+                      itemCount: summaries.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final summary = summaries[index];
+                        return ProjectSummaryCard(
+                          key: Key('project-card-${summary.project.id}'),
+                          summary: summary,
+                          outputPaths: outputPaths,
+                          onOpen: () => context.push(
+                            '/projects/${summary.project.id}',
+                            extra: summary.project,
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+          ),
         ),
       ),
     );

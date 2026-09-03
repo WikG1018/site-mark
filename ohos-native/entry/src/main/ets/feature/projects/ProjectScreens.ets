@@ -21,6 +21,8 @@ import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { RecordRefreshGate } from '../records/RecordUiCoordinator';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
+import { ScrollChromeCoordinator } from '../../shared/ScrollChromePolicy';
+import { MotionPolicy } from '../../shared/MotionPolicy';
 import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { ProjectCard } from './ProjectComponents';
 import { CapturePageLoader, CapturePagedController } from '../records/CapturePagedController';
@@ -63,6 +65,7 @@ export struct ProjectListView {
   @State private loading: boolean = true;
   @State private message: string = '';
   @State private projectCount: number = 0;
+  @State private chromeVisible: boolean = true;
   private readonly projectSource: LazyListDataSource<ProjectSummary> =
     new LazyListDataSource<ProjectSummary>((item: ProjectSummary): string => item.project.id);
   private readonly projectScroller: Scroller = new Scroller();
@@ -76,11 +79,16 @@ export struct ProjectListView {
   private readonly memoryListener: (level: number) => void = (_level: number): void => {
     this.pageState.requestSafeReload();
   };
+  private readonly chromeListener: () => void = (): void => {
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
+  };
 
   aboutToAppear(): void {
     if (!this.pageState.activate()) {
       return;
     }
+    ScrollChromeCoordinator.shared().subscribe(this.chromeListener);
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
     const runtime = AppRuntime.require();
     const restored = runtime.screenState.project(this.lifecycle);
     this.searchText = restored.searchText;
@@ -107,6 +115,8 @@ export struct ProjectListView {
     this.loadGeneration += 1;
     AppRuntime.current?.unsubscribe(this.refreshListener);
     AppRuntime.current?.uiMemory.unregister(this.memoryListener);
+    ScrollChromeCoordinator.shared().unsubscribe(this.chromeListener);
+    ScrollChromeCoordinator.shared().setForce('project-search', false);
   }
 
   private cancelRestoreTimer(): void {
@@ -231,6 +241,7 @@ export struct ProjectListView {
 
   build() {
     Column() {
+      Column() {
       AppTopBar({ title: tr('项目', 'Projects'), subtitle: tr('工程现场按项目归档',
         'Organize site records by project'), actionLabel: tr('＋ 新建', '＋ New'),
         onAction: (): void => this.createProject() })
@@ -239,6 +250,7 @@ export struct ProjectListView {
           accessibilityLabel: tr('搜索项目名称', 'Search project names'),
           onChange: (value: string): void => {
             this.searchText = value;
+            ScrollChromeCoordinator.shared().setForce('project-search', value.length > 0);
             this.scheduleSearch();
           } })
         LifecycleSegment({ options: [
@@ -250,6 +262,11 @@ export struct ProjectListView {
       }
       .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 8 })
       .width('100%')
+      }
+      .width('100%')
+      .translate({ y: this.chromeVisible ? 0 : -(UiTokens.TOP_BAR_HEIGHT + 108) })
+      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+      .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
       if (this.message.length > 0 && this.projectCount > 0) {
         Column() {
           InlineErrorPanel({ message: this.message, retryLabel: tr('重试', 'Retry'),
@@ -292,6 +309,9 @@ export struct ProjectListView {
         .contentEndOffset(RootShellPolicy.overlayContentEndOffset(this.safeAreaBottomVp))
         .cachedCount(4)
         .edgeEffect(EdgeEffect.Spring)
+        .onDidScroll((scrollOffset: number, _scrollState: ScrollState): void => {
+          ScrollChromeCoordinator.shared().applyOffset(scrollOffset);
+        })
         .onScrollIndex((start: number, _end: number): void => {
           if (!this.pageState.canSaveScroll()) {
             return;
@@ -512,6 +532,7 @@ export struct ProjectDetailScreen {
   @State private mutationBusy: boolean = false;
   @State private confirmBatchDelete: boolean = false;
   @State private searchText: string = '';
+  @State private chromeVisible: boolean = true;
   @State private filterOpen: boolean = false;
   @State private yearText: string = '';
   @State private monthText: string = '';
@@ -532,6 +553,9 @@ export struct ProjectDetailScreen {
   private readonly refreshGate: RecordRefreshGate = new RecordRefreshGate();
   private readonly memoryListener: (level: number) => void = (_level: number): void => {
     this.pageState.requestSafeReload();
+  };
+  private readonly chromeListener: () => void = (): void => {
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
   };
 
   aboutToAppear(): void {
@@ -559,6 +583,8 @@ export struct ProjectDetailScreen {
     this.pageState.consumeSafeReloadRequest();
     runtime.subscribe(this.refreshListener);
     runtime.uiMemory.register(this.memoryListener);
+    ScrollChromeCoordinator.shared().subscribe(this.chromeListener);
+    this.chromeVisible = ScrollChromeCoordinator.shared().isVisible();
     this.refreshContent();
   }
 
@@ -580,6 +606,9 @@ export struct ProjectDetailScreen {
     this.controller.invalidate();
     AppRuntime.current?.unsubscribe(this.refreshListener);
     AppRuntime.current?.uiMemory.unregister(this.memoryListener);
+    ScrollChromeCoordinator.shared().unsubscribe(this.chromeListener);
+    ScrollChromeCoordinator.shared().setForce('project-detail-selection', false);
+    ScrollChromeCoordinator.shared().setForce('project-detail-search', false);
   }
 
   private currentFilter(): CaptureFilter {
@@ -758,6 +787,7 @@ export struct ProjectDetailScreen {
       this.selection.exit();
     }
     this.syncSelection();
+    ScrollChromeCoordinator.shared().setForce('project-detail-selection', enabled);
   }
 
   private pageBusy(): boolean {
@@ -1174,6 +1204,9 @@ export struct ProjectDetailScreen {
             actionEnabled: this.project !== null && !this.pageBusy(),
             onAction: (): void => { if (this.selectionMode) this.setSelectionMode(false);
               else this.editProject(); } })
+            .translate({ y: this.chromeVisible ? 0 : -UiTokens.TOP_BAR_HEIGHT })
+            .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+            .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
           if (this.project !== null) {
             List({ space: 10, scroller: this.detailScroller }) {
               ListItem() { this.projectSummary() }
@@ -1359,6 +1392,9 @@ export struct ProjectDetailScreen {
               this.batchFontScale(), this.safeAreaBottomVp))
             .cachedCount(4)
             .edgeEffect(EdgeEffect.Spring)
+            .onDidScroll((scrollOffset: number, _scrollState: ScrollState): void => {
+              ScrollChromeCoordinator.shared().applyOffset(scrollOffset);
+            })
             .onScrollIndex((start: number, _end: number): void => {
               if (!this.pageState.canSaveScroll()) {
                 return;
@@ -1386,6 +1422,9 @@ export struct ProjectDetailScreen {
             .shadow({ radius: 18, color: `#66${UiTokens.PRIMARY.substring(UiTokens.PRIMARY.length - 6)}`, offsetY: 7 })
             .margin({ right: 18, bottom: 18 + this.safeAreaBottomVp }).align(Alignment.BottomEnd)
             .enabled(this.canMutateProject())
+            .translate({ y: this.chromeVisible ? 0 : 80 })
+            .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+            .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
             .onClick((): void => { this.beginCapture(); })
         }
         if (this.selectionMode) {

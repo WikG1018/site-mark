@@ -4,6 +4,7 @@ import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 
 /// Cascading year → month → day filter for capture lists.
 ///
@@ -128,6 +129,8 @@ class _CaptureDateFilterBarState extends State<CaptureDateFilterBar> {
   }
 
   void _openFilterSheet(BuildContext context) {
+    final chrome = ScrollChromeScope.maybeOf(context);
+    chrome?.setForce('date-filter', true);
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -136,7 +139,7 @@ class _CaptureDateFilterBarState extends State<CaptureDateFilterBar> {
         options: _options,
         onChanged: widget.onChanged,
       ),
-    );
+    ).whenComplete(() => chrome?.setForce('date-filter', false));
   }
 
   Widget _menu({

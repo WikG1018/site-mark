@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:sitemark/motion.dart';
+import 'package:sitemark/navigation/scroll_chrome.dart';
 
 /// Standard page scaffold that follows each platform's navigation shape.
 ///
@@ -15,8 +17,10 @@ class AdaptivePageScaffold extends StatelessWidget {
     required this.body,
     this.titleWidget,
     this.actions,
+    this.bottom,
     this.bottomNavigationBar,
     this.floatingActionButton,
+    this.hideOnScroll = false,
     this.iosBodyPadding = const EdgeInsets.all(20),
   }) : _wrapBodyInList = true;
 
@@ -28,8 +32,10 @@ class AdaptivePageScaffold extends StatelessWidget {
     required this.body,
     this.titleWidget,
     this.actions,
+    this.bottom,
     this.bottomNavigationBar,
     this.floatingActionButton,
+    this.hideOnScroll = false,
     this.iosBodyPadding = const EdgeInsets.all(20),
   }) : _wrapBodyInList = false;
 
@@ -41,8 +47,12 @@ class AdaptivePageScaffold extends StatelessWidget {
   final Widget? titleWidget;
   final Widget body;
   final List<Widget>? actions;
+  final PreferredSizeWidget? bottom;
   final Widget? bottomNavigationBar;
   final Widget? floatingActionButton;
+
+  /// WeChat-style overlay chrome: the top bar slides away on scroll down.
+  final bool hideOnScroll;
 
   /// iOS wraps the boxed [body] in this padding; Material bodies are used
   /// verbatim, so screens that manage their own content padding pass
@@ -52,9 +62,16 @@ class AdaptivePageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (hideOnScroll) {
+      return _hideOnScrollScaffold(context);
+    }
     if (defaultTargetPlatform != TargetPlatform.iOS) {
       return Scaffold(
-        appBar: AppBar(title: titleWidget ?? Text(title), actions: actions),
+        appBar: AppBar(
+          title: titleWidget ?? Text(title),
+          actions: actions,
+          bottom: bottom,
+        ),
         body: _wrapBodyInList
             ? ListView(padding: const EdgeInsets.all(20), children: [body])
             : body,
@@ -84,6 +101,37 @@ class AdaptivePageScaffold extends StatelessWidget {
           );
     return Scaffold(
       body: scrollBody,
+      bottomNavigationBar: bottomNavigationBar,
+      floatingActionButton: floatingActionButton,
+    );
+  }
+
+  Widget _hideOnScrollScaffold(BuildContext context) {
+    final visible = ScrollChromeScope.visibleOf(context);
+    final pageBody = _wrapBodyInList
+        ? ListView(padding: const EdgeInsets.all(20), children: [body])
+        : body;
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        preferredSize: Size.fromHeight(
+          kToolbarHeight + (bottom?.preferredSize.height ?? 0),
+        ),
+        child: AnimatedSlide(
+          duration: scrollChromeAnimationOf(context),
+          curve: AppMotion.emphasized,
+          offset: visible ? Offset.zero : const Offset(0, -1),
+          child: IgnorePointer(
+            ignoring: !visible,
+            child: AppBar(
+              title: titleWidget ?? Text(title),
+              actions: actions,
+              bottom: bottom,
+            ),
+          ),
+        ),
+      ),
+      body: pageBody,
       bottomNavigationBar: bottomNavigationBar,
       floatingActionButton: floatingActionButton,
     );
