@@ -499,15 +499,15 @@ class AppStrings {
   String get about => _english ? 'About' : '关于';
   String get version => _english ? 'Version' : '版本';
   String get privacyStatements => _english
-      ? 'No ads · No account · No cloud sync · No network permission · System camera'
-      : '无广告 · 无账号 · 无云同步 · 发布包无网络权限 · 调用系统相机';
+      ? 'No ads · No account · No third-party cloud · Optional NAS sync · System camera'
+      : '无广告 · 无账号 · 无第三方云同步 · 可选 NAS 同步 · 调用系统相机';
   String get repository => _english ? 'GitHub Repository' : 'GitHub 代码仓库';
   String get repositoryValue => siteMarkRepositoryUrl;
   String get openLinkFailed =>
       _english ? 'Could not open the browser' : '无法打开浏览器';
   String get privacySummary => _english
-      ? 'The release APK requests no network permission; GitHub links open in an external browser. Foreground location is used only when requested, and a diagnostic bundle reaches the system share sheet only after confirmation.'
-      : '发布包不申请网络权限；GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。';
+      ? 'Offline by default. The only network surface is optional NAS sync (WebDAV, SFTP or SMB) that you enable yourself; it connects only to the server you configure. GitHub links open in an external browser. Foreground location is used only when requested, and a diagnostic bundle reaches the system share sheet only after confirmation.'
+      : '默认离线。唯一的网络出口是你主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB），只连接你自己的服务器。GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。';
   String get license => _english ? 'License' : '许可证';
   String get licenseValue => 'Apache-2.0';
   String get licenses => _english ? 'Open-source licenses' : '开源许可证';

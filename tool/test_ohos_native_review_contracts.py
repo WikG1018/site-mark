@@ -88,6 +88,43 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         self.assertIn("project_name_conflict", create)
         self.assertIn("project_name_conflict", rename)
 
+    def test_about_and_privacy_gate_describe_optional_nas_not_closed_network(self) -> None:
+        about = read(ETS / "feature" / "settings" / "SettingsScreens.ets")
+        index = read(ETS / "pages" / "Index.ets")
+        self.assertNotIn("不申请网络权限", about)
+        self.assertNotIn("does not request network permission", about)
+        self.assertIn("NAS", about)
+        self.assertNotIn("也不申请网络权限", index)
+        self.assertNotIn("or network permission", index)
+        self.assertIn("NAS", index)
+
+    def test_native_link_includes_time_service_for_iana_timezone(self) -> None:
+        cmake = read(OHOS / "entry" / "src" / "main" / "cpp" / "CMakeLists.txt")
+        self.assertIn("libtime_service_ndk.so", cmake)
+
+    def test_nas_sync_service_uses_arkts_legal_constructors_and_asset_maps(self) -> None:
+        source = read(ETS / "core" / "sync" / "NasSyncService.ets")
+        self.assertNotIn("constructor(private readonly database", source)
+        self.assertNotIn("readonly failure: string | null,", source)
+        self.assertIn("asset.Tag.ALIAS", source)
+        self.assertIn("asset.Tag.SECRET", source)
+        self.assertIn("bearerTypes", source)
+        self.assertNotIn("bearType", source)
+
+    def test_nas_settings_exposes_protocol_choice_and_shared_form_fields(self) -> None:
+        source = read(ETS / "feature" / "settings" / "NasSyncScreen.ets")
+        self.assertIn("LifecycleSegment", source)
+        self.assertIn("SegmentOption('webdav'", source)
+        self.assertIn("SegmentOption('sftp'", source)
+        self.assertIn("SegmentOption('smb'", source)
+        self.assertIn("FormField", source)
+        self.assertNotIn("padding({ top: 6, bottom: 6 })", source)
+        self.assertNotIn("private fieldRow", source)
+        self.assertNotIn("Align.Top", source)
+        self.assertNotIn("@State private enabled", source)
+        self.assertIn("SectionHeader", source)
+        self.assertIn("../../shared/AppComponents", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,8 +1,8 @@
 import hilog from '@ohos.hilog';
-import { AppDatabase, NasSyncConfigRecord, NasUploadCounts,
-  NAS_MAX_UPLOAD_ATTEMPTS } from '../../data/database/AppDatabase';
+import { AppDatabase, NasSyncConfigRecord, NasUploadCounts } from '../../data/database/AppDatabase';
 import { AppRuntime } from '../../app/AppRuntime';
-import { SectionHeader } from './SettingsScreens';
+import { LifecycleSegment, SectionHeader, SegmentOption } from '../../shared/AppComponents';
+import { FormField } from '../../shared/FormComponents';
 import { tr } from '../../shared/AppText';
 import { UiTokens } from '../../shared/UiTokens';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
@@ -29,7 +29,7 @@ export struct NasSyncScreen {
   @State private secureTls: boolean = true;
   @State private acceptInvalidTls: boolean = false;
   @State private wifiOnly: boolean = true;
-  @State private enabled: boolean = false;
+  @State private syncEnabled: boolean = false;
   @State private loaded: boolean = false;
   @State private busy: boolean = false;
   @State private message: string = '';
@@ -62,7 +62,7 @@ export struct NasSyncScreen {
     this.secureTls = config.secureTls;
     this.acceptInvalidTls = config.acceptInvalidTls;
     this.wifiOnly = config.wifiOnly;
-    this.enabled = config.enabled;
+    this.syncEnabled = config.enabled;
     this.counts = await this.database.countNasUploadStates();
     this.loaded = true;
   }
@@ -84,7 +84,7 @@ export struct NasSyncScreen {
     config.acceptInvalidTls = this.acceptInvalidTls;
     config.knownSftpFingerprint = this.knownFingerprint;
     config.wifiOnly = this.wifiOnly;
-    config.enabled = this.enabled;
+    config.enabled = this.syncEnabled;
     config.updatedAt = Date.now();
     return config;
   }
@@ -238,28 +238,64 @@ export struct NasSyncScreen {
   }
 
   build() {
-    Stack({ alignContent: Align.Top }) {
+    Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column() {
           SectionHeader({ title: tr('NAS 同步', 'NAS sync') })
-          Column() {
-            this.fieldRow('nas-host', tr('服务器地址', 'Server address'),
-              tr('例如 192.168.1.10', 'e.g. 192.168.1.10'), this.host,
-              (value: string) => { this.host = value; })
-            this.fieldRow('nas-port', tr('端口（可选）', 'Port (optional)'),
-              this.protocol === 'smb' ? '445' : (this.protocol === 'sftp' ? '22' : '80 或 443'),
-              this.portText, (value: string) => { this.portText = value; })
-            this.fieldRow('nas-username', tr('用户名', 'Username'), '',
-              this.username, (value: string) => { this.username = value; })
-            this.fieldRow('nas-password', tr('密码', 'Password'),
-              this.passwordStored ? tr('已保存，输入可更新', 'Saved; type to update') : '',
-              this.password, (value: string) => { this.password = value; }, true)
-            this.fieldRow('nas-root',
-              tr('根目录', 'Root path'),
-              this.protocol === 'smb'
+          Column({ space: 8 }) {
+            this.toggleRow(tr('启用 NAS 同步', 'Enable NAS sync'), this.syncEnabled,
+              (value: boolean) => { this.syncEnabled = value; })
+            Text(tr('协议', 'Protocol'))
+              .fontSize(16).fontWeight(FontWeight.Medium).fontColor(UiTokens.TEXT).width('100%')
+            LifecycleSegment({
+              options: [
+                new SegmentOption('webdav', tr('WebDAV', 'WebDAV')),
+                new SegmentOption('sftp', tr('SFTP', 'SFTP')),
+                new SegmentOption('smb', tr('SMB', 'SMB'))
+              ],
+              selectedValue: this.protocol,
+              controlEnabled: !this.busy,
+              onSelect: (value: string): void => { this.protocol = value; }
+            })
+            FormField({
+              label: tr('服务器地址', 'Server address'),
+              value: this.host,
+              placeholder: tr('例如 192.168.1.10', 'e.g. 192.168.1.10'),
+              fieldEnabled: !this.busy,
+              onChange: (value: string): void => { this.host = value; }
+            })
+            FormField({
+              label: tr('端口（可选）', 'Port (optional)'),
+              value: this.portText,
+              placeholder: this.protocol === 'smb' ? '445' :
+                (this.protocol === 'sftp' ? '22' : tr('80 或 443', '80 or 443')),
+              maxLength: 5,
+              fieldEnabled: !this.busy,
+              onChange: (value: string): void => { this.portText = value; }
+            })
+            FormField({
+              label: tr('用户名', 'Username'),
+              value: this.username,
+              fieldEnabled: !this.busy,
+              onChange: (value: string): void => { this.username = value; }
+            })
+            FormField({
+              label: tr('密码', 'Password'),
+              value: this.password,
+              helper: this.passwordStored ? tr('已保存，输入可更新', 'Saved; type to update') : '',
+              obscure: true,
+              fieldEnabled: !this.busy,
+              onChange: (value: string): void => { this.password = value; }
+            })
+            FormField({
+              label: tr('根目录', 'Root path'),
+              value: this.rootPath,
+              placeholder: this.protocol === 'smb'
                 ? tr('以共享名开头，例如 /media/SiteMark', 'Start with the share, e.g. /media/SiteMark')
                 : tr('例如 /SiteMark', 'e.g. /SiteMark'),
-              this.rootPath, (value: string) => { this.rootPath = value; })
+              fieldEnabled: !this.busy,
+              onChange: (value: string): void => { this.rootPath = value; }
+            })
             if (this.protocol === 'webdav') {
               this.toggleRow(tr('使用 HTTPS', 'Use HTTPS'), this.secureTls,
                 (value: boolean) => { this.secureTls = value; })
@@ -270,9 +306,7 @@ export struct NasSyncScreen {
             }
             this.toggleRow(tr('仅 Wi-Fi 上传', 'Upload on Wi-Fi only'), this.wifiOnly,
               (value: boolean) => { this.wifiOnly = value; })
-            this.toggleRow(tr('启用 NAS 同步', 'Enable NAS sync'), this.enabled,
-              (value: boolean) => { this.enabled = value; })
-            Row() {
+            Row({ space: 12 }) {
               Button(tr('测试连接', 'Test connection'))
                 .buttonStyle(ButtonStyleMode.NORMAL).role(ButtonRole.NORMAL)
                 .enabled(!this.busy)
@@ -282,7 +316,7 @@ export struct NasSyncScreen {
                 .enabled(!this.busy)
                 .onClick(() => this.save())
             }
-            .space(12).width('100%').padding({ top: 8, bottom: 8 })
+            .width('100%').padding({ top: 8, bottom: 8 })
             Text(tr(`待上传 ${this.counts.pending} · 失败 ${this.counts.failed} · 已上传 ${this.counts.uploaded}`,
               `Pending ${this.counts.pending} · Failed ${this.counts.failed} · Uploaded ${this.counts.uploaded}`))
               .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
@@ -311,23 +345,6 @@ export struct NasSyncScreen {
       .layoutWeight(1)
     }
     .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
-  }
-
-  @Builder
-  private fieldRow(key: string, label: string, hint: string, value: string,
-    onChange: (value: string) => void, obscure: boolean = false) {
-    Column() {
-      Text(label).fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
-      TextInput({ text: value, placeholder: hint })
-        .type(obscure ? InputType.Password : InputType.Normal)
-        .fontSize(15)
-        .id(`nas-field-${key}`)
-        .onChange((value: string) => onChange(value))
-        .width('100%')
-    }
-    .alignItems(HorizontalAlign.Start)
-    .padding({ top: 6, bottom: 6 })
-    .width('100%')
   }
 
   @Builder

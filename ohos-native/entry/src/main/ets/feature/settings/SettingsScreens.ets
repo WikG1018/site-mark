@@ -768,8 +768,8 @@ export struct AboutScreen {
             Text(tr('工程印记 · 鸿蒙原生版', 'SiteMark · Native HarmonyOS')).fontSize(18)
               .fontWeight(FontWeight.Medium)
             Text(this.versionLabel).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
-            Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无云同步；照片和项目数据在本机处理。',
-              'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or cloud sync; photos and project data are processed on-device.'))
+            Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无第三方云同步；照片和项目数据在本机处理。',
+              'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or third-party cloud sync; photos and project data are processed on-device.'))
               .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).textAlign(TextAlign.Center)
             Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
             Button(tr('GitHub 代码仓库\ngithub.com/WikG1018/site-mark',
@@ -778,8 +778,8 @@ export struct AboutScreen {
               .backgroundColor(UiTokens.PRIMARY_CONTAINER)
               .accessibilityText(tr('打开 GitHub 代码仓库', 'Open GitHub repository'))
               .onClick((): void => { AppRuntime.require().services.openRepository(); })
-            Text(tr('本应用不申请网络权限。点击仓库链接时会交给系统浏览器。',
-              'This app does not request network permission. Repository links open in the system browser.'))
+            Text(tr('默认离线。唯一的网络出口是你主动配置并启用的 NAS 同步，只连接你自己的服务器。点击仓库链接时会交给系统浏览器。',
+              'Offline by default. The only network surface is optional NAS sync that you enable yourself; it connects only to the server you configure. Repository links open in the system browser.'))
               .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
             Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
             Text(tr('本项目以 Apache-2.0 许可证开源，第三方组件声明见仓库 THIRD_PARTY_NOTICES.md。',

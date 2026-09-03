@@ -83,6 +83,11 @@ class ReleaseWorkflowTest(unittest.TestCase):
             with self.subTest(permission=permission):
                 self.assertIn(permission, workflow)
 
+    def test_ci_retries_flutter_pub_get(self) -> None:
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        self.assertGreaterEqual(workflow.count("flutter pub get failed; retrying"), 2)
+        self.assertIn("transient-download backoff", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

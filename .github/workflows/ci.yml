@@ -37,7 +37,18 @@ jobs:
           SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
           "$SDKMANAGER" 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;28.2.13676358'
-      - run: flutter pub get
+      - name: Install Flutter packages
+        run: |
+          for attempt in 1 2 3; do
+            if flutter pub get; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::flutter pub get failed; retrying after a transient-download backoff (attempt $attempt/3)."
+            sleep "$((attempt * 10))"
+          done
       - run: python -m pip install -r tool/icon-requirements.txt
       - run: python -m unittest tool.test_generate_launcher_icon tool.test_verify_launcher_icon_resources tool.test_verify_release_tag tool.test_release_workflow
       - name: Run HarmonyOS host tests
@@ -151,7 +162,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim
-      - run: flutter pub get
+      - name: Install Flutter packages
+        run: |
+          for attempt in 1 2 3; do
+            if flutter pub get; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::flutter pub get failed; retrying after a transient-download backoff (attempt $attempt/3)."
+            sleep "$((attempt * 10))"
+          done
       - name: Run Swift bridge policy tests
         run: swift test --package-path packages/sitemark_system_api/ios
       - name: Build unsigned iOS app

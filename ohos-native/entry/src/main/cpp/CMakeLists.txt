@@ -14,4 +14,8 @@ set_target_properties(sitemark_core PROPERTIES
 
 add_library(sitemark_native SHARED napi_init.cpp)
 target_include_directories(sitemark_native PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(sitemark_native PUBLIC sitemark_core libace_napi.z.so)
+# iana_time_zone (pulled in by chrono via the NAS SFTP/SMB stack) resolves
+# the zone through OH_TimeService_GetTimeZone; the static Rust archive
+# therefore needs the NDK time-service stub at final link.
+target_link_libraries(sitemark_native PUBLIC sitemark_core libace_napi.z.so
+  libtime_service_ndk.so)

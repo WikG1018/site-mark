@@ -19,10 +19,33 @@ interface NasTestDetailsValue {
 
 /** Result of a connection probe: a failure category, or the observed host key. */
 export class NasTestOutcome {
-  constructor(
-    readonly failure: string | null,
-    readonly sftpFingerprint: string | null) {
+  readonly failure: string | null;
+  readonly sftpFingerprint: string | null;
+
+  constructor(failure: string | null, sftpFingerprint: string | null) {
+    this.failure = failure;
+    this.sftpFingerprint = sftpFingerprint;
   }
+}
+
+/** JSON C ABI payload for nasTestConnection / the nested config on nasUpload. */
+class NasConfigPayload {
+  protocol: string = '';
+  host: string = '';
+  port: number | null = null;
+  username: string = '';
+  password: string = '';
+  root_path: string = '';
+  secure_tls: boolean = false;
+  accept_invalid_tls: boolean = false;
+  known_sftp_fingerprint: string | null = null;
+}
+
+class NasUploadPayload {
+  config: NasConfigPayload = new NasConfigPayload();
+  project_key: string = '';
+  file_name: string = '';
+  local_path: string = '';
 }
 
 /**
@@ -32,7 +55,7 @@ export class NasTestOutcome {
  * rejects on transport-level breakage.
  */
 export class NasNativeBridge {
-  private async call<T>(operation: string, payload: Record<string, Object | null>): Promise<NativeResponse<T>> {
+  private async call<T>(operation: string, payload: Object): Promise<NativeResponse<T>> {
     const request = `{"operation":${JSON.stringify(operation)},"payload":${JSON.stringify(payload)}}`;
     const encoded = await sitemarkNative.call(request);
     return JSON.parse(encoded) as NativeResponse<T>;
@@ -49,12 +72,12 @@ export class NasNativeBridge {
 
   async upload(config: NasSyncConfigRecord, password: string, localPath: string,
     projectKey: string, fileName: string): Promise<string | null> {
-    const response = await this.call<Object>('nasUpload', {
-      config: nasConfigPayload(config, password),
-      project_key: projectKey,
-      file_name: fileName,
-      local_path: localPath
-    });
+    const payload = new NasUploadPayload();
+    payload.config = nasConfigPayload(config, password);
+    payload.project_key = projectKey;
+    payload.file_name = fileName;
+    payload.local_path = localPath;
+    const response = await this.call<Object>('nasUpload', payload);
     if (response.ok) {
       return null;
     }
@@ -62,18 +85,18 @@ export class NasNativeBridge {
   }
 }
 
-function nasConfigPayload(config: NasSyncConfigRecord, password: string): Record<string, Object | null> {
-  return {
-    protocol: config.protocol,
-    host: config.host,
-    port: config.port,
-    username: config.username,
-    password: password,
-    root_path: config.rootPath,
-    secure_tls: config.secureTls,
-    accept_invalid_tls: config.acceptInvalidTls,
-    known_sftp_fingerprint: config.knownSftpFingerprint
-  };
+function nasConfigPayload(config: NasSyncConfigRecord, password: string): NasConfigPayload {
+  const payload = new NasConfigPayload();
+  payload.protocol = config.protocol;
+  payload.host = config.host;
+  payload.port = config.port;
+  payload.username = config.username;
+  payload.password = password;
+  payload.root_path = config.rootPath;
+  payload.secure_tls = config.secureTls;
+  payload.accept_invalid_tls = config.acceptInvalidTls;
+  payload.known_sftp_fingerprint = config.knownSftpFingerprint;
+  return payload;
 }
 
 /**
@@ -96,14 +119,25 @@ export function nasFailureCode(message: string): string {
 export class NasSecretStore {
   private static readonly ALIAS: string = 'sitemark.nas.password';
 
+  private aliasMap(): asset.AssetMap {
+    const attributes: asset.AssetMap = new Map();
+    attributes.set(asset.Tag.ALIAS, NasSyncService.encodeUtf8(NasSecretStore.ALIAS));
+    return attributes;
+  }
+
   async read(): Promise<string | null> {
     try {
-      const result = await asset.query({
-        ALIAS: NasSecretStore.ALIAS,
-        RETURN_TYPE: asset.PropertyType.ALL
-      } as asset.AssetMap);
-      const bytes = result.RESULT as Uint8Array;
-      return bytes === undefined ? null : NasSyncService.decodeUtf8(bytes);
+      const query = this.aliasMap();
+      query.set(asset.Tag.RETURN_TYPE, asset.ReturnType.ALL);
+      const rows: Array<asset.AssetMap> = await asset.query(query);
+      if (rows.length === 0) {
+        return null;
+      }
+      const secret = rows[0].get(asset.Tag.SECRET);
+      if (secret === undefined) {
+        return null;
+      }
+      return NasSyncService.decodeUtf8(secret as Uint8Array);
     } catch (_) {
       // Missing asset = no stored password.
       return null;
@@ -112,19 +146,19 @@ export class NasSecretStore {
 
   async write(password: string): Promise<void> {
     try {
-      await asset.remove({ ALIAS: NasSecretStore.ALIAS } as asset.AssetMap);
+      await asset.remove(this.aliasMap());
     } catch (_) {
       // First write: nothing to remove.
     }
-    await asset.add({
-      ALIAS: NasSecretStore.ALIAS,
-      DATA: NasSyncService.encodeUtf8(password)
-    } as asset.AssetMap);
+    const attributes = this.aliasMap();
+    attributes.set(asset.Tag.SECRET, NasSyncService.encodeUtf8(password));
+    attributes.set(asset.Tag.ACCESSIBILITY, asset.Accessibility.DEVICE_FIRST_UNLOCKED);
+    await asset.add(attributes);
   }
 
   async delete(): Promise<void> {
     try {
-      await asset.remove({ ALIAS: NasSecretStore.ALIAS } as asset.AssetMap);
+      await asset.remove(this.aliasMap());
     } catch (_) {
       // Already absent.
     }
@@ -142,10 +176,12 @@ export class NasSyncService {
 
   readonly bridge: NasNativeBridge = new NasNativeBridge();
   readonly secrets: NasSecretStore = new NasSecretStore();
+  private readonly database: AppDatabase;
   private syncing: boolean = false;
   private rerunQueued: boolean = false;
 
-  constructor(private readonly database: AppDatabase) {
+  constructor(database: AppDatabase) {
+    this.database = database;
   }
 
   static decodeUtf8(bytes: Uint8Array): string {
@@ -171,8 +207,14 @@ export class NasSyncService {
         return true;
       }
       const capabilities = await connection.getNetCapabilities(net);
-      return capabilities.bearType === connection.NetBearType.BEARER_WIFI ||
-        capabilities.bearType === connection.NetBearType.BEARER_ETHERNET;
+      const types: Array<connection.NetBearType> = capabilities.bearerTypes;
+      for (let i = 0; i < types.length; i++) {
+        if (types[i] === connection.NetBearType.BEARER_WIFI ||
+          types[i] === connection.NetBearType.BEARER_ETHERNET) {
+          return true;
+        }
+      }
+      return false;
     } catch (_) {
       return false;
     }

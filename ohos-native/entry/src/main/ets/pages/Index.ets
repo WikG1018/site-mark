@@ -440,8 +440,8 @@ struct Index {
           Column({ space: 13 }) {
             Text(tr('本机处理', 'On-device processing')).fontSize(17).fontWeight(FontWeight.Bold)
               .fontColor(UiTokens.PRIMARY).width('100%')
-            Text(tr('项目、照片、水印和诊断均在本机处理；应用没有广告、账号、云同步或统计上传，也不申请网络权限。',
-              'Projects, photos, watermarks, and diagnostics are processed on this device. There are no ads, accounts, cloud sync, analytics uploads, or network permission.'))
+            Text(tr('项目、照片、水印和诊断均在本机处理；应用没有广告、账号、第三方云同步或统计上传。唯一的网络出口是默认关闭的可选 NAS 同步，只连接你自己配置的服务器。',
+              'Projects, photos, watermarks, and diagnostics are processed on this device. There are no ads, accounts, third-party cloud sync, or analytics uploads. The only network surface is optional, off-by-default NAS sync to the server you configure.'))
               .fontSize(14).lineHeight(22).fontColor(UiTokens.TEXT).width('100%')
             Text(tr('系统相机', 'System camera')).fontSize(17).fontWeight(FontWeight.Bold)
               .fontColor(UiTokens.PRIMARY).width('100%')
