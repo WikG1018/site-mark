@@ -1094,6 +1094,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
   });
 
+  test('clampFullscreenPan lets a centered zoom pan to the right edge', () {
+    const viewport = Size(800, 600);
+    const scale = 2.0;
+    const centered = Offset(-400, -300);
+    expect(
+      clampFullscreenPan(viewport, scale, centered + const Offset(-80, 0)),
+      const Offset(-480, -300),
+    );
+    expect(
+      clampFullscreenPan(viewport, scale, const Offset(-900, 50)),
+      const Offset(-800, 0),
+    );
+  });
+
   testWidgets('single-finger drag pans the photo while zoomed', (tester) async {
     await pumpHost(tester);
     await doubleTapViewer(tester);
@@ -1111,6 +1125,29 @@ void main() {
     // pending timers behind.
     await tester.pump(const Duration(milliseconds: 350));
   });
+
+  testWidgets(
+    'a left drag after a centered zoom still reveals the right side',
+    (tester) async {
+      await pumpHost(tester);
+      await doubleTapViewer(tester);
+      expect(viewerScale(tester), closeTo(2, 0.001));
+      final panBefore = viewerPan(tester);
+      final viewport = tester.getSize(find.byType(InteractiveViewer));
+      // Centered 2x zoom sits on the old symmetric clamp's left wall
+      // (`-width/2`). A left drag must still move the photo so the right
+      // edge can enter the viewport.
+      expect(panBefore.dx, closeTo(-viewport.width / 2, 1));
+
+      await tester.drag(find.byType(InteractiveViewer), const Offset(-80, 0));
+      await tester.pump();
+
+      final panAfter = viewerPan(tester);
+      expect(panAfter.dx, lessThan(panBefore.dx - 1));
+      expect(panAfter.dx, greaterThanOrEqualTo(viewport.width * (1 - 2)));
+      await tester.pump(const Duration(milliseconds: 350));
+    },
+  );
 
   testWidgets('the finger left behind by a pinch keeps panning the photo', (
     tester,

@@ -12,6 +12,21 @@ import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 export 'package:sitemark/features/capture/capture_fullscreen_sequence.dart'
     show CaptureFullscreenPhoto;
 
+/// Clamps [pan] for `screen = scale * local + pan` (top-left origin).
+///
+/// A symmetric ±(scale-1)/2 range assumes a centered origin. After a
+/// centered pinch or double-tap the translation already sits on that
+/// range's negative wall, so a left drag cannot bring the right edge
+/// of a full-width photo into view.
+Offset clampFullscreenPan(Size viewport, double scale, Offset pan) {
+  if (scale <= 1) {
+    return Offset.zero;
+  }
+  final minX = viewport.width * (1 - scale);
+  final minY = viewport.height * (1 - scale);
+  return Offset(pan.dx.clamp(minX, 0.0), pan.dy.clamp(minY, 0.0));
+}
+
 /// Full-screen immersive photo viewer pushed from the detail image preview.
 ///
 /// Supports a list of image paths so the user can swipe left/right between
@@ -355,9 +370,7 @@ class _CaptureFullscreenScreenState
   Offset _clampPan(double scale, Offset pan) {
     final size = context.size;
     if (size == null) return pan;
-    final maxX = size.width * (scale - 1) / 2;
-    final maxY = size.height * (scale - 1) / 2;
-    return Offset(pan.dx.clamp(-maxX, maxX), pan.dy.clamp(-maxY, maxY));
+    return clampFullscreenPan(size, scale, pan);
   }
 
   void _onPointerDown(PointerDownEvent event) {
