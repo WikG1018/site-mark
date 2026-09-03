@@ -169,6 +169,36 @@ void main() {
     expect(states.single.lastAttemptAt, isNotNull);
   });
 
+  test('enqueues a capture that becomes ready after sync is enabled', () async {
+    await seedReadyCapture('a');
+    final uploader = _FakeUploader();
+    final coordinator = buildCoordinator(
+      connectivity: _FakeConnectivity(true),
+      uploader: uploader,
+    );
+    addTearDown(coordinator.dispose);
+    await database.saveNasSyncConfig(
+      protocol: 'webdav',
+      host: 'nas.local',
+      port: null,
+      username: 'builder',
+      rootPath: '/SiteMark',
+      secureTls: false,
+      acceptInvalidTls: false,
+      knownSftpFingerprint: null,
+      wifiOnly: true,
+      enabled: true,
+    );
+    final first = pumpUntil(coordinator, (s) => s.uploadedCount >= 1);
+    await coordinator.start();
+    await first;
+
+    final second = pumpUntil(coordinator, (s) => s.uploadedCount >= 2);
+    await seedReadyCapture('b');
+    await second;
+    expect(uploader.jobs, hasLength(2));
+  });
+
   test('uploads every ready capture serially when enabled', () async {
     await seedReadyCapture('a');
     await seedReadyCapture('b');

@@ -1,13 +1,7 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Security boundary: SiteMark is a fully offline app. INTERNET is
-         forbidden even in debug builds, so the debug APK shipped for
-         phone testing carries no network permission. Flutter's default
-         debug manifest declares INTERNET for hot reload / breakpoints;
-         we strip it at merge time. Hot reload over USB still works via
-         the local Dart VM service socket that does not require the
-         INTERNET permission. The main manifest also carries a
-         tools:node="remove" for INTERNET to cover library manifests. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- D-023: debug inherits INTERNET + ACCESS_NETWORK_STATE from the
+         main manifest so NAS sync can be tested on debug APKs. Flutter's
+         default debug INTERNET (hot reload) now matches that permission
+         instead of being stripped at merge time. -->
 </manifest>

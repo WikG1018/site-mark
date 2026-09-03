@@ -102,6 +102,13 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         cmake = read(OHOS / "entry" / "src" / "main" / "cpp" / "CMakeLists.txt")
         self.assertIn("libtime_service_ndk.so", cmake)
 
+    def test_nas_sync_service_enqueues_ready_captures_and_encodes_utf8(self) -> None:
+        source = read(ETS / "core" / "sync" / "NasSyncService.ets")
+        self.assertIn("enqueueReadyCapturesForNas()", source)
+        self.assertIn("util.TextEncoder", source)
+        self.assertIn("util.TextDecoder", source)
+        self.assertNotIn("String.fromCharCode", source)
+
     def test_nas_sync_service_uses_arkts_legal_constructors_and_asset_maps(self) -> None:
         source = read(ETS / "core" / "sync" / "NasSyncService.ets")
         self.assertNotIn("constructor(private readonly database", source)
@@ -124,6 +131,10 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         self.assertNotIn("@State private enabled", source)
         self.assertIn("SectionHeader", source)
         self.assertIn("../../shared/AppComponents", source)
+        self.assertIn("private async setEnabled", source)
+        self.assertIn("this.setEnabled(value)", source)
+        self.assertIn("WebDAV 仅支持 HTTP", source)
+        self.assertNotIn("使用 HTTPS", source)
 
 
 if __name__ == "__main__":

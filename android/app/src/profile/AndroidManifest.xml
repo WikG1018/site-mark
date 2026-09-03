@@ -1,10 +1,6 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Security boundary: SiteMark is a fully offline app. INTERNET is
-         forbidden even in profile builds. Flutter's default profile
-         manifest declares INTERNET for profiling tooling; we strip it
-         at merge time. The main manifest also carries a
-         tools:node="remove" for INTERNET to cover library manifests. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- D-023: profile inherits INTERNET + ACCESS_NETWORK_STATE from the
+         main manifest. Do not strip INTERNET here — NAS sync must work
+         on profile builds the same as release. -->
 </manifest>

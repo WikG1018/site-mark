@@ -1489,7 +1489,7 @@ export class NasSyncConfigRecord {
   port: number | null = null;
   username: string = '';
   rootPath: string = '/';
-  secureTls: boolean = true;
+  secureTls: boolean = false;
   acceptInvalidTls: boolean = false;
   knownSftpFingerprint: string | null = null;
   wifiOnly: boolean = true;
@@ -1497,7 +1497,7 @@ export class NasSyncConfigRecord {
   updatedAt: number = 0;
 
   constructor(protocol: string = 'webdav', host: string = '', port: number | null = null,
-    username: string = '', rootPath: string = '/', secureTls: boolean = true,
+    username: string = '', rootPath: string = '/', secureTls: boolean = false,
     acceptInvalidTls: boolean = false, knownSftpFingerprint: string | null = null,
     wifiOnly: boolean = true, enabled: boolean = false, updatedAt: number = 0) {
     this.protocol = protocol;

@@ -1,7 +1,7 @@
 # SiteMark 当前产品边界与总体架构
 
-> 状态：Android v1.0.8 当前设计 + HarmonyOS NEXT 原生模拟器验证版 + iOS Flutter 复用适配中
-> 适用版本：Android v1.0.8；HarmonyOS native 1.0.0 开发版；iOS Phase 0–3
+> 状态：Android v1.0.16 当前设计 + HarmonyOS NEXT 原生（native-v1.0.8）+ iOS Flutter 复用（签名待补）
+> 适用版本：Android v1.0.16；HarmonyOS native 1.0.8；iOS Phase 0–3、5–8 已落地，Phase 4 待 Apple Developer 账号
 > 本文描述已落地的产品边界；阶段性计划保留在 `docs/superpowers/` 供追溯。
 
 ## 1. 产品定位
@@ -103,12 +103,14 @@ U+0000 CHECK 和 `(project_id, name_key)` 唯一约束兜底，不负责文本�
 开机恢复、前台服务和 Android 13+ 通知能力。应用不申请：
 
 - `CAMERA`；
-- `INTERNET`、`ACCESS_NETWORK_STATE`；
 - 后台定位；
 - 广泛媒体访问或传统外部存储权限。
 
-GitHub 仓库链接由外部浏览器打开，SiteMark 本身不联网。SHA-256 用于本地完整性
-检查和记录追溯，不代表司法鉴定、可信时间戳或第三方存证。
+唯一的网络出口是默认关闭的可选 NAS 同步（D-023）：发布包为此声明
+`INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`），
+Android 17 局域网 NAS 另声明 `ACCESS_LOCAL_NETWORK`。GitHub 仓库链接由外部
+浏览器打开。SHA-256 用于本地完整性检查和记录追溯，不代表司法鉴定、可信时间戳
+或第三方存证。
 
 ## 6. 数据保留边界
 
@@ -154,7 +156,7 @@ v1.0.0 必须通过 Flutter 全量测试与静态分析、Rust fmt/Clippy/全量
 | --- | --- | --- |
 | 界面与导航 | ArkTS、ArkUI、Navigation、自定义悬浮 Dock | 项目/记录/设置三分支、中英文、深浅色、表单与批量交互 |
 | 数据 | RelationalStore schema 14、Preferences | 业务字段对齐 Android schema 11；额外表用于鸿蒙私有文件/媒体清理和中断恢复 |
-| 拍摄与系统 | CameraPicker、LocationKit、PhotoAccessHelper、DocumentViewPicker | 系统相机与系统保存面板；只声明前台定位权限 |
+| 拍摄与系统 | CameraPicker、LocationKit、PhotoAccessHelper、DocumentViewPicker | 系统相机与系统保存面板；声明前台定位权限，以及可选 NAS 同步所需的 INTERNET / GET_NETWORK_INFO |
 | 处理与恢复 | 应用存活期串行队列、启动对账、Preferences 发布日记 | 进程被系统结束后暂停，下次启动幂等收敛，不伪装 WorkManager |
 | 图像与归档 | 同一 `sitemark_core`，C ABI + C++ N-API，`arm64-v8a`/`x86_64` | 与 Android 复用水印、SHA-256、CSV/JSON/ZIP 算法；全分辨率数据不经 ArkTS 字节数组传递 |
 

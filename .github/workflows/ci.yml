@@ -119,10 +119,12 @@ jobs:
           PERMISSIONS="$($AAPT2 dump permissions "$APK")"
           # D-023: INTERNET/ACCESS_NETWORK_STATE are required for the opt-in
           # NAS sync (WebDAV to a user-configured server) and must be present;
+          # ACCESS_LOCAL_NETWORK is required on targetSdk 37 for LAN NAS.
           # everything broader stays forbidden.
           for REQUIRED in \
             android.permission.INTERNET \
-            android.permission.ACCESS_NETWORK_STATE; do
+            android.permission.ACCESS_NETWORK_STATE \
+            android.permission.ACCESS_LOCAL_NETWORK; do
             if ! grep -Fq "$REQUIRED" <<<"$PERMISSIONS"; then
               echo "APK is missing required permission $REQUIRED" >&2
               exit 1
@@ -201,6 +203,7 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print :NSCameraUsageDescription" "$PLIST" >/dev/null
           /usr/libexec/PlistBuddy -c "Print :NSLocationWhenInUseUsageDescription" "$PLIST" >/dev/null
           /usr/libexec/PlistBuddy -c "Print :NSPhotoLibraryAddUsageDescription" "$PLIST" >/dev/null
+          /usr/libexec/PlistBuddy -c "Print :NSLocalNetworkUsageDescription" "$PLIST" >/dev/null
           test -z "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$PLIST" 2>/dev/null)"
           test -z "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$PLIST" 2>/dev/null)"
           # Background task wiring: exactly one permitted identifier matching

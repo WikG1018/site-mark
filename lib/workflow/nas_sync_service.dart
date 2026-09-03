@@ -198,7 +198,10 @@ class NasSyncCoordinator {
     _captureUpdatesSubscription = _database
         .tableUpdates(TableUpdateQuery.onTable(_database.captureRecords))
         .listen((_) {
-          unawaited(_refreshAndDrain());
+          // A capture becoming ready after enable must be inserted, not
+          // only drained — otherwise new photos wait until the next
+          // config save or process restart.
+          unawaited(_refreshAndDrain(catchUp: true));
         });
     await _refreshAndDrain(catchUp: true);
   }

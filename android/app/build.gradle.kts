@@ -24,10 +24,11 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "io.github.wikg1018.sitemark"
     // Android 17 SDK (platforms;android-37.0). targetSdk 37 opts into the
-    // Android 17 targeted behavior changes; the audited ones (large-screen
-    // orientation rules, background activity launch, local network access,
-    // background audio) all turn out to be no-ops for this offline,
-    // system-camera, orientation-unlocked app — see the targetSdk 37 PR.
+    // Android 17 targeted behavior changes. Large-screen orientation,
+    // background activity launch, and background audio remain no-ops for
+    // this system-camera, orientation-unlocked app. Local network access
+    // is no longer a no-op: D-023 NAS sync to a LAN box needs
+    // ACCESS_LOCAL_NETWORK (see the main manifest).
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
