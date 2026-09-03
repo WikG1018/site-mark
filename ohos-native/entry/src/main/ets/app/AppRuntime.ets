@@ -107,6 +107,7 @@ export class AppRuntime {
     await runtime.applyAppearance();
     await runtime.startupRecovery.run();
     // Catch-up scan + drain for the NAS queue (no-op when sync is off).
+    runtime.nasSync.start();
     runtime.nasSync.syncNow();
     if (AppRuntime.current === null) {
       AppRuntime.current = runtime;

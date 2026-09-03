@@ -45,6 +45,11 @@ class SecureStorageNasCredentials implements NasCredentialStore {
 /// Network gate evaluated before every drain cycle.
 abstract interface class NasConnectivity {
   Future<bool> allowsUpload({required bool wifiOnly});
+
+  /// Fires when the available interfaces may have changed. The coordinator
+  /// re-evaluates the Wi-Fi gate; a wifi-only queue that parked on mobile
+  /// must resume when Wi-Fi returns, without waiting for the next photo.
+  Stream<void> get changes;
 }
 
 class ConnectivityNasConnectivity implements NasConnectivity {
@@ -63,6 +68,9 @@ class ConnectivityNasConnectivity implements NasConnectivity {
         types.contains(ConnectivityResult.mobile) ||
         types.contains(ConnectivityResult.vpn);
   }
+
+  @override
+  Stream<void> get changes => Connectivity().onConnectivityChanged.map((_) {});
 }
 
 /// One upload request, fully resolved: everything the protocol core needs
@@ -184,6 +192,7 @@ class NasSyncCoordinator {
   final _deferredThisCycle = <String>{};
   StreamSubscription? _configSubscription;
   StreamSubscription? _captureUpdatesSubscription;
+  StreamSubscription? _connectivitySubscription;
 
   Stream<NasSyncSnapshot> get state => _stateController.stream;
 
@@ -204,12 +213,18 @@ class NasSyncCoordinator {
           // config save or process restart.
           unawaited(_refreshAndDrain(catchUp: true));
         });
+    _connectivitySubscription = _connectivity.changes.listen((_) {
+      // Wifi-only rows stay pending on mobile; a later Wi-Fi/ethernet
+      // path must re-arm the drain without waiting for the next photo.
+      unawaited(_refreshAndDrain());
+    });
     await _refreshAndDrain(catchUp: true);
   }
 
   Future<void> dispose() async {
     await _configSubscription?.cancel();
     await _captureUpdatesSubscription?.cancel();
+    await _connectivitySubscription?.cancel();
     await _stateController.close();
   }
 

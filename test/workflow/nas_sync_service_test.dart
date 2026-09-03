@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -34,9 +35,18 @@ class _FakeConnectivity implements NasConnectivity {
   _FakeConnectivity(this.allowed);
 
   bool allowed;
+  final _changes = StreamController<void>.broadcast();
 
   @override
   Future<bool> allowsUpload({required bool wifiOnly}) async => allowed;
+
+  @override
+  Stream<void> get changes => _changes.stream;
+
+  void becomeAllowed() {
+    allowed = true;
+    _changes.add(null);
+  }
 }
 
 class _FakeUploader implements NasUploader {
@@ -275,6 +285,41 @@ void main() {
     expect(uploader.jobs, isEmpty);
     final states = await database.allNasUploadStates();
     expect(states.single.status, NasUploadStatus.pending);
+  });
+
+  test('drains pending uploads when connectivity becomes allowed', () async {
+    await seedReadyCapture('a');
+    final uploader = _FakeUploader();
+    final connectivity = _FakeConnectivity(false);
+    final coordinator = buildCoordinator(
+      connectivity: connectivity,
+      uploader: uploader,
+    );
+    addTearDown(coordinator.dispose);
+    await database.saveNasSyncConfig(
+      protocol: 'webdav',
+      host: 'nas.local',
+      port: null,
+      username: 'builder',
+      rootPath: '/SiteMark',
+      secureTls: false,
+      acceptInvalidTls: false,
+      knownSftpFingerprint: null,
+      wifiOnly: true,
+      enabled: true,
+    );
+    final parked = pumpUntil(
+      coordinator,
+      (s) => !s.active && s.pendingCount == 1,
+    );
+    await coordinator.start();
+    await parked;
+    expect(uploader.jobs, isEmpty);
+
+    final uploaded = pumpUntil(coordinator, (s) => s.uploadedCount >= 1);
+    connectivity.becomeAllowed();
+    await uploaded;
+    expect(uploader.jobs, hasLength(1));
   });
 
   test('missing password parks the upload in config_invalid', () async {

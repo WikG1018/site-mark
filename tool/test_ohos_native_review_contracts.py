@@ -188,6 +188,23 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         source = read(ETS / "feature" / "backup" / "RestoreService.ets")
         self.assertIn("nasSync.syncNow()", source)
 
+    def test_nas_sync_rearms_on_network_change(self) -> None:
+        source = read(ETS / "core" / "sync" / "NasSyncService.ets")
+        runtime = read(ETS / "app" / "AppRuntime.ets")
+        self.assertIn("createNetConnection", source)
+        self.assertIn("netAvailable", source)
+        self.assertIn("netCapabilitiesChange", source)
+        self.assertIn("nasSync.start()", runtime)
+
+    def test_nas_settings_subscribe_to_live_queue_counts(self) -> None:
+        service = read(ETS / "core" / "sync" / "NasSyncService.ets")
+        screen = read(ETS / "feature" / "settings" / "NasSyncScreen.ets")
+        self.assertIn("addCountsListener", service)
+        self.assertIn("removeCountsListener", service)
+        self.assertIn("notifyCounts", service)
+        self.assertIn("addCountsListener", screen)
+        self.assertIn("aboutToDisappear", screen)
+
 
 if __name__ == "__main__":
     unittest.main()
