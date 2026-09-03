@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.15`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.16`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -10,14 +10,14 @@ English | [简体中文](README.md)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.15-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.15)
+[![Latest](https://img.shields.io/badge/latest-v1.0.16-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.16)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.8-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.8)
 
-**Current stable version (Latest): [`v1.0.15`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.15)**
+**Current stable version (Latest): [`v1.0.16`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.16)**
 
 **Current HarmonyOS native version: [`native-v1.0.8`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.8) (HarmonyOS NEXT, unsigned HAP)**
 
-Requires Android 12 (API 31) or later. `v1.0.15` is set as Latest: on top of the optional NAS sync added in v1.0.14 across all three product lines (WebDAV/SFTP/SMB, off by default, talking only to the server you configure, with passwords in system secure storage; the packages declare `INTERNET` / `ACCESS_NETWORK_STATE` plus `GET_NETWORK_INFO` on HarmonyOS solely for it), this release ships a full audit pass — queue counts and a retry entry on the settings page, stored-password connection tests, port validation, and deferral for captures still processing. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
+Requires Android 12 (API 31) or later. `v1.0.16` is set as Latest: it polishes the NAS sync settings layout — field spacing, group rhythm, and a protocol label plus segmented button aligned with the global settings conventions (48dp tap target). The feature baseline matches v1.0.15: the optional three-protocol NAS sync (WebDAV/SFTP/SMB, off by default, passwords in system secure storage), queue counts, a retry entry for failed uploads, and the full audit fixes. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
 
 ## Download
 
@@ -25,9 +25,9 @@ Requires Android 12 (API 31) or later. `v1.0.15` is set as Latest: on top of the
 
 | Package | Applies to | Download |
 | --- | --- | --- |
-| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.15-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.15/sitemark-v1.0.15-arm64.apk) |
-| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.15-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.15/sitemark-v1.0.15-universal.apk) |
-| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.15/SHA256SUMS.txt) |
+| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.16-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.16/sitemark-v1.0.16-arm64.apk) |
+| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.16-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.16/sitemark-v1.0.16-universal.apk) |
+| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.16/SHA256SUMS.txt) |
 
 ### HarmonyOS native (native-v1.0.8)
 
@@ -68,7 +68,8 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releases) for the full notes.
 
-- **v1.0.15 / native-v1.0.8** (Latest): full NAS audit fixes — the settings page gains upload-queue counts and a "Retry failed uploads" entry; testing the connection uses the stored password when the field is left blank; out-of-range ports are rejected before save/test; captures still processing are deferred without burning the retry budget (no busy-spinning); uploader and credential-read failures degrade to categorized errors.
+- **v1.0.16** (Latest): NAS settings layout polish — field spacing and group rhythm, with the protocol label and segmented button aligned to the global settings conventions (48dp tap target); Android-only, feature parity with v1.0.15.
+- **v1.0.15 / native-v1.0.8**: full NAS audit fixes — the settings page gains upload-queue counts and a "Retry failed uploads" entry; testing the connection uses the stored password when the field is left blank; out-of-range ports are rejected before save/test; captures still processing are deferred without burning the retry budget (no busy-spinning); uploader and credential-read failures degrade to categorized errors.
 - **v1.0.14 / native-v1.0.7**: all three product lines gain an optional NAS sync (WebDAV/SFTP/SMB, off by default, talking only to the user-configured server, passwords in system secure storage); the Android/iOS database migrates to v14 (NAS config and upload bookkeeping tables), the HarmonyOS RDB to v15; uploads run on a serial queue with a 5-attempt budget, and the first SFTP connection verifies the host key fingerprint.
 - **v1.0.13 / native-v1.0.6**: fixed the fullscreen photo viewer, where a photo zoomed with a two-finger pinch could not be dragged with one finger to reach the corners (fixed on both Android and HarmonyOS native); added an English README with language switching.
 - **v1.0.12 / native-v1.0.5** (Pre-release): full dual-platform audit fixes (read-only batch bypass, cross-platform watermark domain unification, dark-mode contrast, cold-start notification routing, draft durability).
@@ -267,7 +268,7 @@ The release gates for the current version include:
 
 When HarmonyOS native code is involved, the checks additionally cover the HarmonyOS manifest's minimal permission set and dual-ABI configuration, and run Rust Clippy/tests for the `ohos-native` feature separately. ArkTS tests and HAP packaging need the DevEco Studio SDK and are currently verified in a local DevEco environment.
 
-Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.15` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
+Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.16` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
 
 ## Local build
 
