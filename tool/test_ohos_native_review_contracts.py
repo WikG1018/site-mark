@@ -98,6 +98,10 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         self.assertNotIn("or network permission", index)
         self.assertIn("NAS", index)
 
+    def test_native_link_includes_time_service_for_iana_timezone(self) -> None:
+        cmake = read(OHOS / "entry" / "src" / "main" / "cpp" / "CMakeLists.txt")
+        self.assertIn("libtime_service_ndk.so", cmake)
+
     def test_nas_sync_service_uses_arkts_legal_constructors_and_asset_maps(self) -> None:
         source = read(ETS / "core" / "sync" / "NasSyncService.ets")
         self.assertNotIn("constructor(private readonly database", source)
