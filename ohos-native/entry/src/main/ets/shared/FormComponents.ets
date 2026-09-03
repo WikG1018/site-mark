@@ -27,6 +27,7 @@ export struct FormField {
   @Prop helper: string = '';
   @Prop maxLength: number = 256;
   @Prop fieldEnabled: boolean = true;
+  @Prop obscure: boolean = false;
   onChange: (value: string) => void = (_value: string): void => {};
   onFieldFocus: () => void = (): void => {};
 
@@ -47,6 +48,7 @@ export struct FormField {
       }
       .width('100%')
       TextInput({ text: this.value, placeholder: this.placeholder })
+        .type(this.obscure ? InputType.Password : InputType.Normal)
         .width('100%')
         .height(FormLayoutMetrics.SINGLE_LINE_HEIGHT)
         .fontSize(15)

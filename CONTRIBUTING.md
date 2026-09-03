@@ -3,8 +3,10 @@
 Thank you for helping improve SiteMark.
 
 1. Open an issue describing the behavior or defect before a large change.
-2. Keep the Android release manifest free of INTERNET, CAMERA, background
-   location, broad storage, advertising, and analytics permissions/dependencies.
+2. Keep the Android release manifest free of CAMERA, background location,
+   broad storage, advertising, and analytics permissions/dependencies.
+   `INTERNET` and `ACCESS_NETWORK_STATE` exist only for the opt-in NAS sync
+   (D-023) and must stay in the release APK.
 3. Add a failing focused test before changing product behavior.
 4. Run Flutter formatting, analysis and tests, then Rust formatting, Clippy and
    tests before opening a pull request.
