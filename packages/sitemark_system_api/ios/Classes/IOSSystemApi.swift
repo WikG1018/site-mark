@@ -216,6 +216,19 @@ extension IOSSystemApi: SiteMarkSystemApi {
         Self.mappedPermissionState(CLLocationManager.authorizationStatus())
     }
 
+    func getLocalNetworkPermissionState() throws -> LocationPermissionState {
+        // iOS has no ACCESS_LOCAL_NETWORK analogue. The system prompt is
+        // triggered by the first local-network socket once
+        // NSLocalNetworkUsageDescription is present (D-023).
+        .granted
+    }
+
+    func requestLocalNetworkPermission(
+        completion: @escaping (Result<LocationPermissionState, Error>) -> Void
+    ) {
+        completion(.success(.granted))
+    }
+
     func requestLocationPermission(
         completion: @escaping (Result<LocationPermissionState, Error>) -> Void
     ) {

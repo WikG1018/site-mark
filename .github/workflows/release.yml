@@ -119,11 +119,12 @@ jobs:
               fail_metadata "$APK expected targetSdkVersion=37"
             PERMISSIONS="$($AAPT2 dump permissions "$APK")"
             # D-023: INTERNET/ACCESS_NETWORK_STATE are required for the
-            # opt-in NAS sync (WebDAV to a user-configured server) and must
-            # be present; everything broader stays forbidden.
+            # opt-in NAS sync; ACCESS_LOCAL_NETWORK is required on
+            # targetSdk 37 for LAN NAS.
             for REQUIRED in \
               android.permission.INTERNET \
-              android.permission.ACCESS_NETWORK_STATE; do
+              android.permission.ACCESS_NETWORK_STATE \
+              android.permission.ACCESS_LOCAL_NETWORK; do
               if ! grep -Fq "$REQUIRED" <<<"$PERMISSIONS"; then
                 fail_metadata "$APK missing required permission $REQUIRED"
               fi

@@ -666,6 +666,13 @@ interface SiteMarkSystemApi {
   fun finishCameraCapture(captureId: String, keepOriginal: Boolean)
   fun getLocationPermissionState(): LocationPermissionState
   fun requestLocationPermission(callback: (Result<LocationPermissionState>) -> Unit)
+  /**
+   * Android 17 LAN NAS (ACCESS_LOCAL_NETWORK). Older Android and iOS
+   * report [LocationPermissionState.granted] — iOS prompts via Info.plist
+   * on first local-network use.
+   */
+  fun getLocalNetworkPermissionState(): LocationPermissionState
+  fun requestLocalNetworkPermission(callback: (Result<LocationPermissionState>) -> Unit)
   fun openApplicationSettings()
   fun inspectImage(path: String, callback: (Result<ImageMetadataResult>) -> Unit)
   fun requestCurrentLocation(timeoutMillis: Long, callback: (Result<LocationResult>) -> Unit)
@@ -793,6 +800,39 @@ interface SiteMarkSystemApi {
         if (api != null) {
           channel.setMessageHandler { _, reply ->
             api.requestLocationPermission{ result: Result<LocationPermissionState> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SystemApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SystemApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.getLocalNetworkPermissionState$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getLocalNetworkPermissionState())
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.SiteMarkSystemApi.requestLocalNetworkPermission$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.requestLocalNetworkPermission{ result: Result<LocationPermissionState> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(SystemApiPigeonUtils.wrapError(error))

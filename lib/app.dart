@@ -52,6 +52,7 @@ import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
 import 'package:sitemark/workflow/capture_media_service.dart';
 import 'package:sitemark/workflow/capture_template_service.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
+import 'package:sitemark/workflow/local_network_permission.dart';
 import 'package:sitemark/workflow/location_permission_service.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_export_service.dart';
@@ -159,6 +160,14 @@ final captureOutputPathsProvider = Provider<CaptureOutputPaths>(
 
 final nasCredentialStoreProvider = Provider<NasCredentialStore>((ref) {
   return SecureStorageNasCredentials();
+});
+
+final localNetworkPermissionProvider = Provider<LocalNetworkPermission>((ref) {
+  return PigeonLocalNetworkPermission();
+});
+
+final localNetworkAccessProvider = Provider<LocalNetworkAccess>((ref) {
+  return LocalNetworkAccess(ref.watch(localNetworkPermissionProvider));
 });
 
 final nasConnectivityProvider = Provider<NasConnectivity>((ref) {

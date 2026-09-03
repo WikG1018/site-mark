@@ -213,7 +213,7 @@ Privacy boundaries:
 | `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION` | Optional foreground location; used only when you request it, and declining does not block taking photos |
 | `POST_NOTIFICATIONS` | Android 13+ notifications for finished background processing |
 | `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE` | WorkManager local background processing, retries, and resume |
-| `INTERNET`, `ACCESS_NETWORK_STATE` | Optional NAS sync (WebDAV/SFTP/SMB); only used to reach the NAS server you configure after enabling the feature, plus network-state checks for the Wi-Fi-only gate |
+| `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_LOCAL_NETWORK` | Optional NAS sync (WebDAV/SFTP/SMB); only used to reach the NAS server you configure after enabling the feature. Network state backs the Wi-Fi-only gate; Android 17 LAN NAS declares and runtime-requests the local-network permission |
 
 The released APK does not request:
 

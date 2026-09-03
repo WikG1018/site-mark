@@ -55,6 +55,9 @@ class AndroidSystemApi(
     private var locationCancellation: CancellationSignal? = null
     private var locationTimeout: Runnable? = null
     private var permissionCallback: ((Result<LocationPermissionState>) -> Unit)? = null
+    private var localNetworkPermissionCallback: ((Result<LocationPermissionState>) -> Unit)? = null
+    /** Test seam: production reads [android.os.Build.VERSION.SDK_INT]. */
+    internal var sdkIntForTest: Int? = null
     private var requestedLocationTimeoutMillis: Long = DEFAULT_LOCATION_TIMEOUT_MILLIS
 
     /** Attaches a foreground [Activity] enabling camera launch and permission requests. */
@@ -210,6 +213,41 @@ class AndroidSystemApi(
         )
     }
 
+    override fun getLocalNetworkPermissionState(): LocationPermissionState {
+        if (!localNetworkEnforced()) return LocationPermissionState.GRANTED
+        if (hasLocalNetworkPermission()) return LocationPermissionState.GRANTED
+        val asked = preferences.getBoolean(KEY_LOCAL_NETWORK_PERMISSION_REQUESTED, false)
+        val canExplain = activity?.shouldShowRequestPermissionRationale(
+            ACCESS_LOCAL_NETWORK_PERMISSION,
+        ) == true
+        return if (asked && !canExplain) {
+            LocationPermissionState.PERMANENTLY_DENIED
+        } else {
+            LocationPermissionState.DENIED
+        }
+    }
+
+    override fun requestLocalNetworkPermission(
+        callback: (Result<LocationPermissionState>) -> Unit,
+    ) {
+        if (!localNetworkEnforced() || hasLocalNetworkPermission()) {
+            callback(Result.success(LocationPermissionState.GRANTED))
+            return
+        }
+        val foreground = try {
+            requireActivity()
+        } catch (error: IllegalStateException) {
+            callback(Result.failure(error))
+            return
+        }
+        localNetworkPermissionCallback = callback
+        preferences.edit().putBoolean(KEY_LOCAL_NETWORK_PERMISSION_REQUESTED, true).apply()
+        foreground.requestPermissions(
+            arrayOf(ACCESS_LOCAL_NETWORK_PERMISSION),
+            REQUEST_LOCAL_NETWORK_PERMISSION,
+        )
+    }
+
     override fun openApplicationSettings() {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -263,6 +301,12 @@ class AndroidSystemApi(
         val callback = permissionCallback ?: return
         permissionCallback = null
         callback(Result.success(getLocationPermissionState()))
+    }
+
+    fun onLocalNetworkPermissionResult() {
+        val callback = localNetworkPermissionCallback ?: return
+        localNetworkPermissionCallback = null
+        callback(Result.success(getLocalNetworkPermissionState()))
     }
 
     private fun startCurrentLocation() {
@@ -581,6 +625,14 @@ class AndroidSystemApi(
             PackageManager.PERMISSION_GRANTED
     }
 
+    private fun localNetworkEnforced(): Boolean =
+        (sdkIntForTest ?: android.os.Build.VERSION.SDK_INT) >= LOCAL_NETWORK_ENFORCEMENT_SDK
+
+    private fun hasLocalNetworkPermission(): Boolean {
+        return context.checkSelfPermission(ACCESS_LOCAL_NETWORK_PERMISSION) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
     private fun preferredLocationProvider(): String? {
         val hasFine = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
@@ -618,8 +670,12 @@ class AndroidSystemApi(
         const val REQUEST_CAMERA_CAPTURE = 41001
         const val REQUEST_LOCATION_PERMISSION = 41002
         const val REQUEST_ARCHIVE_SAVE = 41003
+        const val REQUEST_LOCAL_NETWORK_PERMISSION = 41004
+        const val ACCESS_LOCAL_NETWORK_PERMISSION = "android.permission.ACCESS_LOCAL_NETWORK"
+        const val LOCAL_NETWORK_ENFORCEMENT_SDK = 37
         private const val DEFAULT_LOCATION_TIMEOUT_MILLIS = 10_000L
         private const val KEY_LOCATION_PERMISSION_REQUESTED = "location_permission_requested"
+        private const val KEY_LOCAL_NETWORK_PERMISSION_REQUESTED = "local_network_permission_requested"
         private const val PUBLISH_JOURNAL_PREFERENCES = "publish_journal"
     }
 

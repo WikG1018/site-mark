@@ -138,6 +138,14 @@ abstract class SiteMarkSystemApi {
   @async
   LocationPermissionState requestLocationPermission();
 
+  /// Android 17 LAN NAS (ACCESS_LOCAL_NETWORK). Older Android and iOS
+  /// report [LocationPermissionState.granted] — iOS prompts via Info.plist
+  /// on first local-network use.
+  LocationPermissionState getLocalNetworkPermissionState();
+
+  @async
+  LocationPermissionState requestLocalNetworkPermission();
+
   void openApplicationSettings();
 
   @async

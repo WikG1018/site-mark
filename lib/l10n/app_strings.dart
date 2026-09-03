@@ -915,6 +915,9 @@ class AppStrings {
   String get nasFingerprintAccept => _english ? 'Trust and continue' : '信任并继续';
   String get nasHostRequired =>
       _english ? 'Enter the server address first' : '请先填写服务器地址';
+  String get nasLocalNetworkRequired => _english
+      ? 'Android needs local network access to reach a LAN NAS. Grant it in the system prompt, or use a public server address.'
+      : '连接局域网 NAS 需要本机的本地网络权限。请在系统提示中允许，或改用公网地址。';
   String nasQueueSummary(int pending, int failed, int uploaded) => _english
       ? 'Pending $pending · Failed $failed · Uploaded $uploaded'
       : '待上传 $pending · 失败 $failed · 已上传 $uploaded';

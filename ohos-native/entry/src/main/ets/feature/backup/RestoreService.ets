@@ -191,6 +191,7 @@ export class ProjectRestoreService {
       try { await this.runtime.restoreJournal.clear(operationId); } catch (_) {}
       await this.runtime.recordDiagnosticBestEffort('restore', 'success', 0);
       this.runtime.notifyDataChanged();
+      this.runtime.nasSync.syncNow();
       return new RestoreResult(plans.length, photoCount, renamedCount,
         plans.map((project: RestoredProjectInput): string => project.name));
     } catch (error) {

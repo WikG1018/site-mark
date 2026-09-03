@@ -26,7 +26,7 @@ export struct NasSyncScreen {
   @State private portText: string = '';
   @State private username: string = '';
   @State private rootPath: string = '/';
-  @State private secureTls: boolean = true;
+  @State private secureTls: boolean = false;
   @State private acceptInvalidTls: boolean = false;
   @State private wifiOnly: boolean = true;
   @State private syncEnabled: boolean = false;
@@ -80,8 +80,9 @@ export struct NasSyncScreen {
     config.port = Number.isFinite(port) && this.portText.trim().length > 0 ? port : null;
     config.username = this.username.trim();
     config.rootPath = this.rootPath.trim().length === 0 ? '/' : this.rootPath.trim();
-    config.secureTls = this.secureTls;
-    config.acceptInvalidTls = this.acceptInvalidTls;
+    // ohos-native WebDAV has no TLS backend (D-023). Never send HTTPS.
+    config.secureTls = this.protocol === 'webdav' ? false : this.secureTls;
+    config.acceptInvalidTls = false;
     config.knownSftpFingerprint = this.knownFingerprint;
     config.wifiOnly = this.wifiOnly;
     config.enabled = this.syncEnabled;
@@ -98,15 +99,31 @@ export struct NasSyncScreen {
     if (text.length === 0) {
       return false;
     }
+    if (!/^[0-9]+$/.test(text)) {
+      return true;
+    }
     const port = Number.parseInt(text, 10);
     return !Number.isFinite(port) || port < 1 || port > 65535;
+  }
+
+  /**
+   * The enable switch is the master of the upload queue, matching Flutter:
+   * persist immediately, and refuse to turn on until a host exists.
+   */
+  private async setEnabled(value: boolean): Promise<void> {
+    if (value && this.host.trim().length === 0) {
+      this.showToast(tr('请先填写服务器地址', 'Enter the server address first'), true);
+      return;
+    }
+    this.syncEnabled = value;
+    await this.save();
   }
 
   private async save(): Promise<void> {
     if (this.database === null) {
       return;
     }
-    if (this.host.trim().length === 0) {
+    if (this.host.trim().length === 0 && this.syncEnabled) {
       this.showToast(tr('请先填写服务器地址', 'Enter the server address first'), true);
       return;
     }
@@ -136,7 +153,8 @@ export struct NasSyncScreen {
   }
 
   private async testConnection(): Promise<void> {
-    if (this.database === null) {
+    const database = this.database;
+    if (database === null) {
       return;
     }
     if (this.host.trim().length === 0) {
@@ -163,6 +181,7 @@ export struct NasSyncScreen {
           return;
         }
         this.knownFingerprint = outcome.sftpFingerprint;
+        await database.saveNasSyncConfig(this.buildConfig());
       }
       this.showToast(tr('连接成功', 'Connection successful'), false);
     } catch (error) {
@@ -210,6 +229,9 @@ export struct NasSyncScreen {
       return tr('当前平台的 WebDAV 暂不支持 HTTPS，可改用 HTTP 或 SFTP/SMB。',
         'WebDAV over HTTPS is unavailable on this platform. Use HTTP, SFTP or SMB.');
     }
+    if (code === 'tls_error') {
+      return tr('TLS 或证书错误', 'TLS or certificate error');
+    }
     if (code === 'host_key_changed') {
       return tr('服务器指纹已变化，请重新测试连接并确认。',
         'The server fingerprint changed. Re-run the connection test to confirm.');
@@ -244,7 +266,7 @@ export struct NasSyncScreen {
           SectionHeader({ title: tr('NAS 同步', 'NAS sync') })
           Column({ space: 8 }) {
             this.toggleRow(tr('启用 NAS 同步', 'Enable NAS sync'), this.syncEnabled,
-              (value: boolean) => { this.syncEnabled = value; })
+              (value: boolean) => { this.setEnabled(value); })
             Text(tr('协议', 'Protocol'))
               .fontSize(16).fontWeight(FontWeight.Medium).fontColor(UiTokens.TEXT).width('100%')
             LifecycleSegment({
@@ -268,7 +290,7 @@ export struct NasSyncScreen {
               label: tr('端口（可选）', 'Port (optional)'),
               value: this.portText,
               placeholder: this.protocol === 'smb' ? '445' :
-                (this.protocol === 'sftp' ? '22' : tr('80 或 443', '80 or 443')),
+                (this.protocol === 'sftp' ? '22' : '80'),
               maxLength: 5,
               fieldEnabled: !this.busy,
               onChange: (value: string): void => { this.portText = value; }
@@ -297,12 +319,9 @@ export struct NasSyncScreen {
               onChange: (value: string): void => { this.rootPath = value; }
             })
             if (this.protocol === 'webdav') {
-              this.toggleRow(tr('使用 HTTPS', 'Use HTTPS'), this.secureTls,
-                (value: boolean) => { this.secureTls = value; })
-              if (this.secureTls) {
-                this.toggleRow(tr('接受自签名证书', 'Accept self-signed certificates'),
-                  this.acceptInvalidTls, (value: boolean) => { this.acceptInvalidTls = value; })
-              }
+              Text(tr('当前平台的 WebDAV 仅支持 HTTP。加密传输请改用 SFTP 或 SMB。',
+                'WebDAV on this platform is HTTP only. Use SFTP or SMB for encrypted transport.'))
+                .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
             }
             this.toggleRow(tr('仅 Wi-Fi 上传', 'Upload on Wi-Fi only'), this.wifiOnly,
               (value: boolean) => { this.wifiOnly = value; })

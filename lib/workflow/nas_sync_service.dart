@@ -180,6 +180,7 @@ class NasSyncCoordinator {
   final _stateController = StreamController<NasSyncSnapshot>.broadcast();
   bool _started = false;
   bool _syncing = false;
+  bool _rerunQueued = false;
   final _deferredThisCycle = <String>{};
   StreamSubscription? _configSubscription;
   StreamSubscription? _captureUpdatesSubscription;
@@ -198,7 +199,10 @@ class NasSyncCoordinator {
     _captureUpdatesSubscription = _database
         .tableUpdates(TableUpdateQuery.onTable(_database.captureRecords))
         .listen((_) {
-          unawaited(_refreshAndDrain());
+          // A capture becoming ready after enable must be inserted, not
+          // only drained — otherwise new photos wait until the next
+          // config save or process restart.
+          unawaited(_refreshAndDrain(catchUp: true));
         });
     await _refreshAndDrain(catchUp: true);
   }
@@ -234,7 +238,10 @@ class NasSyncCoordinator {
   }
 
   Future<void> _drainQueue() async {
-    if (_syncing) return;
+    if (_syncing) {
+      _rerunQueued = true;
+      return;
+    }
     _syncing = true;
     await _emit();
     try {
@@ -263,6 +270,10 @@ class NasSyncCoordinator {
       _deferredThisCycle.clear();
       _syncing = false;
       await _emit();
+    }
+    if (_rerunQueued) {
+      _rerunQueued = false;
+      await _drainQueue();
     }
   }
 

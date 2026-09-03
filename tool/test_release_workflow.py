@@ -15,6 +15,7 @@ EXPECTED_TARGET_SDK = "37"
 REQUIRED_PERMISSIONS = (
     "android.permission.INTERNET",
     "android.permission.ACCESS_NETWORK_STATE",
+    "android.permission.ACCESS_LOCAL_NETWORK",
 )
 
 FORBIDDEN_PERMISSIONS = (
@@ -82,6 +83,23 @@ class ReleaseWorkflowTest(unittest.TestCase):
         for permission in REQUIRED_PERMISSIONS:
             with self.subTest(permission=permission):
                 self.assertIn(permission, workflow)
+
+    def test_debug_and_profile_manifests_do_not_strip_internet(self) -> None:
+        for relative in (
+            "android/app/src/debug/AndroidManifest.xml",
+            "android/app/src/profile/AndroidManifest.xml",
+        ):
+            text = (REPOSITORY_ROOT / relative).read_text(encoding="utf-8")
+            with self.subTest(manifest=relative):
+                self.assertNotIn('tools:node="remove"', text)
+                self.assertNotIn("fully offline app", text)
+
+    def test_integration_workflow_does_not_patch_offline_internet_strip(self) -> None:
+        workflow = (REPOSITORY_ROOT / ".github" / "workflows" / "integration.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('tools:node="remove"', workflow)
+        self.assertNotIn("Allow the integration runner to bind", workflow)
 
     def test_ci_retries_flutter_pub_get(self) -> None:
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")

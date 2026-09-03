@@ -19,11 +19,13 @@ user requests an export and are handed to Android's system share sheet.
 
 The only network surface is the optional, off-by-default NAS sync (decision
 D-023): when you configure your own server — WebDAV, SFTP, or SMB — watermarked
-photos are uploaded directly to that server, and to no other destination. The
-password is stored in the system secure storage (Android Keystore-backed
-storage / iOS Keychain / HarmonyOS asset store) and never enters the database,
-backups, or diagnostics. SiteMark itself still has no server, no accounts, no
-advertising, and no analytics.
+photos are uploaded directly to that server, and to no other destination. On
+Android 17, a LAN NAS also requires the system local-network permission, which
+SiteMark requests from the NAS settings screen. The password is stored in the
+system secure storage (Android Keystore-backed storage / iOS Keychain /
+HarmonyOS asset store) and never enters the database, backups, or diagnostics.
+SiteMark itself still has no server, no accounts, no advertising, and no
+analytics.
 
 Uninstalling SiteMark removes private application data. Watermarked images
 already published to shared storage remain until the user deletes them.
@@ -42,9 +44,10 @@ SiteMark 以离线使用为设计前提，不创建账号、不连接 SiteMark �
 
 唯一的网络出口是默认关闭的可选 NAS 同步（决策 D-023）：当你配置自己的服务器——
 WebDAV、SFTP 或 SMB——水印成片只会直接上传到该服务器，不经过任何其他目的地。
-密码保存在系统安全存储（Android Keystore 支撑的存储 / iOS Keychain / 鸿蒙 asset
-资产存储），不进入数据库、备份或诊断。SiteMark 自身依旧没有服务器、账号、广告或
-统计 SDK。
+在 Android 17 上，连接局域网 NAS 还需要系统的本地网络权限，SiteMark 会在 NAS
+设置页申请。密码保存在系统安全存储（Android Keystore 支撑的存储 / iOS Keychain /
+鸿蒙 asset 资产存储），不进入数据库、备份或诊断。SiteMark 自身依旧没有服务器、
+账号、广告或统计 SDK。
 
 卸载 SiteMark 会删除应用私有数据；已经发布到共享相册的水印图将保留，直到用户自行
 删除。

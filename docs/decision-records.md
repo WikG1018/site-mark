@@ -16,14 +16,14 @@
 
 ## D-002 发布包不申请网络权限
 
-**状态：已接受**
+**状态：已被 D-023 替代（2026-09-02）**
 
-发布 APK 移除 `INTERNET` 和 `ACCESS_NETWORK_STATE`，不加入账号、广告、分析、
+发布 APK 曾移除 `INTERNET` 和 `ACCESS_NETWORK_STATE`，不加入账号、广告、分析、
 云同步或远程 API。GitHub 链接只交给外部浏览器打开。
 
-这样可以缩小数据出站面并保持功能可解释；代价是没有自动云备份、跨设备同步和应用内
-版本检查。该决策描述发布包权限和内置功能，不承诺外部系统相机、系统分享面板或用户
-选择的浏览器如何处理数据。
+D-023 修订了该边界：唯一的网络出口是用户主动配置并启用的 NAS 同步，发布包为此
+声明 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`）。无账号、
+广告、分析、第三方云同步和远程 API 的约束仍然有效。
 
 ## D-003 私有保留原图，公开发布水印成片
 
@@ -171,7 +171,8 @@ schema 仍为 v1，只组织内层项目 ZIP；旧项目 ZIP 恢复为进行中�
 人员、位置、路径、编号、哈希、原始异常和堆栈均禁止进入诊断文件。
 
 用户主动点击并再次确认后，诊断 ZIP 才交给 Android 系统分享面板。该边界允许排查
-版本以及备份、恢复与删除流程问题，同时维持无网络权限发布包的诊断最小化边界。
+版本以及备份、恢复与删除流程问题。诊断不是网络出口：不自动上传，也不因诊断功能
+申请任何额外权限（D-023 的 `INTERNET` 只服务可选 NAS 同步）。
 
 ## D-017 字段复用限定在项目内并排除备注
 
@@ -272,8 +273,10 @@ CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用
   后端——鸿蒙上 WebDAV 仅明文 HTTP，SFTP 与 SMB 本身即为加密传输。测试连接
   在鸿蒙请求 HTTPS 时返回 `tls_unsupported` 分类码。
 - **权限**：`INTERNET` + `ACCESS_NETWORK_STATE`（后者同时服务"仅 Wi‑Fi 上传"
-  偏好的连通性判定）；鸿蒙新增 `GET_NETWORK_INFO`（normal 级）。CI/release
-  门禁从"禁止网络权限"改为"必须有这两个权限、且不得出现其余网络/相机/存储权限"。
+  偏好的连通性判定）；Android 17（targetSdk 37）局域网 NAS 另声明并在设置页
+  运行时申请 `ACCESS_LOCAL_NETWORK`（NEARBY_DEVICES 组；API 36 及以下随
+  `INTERNET` 隐式授予）；鸿蒙新增 `GET_NETWORK_INFO`（normal 级）。CI/release
+  门禁从"禁止网络权限"改为"必须有这些权限、且不得出现其余网络/相机/存储权限"。
 - **明文 HTTP**：局域网 NAS 常见明文 HTTP，Android `usesCleartextTraffic=true`、
   iOS `NSAllowsLocalNetworking`。代价与理由：应用内除 NAS 同步外不存在任何网络
   调用点（构造性保证），明文只影响用户自选的局域网目标；设置中提供"允许自签名

@@ -462,6 +462,50 @@ class AndroidSystemApiTest {
         }
     }
 
+    @Test
+    fun localNetworkPermissionIsGrantedBelowEnforcementSdk() {
+        `when`(
+            context.checkSelfPermission(AndroidSystemApi.ACCESS_LOCAL_NETWORK_PERMISSION),
+        ).thenReturn(PackageManager.PERMISSION_DENIED)
+        val api = AndroidSystemApi(context)
+        api.sdkIntForTest = 36
+        assertEquals(LocationPermissionState.GRANTED, api.getLocalNetworkPermissionState())
+    }
+
+    @Test
+    fun localNetworkPermissionIsDeniedOnAndroid17UntilGranted() {
+        `when`(
+            context.checkSelfPermission(AndroidSystemApi.ACCESS_LOCAL_NETWORK_PERMISSION),
+        ).thenReturn(PackageManager.PERMISSION_DENIED)
+        val api = AndroidSystemApi(context)
+        api.sdkIntForTest = 37
+        assertEquals(LocationPermissionState.DENIED, api.getLocalNetworkPermissionState())
+    }
+
+    @Test
+    fun localNetworkPermissionIsGrantedWhenTheRuntimeFlagIsSet() {
+        `when`(
+            context.checkSelfPermission(AndroidSystemApi.ACCESS_LOCAL_NETWORK_PERMISSION),
+        ).thenReturn(PackageManager.PERMISSION_GRANTED)
+        val api = AndroidSystemApi(context)
+        api.sdkIntForTest = 37
+        assertEquals(LocationPermissionState.GRANTED, api.getLocalNetworkPermissionState())
+    }
+
+    @Test
+    fun requestLocalNetworkPermissionFailsClearlyWithoutActivity() {
+        `when`(
+            context.checkSelfPermission(AndroidSystemApi.ACCESS_LOCAL_NETWORK_PERMISSION),
+        ).thenReturn(PackageManager.PERMISSION_DENIED)
+        val api = AndroidSystemApi(context)
+        api.sdkIntForTest = 37
+        var error: Throwable? = null
+        api.requestLocalNetworkPermission { result ->
+            error = result.exceptionOrNull()
+        }
+        assertEquals("System camera requires a foreground activity", error?.message)
+    }
+
     /** Returns a Uri double that passes the MediaStore allowlist check. */
     private fun mediaUri(): Uri {
         val uri = mock(Uri::class.java)

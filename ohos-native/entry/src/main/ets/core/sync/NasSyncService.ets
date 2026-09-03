@@ -2,6 +2,7 @@ import connection from '@ohos.net.connection';
 import sitemarkNative from 'libsitemark_native.so';
 import asset from '@ohos.security.asset';
 import hilog from '@ohos.hilog';
+import util from '@ohos.util';
 import { AppDatabase, NasSyncConfigRecord, NasUploadCounts } from '../../data/database/AppDatabase';
 
 const LOG_DOMAIN: number = 0x5100;
@@ -93,7 +94,7 @@ function nasConfigPayload(config: NasSyncConfigRecord, password: string): NasCon
   payload.username = config.username;
   payload.password = password;
   payload.root_path = config.rootPath;
-  payload.secure_tls = config.secureTls;
+  payload.secure_tls = config.protocol === 'webdav' ? false : config.secureTls;
   payload.accept_invalid_tls = config.acceptInvalidTls;
   payload.known_sftp_fingerprint = config.knownSftpFingerprint;
   return payload;
@@ -185,15 +186,11 @@ export class NasSyncService {
   }
 
   static decodeUtf8(bytes: Uint8Array): string {
-    return String.fromCharCode(...bytes);
+    return util.TextDecoder.create('utf-8').decodeToString(bytes);
   }
 
   static encodeUtf8(value: string): Uint8Array {
-    const bytes = new Uint8Array(value.length);
-    for (let i = 0; i < value.length; i++) {
-      bytes[i] = value.charCodeAt(i) & 0xFF;
-    }
-    return bytes;
+    return new util.TextEncoder().encodeInto(value);
   }
 
   /** Wi-Fi gate: uploads over metered links only when wifiOnly is false. */
@@ -236,21 +233,22 @@ export class NasSyncService {
       while (true) {
         const config = await this.database.nasSyncConfig();
         if (!config.enabled) {
-          return;
+          break;
         }
+        await this.database.enqueueReadyCapturesForNas();
         if (!await this.networkAllows(config.wifiOnly)) {
-          return;
+          break;
         }
         const queue = await this.database.pendingNasUploads();
         if (queue.length === 0) {
-          return;
+          break;
         }
         // A capture still processing is deferred, not failed; once every
         // queued item deferred this cycle, stop and wait for the next
         // trigger instead of spinning on the same row forever.
         const first = queue[0].captureId;
         if (deferredThisCycle.has(first)) {
-          return;
+          break;
         }
         const progressed = await this.uploadOne(config, first);
         if (!progressed) {

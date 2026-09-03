@@ -1376,17 +1376,18 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     const rows = await this.store.querySql(
       "SELECT c.id FROM captures c LEFT JOIN nas_upload_state n ON n.capture_id=c.id " +
       "WHERE c.status='ready' AND n.capture_id IS NULL");
-    let enqueued = 0;
+    const ids: Array<string> = [];
     try {
       while (rows.goToNextRow()) {
-        const captureId = rows.getString(rows.getColumnIndex('id'));
-        await this.upsertNasUploadPending(captureId);
-        enqueued++;
+        ids.push(rows.getString(rows.getColumnIndex('id')));
       }
-      return enqueued;
     } finally {
       rows.close();
     }
+    for (let i = 0; i < ids.length; i++) {
+      await this.upsertNasUploadPending(ids[i]);
+    }
+    return ids.length;
   }
 
   async pendingNasUploads(): Promise<NasUploadStateRecord[]> {
@@ -1489,7 +1490,7 @@ export class NasSyncConfigRecord {
   port: number | null = null;
   username: string = '';
   rootPath: string = '/';
-  secureTls: boolean = true;
+  secureTls: boolean = false;
   acceptInvalidTls: boolean = false;
   knownSftpFingerprint: string | null = null;
   wifiOnly: boolean = true;
@@ -1497,7 +1498,7 @@ export class NasSyncConfigRecord {
   updatedAt: number = 0;
 
   constructor(protocol: string = 'webdav', host: string = '', port: number | null = null,
-    username: string = '', rootPath: string = '/', secureTls: boolean = true,
+    username: string = '', rootPath: string = '/', secureTls: boolean = false,
     acceptInvalidTls: boolean = false, knownSftpFingerprint: string | null = null,
     wifiOnly: boolean = true, enabled: boolean = false, updatedAt: number = 0) {
     this.protocol = protocol;

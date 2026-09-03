@@ -59,7 +59,7 @@
 这些决策已写入 `docs/decision-records.md`，默认视为硬约束：
 
 - **系统/厂商相机**：通过 `ACTION_IMAGE_CAPTURE`；不申请 `CAMERA`，不内置相机 SDK。  
-- **网络边界（D-023，2026-09-02 修订）**：唯一的网络出口是用户主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB，Rust 核心 `sitemark_core::nas` 三线共用），默认关闭；发布包为此声明 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`）。密码只存系统安全存储（Keystore / Keychain / 鸿蒙 asset），不进数据库、备份或诊断。无账号、广告、分析、第三方云同步、远程 API。  
+- **网络边界（D-023，2026-09-02 修订）**：唯一的网络出口是用户主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB，Rust 核心 `sitemark_core::nas` 三线共用），默认关闭；发布包为此声明 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`；Android 17 局域网 NAS 另声明并在设置页运行时申请 `ACCESS_LOCAL_NETWORK`）。密码只存系统安全存储（Keystore / Keychain / 鸿蒙 asset），不进数据库、备份或诊断。无账号、广告、分析、第三方云同步、远程 API。  
 - **定位**：仅前台、可拒绝；不申请后台定位。优先原图 EXIF GPS。  
 - **存储**：原图与中间文件在应用私有目录；水印成片经 MediaStore 到 `Pictures/SiteMark`。不申请广泛媒体权限。  
 - **后台处理**：全分辨率串行队列（WorkManager）；幂等、可恢复；强行停止后需用户再打开应用。iOS 由 BGTaskScheduler 机会性补拍承接，不模拟 Android 节奏。  
