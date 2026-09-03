@@ -131,9 +131,15 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             value: _enabled,
             onChanged: (value) => _setEnabled(value),
           ),
-          ListTile(dense: true, title: Text(strings.nasProtocol)),
+          const SizedBox(height: 12),
+          Text(
+            strings.nasProtocol,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
           AdaptiveSegmentedButton<String>(
             key: const Key('nas-protocol-segmented'),
+            style: segmentTapTargetStyle,
             segments: [
               ButtonSegment(
                 value: 'webdav',
@@ -149,6 +155,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             onSelectionChanged: (value) =>
                 setState(() => _protocol = value.first),
           ),
+          const SizedBox(height: 8),
           TextField(
             key: const Key('nas-host-field'),
             controller: _hostController,
@@ -159,6 +166,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             autocorrect: false,
             enableSuggestions: false,
           ),
+          const SizedBox(height: 8),
           TextField(
             key: const Key('nas-port-field'),
             controller: _portController,
@@ -170,6 +178,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             keyboardType: TextInputType.number,
             maxLength: 5,
           ),
+          const SizedBox(height: 8),
           TextField(
             key: const Key('nas-username-field'),
             controller: _usernameController,
@@ -177,6 +186,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             autocorrect: false,
             enableSuggestions: false,
           ),
+          const SizedBox(height: 8),
           TextField(
             key: const Key('nas-password-field'),
             controller: _passwordController,
@@ -188,6 +198,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             autocorrect: false,
             enableSuggestions: false,
           ),
+          const SizedBox(height: 8),
           TextField(
             key: const Key('nas-root-field'),
             controller: _rootController,
@@ -199,6 +210,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             enableSuggestions: false,
           ),
           if (_protocol == 'webdav') ...[
+            const SizedBox(height: 8),
             SwitchListTile.adaptive(
               title: Text(strings.nasSecureTls),
               value: _secureTls,
@@ -211,12 +223,14 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
                 onChanged: (value) => setState(() => _acceptInvalidTls = value),
               ),
           ],
+          const SizedBox(height: 8),
           SwitchListTile.adaptive(
             key: const Key('nas-wifi-only-switch'),
             title: Text(strings.nasWifiOnly),
             value: _wifiOnly,
             onChanged: (value) => setState(() => _wifiOnly = value),
           ),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
