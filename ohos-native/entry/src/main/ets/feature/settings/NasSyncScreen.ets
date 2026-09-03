@@ -1,8 +1,7 @@
 import hilog from '@ohos.hilog';
 import { AppDatabase, NasSyncConfigRecord, NasUploadCounts } from '../../data/database/AppDatabase';
 import { AppRuntime } from '../../app/AppRuntime';
-import { SectionHeader } from './SettingsScreens';
-import { LifecycleSegment, SegmentOption } from '../../shared/AppComponents';
+import { LifecycleSegment, SectionHeader, SegmentOption } from '../../shared/AppComponents';
 import { FormField } from '../../shared/FormComponents';
 import { tr } from '../../shared/AppText';
 import { UiTokens } from '../../shared/UiTokens';
@@ -30,7 +29,7 @@ export struct NasSyncScreen {
   @State private secureTls: boolean = true;
   @State private acceptInvalidTls: boolean = false;
   @State private wifiOnly: boolean = true;
-  @State private enabled: boolean = false;
+  @State private syncEnabled: boolean = false;
   @State private loaded: boolean = false;
   @State private busy: boolean = false;
   @State private message: string = '';
@@ -63,7 +62,7 @@ export struct NasSyncScreen {
     this.secureTls = config.secureTls;
     this.acceptInvalidTls = config.acceptInvalidTls;
     this.wifiOnly = config.wifiOnly;
-    this.enabled = config.enabled;
+    this.syncEnabled = config.enabled;
     this.counts = await this.database.countNasUploadStates();
     this.loaded = true;
   }
@@ -85,7 +84,7 @@ export struct NasSyncScreen {
     config.acceptInvalidTls = this.acceptInvalidTls;
     config.knownSftpFingerprint = this.knownFingerprint;
     config.wifiOnly = this.wifiOnly;
-    config.enabled = this.enabled;
+    config.enabled = this.syncEnabled;
     config.updatedAt = Date.now();
     return config;
   }
@@ -239,13 +238,13 @@ export struct NasSyncScreen {
   }
 
   build() {
-    Stack({ alignContent: Align.Top }) {
+    Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column() {
           SectionHeader({ title: tr('NAS 同步', 'NAS sync') })
           Column({ space: 8 }) {
-            this.toggleRow(tr('启用 NAS 同步', 'Enable NAS sync'), this.enabled,
-              (value: boolean) => { this.enabled = value; })
+            this.toggleRow(tr('启用 NAS 同步', 'Enable NAS sync'), this.syncEnabled,
+              (value: boolean) => { this.syncEnabled = value; })
             Text(tr('协议', 'Protocol'))
               .fontSize(16).fontWeight(FontWeight.Medium).fontColor(UiTokens.TEXT).width('100%')
             LifecycleSegment({
@@ -307,7 +306,7 @@ export struct NasSyncScreen {
             }
             this.toggleRow(tr('仅 Wi-Fi 上传', 'Upload on Wi-Fi only'), this.wifiOnly,
               (value: boolean) => { this.wifiOnly = value; })
-            Row() {
+            Row({ space: 12 }) {
               Button(tr('测试连接', 'Test connection'))
                 .buttonStyle(ButtonStyleMode.NORMAL).role(ButtonRole.NORMAL)
                 .enabled(!this.busy)
@@ -317,7 +316,7 @@ export struct NasSyncScreen {
                 .enabled(!this.busy)
                 .onClick(() => this.save())
             }
-            .space(12).width('100%').padding({ top: 8, bottom: 8 })
+            .width('100%').padding({ top: 8, bottom: 8 })
             Text(tr(`待上传 ${this.counts.pending} · 失败 ${this.counts.failed} · 已上传 ${this.counts.uploaded}`,
               `Pending ${this.counts.pending} · Failed ${this.counts.failed} · Uploaded ${this.counts.uploaded}`))
               .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).width('100%')

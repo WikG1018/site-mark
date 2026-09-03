@@ -120,6 +120,10 @@ class OhosNativeReviewContractsTest(unittest.TestCase):
         self.assertIn("FormField", source)
         self.assertNotIn("padding({ top: 6, bottom: 6 })", source)
         self.assertNotIn("private fieldRow", source)
+        self.assertNotIn("Align.Top", source)
+        self.assertNotIn("@State private enabled", source)
+        self.assertIn("SectionHeader", source)
+        self.assertIn("../../shared/AppComponents", source)
 
 
 if __name__ == "__main__":
