@@ -1,9 +1,65 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
 void main() {
+  testWidgets('glass card never uses a live backdrop blur', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: GlassCard(child: Text('项目卡片'))),
+      ),
+    );
+    expect(find.byType(BackdropFilter), findsNothing);
+  });
+
+  testWidgets('Android glass surface skips live backdrop blur', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: GlassSurface(child: Text('content'))),
+        ),
+      );
+      expect(find.byType(BackdropFilter), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('blurOnAndroid keeps the dock-style blur on Android', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: GlassSurface(blurOnAndroid: true, child: Text('dock')),
+          ),
+        ),
+      );
+      expect(find.byType(BackdropFilter), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('iOS glass surface keeps live backdrop blur', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: GlassSurface(child: Text('content'))),
+        ),
+      );
+      expect(find.byType(BackdropFilter), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('glass surface disables blur when animations are disabled', (
     tester,
   ) async {
@@ -153,44 +209,54 @@ void main() {
   }
 
   testWidgets('boosts surface opacity when blur is disabled', (tester) async {
-    const baseOpacity = 0.72;
-    final scheme = ColorScheme.fromSeed(seedColor: const Color(0xff005a9c));
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      const baseOpacity = 0.72;
+      final scheme = ColorScheme.fromSeed(seedColor: const Color(0xff005a9c));
 
-    Future<Color?> pumpAndReadSurface({required bool disableAnimations}) async {
-      await tester.pumpWidget(
-        MediaQuery(
-          data: MediaQueryData(disableAnimations: disableAnimations),
-          child: MaterialApp(
-            theme: ThemeData(colorScheme: scheme),
-            home: const Scaffold(
-              body: GlassSurface(opacity: baseOpacity, child: Text('content')),
+      Future<Color?> pumpAndReadSurface({
+        required bool disableAnimations,
+      }) async {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: MediaQueryData(disableAnimations: disableAnimations),
+            child: MaterialApp(
+              theme: ThemeData(colorScheme: scheme),
+              home: const Scaffold(
+                body: GlassSurface(
+                  opacity: baseOpacity,
+                  child: Text('content'),
+                ),
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      final decorated = find.descendant(
-        of: find.byType(GlassSurface),
-        matching: find.byType(DecoratedBox),
+        final decorated = find.descendant(
+          of: find.byType(GlassSurface),
+          matching: find.byType(DecoratedBox),
+        );
+        expect(decorated, findsWidgets);
+        final outer = tester.widget<DecoratedBox>(decorated.first);
+        final decoration = outer.decoration as BoxDecoration;
+        return decoration.color;
+      }
+
+      final withBlur = await pumpAndReadSurface(disableAnimations: false);
+      final withoutBlur = await pumpAndReadSurface(disableAnimations: true);
+
+      expect(withBlur, isNotNull);
+      expect(withoutBlur, isNotNull);
+      expect(withBlur!.a, closeTo(baseOpacity, 0.001));
+      expect(
+        withoutBlur!.a,
+        closeTo((baseOpacity + 0.10).clamp(0.58, 0.94), 0.001),
       );
-      expect(decorated, findsWidgets);
-      final outer = tester.widget<DecoratedBox>(decorated.first);
-      final decoration = outer.decoration as BoxDecoration;
-      return decoration.color;
+      expect(withoutBlur.a, greaterThan(withBlur.a));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
     }
-
-    final withBlur = await pumpAndReadSurface(disableAnimations: false);
-    final withoutBlur = await pumpAndReadSurface(disableAnimations: true);
-
-    expect(withBlur, isNotNull);
-    expect(withoutBlur, isNotNull);
-    expect(withBlur!.a, closeTo(baseOpacity, 0.001));
-    expect(
-      withoutBlur!.a,
-      closeTo((baseOpacity + 0.10).clamp(0.58, 0.94), 0.001),
-    );
-    expect(withoutBlur.a, greaterThan(withBlur.a));
   });
 
   testWidgets('enableOverlay false skips the overlay blend layer', (
@@ -295,27 +361,32 @@ void main() {
   testWidgets('clamps blur-enabled opacity into the glass band', (
     tester,
   ) async {
-    final scheme = ColorScheme.fromSeed(seedColor: const Color(0xff005a9c));
-    await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(disableAnimations: false),
-        child: MaterialApp(
-          theme: ThemeData(colorScheme: scheme),
-          home: const Scaffold(
-            body: GlassSurface(opacity: 1.0, child: Text('content')),
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      final scheme = ColorScheme.fromSeed(seedColor: const Color(0xff005a9c));
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: false),
+          child: MaterialApp(
+            theme: ThemeData(colorScheme: scheme),
+            home: const Scaffold(
+              body: GlassSurface(opacity: 1.0, child: Text('content')),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    final decorated = find.descendant(
-      of: find.byType(GlassSurface),
-      matching: find.byType(DecoratedBox),
-    );
-    final outer = tester.widget<DecoratedBox>(decorated.first);
-    final color = (outer.decoration as BoxDecoration).color;
-    expect(color, isNotNull);
-    expect(color!.a, closeTo(0.92, 0.001));
+      final decorated = find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byType(DecoratedBox),
+      );
+      final outer = tester.widget<DecoratedBox>(decorated.first);
+      final color = (outer.decoration as BoxDecoration).color;
+      expect(color, isNotNull);
+      expect(color!.a, closeTo(0.92, 0.001));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

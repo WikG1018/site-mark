@@ -460,55 +460,60 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       skeletonItemCount: 4,
       padding: EdgeInsets.fromLTRB(
         16,
-        4 + scrollChromeTopInsetOf(context),
+        4,
         16,
         floatingDockReservedSpaceOf(context),
       ),
       sliversBefore: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-            child: _ProjectHeader(
-              project: project,
-              captureCount:
-                  _pagerController.state.totalCount ??
-                  _pagerController.state.rows.length,
-              editing: _selectionController.editing,
-              onToggleSelection: () {
-                if (_selectionController.editing) {
-                  _invalidateSelectionRequests();
-                  _selectionController.exit();
-                } else {
-                  _selectionController.enter();
-                }
-              },
+        scrollChromeOverlaySliver(
+          context: context,
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: _ProjectHeader(
+                  project: project,
+                  captureCount:
+                      _pagerController.state.totalCount ??
+                      _pagerController.state.rows.length,
+                  editing: _selectionController.editing,
+                  onToggleSelection: () {
+                    if (_selectionController.editing) {
+                      _invalidateSelectionRequests();
+                      _selectionController.exit();
+                    } else {
+                      _selectionController.enter();
+                    }
+                  },
+                ),
+              ),
             ),
-          ),
+            if (project.lifecycleStatus != ProjectLifecycleStatus.active)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: _ProjectStatusBanner(project: project),
+                ),
+              ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                child: Text(
+                  strings.captureRecords,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+            ),
+            if (_dateOptions.years.isNotEmpty || hasDateFilter)
+              SliverToBoxAdapter(
+                child: CaptureDateFilterBar(
+                  filter: filter,
+                  options: _dateOptions,
+                  onChanged: _onFilterChanged,
+                ),
+              ),
+          ],
         ),
-        if (project.lifecycleStatus != ProjectLifecycleStatus.active)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: _ProjectStatusBanner(project: project),
-            ),
-          ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-            child: Text(
-              strings.captureRecords,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-          ),
-        ),
-        if (_dateOptions.years.isNotEmpty || hasDateFilter)
-          SliverToBoxAdapter(
-            child: CaptureDateFilterBar(
-              filter: filter,
-              options: _dateOptions,
-              onChanged: _onFilterChanged,
-            ),
-          ),
       ],
       itemBuilder: (context, summary, _) {
         final id = summary.capture.id;

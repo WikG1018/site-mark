@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// A translucent surface that drops backdrop blur when reduced motion is on.
@@ -17,6 +18,7 @@ class GlassSurface extends StatelessWidget {
     this.padding,
     this.opacity = .72,
     this.blurSigma = 16,
+    this.blurOnAndroid = false,
     this.enableOverlay = true,
   });
 
@@ -25,6 +27,12 @@ class GlassSurface extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final double opacity;
   final double blurSigma;
+
+  /// Keeps the live backdrop blur on Android, where [GlassSurface] otherwise
+  /// falls back to the tinted surface. Reserve this for single, always-on
+  /// chrome like the navigation dock: one small blur layer per frame is
+  /// affordable, while one per list card is what drops frames.
+  final bool blurOnAndroid;
 
   /// When true (default), a very low-opacity flat tint is applied with
   /// [BlendMode.overlay] **under** the child content (chrome only).
@@ -35,8 +43,13 @@ class GlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Android BackdropFilter is a saveLayer per widget per frame. List cards
+    // and page transitions drop frames; iOS blur stays compositor-cheap.
+    // Single chrome surfaces opt back in via [blurOnAndroid].
     final blurEnabled =
-        blurSigma > 0 && !MediaQuery.disableAnimationsOf(context);
+        blurSigma > 0 &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        (defaultTargetPlatform != TargetPlatform.android || blurOnAndroid);
     // Always clamp so callers cannot push opacity outside a readable glass band.
     final effectiveOpacity = blurEnabled
         ? opacity.clamp(0.58, 0.92)
@@ -130,6 +143,7 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GlassSurface(
     borderRadius: borderRadius,
+    blurSigma: 0,
     child: Material(
       color: Colors.transparent,
       child: InkWell(

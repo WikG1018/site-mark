@@ -213,6 +213,17 @@ double scrollChromeTopInsetOf(BuildContext context, {double extra = 0}) {
   return MediaQuery.paddingOf(context).top + extra;
 }
 
+/// Groups [slivers] so overlay chrome lists pad the header, not the rows.
+Widget scrollChromeOverlaySliver({
+  required BuildContext context,
+  required List<Widget> slivers,
+}) {
+  return SliverPadding(
+    padding: EdgeInsets.only(top: scrollChromeTopInsetOf(context)),
+    sliver: SliverMainAxisGroup(slivers: slivers),
+  );
+}
+
 /// Holds overlay chrome visible while [active] is true (search, selection,
 /// or an open filter sheet).
 class ScrollChromeForce extends StatefulWidget {
