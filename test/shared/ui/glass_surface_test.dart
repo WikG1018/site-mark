@@ -28,6 +28,24 @@ void main() {
     }
   });
 
+  testWidgets('blurOnAndroid keeps the dock-style blur on Android', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: GlassSurface(blurOnAndroid: true, child: Text('dock')),
+          ),
+        ),
+      );
+      expect(find.byType(BackdropFilter), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('iOS glass surface keeps live backdrop blur', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     try {
