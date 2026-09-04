@@ -345,34 +345,38 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                         child: _filterBar(context, strings, projects),
                       ),
                 iosBodyPadding: EdgeInsets.zero,
-                body: FloatingDockLayout(
-                  animateDock: false,
-                  dock: editing
-                      ? CaptureBatchActionBar(
-                          key: const Key('batch-bar'),
-                          controller: _selectionController,
-                          mediaService: ref.watch(captureMediaServiceProvider),
-                          exportService: ref.watch(
-                            projectExportServiceProvider,
-                          ),
-                          shareService: ref.watch(shareFileServiceProvider),
-                        )
-                      : null,
-                  child: CapturePagedList(
-                    controller: _pagerController,
-                    source: _querySource,
-                    emptyMessage: _hasActiveQuery
-                        ? strings.filteredEmpty
-                        : strings.noCaptures,
-                    itemBuilder: _buildCaptureCard,
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      4 + scrollChromeTopInsetOf(context),
-                      16,
-                      floatingDockReservedSpaceOf(context),
+                body: Builder(
+                  builder: (context) => FloatingDockLayout(
+                    animateDock: false,
+                    dock: editing
+                        ? CaptureBatchActionBar(
+                            key: const Key('batch-bar'),
+                            controller: _selectionController,
+                            mediaService: ref.watch(
+                              captureMediaServiceProvider,
+                            ),
+                            exportService: ref.watch(
+                              projectExportServiceProvider,
+                            ),
+                            shareService: ref.watch(shareFileServiceProvider),
+                          )
+                        : null,
+                    child: CapturePagedList(
+                      controller: _pagerController,
+                      source: _querySource,
+                      emptyMessage: _hasActiveQuery
+                          ? strings.filteredEmpty
+                          : strings.noCaptures,
+                      itemBuilder: _buildCaptureCard,
+                      padding: EdgeInsets.fromLTRB(
+                        16,
+                        4 + scrollChromeTopInsetOf(context),
+                        16,
+                        floatingDockReservedSpaceOf(context),
+                      ),
+                      groupKey: _captureDateKey,
+                      onVisibleGroupChanged: _onVisibleDateChanged,
                     ),
-                    groupKey: _captureDateKey,
-                    onVisibleGroupChanged: _onVisibleDateChanged,
                   ),
                 ),
               );

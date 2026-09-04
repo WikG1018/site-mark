@@ -205,9 +205,10 @@ const double scrollChromeFilterBarHeight = 52;
 
 /// Top inset for overlay chrome lists.
 ///
-/// Inside a [Scaffold] with `extendBodyBehindAppBar: true`,
+/// Call this from the [Scaffold] body. With `extendBodyBehindAppBar: true`,
 /// [MediaQuery.padding] already includes the overlay app bar (status bar,
-/// toolbar, and [AppBar.bottom]). Do not add [kToolbarHeight] again.
+/// toolbar, and [AppBar.bottom]). Do not add [kToolbarHeight] again, and do
+/// not read this from a context outside that scaffold.
 double scrollChromeTopInsetOf(BuildContext context, {double extra = 0}) {
   return MediaQuery.paddingOf(context).top + extra;
 }

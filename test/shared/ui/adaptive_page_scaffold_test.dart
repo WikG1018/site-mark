@@ -383,6 +383,51 @@ void main() {
     }
   });
 
+  testWidgets(
+    'hideOnScroll inset is the overlay app bar only inside the body',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.padding = const FakeViewPadding(top: 24);
+      tester.view.viewPadding = const FakeViewPadding(top: 24);
+      addTearDown(tester.view.reset);
+      late double outsideInset;
+      late double insideInset;
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ScrollChromeHost(
+              resetKey: 0,
+              child: Builder(
+                builder: (outside) {
+                  outsideInset = scrollChromeTopInsetOf(outside);
+                  return AdaptivePageScaffold.raw(
+                    hideOnScroll: true,
+                    title: '页面标题',
+                    body: Builder(
+                      builder: (inside) {
+                        insideInset = scrollChromeTopInsetOf(inside);
+                        return const SizedBox.expand();
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final appBar = tester.getRect(find.byType(AppBar));
+        expect(insideInset, closeTo(appBar.height, 1));
+        expect(outsideInset, lessThan(insideInset - 40));
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
   testWidgets('hideOnScroll list keeps a 16px gap under the overlay app bar', (
     tester,
   ) async {

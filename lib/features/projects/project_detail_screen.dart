@@ -350,33 +350,42 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     ),
                 ],
                 iosBodyPadding: EdgeInsets.zero,
-                body: FloatingDockLayout(
-                  dock: project != null && editing
-                      ? CaptureBatchActionBar(
-                          key: const Key('batch-bar'),
-                          controller: _selectionController,
-                          mediaService: ref.watch(captureMediaServiceProvider),
-                          exportService: ref.watch(
-                            projectExportServiceProvider,
+                body: Builder(
+                  builder: (context) => FloatingDockLayout(
+                    dock: project != null && editing
+                        ? CaptureBatchActionBar(
+                            key: const Key('batch-bar'),
+                            controller: _selectionController,
+                            mediaService: ref.watch(
+                              captureMediaServiceProvider,
+                            ),
+                            exportService: ref.watch(
+                              projectExportServiceProvider,
+                            ),
+                            shareService: ref.watch(shareFileServiceProvider),
+                          )
+                        : null,
+                    child: waitingForProject
+                        ? _projectLoadingList(strings)
+                        : projectLoadFailed
+                        ? _ProjectUnavailableState(
+                            key: const Key('project-load-error'),
+                            icon: Icons.cloud_off_outlined,
+                            message: strings.projectLoadFailed,
+                          )
+                        : projectMissing
+                        ? _ProjectUnavailableState(
+                            key: const Key('project-not-found'),
+                            icon: Icons.folder_off_outlined,
+                            message: strings.projectNotFound,
+                          )
+                        : _projectCaptureList(
+                            context,
+                            strings,
+                            project!,
+                            filter,
                           ),
-                          shareService: ref.watch(shareFileServiceProvider),
-                        )
-                      : null,
-                  child: waitingForProject
-                      ? _projectLoadingList(strings)
-                      : projectLoadFailed
-                      ? _ProjectUnavailableState(
-                          key: const Key('project-load-error'),
-                          icon: Icons.cloud_off_outlined,
-                          message: strings.projectLoadFailed,
-                        )
-                      : projectMissing
-                      ? _ProjectUnavailableState(
-                          key: const Key('project-not-found'),
-                          icon: Icons.folder_off_outlined,
-                          message: strings.projectNotFound,
-                        )
-                      : _projectCaptureList(context, strings, project!, filter),
+                  ),
                 ),
                 floatingActionButton: AnimatedSlide(
                   duration: scrollChromeAnimationOf(context),
