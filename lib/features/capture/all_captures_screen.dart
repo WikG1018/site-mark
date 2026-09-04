@@ -367,11 +367,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                     itemBuilder: _buildCaptureCard,
                     padding: EdgeInsets.fromLTRB(
                       16,
-                      4 +
-                          scrollChromeTopInsetOf(
-                            context,
-                            extra: _searching ? 0 : scrollChromeFilterBarHeight,
-                          ),
+                      4 + scrollChromeTopInsetOf(context),
                       16,
                       floatingDockReservedSpaceOf(context),
                     ),

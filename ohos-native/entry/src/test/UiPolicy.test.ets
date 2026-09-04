@@ -129,6 +129,8 @@ export default function uiPolicyTest(): void {
     it('removes motion duration and blur only when reduce motion is enabled', 0, () => {
       MotionPolicy.reduceMotion = false;
       expect(MotionPolicy.duration(UiTokens.MOTION_STANDARD)).assertEqual(UiTokens.MOTION_STANDARD);
+      expect(UiTokens.MOTION_CHROME > UiTokens.MOTION_STANDARD).assertTrue();
+      expect(MotionPolicy.duration(UiTokens.MOTION_CHROME)).assertEqual(UiTokens.MOTION_CHROME);
       expect(MotionPolicy.blur(20)).assertEqual(20);
 
       MotionPolicy.reduceMotion = true;

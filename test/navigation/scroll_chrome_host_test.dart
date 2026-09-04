@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/scroll_chrome.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 
@@ -98,6 +99,44 @@ void main() {
     final hidden = tester.getRect(find.byKey(const Key('probe-dock')));
     expect(hidden.top, greaterThan(shown.top));
     expect(hidden.top, greaterThanOrEqualTo(viewportBottom - 1));
+  });
+
+  testWidgets('scroll chrome animation is slower than the short4 snap', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            expect(
+              scrollChromeAnimationOf(context),
+              const Duration(milliseconds: 280),
+            );
+            expect(
+              scrollChromeAnimationOf(context).inMilliseconds,
+              greaterThan(AppMotion.short4.inMilliseconds),
+            );
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+  });
+
+  testWidgets('scroll chrome animation collapses when reduce-motion is on', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: Builder(
+          builder: (context) {
+            expect(scrollChromeAnimationOf(context), Duration.zero);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
   });
 }
 

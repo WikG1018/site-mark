@@ -4,6 +4,7 @@ abstract final class AppMotion {
   static const Duration rootSwitch = Duration(milliseconds: 240);
   static const Duration pageTransition = Duration(milliseconds: 260);
   static const Duration short4 = Duration(milliseconds: 180);
+  static const Duration scrollChrome = Duration(milliseconds: 280);
   static const Duration medium2 = pageTransition;
   static const Duration medium4 = Duration(milliseconds: 320);
   static const Duration long2 = Duration(milliseconds: 500);

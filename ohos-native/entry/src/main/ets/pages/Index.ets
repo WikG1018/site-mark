@@ -414,7 +414,7 @@ struct Index {
     .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
     .translate({ y: this.chromeVisible ? 0 :
       RootShellPolicy.dockHeight() + RootShellPolicy.dockBottomMargin() + this.safeAreaBottomVp + 24 })
-    .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+    .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_CHROME), curve: Curve.EaseOut })
     .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
     .transition(panelTransition(28))
   }
