@@ -32,6 +32,7 @@ export class UiTokens {
   static readonly DOCK_HEIGHT: number = 64;
   static readonly MOTION_FAST: number = 120;
   static readonly MOTION_STANDARD: number = 180;
+  static readonly MOTION_CHROME: number = 280;
 
   static apply(dark: boolean, accentArgb: number): void {
     const accent = `#${(accentArgb >>> 0).toString(16).padStart(8, '0')}`;

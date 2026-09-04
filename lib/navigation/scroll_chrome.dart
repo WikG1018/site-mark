@@ -198,13 +198,19 @@ class _ScrollChromeHostState extends State<ScrollChromeHost> {
 }
 
 Duration scrollChromeAnimationOf(BuildContext context) {
-  return AppMotion.durationOf(context, AppMotion.short4);
+  return AppMotion.durationOf(context, AppMotion.scrollChrome);
 }
 
 const double scrollChromeFilterBarHeight = 52;
 
+/// Top inset for overlay chrome lists.
+///
+/// Call this from the [Scaffold] body. With `extendBodyBehindAppBar: true`,
+/// [MediaQuery.padding] already includes the overlay app bar (status bar,
+/// toolbar, and [AppBar.bottom]). Do not add [kToolbarHeight] again, and do
+/// not read this from a context outside that scaffold.
 double scrollChromeTopInsetOf(BuildContext context, {double extra = 0}) {
-  return MediaQuery.paddingOf(context).top + kToolbarHeight + extra;
+  return MediaQuery.paddingOf(context).top + extra;
 }
 
 /// Holds overlay chrome visible while [active] is true (search, selection,

@@ -382,6 +382,169 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets(
+    'hideOnScroll inset is the overlay app bar only inside the body',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.padding = const FakeViewPadding(top: 24);
+      tester.view.viewPadding = const FakeViewPadding(top: 24);
+      addTearDown(tester.view.reset);
+      late double outsideInset;
+      late double insideInset;
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ScrollChromeHost(
+              resetKey: 0,
+              child: Builder(
+                builder: (outside) {
+                  outsideInset = scrollChromeTopInsetOf(outside);
+                  return AdaptivePageScaffold.raw(
+                    hideOnScroll: true,
+                    title: '页面标题',
+                    body: Builder(
+                      builder: (inside) {
+                        insideInset = scrollChromeTopInsetOf(inside);
+                        return const SizedBox.expand();
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final appBar = tester.getRect(find.byType(AppBar));
+        expect(insideInset, closeTo(appBar.height, 1));
+        expect(outsideInset, lessThan(insideInset - 40));
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets('hideOnScroll list keeps a 16px gap under the overlay app bar', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.padding = const FakeViewPadding(top: 24);
+    tester.view.viewPadding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.reset);
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ScrollChromeHost(
+            resetKey: 0,
+            child: AdaptivePageScaffold.raw(
+              hideOnScroll: true,
+              title: '页面标题',
+              body: _InsetProbeList(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final appBar = tester.getRect(find.byType(AppBar));
+      final card = tester.getRect(find.byKey(const Key('first-card')));
+      expect(card.top - appBar.bottom, closeTo(16, 1));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('hideOnScroll filter bottom is already in the overlay inset', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.padding = const FakeViewPadding(top: 24);
+    tester.view.viewPadding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.reset);
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ScrollChromeHost(
+            resetKey: 0,
+            child: AdaptivePageScaffold.raw(
+              hideOnScroll: true,
+              title: '全部记录',
+              bottom: PreferredSize(
+                preferredSize: Size.fromHeight(scrollChromeFilterBarHeight),
+                child: SizedBox(
+                  height: scrollChromeFilterBarHeight,
+                  child: Text('filter'),
+                ),
+              ),
+              body: _FilterInsetProbeList(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final appBar = tester.getRect(find.byType(AppBar));
+      final card = tester.getRect(find.byKey(const Key('first-card')));
+      expect(card.top - appBar.bottom, closeTo(4, 1));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('hideOnScroll app bar does not tint darker when scrolled under', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ScrollChromeHost(
+            resetKey: 0,
+            child: ScrollChromeForce(
+              reason: 'keep-visible',
+              active: true,
+              child: AdaptivePageScaffold.raw(
+                hideOnScroll: true,
+                title: '页面标题',
+                body: _HideOnScrollList(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(appBar.scrolledUnderElevation, 0);
+      expect(appBar.surfaceTintColor, Colors.transparent);
+
+      Color? materialColor() {
+        final materials = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byType(Material),
+        );
+        return tester.widget<Material>(materials.first).color;
+      }
+
+      final before = materialColor();
+      await tester.drag(
+        find.byKey(const Key('probe-list')),
+        const Offset(0, -120),
+      );
+      await tester.pumpAndSettle();
+      expect(materialColor(), before);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }
 
 class _HideOnScrollList extends StatelessWidget {
@@ -394,6 +557,44 @@ class _HideOnScrollList extends StatelessWidget {
       children: [
         for (var i = 0; i < 40; i++)
           SizedBox(height: 80, child: Text('row $i')),
+      ],
+    );
+  }
+}
+
+class _InsetProbeList extends StatelessWidget {
+  const _InsetProbeList();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16 + scrollChromeTopInsetOf(context),
+        16,
+        16,
+      ),
+      children: const [
+        SizedBox(key: Key('first-card'), height: 80, child: Text('card')),
+      ],
+    );
+  }
+}
+
+class _FilterInsetProbeList extends StatelessWidget {
+  const _FilterInsetProbeList();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        4 + scrollChromeTopInsetOf(context),
+        16,
+        16,
+      ),
+      children: const [
+        SizedBox(key: Key('first-card'), height: 80, child: Text('card')),
       ],
     );
   }

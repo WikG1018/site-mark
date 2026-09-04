@@ -660,7 +660,7 @@ export struct AllRecordsView {
       }
       .width('100%')
       .translate({ y: this.chromeVisible ? 0 : -(UiTokens.TOP_BAR_HEIGHT + 108) })
-      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut })
+      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_CHROME), curve: Curve.EaseOut })
       .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
         if (this.message.length > 0) {
           Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER :

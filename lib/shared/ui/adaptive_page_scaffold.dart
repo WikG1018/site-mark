@@ -111,6 +111,8 @@ class AdaptivePageScaffold extends StatelessWidget {
     final pageBody = _wrapBodyInList
         ? ListView(padding: const EdgeInsets.all(20), children: [body])
         : body;
+    // Plain Color, not WidgetState: M3 otherwise swaps to surfaceContainer.
+    final appBarColor = Theme.of(context).colorScheme.surface;
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: PreferredSize(
@@ -127,6 +129,11 @@ class AdaptivePageScaffold extends StatelessWidget {
               title: titleWidget ?? Text(title),
               actions: actions,
               bottom: bottom,
+              backgroundColor: appBarColor,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
+              shadowColor: Colors.transparent,
             ),
           ),
         ),
