@@ -428,6 +428,42 @@ void main() {
     },
   );
 
+  testWidgets(
+    'hideOnScroll header sliver sits just below the overlay app bar',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.padding = const FakeViewPadding(top: 24);
+      tester.view.viewPadding = const FakeViewPadding(top: 24);
+      addTearDown(tester.view.reset);
+      try {
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: ScrollChromeHost(
+              resetKey: 0,
+              child: AdaptivePageScaffold.raw(
+                hideOnScroll: true,
+                title: '项目',
+                body: _DetailInsetProbe(),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final appBar = tester.getRect(find.byType(AppBar));
+        final header = tester.getRect(find.byKey(const Key('detail-header')));
+        final card = tester.getRect(find.byKey(const Key('first-card')));
+        expect(header.top - appBar.bottom, closeTo(0, 1));
+        expect(card.top - header.bottom, closeTo(4, 1));
+        expect(card.top - appBar.bottom, lessThan(appBar.height));
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
   testWidgets('hideOnScroll list keeps a 16px gap under the overlay app bar', (
     tester,
   ) async {
@@ -576,6 +612,40 @@ class _InsetProbeList extends StatelessWidget {
       ),
       children: const [
         SizedBox(key: Key('first-card'), height: 80, child: Text('card')),
+      ],
+    );
+  }
+}
+
+class _DetailInsetProbe extends StatelessWidget {
+  const _DetailInsetProbe();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        scrollChromeOverlaySliver(
+          context: context,
+          slivers: const [
+            SliverToBoxAdapter(
+              child: SizedBox(
+                key: Key('detail-header'),
+                height: 72,
+                child: Text('header'),
+              ),
+            ),
+          ],
+        ),
+        const SliverPadding(
+          padding: EdgeInsets.fromLTRB(16, 4, 16, 16),
+          sliver: SliverToBoxAdapter(
+            child: SizedBox(
+              key: Key('first-card'),
+              height: 80,
+              child: Text('card'),
+            ),
+          ),
+        ),
       ],
     );
   }

@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// A translucent surface that drops backdrop blur when reduced motion is on.
@@ -35,8 +36,12 @@ class GlassSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Android BackdropFilter is a saveLayer per widget per frame. List cards
+    // and page transitions drop frames; iOS blur stays compositor-cheap.
     final blurEnabled =
-        blurSigma > 0 && !MediaQuery.disableAnimationsOf(context);
+        blurSigma > 0 &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        defaultTargetPlatform != TargetPlatform.android;
     // Always clamp so callers cannot push opacity outside a readable glass band.
     final effectiveOpacity = blurEnabled
         ? opacity.clamp(0.58, 0.92)
@@ -130,6 +135,7 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GlassSurface(
     borderRadius: borderRadius,
+    blurSigma: 0,
     child: Material(
       color: Colors.transparent,
       child: InkWell(

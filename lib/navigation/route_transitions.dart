@@ -1,6 +1,29 @@
 import 'package:animations/animations.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sitemark/motion.dart';
+
+Widget _androidPageSlide({
+  required Animation<double> animation,
+  required Widget child,
+  Offset begin = const Offset(0.08, 0),
+  Key? clipKey,
+  Key? slideKey,
+}) {
+  final curved = CurvedAnimation(
+    parent: animation,
+    curve: AppMotion.emphasizedDecelerate,
+    reverseCurve: AppMotion.emphasizedAccelerate,
+  );
+  return ClipRect(
+    key: clipKey ?? const Key('android-page-slide'),
+    child: SlideTransition(
+      key: slideKey,
+      position: Tween<Offset>(begin: begin, end: Offset.zero).animate(curved),
+      child: child,
+    ),
+  );
+}
 
 /// Builds the page-body transition used by photo details and their editor.
 ///
@@ -11,6 +34,9 @@ Widget buildCaptureDetailRouteTransition({
   required Animation<double> animation,
   required Widget child,
 }) {
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    return _androidPageSlide(animation: animation, child: child);
+  }
   final position = Tween<Offset>(begin: const Offset(0.08, 0), end: Offset.zero)
       .animate(
         CurvedAnimation(
@@ -44,6 +70,15 @@ Widget buildProjectDetailRouteTransition({
 }) {
   if (MediaQuery.disableAnimationsOf(context)) {
     return child;
+  }
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    return _androidPageSlide(
+      animation: animation,
+      begin: const Offset(0.045, 0),
+      clipKey: const Key('project-detail-route-clip'),
+      slideKey: const Key('project-detail-route-slide'),
+      child: child,
+    );
   }
 
   final curvedAnimation = CurvedAnimation(
@@ -85,6 +120,9 @@ Widget buildSharedAxisRouteTransition({
   if (MediaQuery.disableAnimationsOf(context)) {
     return child;
   }
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    return _androidPageSlide(animation: animation, child: child);
+  }
   return SharedAxisTransition(
     animation: animation,
     secondaryAnimation: freezeSecondary
@@ -108,6 +146,9 @@ Widget buildFadeThroughRouteTransition({
 }) {
   if (MediaQuery.disableAnimationsOf(context)) {
     return child;
+  }
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    return _androidPageSlide(animation: animation, child: child);
   }
   return FadeThroughTransition(
     animation: animation,

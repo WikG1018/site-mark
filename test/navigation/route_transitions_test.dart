@@ -1,4 +1,5 @@
 import 'package:animations/animations.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/navigation/route_transitions.dart';
@@ -13,31 +14,75 @@ void main() {
   testWidgets('capture detail route fades continuously during reverse motion', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: buildCaptureDetailRouteTransition(
-          animation: const AlwaysStoppedAnimation(0.5),
-          child: const SizedBox(key: Key('capture-detail-content')),
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: buildCaptureDetailRouteTransition(
+            animation: const AlwaysStoppedAnimation(0.5),
+            child: const SizedBox(key: Key('capture-detail-content')),
+          ),
         ),
-      ),
-    );
+      );
 
-    final fades = tester.widgetList<FadeTransition>(
-      find.ancestor(
-        of: find.byKey(const Key('capture-detail-content')),
-        matching: find.byType(FadeTransition),
-      ),
-    );
-    expect(fades, isNotEmpty);
-    expect(
-      fades.any((fade) => fade.opacity.value > 0 && fade.opacity.value < 1),
-      isTrue,
-    );
+      final fades = tester.widgetList<FadeTransition>(
+        find.ancestor(
+          of: find.byKey(const Key('capture-detail-content')),
+          matching: find.byType(FadeTransition),
+        ),
+      );
+      expect(fades, isNotEmpty);
+      expect(
+        fades.any((fade) => fade.opacity.value > 0 && fade.opacity.value < 1),
+        isTrue,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets(
     'project detail route uses a clipped slide and fade instead of shared axis',
     (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      try {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => buildProjectDetailRouteTransition(
+                context: context,
+                animation: const AlwaysStoppedAnimation(0.5),
+                child: const SizedBox(key: Key('project-detail-content')),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.byKey(const Key('project-detail-content')), findsOneWidget);
+        expect(
+          find.byKey(const Key('project-detail-route-clip')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('project-detail-route-slide')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('project-detail-route-fade')),
+          findsOneWidget,
+        );
+        expect(find.byType(SharedAxisTransition), findsNothing);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    },
+  );
+
+  testWidgets('Android project detail slides without a full-page fade', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
       await tester.pumpWidget(
         MaterialApp(
           home: Builder(
@@ -50,22 +95,41 @@ void main() {
         ),
       );
 
-      expect(find.byKey(const Key('project-detail-content')), findsOneWidget);
-      expect(
-        find.byKey(const Key('project-detail-route-clip')),
-        findsOneWidget,
-      );
       expect(
         find.byKey(const Key('project-detail-route-slide')),
         findsOneWidget,
       );
-      expect(
-        find.byKey(const Key('project-detail-route-fade')),
-        findsOneWidget,
+      expect(find.byKey(const Key('project-detail-route-fade')), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Android shared-axis routes slide without SharedAxis layers', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => buildSharedAxisRouteTransition(
+              context: context,
+              animation: const AlwaysStoppedAnimation(0.5),
+              secondaryAnimation: const AlwaysStoppedAnimation(0),
+              child: const SizedBox(key: Key('shared-axis-content')),
+            ),
+          ),
+        ),
       );
+
+      expect(find.byKey(const Key('shared-axis-content')), findsOneWidget);
       expect(find.byType(SharedAxisTransition), findsNothing);
-    },
-  );
+      expect(find.byKey(const Key('android-page-slide')), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 
   testWidgets('reduce-motion skips the project detail transition widgets', (
     tester,
