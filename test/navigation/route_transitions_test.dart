@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:animations/animations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -100,6 +102,112 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('project-detail-route-fade')), findsNothing);
+      final pushFades = tester.widgetList<FadeTransition>(
+        find.descendant(
+          of: find.byKey(const Key('project-detail-route-clip')),
+          matching: find.byType(FadeTransition),
+        ),
+      );
+      expect(pushFades, isNotEmpty);
+      expect(pushFades.every((fade) => fade.opacity.value == 1), isTrue);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Android pop slides the page out with a fade', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final controller = AnimationController(
+      vsync: tester,
+      duration: AppMotion.medium2,
+      value: 1.0,
+    );
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: buildCaptureDetailRouteTransition(
+            animation: controller,
+            child: const SizedBox(key: Key('capture-detail-content')),
+          ),
+        ),
+      );
+      controller.value = 0.6;
+      unawaited(controller.reverse());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+
+      final slide = tester.widget<SlideTransition>(
+        find.descendant(
+          of: find.byKey(const Key('android-page-slide')),
+          matching: find.byType(SlideTransition),
+        ),
+      );
+      expect(slide.position.value.dx, greaterThan(0.08));
+      final fade = tester.widget<FadeTransition>(
+        find.descendant(
+          of: find.byKey(const Key('android-page-slide')),
+          matching: find.byType(FadeTransition),
+        ),
+      );
+      expect(fade.opacity.value, greaterThan(0.0));
+      expect(fade.opacity.value, lessThan(1.0));
+    } finally {
+      controller.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('covered page drifts toward the incoming route on Android', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => buildProjectDetailRouteTransition(
+              context: context,
+              animation: const AlwaysStoppedAnimation(1),
+              secondaryAnimation: const AlwaysStoppedAnimation(0.5),
+              child: const SizedBox(key: Key('project-detail-content')),
+            ),
+          ),
+        ),
+      );
+
+      final parallax = tester.widget<SlideTransition>(
+        find.byKey(const Key('android-page-secondary-slide')),
+      );
+      expect(parallax.position.value.dx, lessThan(0.0));
+      expect(parallax.position.value.dx, greaterThan(-0.04));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('frozen secondary keeps the covered Android page put', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => buildSharedAxisRouteTransition(
+              context: context,
+              animation: const AlwaysStoppedAnimation(1),
+              secondaryAnimation: const AlwaysStoppedAnimation(0.5),
+              freezeSecondary: true,
+              child: const SizedBox(key: Key('capture-list')),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('android-page-secondary-slide')),
+        findsNothing,
+      );
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
