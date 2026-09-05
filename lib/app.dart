@@ -473,6 +473,7 @@ CustomTransitionPage<void> _projectDetailPage(
       return buildProjectDetailRouteTransition(
         context: context,
         animation: animation,
+        secondaryAnimation: secondaryAnimation,
         child: child,
       );
     },
@@ -496,6 +497,7 @@ CustomTransitionPage<void> _captureDetailPage(
       }
       return buildCaptureDetailRouteTransition(
         animation: animation,
+        secondaryAnimation: secondaryAnimation,
         child: child,
       );
     },
