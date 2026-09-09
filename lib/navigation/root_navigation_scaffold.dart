@@ -139,15 +139,25 @@ class RootBranchContainer extends StatefulWidget {
   final int currentIndex;
   final List<Widget> children;
 
+  /// Screen-width fraction each branch travels during a root tab switch.
+  ///
+  /// Shorter than a full-width pan so the switch feels snappier and costs
+  /// fewer pixels of overdraw; paired with progress-based opacity so any
+  /// remaining uncovered strip stays visually soft. Interrupt planning still
+  /// keeps the union of page spans covering the viewport [0, 1].
+  @visibleForTesting
+  static const double branchTravel = 0.45;
+
   /// Plans the next dock-switch animation's page offsets.
   ///
   /// Returns a map of page index -> (start, end) screen-width-fraction
   /// offsets. Every page still covering the viewport during the transition is
-  /// in the map; pages that have fully exited (|position| >= 1 at the moment
-  /// of the switch) are dropped so the build offstages them. The current page
-  /// always tweens to 0; every other planned page tweens to |end| == 1 so the
-  /// viewport [0, 1] is fully covered by the union of page spans at every
-  /// animation progress (asserted by the planner tests).
+  /// in the map; pages that have fully exited (|position| >= [branchTravel]
+  /// at the moment of the switch) are dropped so the build offstages them.
+  /// The current page always tweens to 0; every other planned page tweens to
+  /// |end| == [branchTravel] so the viewport [0, 1] is fully covered by the
+  /// union of page spans at every animation progress (asserted by the
+  /// planner tests).
   ///
   /// [interruptProgress] is the curve-transformed controller progress (0..1)
   /// sampled at the moment of the switch, or null when the switch starts from
@@ -164,11 +174,12 @@ class RootBranchContainer extends StatefulWidget {
     required int targetIndex,
     double? interruptProgress,
   }) {
-    final direction = targetIndex > currentIndex ? 1.0 : -1.0;
+    final sign = targetIndex > currentIndex ? 1.0 : -1.0;
+    final direction = sign * branchTravel;
     final newTweens = <int, (double, double)>{};
 
     if (interruptProgress == null) {
-      // Clean switch from rest: the outgoing page exits to the far side of
+      // Clean switch from rest: the outgoing page exits to the travel edge of
       // the new direction while the incoming page enters from that side.
       newTweens[currentIndex] = (0, -direction);
       newTweens[targetIndex] = (direction, 0);
@@ -192,10 +203,10 @@ class RootBranchContainer extends StatefulWidget {
     } else {
       // Enter from just outside the outgoing page on the new direction's
       // side, so the incoming page stays edge-to-edge with the outgoing page.
-      // Starting from the far edge (|direction| == 1) would leave a
-      // background gap when the outgoing page is still near the center —
-      // e.g. reverse 0->2->1: page 2 sits at ~+0.6, page 1 entering from
-      // -1 leaves a gap in the middle until page 1 crosses the center.
+      // Starting from the far travel edge would leave a background gap when
+      // the outgoing page is still near the center — e.g. reverse 0->2->1:
+      // page 2 sits mid-travel, page 1 entering from -travel leaves a gap
+      // until page 1 crosses the center.
       newTweens[targetIndex] = (currentPosition(currentIndex) + direction, 0);
     }
 
@@ -205,17 +216,20 @@ class RootBranchContainer extends StatefulWidget {
     // direction: pages with index < target must exit left, pages with
     // index > target must exit right. Using position (e.g. `pos < 0`) is
     // wrong because during a long rapid chain a page can momentarily cross
-    // the center (e.g. 0->1->2->0 late-interrupt: page 1 may be at -0.1
-    // after sliding left fast, but index 1 > 0 so it must exit right —
+    // the center (e.g. 0->1->2->0 late-interrupt: page 1 may be slightly
+    // left after sliding left fast, but index 1 > 0 so it must exit right —
     // sending it left would pull it away from page 2 and open a gap). Using
     // `-direction` is also wrong for reverse jumps (e.g. 0->2->1: page 0 is
-    // on the left, but -direction = +1 would send it across the screen to
-    // the right).
+    // on the left, but -direction would send it across the screen to the
+    // right).
     for (final index in previous.keys) {
       if (index == currentIndex || index == targetIndex) continue;
       final pos = currentPosition(index);
-      if (pos.abs() < 1) {
-        newTweens[index] = (pos, index < targetIndex ? -1.0 : 1.0);
+      if (pos.abs() < branchTravel) {
+        newTweens[index] = (
+          pos,
+          index < targetIndex ? -branchTravel : branchTravel,
+        );
       }
     }
     return newTweens;
@@ -235,7 +249,8 @@ class _RootBranchContainerState extends State<RootBranchContainer>
   /// Active branch page tweens during a transition: [index] -> (start, end)
   /// screen-width-fraction offsets. Planned by [planTweens]; the current page
   /// tweens to 0 and every other page still on screen exits to a side
-  /// (|end| == 1) so the viewport is always fully covered by pages.
+  /// (|end| == [RootBranchContainer.branchTravel]) so the viewport is always
+  /// fully covered by pages.
   Map<int, (double, double)> _activeTweens = const {};
 
   @override
@@ -317,38 +332,52 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                       index != _currentIndex &&
                       !(transitioning && _activeTweens.containsKey(index)),
                   child: RepaintBoundary(
-                    // Full-width horizontal slide ("one continuous take"):
-                    // outgoing page exits by one full width while the incoming
-                    // page enters by one full width. No scale — scale made the
-                    // switch feel like a zoom/card handoff instead of a pan.
-                    // [_activeTweens] holds each visible page's (start, end)
-                    // offset; pages still on-screen when a switch is
-                    // interrupted keep sliding out so no background gap shows.
-                    child: FractionalTranslation(
-                      key: Key('root-branch-translation-$index'),
-                      translation: Offset(
-                        transitioning && _activeTweens.containsKey(index)
+                    // Partial-width horizontal slide with opacity crossfade:
+                    // pages travel [branchTravel] of one screen width while
+                    // fading by |dx|/travel so the switch feels snappy without
+                    // flashing the scaffold. [_activeTweens] holds each
+                    // visible page's (start, end) offset; pages still
+                    // on-screen when a switch is interrupted keep sliding out
+                    // so no background gap shows.
+                    child: Builder(
+                      builder: (context) {
+                        final dx =
+                            transitioning && _activeTweens.containsKey(index)
                             ? lerpDouble(
                                 _activeTweens[index]!.$1,
                                 _activeTweens[index]!.$2,
                                 progress,
                               )!
-                            : 0,
-                        0,
-                      ),
-                      child: HeroMode(
-                        enabled: index == _currentIndex,
-                        child: TickerMode(
-                          enabled: index == _currentIndex,
-                          child: IgnorePointer(
-                            ignoring: index != _currentIndex,
-                            child: ExcludeSemantics(
-                              excluding: index != _currentIndex,
-                              child: branchChild,
+                            : 0.0;
+                        final opacity =
+                            transitioning && _activeTweens.containsKey(index)
+                            ? (1.0 -
+                                      (dx.abs() /
+                                          RootBranchContainer.branchTravel))
+                                  .clamp(0.0, 1.0)
+                            : 1.0;
+                        return Opacity(
+                          key: Key('root-branch-opacity-$index'),
+                          opacity: opacity,
+                          child: FractionalTranslation(
+                            key: Key('root-branch-translation-$index'),
+                            translation: Offset(dx, 0),
+                            child: HeroMode(
+                              enabled: index == _currentIndex,
+                              child: TickerMode(
+                                enabled: index == _currentIndex,
+                                child: IgnorePointer(
+                                  ignoring: index != _currentIndex,
+                                  child: ExcludeSemantics(
+                                    excluding: index != _currentIndex,
+                                    child: branchChild,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ),
                 ),
