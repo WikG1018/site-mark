@@ -7,20 +7,24 @@ import 'package:sitemark/motion.dart';
 const Offset _androidSecondaryDrift = Offset(-0.04, 0);
 
 /// Push enter travel for hierarchical pages (list → detail).
-const Offset _androidEnterBegin = Offset(0.18, 0);
+const Offset _androidEnterBegin = Offset(0.14, 0);
 
 /// Push enter travel for project detail, which stays lighter than a full
 /// hierarchical push so the project list under it remains the visual anchor.
-const Offset _androidProjectEnterBegin = Offset(0.12, 0);
+const Offset _androidProjectEnterBegin = Offset(0.08, 0);
 
 /// Pop exit travel. Push and pop share one timeline but not one travel
 /// distance: the page enters from a short offset, yet must visibly leave
 /// toward [exitOffset] while fading out.
-const Offset _androidExitOffset = Offset(0.30, 0);
+const Offset _androidExitOffset = Offset(0.28, 0);
 
 /// Floor of the enter fade. The page is already mostly opaque at the first
 /// frame so content is readable, then settles fully opaque as it lands.
 const double _androidEnterOpacityFloor = 0.72;
+
+/// Enter depth cue applied to the page body only. Hero flights live in the
+/// navigator overlay and stay outside this scale.
+const double _androidEnterScaleStart = 0.985;
 
 Widget _androidPageSlide({
   required Animation<double> animation,
@@ -48,13 +52,17 @@ Widget _androidPageSlide({
         final progress = exiting
             ? AppMotion.emphasizedAccelerate.transform(animation.value)
             : AppMotion.emphasizedDecelerate.transform(animation.value);
-        // Enter: light fade-in while sliding. Exit: fade out with the slide.
-        // Both paths keep a continuous opacity timeline so the page never
-        // pops out at full opacity and then disappears.
+        // Enter: light fade-in + settle scale while sliding. Exit: fade out
+        // with the slide. Both paths keep a continuous opacity timeline so
+        // the page never pops out at full opacity and then disappears.
         final opacity = exiting
             ? progress
             : _androidEnterOpacityFloor +
                   (1 - _androidEnterOpacityFloor) * progress;
+        final scale = exiting
+            ? 1.0
+            : _androidEnterScaleStart +
+                  (1 - _androidEnterScaleStart) * progress;
         return FadeTransition(
           opacity: AlwaysStoppedAnimation<double>(opacity),
           child: SlideTransition(
@@ -65,8 +73,15 @@ Widget _androidPageSlide({
             ).animate(AlwaysStoppedAnimation<double>(progress)),
             // Isolate the page paint so the transform/fade only moves a
             // layer instead of re-rasterizing list and photo subtrees every
-            // transition frame.
-            child: RepaintBoundary(child: child),
+            // transition frame. Scale sits on the page body only.
+            child: RepaintBoundary(
+              child: Transform.scale(
+                key: const Key('android-page-scale'),
+                scale: scale,
+                alignment: Alignment.center,
+                child: child,
+              ),
+            ),
           ),
         );
       },

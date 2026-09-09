@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 abstract final class AppMotion {
-  static const Duration rootSwitch = Duration(milliseconds: 240);
+  static const Duration rootSwitch = Duration(milliseconds: 220);
   static const Duration pageTransition = Duration(milliseconds: 260);
   static const Duration short4 = Duration(milliseconds: 180);
   static const Duration scrollChrome = Duration(milliseconds: 220);
