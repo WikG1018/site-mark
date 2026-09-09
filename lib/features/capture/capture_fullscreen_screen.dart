@@ -149,8 +149,12 @@ class _CaptureFullscreenScreenState
   Animation<Matrix4>? _scaleAnimation;
   Animation<double>? _dragAnimation;
 
+  /// Continuous dismiss-drag offset. Driven through a [ValueNotifier] so
+  /// pointer-move frames only rebuild the current photo's transform, not the
+  /// whole [PageView] tree.
+  final ValueNotifier<double> _dragOffset = ValueNotifier(0);
+
   Offset? _doubleTapPosition;
-  double _dragOffset = 0;
   bool _zoomed = false;
   bool _chromeVisible = false;
   int _currentPage = 0;
@@ -189,7 +193,7 @@ class _CaptureFullscreenScreenState
     });
     _dragController.addListener(() {
       final animation = _dragAnimation;
-      if (animation != null) setState(() => _dragOffset = animation.value);
+      if (animation != null) _dragOffset.value = animation.value;
     });
 
     final controller = ref.read(memoryPressureControllerProvider);
@@ -224,7 +228,7 @@ class _CaptureFullscreenScreenState
     _currentPage = widget.initialIndex;
     _currentPhotoId = _photos[widget.initialIndex].id;
     _zoomed = false;
-    _dragOffset = 0;
+    _dragOffset.value = 0;
     if (_pageController.hasClients) {
       _pageController.jumpToPage(widget.initialIndex);
     }
@@ -243,6 +247,7 @@ class _CaptureFullscreenScreenState
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _scaleController.dispose();
     _dragController.dispose();
+    _dragOffset.dispose();
     _pageController.dispose();
     _disposePhotoControllers();
     super.dispose();
@@ -336,7 +341,7 @@ class _CaptureFullscreenScreenState
       _currentPage = index;
       _currentPhotoId = photoId;
       _zoomed = zoomed;
-      _dragOffset = 0;
+      _dragOffset.value = 0;
     });
     _maybeLoadAdjacent(index);
   }
@@ -493,21 +498,21 @@ class _CaptureFullscreenScreenState
   }
 
   void _onVerticalDragUpdate(DragUpdateDetails details) {
-    setState(() => _dragOffset += details.delta.dy);
+    _dragOffset.value += details.delta.dy;
   }
 
   void _onVerticalDragEnd(DragEndDetails details) {
     final velocity = details.primaryVelocity ?? 0;
-    if (_dragOffset.abs() > _dismissThreshold ||
-        velocity.abs() > _dismissVelocity) {
+    final offset = _dragOffset.value;
+    if (offset.abs() > _dismissThreshold || velocity.abs() > _dismissVelocity) {
       Navigator.of(context).pop();
       return;
     }
     if (MediaQuery.disableAnimationsOf(context)) {
-      setState(() => _dragOffset = 0);
+      _dragOffset.value = 0;
       return;
     }
-    _dragAnimation = Tween<double>(begin: _dragOffset, end: 0).animate(
+    _dragAnimation = Tween<double>(begin: offset, end: 0).animate(
       CurvedAnimation(
         parent: _dragController,
         curve: AppMotion.emphasizedDecelerate,
@@ -533,10 +538,6 @@ class _CaptureFullscreenScreenState
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final dragScale = (1 - _dragOffset.abs() / _dragShrinkFactor).clamp(
-      _minDragScale,
-      1.0,
-    );
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -615,24 +616,37 @@ class _CaptureFullscreenScreenState
                           (!_zoomed && !_multiTouch && index == _currentPage)
                           ? _onVerticalDragEnd
                           : null,
-                      child: Transform.translate(
-                        offset: index == _currentPage
-                            ? Offset(0, _dragOffset)
-                            : Offset.zero,
-                        child: Transform.scale(
-                          scale: index == _currentPage ? dragScale : 1.0,
-                          child: InteractiveViewer(
-                            transformationController: transformController,
-                            panEnabled: false,
-                            scaleEnabled: false,
-                            child: Center(
-                              child: Semantics(
-                                label: strings.fullscreenPhotoSemantics,
-                                liveRegion: index == _currentPage,
-                                child: heroForThisPage == null
-                                    ? frame
-                                    : Hero(tag: heroForThisPage, child: frame),
-                              ),
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: _dragOffset,
+                        builder: (context, dragOffset, photo) {
+                          final dragScale =
+                              (1 - dragOffset.abs() / _dragShrinkFactor).clamp(
+                                _minDragScale,
+                                1.0,
+                              );
+                          final isCurrent = index == _currentPage;
+                          return Transform.translate(
+                            offset: isCurrent
+                                ? Offset(0, dragOffset)
+                                : Offset.zero,
+                            child: Transform.scale(
+                              scale: isCurrent ? dragScale : 1.0,
+                              child: photo,
+                            ),
+                          );
+                        },
+                        child: InteractiveViewer(
+                          key: Key('fullscreen-viewer-$index'),
+                          transformationController: transformController,
+                          panEnabled: false,
+                          scaleEnabled: false,
+                          child: Center(
+                            child: Semantics(
+                              label: strings.fullscreenPhotoSemantics,
+                              liveRegion: index == _currentPage,
+                              child: heroForThisPage == null
+                                  ? frame
+                                  : Hero(tag: heroForThisPage, child: frame),
                             ),
                           ),
                         ),

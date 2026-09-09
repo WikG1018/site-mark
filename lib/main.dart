@@ -9,13 +9,13 @@ export 'package:sitemark/app.dart' show MyApp;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Tighten Flutter's image cache for the ITGSA "fair running memory"
-  // mechanism. The defaults (1000 entries / 100 MB) are tuned for image-heavy
-  // social apps; SiteMark is an offline engineering tool whose working set
-  // is a handful of thumbnails plus at most one detail image, so 32 MB / 40
-  // entries is plenty and keeps the PSS footprint low when backgrounded.
-  PaintingBinding.instance.imageCache.maximumSize = 40;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 32 * 1024 * 1024;
+  // Keep a photo-app-sized working set in the foreground: list thumbnails,
+  // Hero flights, detail previews, and fullscreen paging all compete for the
+  // same cache. 40 / 32 MB caused constant re-decode thrash on Android scroll
+  // and transition frames. Memory pressure still clears the cache when the
+  // OS asks, so the backgrounded footprint stays bounded.
+  PaintingBinding.instance.imageCache.maximumSize = 100;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 * 1024 * 1024;
   // The production completion-notification service; SiteMarkApp initializes
   // it (deep-link taps) and keeps its send gate in sync with the persisted
   // settings switch.

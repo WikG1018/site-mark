@@ -3,12 +3,31 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sitemark/motion.dart';
 
+/// Travel distance of the secondary-page drift under an Android push.
+const Offset _androidSecondaryDrift = Offset(-0.04, 0);
+
+/// Push enter travel for hierarchical pages (list → detail).
+const Offset _androidEnterBegin = Offset(0.18, 0);
+
+/// Push enter travel for project detail, which stays lighter than a full
+/// hierarchical push so the project list under it remains the visual anchor.
+const Offset _androidProjectEnterBegin = Offset(0.12, 0);
+
+/// Pop exit travel. Push and pop share one timeline but not one travel
+/// distance: the page enters from a short offset, yet must visibly leave
+/// toward [exitOffset] while fading out.
+const Offset _androidExitOffset = Offset(0.30, 0);
+
+/// Floor of the enter fade. The page is already mostly opaque at the first
+/// frame so content is readable, then settles fully opaque as it lands.
+const double _androidEnterOpacityFloor = 0.72;
+
 Widget _androidPageSlide({
   required Animation<double> animation,
   required Widget child,
   Animation<double>? secondaryAnimation,
-  Offset begin = const Offset(0.08, 0),
-  Offset exitOffset = const Offset(0.30, 0),
+  Offset begin = _androidEnterBegin,
+  Offset exitOffset = _androidExitOffset,
   Key? clipKey,
   Key? slideKey,
 }) {
@@ -29,17 +48,25 @@ Widget _androidPageSlide({
         final progress = exiting
             ? AppMotion.emphasizedAccelerate.transform(animation.value)
             : AppMotion.emphasizedDecelerate.transform(animation.value);
+        // Enter: light fade-in while sliding. Exit: fade out with the slide.
+        // Both paths keep a continuous opacity timeline so the page never
+        // pops out at full opacity and then disappears.
+        final opacity = exiting
+            ? progress
+            : _androidEnterOpacityFloor +
+                  (1 - _androidEnterOpacityFloor) * progress;
         return FadeTransition(
-          opacity: exiting
-              ? AlwaysStoppedAnimation<double>(progress)
-              : const AlwaysStoppedAnimation<double>(1.0),
+          opacity: AlwaysStoppedAnimation<double>(opacity),
           child: SlideTransition(
             key: slideKey,
             position: Tween<Offset>(
               begin: exiting ? exitOffset : begin,
               end: Offset.zero,
             ).animate(AlwaysStoppedAnimation<double>(progress)),
-            child: child,
+            // Isolate the page paint so the transform/fade only moves a
+            // layer instead of re-rasterizing list and photo subtrees every
+            // transition frame.
+            child: RepaintBoundary(child: child),
           ),
         );
       },
@@ -52,7 +79,7 @@ Widget _androidPageSlide({
     // curve is symmetric, so direction handling is a non-issue here.
     page = SlideTransition(
       key: const Key('android-page-secondary-slide'),
-      position: Tween<Offset>(begin: Offset.zero, end: const Offset(-0.04, 0))
+      position: Tween<Offset>(begin: Offset.zero, end: _androidSecondaryDrift)
           .animate(
             CurvedAnimation(
               parent: secondary,
@@ -122,7 +149,7 @@ Widget buildProjectDetailRouteTransition({
     return _androidPageSlide(
       animation: animation,
       secondaryAnimation: secondaryAnimation,
-      begin: const Offset(0.045, 0),
+      begin: _androidProjectEnterBegin,
       clipKey: const Key('project-detail-route-clip'),
       slideKey: const Key('project-detail-route-slide'),
       child: child,
@@ -158,6 +185,10 @@ Widget buildProjectDetailRouteTransition({
 /// Capture-list pages set [freezeSecondary] so they stay fully painted while a
 /// photo detail route is on top. This prevents the returning Hero from landing
 /// on a list that is simultaneously fading and translating underneath it.
+///
+/// On Android the covered page is always frozen: photo-heavy lists re-rasterize
+/// under a secondary drift every frame, which is the main source of push jank
+/// on mid-range devices.
 Widget buildSharedAxisRouteTransition({
   required BuildContext context,
   required Animation<double> animation,
@@ -171,7 +202,7 @@ Widget buildSharedAxisRouteTransition({
   if (defaultTargetPlatform == TargetPlatform.android) {
     return _androidPageSlide(
       animation: animation,
-      secondaryAnimation: freezeSecondary ? null : secondaryAnimation,
+      secondaryAnimation: null,
       child: child,
     );
   }
@@ -202,7 +233,7 @@ Widget buildFadeThroughRouteTransition({
   if (defaultTargetPlatform == TargetPlatform.android) {
     return _androidPageSlide(
       animation: animation,
-      secondaryAnimation: freezeSecondary ? null : secondaryAnimation,
+      secondaryAnimation: null,
       child: child,
     );
   }

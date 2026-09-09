@@ -46,16 +46,22 @@ class GlassSurface extends StatelessWidget {
     // Android BackdropFilter is a saveLayer per widget per frame. List cards
     // and page transitions drop frames; iOS blur stays compositor-cheap.
     // Single chrome surfaces opt back in via [blurOnAndroid].
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
     final blurEnabled =
         blurSigma > 0 &&
         !MediaQuery.disableAnimationsOf(context) &&
-        (defaultTargetPlatform != TargetPlatform.android || blurOnAndroid);
+        (!isAndroid || blurOnAndroid);
     // Always clamp so callers cannot push opacity outside a readable glass band.
     final effectiveOpacity = blurEnabled
         ? opacity.clamp(0.58, 0.92)
         : (opacity + 0.10).clamp(0.58, 0.94);
+    // BlendMode.overlay can force an extra offscreen pass on Android's
+    // compositor. Keep it only for single chrome surfaces that already pay
+    // for live blur (the navigation dock); list cards and pages stay flat.
     final overlayEnabled =
-        enableOverlay && !MediaQuery.disableAnimationsOf(context);
+        enableOverlay &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        (!isAndroid || blurOnAndroid);
 
     final highlightAlpha = isDark ? 0.09 : 0.14;
     final insetAlpha = isDark ? 0.10 : 0.12;

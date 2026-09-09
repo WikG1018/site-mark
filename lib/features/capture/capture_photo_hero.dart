@@ -60,36 +60,33 @@ class CapturePhotoHero extends StatelessWidget {
               null,
               FileImage(File(path)),
             );
+            // FadeTransition rebuilds only its opacity layer; the two Image
+            // widgets stay stable so mid-flight frames do not re-create the
+            // decode-bound image subtrees every tick.
             return KeyedSubtree(
               key: const Key('capture-photo-hero-flight'),
-              child: AnimatedBuilder(
-                animation: animation,
-                builder: (context, child) {
-                  final progress = animation.value;
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Opacity(
-                        opacity: 1 - progress,
-                        child: Image(
-                          image: provider,
-                          fit: BoxFit.cover,
-                          gaplessPlayback: true,
-                          filterQuality: FilterQuality.medium,
-                        ),
-                      ),
-                      Opacity(
-                        opacity: progress,
-                        child: Image(
-                          image: provider,
-                          fit: BoxFit.contain,
-                          gaplessPlayback: true,
-                          filterQuality: FilterQuality.medium,
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  FadeTransition(
+                    opacity: ReverseAnimation(animation),
+                    child: Image(
+                      image: provider,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.medium,
+                    ),
+                  ),
+                  FadeTransition(
+                    opacity: animation,
+                    child: Image(
+                      image: provider,
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                      filterQuality: FilterQuality.medium,
+                    ),
+                  ),
+                ],
               ),
             );
           },

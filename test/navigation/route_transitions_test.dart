@@ -109,7 +109,10 @@ void main() {
         ),
       );
       expect(pushFades, isNotEmpty);
-      expect(pushFades.every((fade) => fade.opacity.value == 1), isTrue);
+      // Mid-push the page is mostly opaque and settles fully opaque at rest —
+      // a light enter fade, not a full-page fade-out.
+      expect(pushFades.every((fade) => fade.opacity.value > 0.7), isTrue);
+      expect(pushFades.every((fade) => fade.opacity.value < 1.0), isTrue);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }

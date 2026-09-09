@@ -1,5 +1,6 @@
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -293,6 +294,11 @@ class _RootBranchContainerState extends State<RootBranchContainer>
   Widget build(BuildContext context) {
     assert(widget.currentIndex >= 0);
     assert(widget.currentIndex < widget.children.length);
+    // Android composites two full-width pages during a dock switch. Pair the
+    // pan with a distance-based fade (FadeThrough feel) so mid-transition the
+    // covered content is not re-painted at full opacity under both pages.
+    final fadeDuringSwitch =
+        defaultTargetPlatform == TargetPlatform.android && !_disableAnimations;
     return ClipRect(
       child: AnimatedBuilder(
         animation: _controller,
@@ -344,7 +350,28 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                             ignoring: index != _currentIndex,
                             child: ExcludeSemantics(
                               excluding: index != _currentIndex,
-                              child: branchChild,
+                              child: Opacity(
+                                // Distance-from-center fade: a page sitting on
+                                // the center stays fully opaque; pages sliding
+                                // off the edges dim so the switch reads as a
+                                // crossfade-with-pan rather than two full pages
+                                // competing for the same pixels.
+                                opacity: () {
+                                  if (!fadeDuringSwitch ||
+                                      !transitioning ||
+                                      !_activeTweens.containsKey(index)) {
+                                    return 1.0;
+                                  }
+                                  final (start, end) = _activeTweens[index]!;
+                                  final distance = lerpDouble(
+                                    start,
+                                    end,
+                                    progress,
+                                  )!.abs();
+                                  return (1.0 - distance).clamp(0.0, 1.0);
+                                }(),
+                                child: branchChild,
+                              ),
                             ),
                           ),
                         ),
