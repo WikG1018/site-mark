@@ -9,7 +9,7 @@ import 'package:sitemark/motion.dart';
 
 void main() {
   test('root and page transition durations use the visual-system timings', () {
-    expect(AppMotion.rootSwitch, const Duration(milliseconds: 240));
+    expect(AppMotion.rootSwitch, const Duration(milliseconds: 220));
     expect(AppMotion.pageTransition, const Duration(milliseconds: 260));
   });
 
@@ -110,6 +110,13 @@ void main() {
       );
       expect(pushFades, isNotEmpty);
       expect(pushFades.every((fade) => fade.opacity.value == 1), isTrue);
+      expect(find.byKey(const Key('android-page-scale')), findsOneWidget);
+      final scale = tester.widget<Transform>(
+        find.byKey(const Key('android-page-scale')),
+      );
+      final axisScale = scale.transform.getMaxScaleOnAxis();
+      expect(axisScale, greaterThan(0.985));
+      expect(axisScale, lessThanOrEqualTo(1.0));
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
