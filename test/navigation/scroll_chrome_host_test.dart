@@ -110,7 +110,7 @@ void main() {
           builder: (context) {
             expect(
               scrollChromeAnimationOf(context),
-              const Duration(milliseconds: 280),
+              const Duration(milliseconds: 220),
             );
             expect(
               scrollChromeAnimationOf(context).inMilliseconds,

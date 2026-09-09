@@ -2,10 +2,10 @@
 
 [English](README_EN.md) | 简体中文
 
-> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.21`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.22`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
-(Latest `v1.0.21`, targeting Android 17), a native HarmonyOS NEXT implementation published
+(Latest `v1.0.22`, targeting Android 17), a native HarmonyOS NEXT implementation published
 alongside it, and an iOS build on the shared Flutter codebase that is fully adapted
 (iOS 26/27-style UI, background catch-up, dark mode) and awaits an Apple Developer
 account for signed distribution — no installable package yet. All product lines live on a
@@ -17,14 +17,14 @@ single branch.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.21-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.21)
+[![Latest](https://img.shields.io/badge/latest-v1.0.22-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.22)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.13-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)
 
-**当前稳定版本（Latest）：[`v1.0.21`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.21)**
+**当前稳定版本（Latest）：[`v1.0.22`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.22)**
 
 **鸿蒙原生版当前版本：[`native-v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)（HarmonyOS NEXT，未签名 HAP）**
 
-支持 Android 12（API 31）及以上系统。`v1.0.21` 已设为 Latest：二级页返回动画修复——退场改为滑向右侧并同步淡出，下层页面被覆盖时轻移、返回时回位；此前页面只回移 8% 即消失、下层不动。功能基线仍是三端可选 NAS 同步（WebDAV/SFTP/SMB，默认关闭，密码只存系统安全存储）。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.22` 已设为 Latest：安卓动效流畅度与质感优化——一级 Tab 改为短行程交叉淡入淡出，二级页进入加轻量淡入与缩放深度，全屏下拉与 Hero 飞行减少重建，图片缓存放宽以降低滚动/翻页解码抖动，列表卡片关闭 BlendMode.overlay。功能基线仍是三端可选 NAS 同步（WebDAV/SFTP/SMB，默认关闭，密码只存系统安全存储）。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 
 ## 下载
@@ -33,9 +33,9 @@ single branch.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.21-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.21/sitemark-v1.0.21-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.21-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.21/sitemark-v1.0.21-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.21/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.22-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.22/sitemark-v1.0.22-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.22-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.22/sitemark-v1.0.22-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.22/SHA256SUMS.txt) |
 
 ### 鸿蒙原生版（native-v1.0.13）
 
@@ -76,7 +76,8 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
-- **v1.0.21 / native-v1.0.13**（Latest）：二级页返回动画修复——退场改为滑向右侧 30% 并同步淡出，下层页面被覆盖时轻移 4%、返回时回位；安卓动效保持省帧（列表卡片停用实时模糊，导航 dock 保留）。
+- **v1.0.22**（Latest）：安卓动效流畅度与质感优化——一级 Tab 短行程交叉淡入淡出，二级页进入轻量淡入 + 缩放深度，全屏下拉/ Hero 减少重建，图片缓存放宽，列表卡片关闭 BlendMode.overlay，滚动藏栏 220ms。
+- **v1.0.21 / native-v1.0.13**：二级页返回动画修复——退场改为滑向右侧 30% 并同步淡出，下层页面被覆盖时轻移 4%、返回时回位；安卓动效保持省帧（列表卡片停用实时模糊，导航 dock 保留）。
 - **v1.0.20 / native-v1.0.12**：安卓流畅度修复——列表卡片与页面停用实时 BackdropFilter（导航 dock 安卓保留真实模糊），安卓页面转场改为单层轻量滑动；项目详情顶距修正。
 - **v1.0.19 / native-v1.0.11**：滚动藏栏动画放慢到 280ms；项目列表去掉多余顶距；滚动时顶栏不再变深。
 - **v1.0.18 / native-v1.0.10**：全屏预览两指放大后单指可拖到照片右侧；列表页下滚隐藏顶栏和底栏、上滚再出现。
@@ -281,7 +282,7 @@ HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Prefere
 
 涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.21` 已设为 Latest；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.22` 已设为 Latest；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 

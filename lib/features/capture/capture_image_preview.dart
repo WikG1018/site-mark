@@ -489,6 +489,12 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
             parent: animation,
             curve: AppMotion.emphasizedDecelerate,
           );
+          // When a Hero is already flying the photo, keep the route as a pure
+          // fade. Stacking a second scale on top of the Hero flight makes
+          // Android composite two competing transforms of the same pixels.
+          if (heroTag != null) {
+            return FadeTransition(opacity: curved, child: child);
+          }
           return FadeTransition(
             opacity: curved,
             child: ScaleTransition(

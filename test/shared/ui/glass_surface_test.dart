@@ -284,78 +284,137 @@ void main() {
   testWidgets('enableOverlay true paints the overlay blend layer', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: GlassSurface(enableOverlay: true, child: Text('content')),
-      ),
-    );
-    await tester.pump();
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: GlassSurface(enableOverlay: true, child: Text('content')),
+        ),
+      );
+      await tester.pump();
 
-    final blends = find.descendant(
-      of: find.byType(GlassSurface),
-      matching: find.byWidgetPredicate((Widget widget) {
-        if (widget is! DecoratedBox) return false;
-        final decoration = widget.decoration;
-        return decoration is BoxDecoration &&
-            decoration.backgroundBlendMode == BlendMode.overlay;
-      }),
-    );
-    expect(blends, findsOneWidget);
+      final blends = find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byWidgetPredicate((Widget widget) {
+          if (widget is! DecoratedBox) return false;
+          final decoration = widget.decoration;
+          return decoration is BoxDecoration &&
+              decoration.backgroundBlendMode == BlendMode.overlay;
+        }),
+      );
+      expect(blends, findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Android skips the overlay blend unless blur is on', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: GlassSurface(enableOverlay: true, child: Text('card')),
+        ),
+      );
+      await tester.pump();
+
+      final cardBlends = find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byWidgetPredicate((Widget widget) {
+          if (widget is! DecoratedBox) return false;
+          final decoration = widget.decoration;
+          return decoration is BoxDecoration &&
+              decoration.backgroundBlendMode == BlendMode.overlay;
+        }),
+      );
+      expect(cardBlends, findsNothing);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: GlassSurface(
+            enableOverlay: true,
+            blurOnAndroid: true,
+            child: Text('dock'),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final dockBlends = find.descendant(
+        of: find.byType(GlassSurface),
+        matching: find.byWidgetPredicate((Widget widget) {
+          if (widget is! DecoratedBox) return false;
+          final decoration = widget.decoration;
+          return decoration is BoxDecoration &&
+              decoration.backgroundBlendMode == BlendMode.overlay;
+        }),
+      );
+      expect(dockBlends, findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('overlay tint sits under content, not above it', (tester) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: GlassSurface(
-          enableOverlay: true,
-          child: Text('content', key: Key('glass-content')),
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: GlassSurface(
+            enableOverlay: true,
+            child: Text('content', key: Key('glass-content')),
+          ),
         ),
-      ),
-    );
-    await tester.pump();
+      );
+      await tester.pump();
 
-    final stack = tester.widget<Stack>(
-      find.descendant(
-        of: find.byType(GlassSurface),
-        matching: find.byType(Stack),
-      ),
-    );
-    final overlayIndex = stack.children.indexWhere((widget) {
-      if (widget is! Positioned) return false;
-      final child = widget.child;
-      if (child is! IgnorePointer) return false;
-      final decorated = child.child;
-      return decorated is DecoratedBox &&
-          decorated.decoration is BoxDecoration &&
-          (decorated.decoration as BoxDecoration).backgroundBlendMode ==
-              BlendMode.overlay;
-    });
-    final contentIndex = stack.children.indexWhere(
-      (widget) =>
-          widget is DefaultTextStyle ||
-          find
-              .descendant(
-                of: find.byWidget(widget),
-                matching: find.byKey(const Key('glass-content')),
-              )
-              .evaluate()
-              .isNotEmpty,
-    );
-    // Fall back: content is wrapped in DefaultTextStyle.merge
-    final textStyleIndex = stack.children.indexWhere(
-      (widget) => widget is DefaultTextStyle,
-    );
-    final resolvedContentIndex = contentIndex >= 0
-        ? contentIndex
-        : textStyleIndex;
+      final stack = tester.widget<Stack>(
+        find.descendant(
+          of: find.byType(GlassSurface),
+          matching: find.byType(Stack),
+        ),
+      );
+      final overlayIndex = stack.children.indexWhere((widget) {
+        if (widget is! Positioned) return false;
+        final child = widget.child;
+        if (child is! IgnorePointer) return false;
+        final decorated = child.child;
+        return decorated is DecoratedBox &&
+            decorated.decoration is BoxDecoration &&
+            (decorated.decoration as BoxDecoration).backgroundBlendMode ==
+                BlendMode.overlay;
+      });
+      final contentIndex = stack.children.indexWhere(
+        (widget) =>
+            widget is DefaultTextStyle ||
+            find
+                .descendant(
+                  of: find.byWidget(widget),
+                  matching: find.byKey(const Key('glass-content')),
+                )
+                .evaluate()
+                .isNotEmpty,
+      );
+      // Fall back: content is wrapped in DefaultTextStyle.merge
+      final textStyleIndex = stack.children.indexWhere(
+        (widget) => widget is DefaultTextStyle,
+      );
+      final resolvedContentIndex = contentIndex >= 0
+          ? contentIndex
+          : textStyleIndex;
 
-    expect(overlayIndex, greaterThanOrEqualTo(0));
-    expect(resolvedContentIndex, greaterThanOrEqualTo(0));
-    expect(
-      overlayIndex,
-      lessThan(resolvedContentIndex),
-      reason: 'overlay must paint before (under) content in the Stack',
-    );
+      expect(overlayIndex, greaterThanOrEqualTo(0));
+      expect(resolvedContentIndex, greaterThanOrEqualTo(0));
+      expect(
+        overlayIndex,
+        lessThan(resolvedContentIndex),
+        reason: 'overlay must paint before (under) content in the Stack',
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('clamps blur-enabled opacity into the glass band', (

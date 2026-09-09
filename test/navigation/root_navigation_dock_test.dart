@@ -140,4 +140,40 @@ void main() {
       reason: 'dock tap should fire HapticFeedback.selectionClick',
     );
   });
+
+  testWidgets('re-tapping the selected destination skips haptic feedback', (
+    tester,
+  ) async {
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        calls.add(call);
+        return null;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
+    });
+
+    var selected = 0;
+    await tester.pumpWidget(buildDock(selected, (value) => selected = value));
+
+    await tester.tap(find.byKey(const Key('root-destination-projects')));
+    await tester.pump();
+
+    expect(selected, 0);
+    expect(
+      calls.any(
+        (call) =>
+            call.method == 'HapticFeedback.vibrate' &&
+            call.arguments == 'HapticFeedbackType.selectionClick',
+      ),
+      isFalse,
+      reason: 're-tapping the current tab must not fire selectionClick',
+    );
+  });
 }

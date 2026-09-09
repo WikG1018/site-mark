@@ -160,7 +160,7 @@ void main() {
       await tester.pumpWidget(buildBranchContainer(fromIndex));
       await tester.pumpWidget(buildBranchContainer(toIndex));
       // Emphasized curve front-loads motion; sample early while both pages
-      // still share the viewport under a full-width pan.
+      // still share the viewport under a partial travel pan.
       await tester.pump(const Duration(milliseconds: 16));
 
       final direction = toIndex > fromIndex ? 1 : -1;
@@ -172,15 +172,16 @@ void main() {
       // Source slides opposite the switch direction; destination enters with it.
       expect(fromDx, lessThan(0));
       expect(toDx, greaterThan(0));
-      // Full-width pan: translation is a fraction of one screen width.
-      expect(fromDx.abs(), lessThanOrEqualTo(1.0));
-      expect(toDx, lessThanOrEqualTo(1.0));
+      // Partial travel pan: translation is a fraction of one screen width.
+      expect(fromDx.abs(), lessThanOrEqualTo(RootBranchContainer.branchTravel));
+      expect(toDx, lessThanOrEqualTo(RootBranchContainer.branchTravel));
       // Outgoing and incoming stay edge-to-edge (one continuous take).
-      // from = -progress, to = 1 - progress  =>  from + to == 0? No:
-      // fromDx = -progress (signed by direction already applied),
-      // toDx   = (1 - progress)  =>  fromDx + toDx == 1 - 2*progress.
-      // Edge-to-edge means |from| + |to| == 1.0.
-      expect(fromDx.abs() + toDx, closeTo(1.0, 0.001));
+      // from = -travel * progress, to = travel * (1 - progress)
+      // => |from| + |to| == branchTravel.
+      expect(
+        fromDx.abs() + toDx,
+        closeTo(RootBranchContainer.branchTravel, 0.001),
+      );
 
       await tester.pumpAndSettle();
       expect(branchOffstage(tester, fromIndex).offstage, isTrue);
@@ -237,7 +238,7 @@ void main() {
       expect(branch2Dx, greaterThan(0));
       expect(
         branch2Dx,
-        closeTo(interruptedDx + 1, 1e-9),
+        closeTo(interruptedDx + RootBranchContainer.branchTravel, 1e-9),
         reason: 'Branch 2 must be edge-to-edge with branch 1 to avoid a gap.',
       );
 
@@ -360,7 +361,7 @@ void main() {
       );
       expect(
         branch1Dx,
-        closeTo(branch2Dx - 1, 1e-9),
+        closeTo(branch2Dx - RootBranchContainer.branchTravel, 1e-9),
         reason: 'Branch 1 must be edge-to-edge with branch 2 to avoid a gap.',
       );
 
@@ -491,7 +492,7 @@ void main() {
     final branch0Dx = branchTranslation(tester, 0).translation.dx;
     expect(
       branch0Dx,
-      closeTo(branch1Dx - 1, 1e-9),
+      closeTo(branch1Dx - RootBranchContainer.branchTravel, 1e-9),
       reason: 'Branch 0 must enter edge-to-edge with branch 1.',
     );
 

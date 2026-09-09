@@ -168,7 +168,10 @@ class _RootDestinationButton extends StatelessWidget {
           child: InkWell(
             key: Key('root-destination-${destination.keyName}'),
             onTap: () {
-              HapticFeedback.selectionClick();
+              // Fire once only when the selected root index actually changes.
+              if (!selected) {
+                HapticFeedback.selectionClick();
+              }
               onTap();
             },
             borderRadius: radius,

@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.21`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.22`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -10,14 +10,14 @@ English | [简体中文](README.md)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.21-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.21)
+[![Latest](https://img.shields.io/badge/latest-v1.0.22-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.22)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.13-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)
 
-**Current stable version (Latest): [`v1.0.21`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.21)**
+**Current stable version (Latest): [`v1.0.22`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.22)**
 
 **Current HarmonyOS native version: [`native-v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13) (HarmonyOS NEXT, unsigned HAP)**
 
-Requires Android 12 (API 31) or later. `v1.0.21` is set as Latest: secondary-page back-exit fix — the leaving page now slides right while fading out, and the covered page drifts slightly and settles back on pop; previously the page nudged 8% and vanished while the page below stayed frozen. The feature baseline remains the optional three-protocol NAS sync (WebDAV/SFTP/SMB, off by default, passwords in system secure storage). Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
+Requires Android 12 (API 31) or later. `v1.0.22` is set as Latest: Android motion polish — root tab switches use a shorter travel with opacity crossfade, hierarchical pages gain a light enter fade and scale depth, fullscreen dismiss and Hero flights rebuild less, the image cache is widened to reduce decode thrash, list cards drop `BlendMode.overlay`, and hide-on-scroll chrome runs at 220ms. The feature baseline remains the optional three-protocol NAS sync (WebDAV/SFTP/SMB, off by default, passwords in system secure storage). Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
 
 ## Download
 
@@ -25,9 +25,9 @@ Requires Android 12 (API 31) or later. `v1.0.21` is set as Latest: secondary-pag
 
 | Package | Applies to | Download |
 | --- | --- | --- |
-| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.21-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.21/sitemark-v1.0.21-arm64.apk) |
-| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.21-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.21/sitemark-v1.0.21-universal.apk) |
-| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.21/SHA256SUMS.txt) |
+| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.22-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.22/sitemark-v1.0.22-arm64.apk) |
+| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.22-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.22/sitemark-v1.0.22-universal.apk) |
+| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.22/SHA256SUMS.txt) |
 
 ### HarmonyOS native (native-v1.0.13)
 
@@ -68,7 +68,8 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releases) for the full notes.
 
-- **v1.0.21 / native-v1.0.13** (Latest): secondary-page back-exit fix — exits slide right by 30% while fading out; the covered page drifts 4% and settles back on pop; Android motion stays frame-cheap (cards drop live blur, the dock keeps it).
+- **v1.0.22** (Latest): Android motion polish — root tab switches use shorter travel with opacity crossfade; hierarchical pages gain a light enter fade and scale depth; fullscreen dismiss and Hero flights rebuild less; image cache widened; list cards drop `BlendMode.overlay`; hide-on-scroll chrome at 220ms.
+- **v1.0.21 / native-v1.0.13**: secondary-page back-exit fix — exits slide right by 30% while fading out; the covered page drifts 4% and settles back on pop; Android motion stays frame-cheap (cards drop live blur, the dock keeps it).
 - **v1.0.20 / native-v1.0.12**: Android smoothness fixes — list cards and pages drop the live BackdropFilter (the navigation dock keeps its real blur on Android), page transitions switch to a single lightweight slide; the project detail top inset is fixed.
 - **v1.0.19 / native-v1.0.11**: the hide-on-scroll animation is slowed to 280ms; the extra gap under the projects AppBar is gone; the top bar no longer darkens while scrolling.
 - **v1.0.18 / native-v1.0.10**: after a two-finger zoom in fullscreen preview, one-finger pan can reach the right edge of the photo; list pages hide the top and bottom bars on scroll down and show them again on scroll up.
@@ -273,7 +274,7 @@ The release gates for the current version include:
 
 When HarmonyOS native code is involved, the checks additionally cover the HarmonyOS manifest's minimal permission set and dual-ABI configuration, and run Rust Clippy/tests for the `ohos-native` feature separately. ArkTS tests and HAP packaging need the DevEco Studio SDK and are currently verified in a local DevEco environment.
 
-Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.21` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
+Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.22` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
 
 ## Local build
 

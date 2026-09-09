@@ -9,7 +9,7 @@ import 'package:sitemark/motion.dart';
 
 void main() {
   test('root and page transition durations use the visual-system timings', () {
-    expect(AppMotion.rootSwitch, const Duration(milliseconds: 240));
+    expect(AppMotion.rootSwitch, const Duration(milliseconds: 220));
     expect(AppMotion.pageTransition, const Duration(milliseconds: 260));
   });
 
@@ -109,7 +109,15 @@ void main() {
         ),
       );
       expect(pushFades, isNotEmpty);
-      expect(pushFades.every((fade) => fade.opacity.value == 1), isTrue);
+      // Mid-push the page is mostly opaque and settles fully opaque at rest —
+      // a light enter fade, not a full-page fade-out.
+      expect(pushFades.every((fade) => fade.opacity.value > 0.7), isTrue);
+      expect(pushFades.every((fade) => fade.opacity.value < 1.0), isTrue);
+      // Enter scale settles from 0.985 → 1.0 on the page body.
+      final scale = tester.widget<Transform>(
+        find.byKey(const Key('android-page-scale')),
+      );
+      expect(scale, isNotNull);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
