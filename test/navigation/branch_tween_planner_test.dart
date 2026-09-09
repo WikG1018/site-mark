@@ -14,6 +14,7 @@ import 'package:sitemark/navigation/root_navigation_scaffold.dart';
 void main() {
   const pageCount = 3;
   const epsilon = 1e-9;
+  const travel = RootBranchContainer.branchTravel;
 
   double position(Map<int, (double, double)> tweens, int index, double p) {
     final tween = tweens[index];
@@ -66,8 +67,8 @@ void main() {
   }
 
   /// Every planned page must converge to a settled end: the most recent
-  /// target ends at 0, every other page ends at exactly -1 or +1 (fully
-  /// exited), so the animation always finishes clean.
+  /// target ends at 0, every other page ends at exactly ±[travel] (fully
+  /// exited for this motion budget), so the animation always finishes clean.
   void expectSettledEnd(
     Map<int, (double, double)> tweens, {
     required int targetIndex,
@@ -82,9 +83,9 @@ void main() {
       if (entry.key == targetIndex) continue;
       expect(
         entry.value.$2.abs(),
-        closeTo(1, epsilon),
+        closeTo(travel, epsilon),
         reason:
-            '$when: page ${entry.key} must exit to exactly one screen width.',
+            '$when: page ${entry.key} must exit to exactly the travel fraction.',
       );
     }
   }
@@ -98,8 +99,8 @@ void main() {
         interruptProgress: null,
       );
 
-      expect(tweens[0], (0.0, -1.0));
-      expect(tweens[1], (1.0, 0.0));
+      expect(tweens[0], (0.0, -travel));
+      expect(tweens[1], (travel, 0.0));
       expectSettledEnd(tweens, targetIndex: 1, when: '0->1 clean');
       for (var k = 0; k <= 10; k++) {
         expectViewportCovered(tweens, k / 10, when: '0->1 clean at $k/10');
@@ -134,7 +135,7 @@ void main() {
         // Incoming page 2 starts edge-to-edge with page 1.
         expect(
           position(second, 2, 0),
-          closeTo(position(second, 1, 0) + 1, epsilon),
+          closeTo(position(second, 1, 0) + travel, epsilon),
         );
         expectSettledEnd(second, targetIndex: 2, when: '0->1->2 chain');
       },
@@ -159,12 +160,12 @@ void main() {
       expect(position(second, 0, 0), lessThanOrEqualTo(0));
       expect(
         second[0]!.$2,
-        -1.0,
+        -travel,
         reason: 'page 0 (index < target) exits left.',
       );
       expect(
         second[2]!.$2,
-        1.0,
+        travel,
         reason: 'page 2 (index > target) exits right.',
       );
       expectSettledEnd(second, targetIndex: 1, when: '0->2->1 reverse jump');
