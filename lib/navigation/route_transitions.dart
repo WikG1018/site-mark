@@ -7,8 +7,8 @@ Widget _androidPageSlide({
   required Animation<double> animation,
   required Widget child,
   Animation<double>? secondaryAnimation,
-  Offset begin = const Offset(0.08, 0),
-  Offset exitOffset = const Offset(0.30, 0),
+  Offset begin = const Offset(0.12, 0),
+  Offset exitOffset = const Offset(0.26, 0),
   Key? clipKey,
   Key? slideKey,
 }) {
@@ -20,6 +20,10 @@ Widget _androidPageSlide({
   // the raw progress here instead of via CurvedAnimation, whose forward/
   // reverse direction is decided by status-change order and not by the
   // status the builder observes.
+  //
+  // Enter also scales 0.985→1.0 for a light depth cue. Opacity / scale sit on
+  // the page body only — Hero flights stay in the navigator overlay and are
+  // not wrapped by these layers.
   Widget page = ClipRect(
     key: clipKey ?? const Key('android-page-slide'),
     child: ListenableBuilder(
@@ -29,6 +33,7 @@ Widget _androidPageSlide({
         final progress = exiting
             ? AppMotion.emphasizedAccelerate.transform(animation.value)
             : AppMotion.emphasizedDecelerate.transform(animation.value);
+        final scale = 0.985 + (0.015 * progress);
         return FadeTransition(
           opacity: exiting
               ? AlwaysStoppedAnimation<double>(progress)
@@ -39,7 +44,12 @@ Widget _androidPageSlide({
               begin: exiting ? exitOffset : begin,
               end: Offset.zero,
             ).animate(AlwaysStoppedAnimation<double>(progress)),
-            child: child,
+            child: Transform.scale(
+              key: const Key('android-page-scale'),
+              scale: scale,
+              alignment: Alignment.center,
+              child: child,
+            ),
           ),
         );
       },
@@ -122,7 +132,7 @@ Widget buildProjectDetailRouteTransition({
     return _androidPageSlide(
       animation: animation,
       secondaryAnimation: secondaryAnimation,
-      begin: const Offset(0.045, 0),
+      begin: const Offset(0.08, 0),
       clipKey: const Key('project-detail-route-clip'),
       slideKey: const Key('project-detail-route-slide'),
       child: child,
