@@ -12,10 +12,11 @@ Future<void> main() async {
   // Keep a photo-app-sized working set in the foreground: list thumbnails,
   // Hero flights, detail previews, and fullscreen paging all compete for the
   // same cache. 40 / 32 MB caused constant re-decode thrash on Android scroll
-  // and transition frames. Memory pressure still clears the cache when the
-  // OS asks, so the backgrounded footprint stays bounded.
-  PaintingBinding.instance.imageCache.maximumSize = 100;
-  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 * 1024 * 1024;
+  // and transition frames. A 2048-wide RGBA decode is ~16 MB, so 96 MB holds
+  // roughly six full-size frames plus thumbnails. Memory pressure still
+  // clears the cache when the OS asks, so backgrounded PSS stays bounded.
+  PaintingBinding.instance.imageCache.maximumSize = 120;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 96 * 1024 * 1024;
   // The production completion-notification service; SiteMarkApp initializes
   // it (deep-link taps) and keeps its send gate in sync with the persisted
   // settings switch.

@@ -354,36 +354,50 @@ class _RootBranchContainerState extends State<RootBranchContainer>
                                 progress,
                               )!
                             : 0.0;
-                        final opacity =
-                            transitioning &&
-                                _activeTweens.containsKey(index) &&
-                                fadeDuringSwitch
-                            ? (1.0 -
-                                      (dx.abs() /
-                                          RootBranchContainer.branchTravel))
-                                  .clamp(0.0, 1.0)
-                            : 1.0;
-                        return Opacity(
-                          key: Key('root-branch-opacity-$index'),
-                          opacity: opacity,
-                          child: FractionalTranslation(
-                            key: Key('root-branch-translation-$index'),
-                            translation: Offset(dx, 0),
-                            child: HeroMode(
-                              enabled: index == _currentIndex,
-                              child: TickerMode(
-                                enabled: index == _currentIndex,
-                                child: IgnorePointer(
-                                  ignoring: index != _currentIndex,
-                                  child: ExcludeSemantics(
-                                    excluding: index != _currentIndex,
-                                    child: branchChild,
-                                  ),
-                                ),
+                        // Asymmetric FadeThrough: the outgoing page dims
+                        // quickly so mid-switch at most one full-page
+                        // saveLayer is active; the incoming page stays mostly
+                        // opaque so the switch never flashes the scaffold.
+                        // Opacity==1 skips the saveLayer entirely at rest.
+                        double opacity = 1.0;
+                        if (transitioning &&
+                            _activeTweens.containsKey(index) &&
+                            fadeDuringSwitch) {
+                          final distance =
+                              dx.abs() / RootBranchContainer.branchTravel;
+                          final end = _activeTweens[index]!.$2;
+                          opacity = end == 0
+                              ? (1.0 - distance * 0.35).clamp(0.0, 1.0)
+                              : (1.0 - distance * 1.6).clamp(0.0, 1.0);
+                        }
+                        final branch = HeroMode(
+                          enabled: index == _currentIndex,
+                          child: TickerMode(
+                            enabled: index == _currentIndex,
+                            child: IgnorePointer(
+                              ignoring: index != _currentIndex,
+                              child: ExcludeSemantics(
+                                excluding: index != _currentIndex,
+                                child: branchChild,
                               ),
                             ),
                           ),
                         );
+                        return opacity >= 1.0
+                            ? FractionalTranslation(
+                                key: Key('root-branch-translation-$index'),
+                                translation: Offset(dx, 0),
+                                child: branch,
+                              )
+                            : Opacity(
+                                key: Key('root-branch-opacity-$index'),
+                                opacity: opacity,
+                                child: FractionalTranslation(
+                                  key: Key('root-branch-translation-$index'),
+                                  translation: Offset(dx, 0),
+                                  child: branch,
+                                ),
+                              );
                       },
                     ),
                   ),

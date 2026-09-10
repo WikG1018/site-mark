@@ -55,14 +55,17 @@ Widget _androidPageSlide({
         // Enter: light fade-in + settle scale while sliding. Exit: fade out
         // with the slide. Both paths keep a continuous opacity timeline so
         // the page never pops out at full opacity and then disappears.
+        //
+        // Scale tracks the raw controller value (not the direction-curved
+        // progress) so a pop mid-enter continues from the current size
+        // instead of snapping 0.985 → 1.0 on the first reverse frame.
         final opacity = exiting
             ? progress
             : _androidEnterOpacityFloor +
                   (1 - _androidEnterOpacityFloor) * progress;
-        final scale = exiting
-            ? 1.0
-            : _androidEnterScaleStart +
-                  (1 - _androidEnterScaleStart) * progress;
+        final scale =
+            _androidEnterScaleStart +
+            (1 - _androidEnterScaleStart) * animation.value;
         return FadeTransition(
           opacity: AlwaysStoppedAnimation<double>(opacity),
           child: SlideTransition(
@@ -74,13 +77,15 @@ Widget _androidPageSlide({
             // Isolate the page paint so the transform/fade only moves a
             // layer instead of re-rasterizing list and photo subtrees every
             // transition frame. Scale sits on the page body only.
-            child: RepaintBoundary(
-              child: Transform.scale(
-                key: const Key('android-page-scale'),
-                scale: scale,
-                alignment: Alignment.center,
-                child: child,
-              ),
+            // Scale must wrap the RepaintBoundary, not sit inside it: the
+            // boundary caches one raster of the page, and a changing scale
+            // outside only re-composites that layer instead of re-rasterizing
+            // photo-heavy subtrees every enter frame.
+            child: Transform.scale(
+              key: const Key('android-page-scale'),
+              scale: scale,
+              alignment: Alignment.center,
+              child: RepaintBoundary(child: child),
             ),
           ),
         );
@@ -119,9 +124,12 @@ Widget buildCaptureDetailRouteTransition({
   required Widget child,
 }) {
   if (defaultTargetPlatform == TargetPlatform.android) {
+    // Freeze the covered capture list: a secondary drift re-rasterizes the
+    // thumbnail grid every frame and is the main source of push jank on
+    // mid-range Android devices. Matches the shared-axis freeze policy.
     return _androidPageSlide(
       animation: animation,
-      secondaryAnimation: secondaryAnimation,
+      secondaryAnimation: null,
       child: child,
     );
   }

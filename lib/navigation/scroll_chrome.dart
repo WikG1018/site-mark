@@ -6,8 +6,12 @@ import 'package:sitemark/motion.dart';
 /// Downward scroll (positive [delta]) hides; upward scroll shows. Chrome
 /// stays visible near the top of the list and whenever a caller forces it.
 class ScrollChromePolicy {
-  static const double hideThreshold = 8;
-  static const double showThreshold = 8;
+  /// Accumulated downward scroll before chrome hides.
+  ///
+  /// 8 px reacted to light accidental swipes and read as jitter; 16 px keeps
+  /// the bar put on a brief flick while still hiding on an intentional scroll.
+  static const double hideThreshold = 16;
+  static const double showThreshold = 16;
   static const double topRevealExtent = 24;
 
   bool visible = true;
