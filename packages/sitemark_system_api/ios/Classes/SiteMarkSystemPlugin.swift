@@ -9,8 +9,8 @@ import UIKit
 /// attaches it from MainActivity). There is no Activity/ActivityResult
 /// plumbing on iOS — view-controller presentation and permission callbacks
 /// resolve at call time.
-public class SiteMarkSystemPlugin: NSObject, FlutterPlugin, FlutterMethodCallHandler {
-    /// Public so tests can assert the lifecycle channel stays registered.
+public class SiteMarkSystemPlugin: NSObject, FlutterPlugin {
+    /// Channel name used only to pin this plugin to the engine's lifetime.
     public static let lifecycleChannelName = "sitemark/system_plugin_lifecycle"
 
     private var api: IOSSystemApi?
