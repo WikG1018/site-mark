@@ -62,7 +62,11 @@ class AdaptivePageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (hideOnScroll) {
+    // [hideOnScroll] swaps in the Material overlay chrome, which has no iOS
+    // equivalent. On iOS the native `CupertinoSliverNavigationBar` already
+    // collapses its large title on scroll, so the flag is ignored there and
+    // the platform branch below keeps the Liquid Glass navigation shape.
+    if (hideOnScroll && defaultTargetPlatform != TargetPlatform.iOS) {
       return _hideOnScrollScaffold(context);
     }
     if (defaultTargetPlatform != TargetPlatform.iOS) {

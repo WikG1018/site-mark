@@ -581,6 +581,63 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets('hideOnScroll keeps the iOS large-title nav bar (raw)', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ScrollChromeHost(
+            resetKey: 0,
+            child: AdaptivePageScaffold.raw(
+              hideOnScroll: true,
+              title: '全部记录',
+              body: _HideOnScrollList(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // iOS has no Material overlay chrome: the flag must fall through to the
+      // native collapsing bar instead of swapping in an AppBar.
+      expect(find.byType(CupertinoSliverNavigationBar), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.text('全部记录'), findsWidgets);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('hideOnScroll keeps the iOS large-title nav bar (boxed)', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ScrollChromeHost(
+            resetKey: 0,
+            child: AdaptivePageScaffold(
+              hideOnScroll: true,
+              title: '页面标题',
+              body: Text('正文'),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CupertinoSliverNavigationBar), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.text('页面标题'), findsWidgets);
+      expect(find.text('正文'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }
 
 class _HideOnScrollList extends StatelessWidget {
