@@ -7,6 +7,11 @@ void main() {
       expect(ScrollChromePolicy().visible, isTrue);
     });
 
+    test('uses a 16px hide/show threshold so light flicks stay put', () {
+      expect(ScrollChromePolicy.hideThreshold, 16);
+      expect(ScrollChromePolicy.showThreshold, 16);
+    });
+
     test('ignores jitter smaller than the hide threshold', () {
       final policy = ScrollChromePolicy();
 

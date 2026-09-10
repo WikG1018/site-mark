@@ -616,41 +616,61 @@ class _CaptureFullscreenScreenState
                           (!_zoomed && !_multiTouch && index == _currentPage)
                           ? _onVerticalDragEnd
                           : null,
-                      child: ValueListenableBuilder<double>(
-                        valueListenable: _dragOffset,
-                        builder: (context, dragOffset, photo) {
-                          final dragScale =
-                              (1 - dragOffset.abs() / _dragShrinkFactor).clamp(
-                                _minDragScale,
-                                1.0,
-                              );
-                          final isCurrent = index == _currentPage;
-                          return Transform.translate(
-                            offset: isCurrent
-                                ? Offset(0, dragOffset)
-                                : Offset.zero,
-                            child: Transform.scale(
-                              scale: isCurrent ? dragScale : 1.0,
-                              child: photo,
+                      // Only the current page listens to the dismiss drag;
+                      // adjacent PageView children stay static so a drag
+                      // frame does not rebuild two extra photo trees.
+                      child: index != _currentPage
+                          ? InteractiveViewer(
+                              key: Key('fullscreen-viewer-$index'),
+                              transformationController: transformController,
+                              panEnabled: false,
+                              scaleEnabled: false,
+                              child: Center(
+                                child: Semantics(
+                                  label: strings.fullscreenPhotoSemantics,
+                                  liveRegion: false,
+                                  child: heroForThisPage == null
+                                      ? frame
+                                      : Hero(
+                                          tag: heroForThisPage,
+                                          child: frame,
+                                        ),
+                                ),
+                              ),
+                            )
+                          : ValueListenableBuilder<double>(
+                              valueListenable: _dragOffset,
+                              builder: (context, dragOffset, photo) {
+                                final dragScale =
+                                    (1 - dragOffset.abs() / _dragShrinkFactor)
+                                        .clamp(_minDragScale, 1.0);
+                                return Transform.translate(
+                                  offset: Offset(0, dragOffset),
+                                  child: Transform.scale(
+                                    scale: dragScale,
+                                    child: photo,
+                                  ),
+                                );
+                              },
+                              child: InteractiveViewer(
+                                key: Key('fullscreen-viewer-$index'),
+                                transformationController: transformController,
+                                panEnabled: false,
+                                scaleEnabled: false,
+                                child: Center(
+                                  child: Semantics(
+                                    label: strings.fullscreenPhotoSemantics,
+                                    liveRegion: true,
+                                    child: heroForThisPage == null
+                                        ? frame
+                                        : Hero(
+                                            tag: heroForThisPage,
+                                            child: frame,
+                                          ),
+                                  ),
+                                ),
+                              ),
                             ),
-                          );
-                        },
-                        child: InteractiveViewer(
-                          key: Key('fullscreen-viewer-$index'),
-                          transformationController: transformController,
-                          panEnabled: false,
-                          scaleEnabled: false,
-                          child: Center(
-                            child: Semantics(
-                              label: strings.fullscreenPhotoSemantics,
-                              liveRegion: index == _currentPage,
-                              child: heroForThisPage == null
-                                  ? frame
-                                  : Hero(tag: heroForThisPage, child: frame),
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
                   ),
                 ),

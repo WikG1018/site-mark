@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:animations/animations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/navigation/route_transitions.dart';
 import 'package:sitemark/motion.dart';
@@ -11,6 +12,9 @@ void main() {
   test('root and page transition durations use the visual-system timings', () {
     expect(AppMotion.rootSwitch, const Duration(milliseconds: 220));
     expect(AppMotion.pageTransition, const Duration(milliseconds: 260));
+    // Photo lists keep ~4 extra card heights laid out so fast flings do not
+    // dispose thumbnails before they re-enter the viewport.
+    expect(AppMotion.photoListCacheExtent, const ScrollCacheExtent.pixels(500));
   });
 
   testWidgets('capture detail route fades continuously during reverse motion', (
@@ -188,6 +192,31 @@ void main() {
       );
       expect(parallax.position.value.dx, lessThan(0.0));
       expect(parallax.position.value.dx, greaterThan(-0.04));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('Android capture detail freezes the covered list', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: buildCaptureDetailRouteTransition(
+            animation: const AlwaysStoppedAnimation(1),
+            secondaryAnimation: const AlwaysStoppedAnimation(0.5),
+            child: const SizedBox(key: Key('capture-detail-content')),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('android-page-secondary-slide')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('capture-detail-content')), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }

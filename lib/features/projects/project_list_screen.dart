@@ -391,6 +391,7 @@ class _ProjectListScreenState extends ConsumerState<ProjectListScreen> {
                       controller:
                           nestedInnerScrollControllerOf(context) ??
                           listController,
+                      scrollCacheExtent: AppMotion.photoListCacheExtent,
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: EdgeInsets.fromLTRB(
