@@ -461,10 +461,13 @@ Page<void> _sharedAxisPage(
 }
 
 /// Project detail uses a short clipped slide over a stable project list.
-CustomTransitionPage<void> _projectDetailPage(
-  GoRouterState state,
-  Widget child,
-) {
+///
+/// On iOS it uses [CupertinoPage] so the push keeps the interactive
+/// edge-swipe back, matching the rest of the hierarchical navigation.
+Page<void> _projectDetailPage(GoRouterState state, Widget child) {
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return CupertinoPage<void>(key: state.pageKey, child: child);
+  }
   return CustomTransitionPage<void>(
     key: state.pageKey,
     transitionDuration: AppMotion.medium2,
@@ -483,10 +486,13 @@ CustomTransitionPage<void> _projectDetailPage(
 
 /// Photo detail and its editor use a position-only transition so the Hero
 /// overlay is not also handed between two independently fading image trees.
-CustomTransitionPage<void> _captureDetailPage(
-  GoRouterState state,
-  Widget child,
-) {
+///
+/// On iOS it uses [CupertinoPage] for the interactive edge-swipe back; the
+/// native transition keeps the Hero flight owned by the router.
+Page<void> _captureDetailPage(GoRouterState state, Widget child) {
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return CupertinoPage<void>(key: state.pageKey, child: child);
+  }
   return CustomTransitionPage<void>(
     key: state.pageKey,
     transitionDuration: AppMotion.medium2,

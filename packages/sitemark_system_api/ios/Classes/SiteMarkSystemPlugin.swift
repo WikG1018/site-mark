@@ -10,6 +10,9 @@ import UIKit
 /// plumbing on iOS — view-controller presentation and permission callbacks
 /// resolve at call time.
 public class SiteMarkSystemPlugin: NSObject, FlutterPlugin {
+    /// Channel name used only to pin this plugin to the engine's lifetime.
+    public static let lifecycleChannelName = "sitemark/system_plugin_lifecycle"
+
     private var api: IOSSystemApi?
     private var memoryPlugin: MemoryPressurePlugin?
 
@@ -21,6 +24,23 @@ public class SiteMarkSystemPlugin: NSObject, FlutterPlugin {
         let memory = MemoryPressurePlugin()
         memory.attach(messenger: registrar.messenger())
         instance.memoryPlugin = memory
+        // Pigeon retains `api` through its own message handlers, but nothing
+        // retained `instance`: without this the plugin deallocated at the end
+        // of `register`, its `MemoryPressurePlugin` went with it (the pressure
+        // source's `[weak self]` handler then never fired) and
+        // `detachFromEngine` was never called. Registering a method-call
+        // delegate pins the instance to the engine's lifetime, which is the
+        // documented Flutter plugin retention contract.
+        registrar.addMethodCallDelegate(
+            instance,
+            channel: FlutterMethodChannel(
+                name: lifecycleChannelName,
+                binaryMessenger: registrar.messenger()))
+    }
+
+    public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // The channel exists only to retain this plugin; there is no API here.
+        result(FlutterMethodNotImplemented)
     }
 
     public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
