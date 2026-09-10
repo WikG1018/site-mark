@@ -193,6 +193,31 @@ void main() {
     }
   });
 
+  testWidgets('Android capture detail freezes the covered list', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: buildCaptureDetailRouteTransition(
+            animation: const AlwaysStoppedAnimation(1),
+            secondaryAnimation: const AlwaysStoppedAnimation(0.5),
+            child: const SizedBox(key: Key('capture-detail-content')),
+          ),
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('android-page-secondary-slide')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('capture-detail-content')), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('frozen secondary keeps the covered Android page put', (
     tester,
   ) async {
