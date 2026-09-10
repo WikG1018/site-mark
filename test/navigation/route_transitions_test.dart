@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:animations/animations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/navigation/route_transitions.dart';
 import 'package:sitemark/motion.dart';
@@ -11,6 +12,9 @@ void main() {
   test('root and page transition durations use the visual-system timings', () {
     expect(AppMotion.rootSwitch, const Duration(milliseconds: 220));
     expect(AppMotion.pageTransition, const Duration(milliseconds: 260));
+    // Photo lists keep ~4 extra card heights laid out so fast flings do not
+    // dispose thumbnails before they re-enter the viewport.
+    expect(AppMotion.photoListCacheExtent, const ScrollCacheExtent.pixels(500));
   });
 
   testWidgets('capture detail route fades continuously during reverse motion', (

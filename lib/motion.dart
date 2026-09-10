@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 abstract final class AppMotion {
@@ -5,6 +6,13 @@ abstract final class AppMotion {
   static const Duration pageTransition = Duration(milliseconds: 260);
   static const Duration short4 = Duration(milliseconds: 180);
   static const Duration scrollChrome = Duration(milliseconds: 220);
+
+  /// Extra off-viewport pixels kept laid out for photo-heavy scrollables.
+  ///
+  /// Flutter's default 250 px is only ~2 card heights; fast flings dispose
+  /// thumbnail rows before they re-enter, which flashes a placeholder.
+  static const ScrollCacheExtent photoListCacheExtent =
+      ScrollCacheExtent.pixels(500);
   static const Duration medium2 = pageTransition;
   static const Duration medium4 = Duration(milliseconds: 320);
   static const Duration long2 = Duration(milliseconds: 500);
