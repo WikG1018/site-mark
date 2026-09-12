@@ -5,6 +5,9 @@
 > 产品：SiteMark（https://github.com/WikG1018/site-mark）
 > 读者：另一台电脑上的接替 Agent。本文件是唯一交接入口；不要依赖上一会话的聊天记录。
 
+> [!WARNING]
+> **状态：历史交接，已完成使命（2026-09-13 归档）。** 本文件写于 Phase 2b 刚合并时；此后 Phase 3 与 5–8 已全部合入 `main`（实施记录见 [`../plans/2026-08-30-ios-adaptation.md`](../plans/2026-08-30-ios-adaptation.md)，当前状态见 [`../../../NEXT_AGENT_PROMPT.md`](../../../NEXT_AGENT_PROMPT.md) 第 0 节与第 7 节）。当前接替入口以 `NEXT_AGENT_PROMPT.md` 为准；本文的「一句话现状」「下一步」「开工清单」已过时，仅「平台陷阱」「设计偏差」两节仍是有用的背景参考。
+
 ## 一句话现状
 
 iOS 是第三条产品线，走 **Flutter 复用**（`lib/` + `rust/` 全量复用，新增 Swift 系统桥），**不做原生重写**。Phase 0–2b 已全部合入 `main` 且 CI 绿。**下一步是 Phase 3（Dart 侧接线与平台差异落地）**。Phase 4（TestFlight / 签名）在用户提供 Apple Developer 账号之前**不得启动**。

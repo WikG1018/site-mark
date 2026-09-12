@@ -136,7 +136,7 @@ cargo test --manifest-path rust/Cargo.toml
 ## 6. 接到任务后的标准流程
 
 1. 读本文件（含第 0 节）+ 用户点名的 spec/plan（若有）+ 相关现有代码/测试。  
-2. `git status -sb`、当前分支、与 `origin/ohos-native` 的关系；工作区有不明改动则先停。  
+2. `git status -sb`、当前分支、与 `origin/main` 的关系；工作区有不明改动则先停。  
 3. 用简短消息说明：理解的目标、将改的文件、验证方式；无冲突则直接开干。  
 4. 红—绿测试 → 最小实现 → analyze + 相关测试 → 审查 diff → 提交 → 推送/更新 PR。  
 5. 阻塞时报告：复现命令、完整错误、已验证事实、已尝试方案、推荐的最小选择。
@@ -162,7 +162,7 @@ cargo test --manifest-path rust/Cargo.toml
 
 ## 9. 立即开始
 
-1. 确认 `ohos-native` 分支与 `ohos-native/AppScope/app.json5` 版本；读第 0 节的事实源。  
+1. 确认 `ohos-native/AppScope/app.json5` 版本；读第 0 节的事实源。  
 2. 阅读用户当前任务与相关 spec/plan。  
 3. 建立简短任务清单并开始第一个可验证步骤。  
 4. 除第 2 节与第 3 节的阻塞条件外，自主推进到可审查的 PR 状态。
