@@ -161,6 +161,11 @@ class _CaptureFullscreenScreenState
   String? _currentPhotoId;
   String? _scaleTargetPhotoId;
   int _sequenceGeneration = 0;
+
+  /// ID of the photo this screen was opened with. Snapshotted because
+  /// `widget.photos` is live for the `.sequence` constructor: once adjacent
+  /// records arrive, indexing it no longer yields the entry photo.
+  String? _entryPhotoId;
   late List<CaptureFullscreenPhoto> _photos;
   VoidCallback? _releaseDetach;
 
@@ -179,6 +184,7 @@ class _CaptureFullscreenScreenState
     super.initState();
     _photos = List.of(widget.photos);
     _currentPage = widget.initialIndex;
+    _entryPhotoId = _photos[widget.initialIndex].id;
     _currentPhotoId = _photos[widget.initialIndex].id;
     _pageController = PageController(initialPage: widget.initialIndex);
     widget.sequence?.addListener(_onSequenceChanged);
@@ -206,9 +212,7 @@ class _CaptureFullscreenScreenState
     });
 
     if (widget.sequence != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _maybeLoadAdjacent(_currentPage);
-      });
+      _scheduleAdjacentPrefetch();
     }
   }
 
@@ -226,6 +230,7 @@ class _CaptureFullscreenScreenState
     _resetPhotoCachesForSequence();
     _photos = List<CaptureFullscreenPhoto>.of(widget.photos);
     _currentPage = widget.initialIndex;
+    _entryPhotoId = _photos[widget.initialIndex].id;
     _currentPhotoId = _photos[widget.initialIndex].id;
     _zoomed = false;
     _dragOffset.value = 0;
@@ -233,9 +238,7 @@ class _CaptureFullscreenScreenState
       _pageController.jumpToPage(widget.initialIndex);
     }
     if (widget.sequence != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _maybeLoadAdjacent(_currentPage);
-      });
+      _scheduleAdjacentPrefetch();
     }
   }
 
@@ -313,9 +316,7 @@ class _CaptureFullscreenScreenState
     setState(() {
       if (nextCurrentPage >= 0) _currentPage = nextCurrentPage;
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _maybeLoadAdjacent(_currentPage);
-    });
+    _scheduleAdjacentPrefetch();
   }
 
   void _maybeLoadAdjacent(int index) {
@@ -327,6 +328,29 @@ class _CaptureFullscreenScreenState
     if (index >= _photos.length - 1 - _prefetchEdgeDistance) {
       unawaited(sequence.loadOlder());
     }
+  }
+
+  /// Adjacent prefetch holds until the entry transition finishes: a prepend
+  /// that lands mid-flight shifts every index and re-parents the flying
+  /// Hero, which ghosts the entry photo (the shuttle flies while the real
+  /// page renders in place). Waiting for the route animation also keeps
+  /// decode work off the transition frames.
+  void _scheduleAdjacentPrefetch() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final animation = ModalRoute.of(context)?.animation;
+      if (animation == null || animation.isCompleted) {
+        _maybeLoadAdjacent(_currentPage);
+        return;
+      }
+      void onStatus(AnimationStatus status) {
+        if (status != AnimationStatus.completed) return;
+        animation.removeStatusListener(onStatus);
+        if (mounted) _maybeLoadAdjacent(_currentPage);
+      }
+
+      animation.addStatusListener(onStatus);
+    });
   }
 
   void _onPageChanged(int index) {
@@ -555,10 +579,15 @@ class _CaptureFullscreenScreenState
               final photo = _photos[index];
               final preview = photo.previewImage;
               final transformController = _controllerFor(photo.id);
-              // The initially shown photo flies in from the source page's
-              // `capture-photo-{id}` hero when one is provided; adjacent and
-              // hero-less photos render without a Hero.
-              final heroForThisPage = index == widget.initialIndex
+              // The photo this screen was opened with flies in from the
+              // source page's `capture-photo-{id}` hero when one is provided;
+              // adjacent and hero-less photos render without a Hero. The
+              // entry photo is matched BY SNAPSHOT ID, not by index:
+              // prepending adjacent records shifts every index, and pinning
+              // the hero to `initialIndex` moves the tag onto a different
+              // photo mid-flight, leaving the real entry photo rendered in
+              // place under the flying shuttle (a double image).
+              final heroForThisPage = photo.id == _entryPhotoId
                   ? widget.heroTag
                   : null;
               final frame = _FullscreenPhotoFrame(

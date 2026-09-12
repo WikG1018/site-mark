@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 
 import 'photo_test_wait.dart';
 
@@ -515,6 +516,128 @@ void main() {
     );
     await gesture.up();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+    'the entry photo keeps the hero when older records are prepended',
+    (tester) async {
+      // Regression (ghosted fullscreen entry): the hero used to pin to
+      // `initialIndex`. Prepending an adjacent record shifts every index, so
+      // the hero tag landed on the WRONG photo while the real entry photo
+      // rendered in place underneath the flying shuttle — a double image.
+      final sequence = CaptureFullscreenSequence(
+        current: CaptureFullscreenPhoto(
+          id: 'capture-2',
+          initialPath: '/capture-2.jpg',
+          resolvePath: () async => '/capture-2.jpg',
+        ),
+        loader: (direction, anchorId) => switch (direction) {
+          CaptureFullscreenDirection.newer => Future.value([
+            CaptureFullscreenPhoto(
+              id: 'capture-1',
+              initialPath: '/capture-1.jpg',
+              resolvePath: () async => '/capture-1.jpg',
+            ),
+          ]),
+          CaptureFullscreenDirection.older => Future.value([]),
+        },
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            locale: const Locale('zh'),
+            supportedLocales: AppStrings.supportedLocales,
+            localizationsDelegates: const [
+              AppStrings.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: CaptureFullscreenScreen.sequence(
+              sequence: sequence,
+              heroTag: 'capture-photo-capture-2',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(sequence.photos.map((photo) => photo.id), [
+        'capture-1',
+        'capture-2',
+      ]);
+
+      final heroes = tester.widgetList<Hero>(find.byType(Hero)).toList();
+      expect(heroes, hasLength(1));
+      expect(heroes.single.tag, 'capture-photo-capture-2');
+      expect(
+        find.ancestor(
+          of: find.byType(Hero),
+          matching: find.byKey(const Key('fullscreen-photo-id-capture-2')),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('adjacent prefetch waits for the entry transition to finish', (
+    tester,
+  ) async {
+    final calls = <CaptureFullscreenDirection>[];
+    final sequence = CaptureFullscreenSequence(
+      current: CaptureFullscreenPhoto.resolved(path: '/current.jpg'),
+      loader: (direction, anchorId) {
+        calls.add(direction);
+        return Future.value([]);
+      },
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          supportedLocales: AppStrings.supportedLocales,
+          localizationsDelegates: const [
+            AppStrings.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () =>
+                    Navigator.of(tester.element(find.text('open'))).push(
+                      PageRouteBuilder<void>(
+                        transitionDuration: AppMotion.long2,
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            CaptureFullscreenScreen.sequence(
+                              sequence: sequence,
+                            ),
+                      ),
+                    ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    // The push transition is still running: prepending now would re-parent
+    // the flying hero, so the prefetch must hold until the entry settles.
+    expect(calls, isEmpty);
+
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(calls.toSet(), {
+      CaptureFullscreenDirection.newer,
+      CaptureFullscreenDirection.older,
+    });
   });
 
   testWidgets('ballistic prepend freezes the corrected visible photo', (
