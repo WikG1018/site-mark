@@ -693,6 +693,11 @@ void main() {
     );
     expect(viewer.sequence, isNotNull);
     expect(viewer.photos.map((photo) => photo.id), ['capture-1']);
+    // Adjacent prefetch waits for the entry transition: a prepend that lands
+    // mid-flight re-parents the flying hero and ghosts the entry photo.
+    expect(source.calls, isEmpty);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
     expect(source.calls, hasLength(2));
     expect(source.calls.every((call) => call.query == query), isTrue);
     expect(source.calls.every((call) => call.cursor == cursor), isTrue);
