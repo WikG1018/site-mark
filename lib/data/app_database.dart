@@ -480,7 +480,10 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 15 && !appSettingsJustCreated) {
         await migrator.addColumn(appSettings, appSettings.autoPublishToGallery);
-        await migrator.addColumn(appSettings, appSettings.locationCaptureEnabled);
+        await migrator.addColumn(
+          appSettings,
+          appSettings.locationCaptureEnabled,
+        );
       }
       await _ensureGlobalSettingsRow(this);
     },

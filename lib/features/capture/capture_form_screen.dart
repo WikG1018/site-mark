@@ -371,7 +371,9 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
               // already granted.
               useLocationFallback:
                   (_permissionState?.locationEnabled ?? false) &&
-                  (ref.read(appSettingControllerProvider).value
+                  (ref
+                          .read(appSettingControllerProvider)
+                          .value
                           ?.locationCaptureEnabled ??
                       true),
             ),
