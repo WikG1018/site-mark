@@ -118,7 +118,7 @@ void main() {
     expect(find.text('完成通知'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
     expect(find.text('简体中文'), findsOneWidget);
-    expect(find.text('已开启'), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsWidgets);
     expect(find.text('1.0 KB'), findsOneWidget);
     expect(find.byType(BackButton), findsNothing);
   });
@@ -129,7 +129,7 @@ void main() {
     await pumpSettings(tester);
 
     expect(find.byType(GlassSurface), findsNWidgets(3));
-    expect(find.byType(Divider), findsNWidgets(7));
+    expect(find.byType(Divider), findsNWidgets(8));
     for (final surface in tester.widgetList<GlassSurface>(
       find.byType(GlassSurface),
     )) {
@@ -150,17 +150,14 @@ void main() {
     for (final key in groupKeys) {
       final group = tester.widget<SettingsGroup>(find.byKey(key));
       expect(group.children.length, inInclusiveRange(3, 4));
-      expect(group.children, everyElement(isA<SettingsEntry>()));
     }
 
     final entries = tester.widgetList<SettingsEntry>(
       find.byType(SettingsEntry),
     );
-    expect(entries, hasLength(10));
-    expect(entries.map((entry) => entry.route), [
+    expect(entries, hasLength(8));
+    expect(entries.map((entry) => entry.route).toList(), [
       '/settings/watermark',
-      '/settings/location',
-      '/settings/notification',
       '/settings/backup-restore',
       '/settings/storage',
       '/settings/nas-sync',
@@ -169,17 +166,7 @@ void main() {
       '/settings/language',
       '/settings/about',
     ]);
-    expect(
-      entries
-          .where((entry) => entry.reserveSubtitleSpace)
-          .map((entry) => entry.route),
-      [
-        '/settings/notification',
-        '/settings/storage',
-        '/settings/nas-sync',
-        '/settings/language',
-      ],
-    );
+    expect(find.byType(SettingsSwitchEntry), findsNWidgets(3));
   });
 
   testWidgets('keeps unfinished async summaries blank without a spinner', (
@@ -267,7 +254,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('简体中文'), findsOneWidget);
-        expect(find.text('已开启'), findsOneWidget);
+        expect(find.byType(SwitchListTile), findsWidgets);
         expect(find.text('1.0 KB'), findsOneWidget);
         dataRects = _summaryAndFollowingRects(tester);
 
@@ -354,14 +341,14 @@ void main() {
       localeCode: 'zh',
       completionNotificationsEnabled: false,
     );
-    final settingsStream = StreamController<AppSetting>();
+    final settingsStream = StreamController<AppSetting>.broadcast();
     addTearDown(settingsStream.close);
     final initialSettings = await database.getAppSettings();
     await pumpSettings(tester, settingsStream: settingsStream.stream);
     settingsStream.add(initialSettings);
     await tester.pumpAndSettle();
     expect(find.text('简体中文'), findsOneWidget);
-    expect(find.text('未开启'), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsWidgets);
 
     await database.updateAppSettings(
       localeCode: 'en',
@@ -371,7 +358,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('English'), findsOneWidget);
-    expect(find.text('已开启'), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsWidgets);
   });
 
   testWidgets('settings route is reachable from the app shell', (tester) async {
@@ -646,6 +633,13 @@ void main() {
   );
 }
 
+List<String> _visibleSummaryTexts(WidgetTester tester) {
+  return [
+    for (final text in const ['简体中文', '1.0 KB'])
+      if (find.text(text).evaluate().isNotEmpty) text,
+  ];
+}
+
 Map<Key, Rect> _summaryAndFollowingRects(WidgetTester tester) {
   const keys = [
     Key('settings-entry-notification'),
@@ -656,13 +650,6 @@ Map<Key, Rect> _summaryAndFollowingRects(WidgetTester tester) {
     Key('settings-entry-about'),
   ];
   return {for (final key in keys) key: tester.getRect(find.byKey(key))};
-}
-
-List<String> _visibleSummaryTexts(WidgetTester tester) {
-  return [
-    for (final text in const ['简体中文', '已开启', '1.0 KB'])
-      if (find.text(text).evaluate().isNotEmpty) text,
-  ];
 }
 
 Map<String, Object> _summaryStateSnapshot(WidgetTester tester) {

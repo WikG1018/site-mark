@@ -168,6 +168,11 @@ final class CaptureProcessor {
           localeCode: rendering.watermarkLocaleCode,
         ),
       );
+      final settings = await database.getAppSettings();
+      if (!settings.autoPublishToGallery) {
+        await database.markReady(captureId: captureId);
+        return CaptureProcessResult.succeeded;
+      }
       final publishOutcome = await platform.publishJpeg(
         renderResult.outputPath,
         rendering.photoNumber!,

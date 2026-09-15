@@ -622,6 +622,14 @@ class AppStrings {
   String get completionNotificationSubtitle => _english
       ? 'Send a local notification when background processing finishes'
       : '后台处理完成后发送本地通知';
+  String get autoPublishToGalleryTitle =>
+      _english ? 'Save to gallery' : '保存至相册';
+  String get autoPublishToGallerySubtitle => _english
+      ? 'Automatically publish watermarked photos after processing'
+      : '处理完成后自动将水印照片保存到系统相册';
+  String get locationCaptureSubtitle => _english
+      ? 'Attach foreground location when capturing (system permission also required)'
+      : '拍照时附加前台定位（仍需系统定位权限）';
   String get notificationReadyTitle => _english ? 'Photo ready' : '照片处理完成';
   String notificationReadyBody(String photoNumber) => _english
       ? '$photoNumber finished processing. Tap to view.'

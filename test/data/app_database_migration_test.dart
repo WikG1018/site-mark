@@ -1102,7 +1102,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV10Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 14);
+    expect(database.schemaVersion, 15);
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);
@@ -1112,7 +1112,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV11Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 14);
+    expect(database.schemaVersion, 15);
     // The v11 lifecycle columns survive the v11→v12-only upgrade path.
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
@@ -1144,7 +1144,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV12Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 14);
+    expect(database.schemaVersion, 15);
 
     // The seeded v12 task survives with a FULL budget: retry count 0 and
     // not stalled, so automatic processing keeps serving it.
@@ -1172,7 +1172,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV12Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 14);
+    expect(database.schemaVersion, 15);
 
     // Pre-existing data survives the two-step upgrade.
     expect(
@@ -1229,7 +1229,7 @@ void main() {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 14);
+    expect(database.schemaVersion, 15);
     final project = await database.createProject(id: 'fresh', name: '新项目');
     expect(project.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);

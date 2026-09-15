@@ -116,6 +116,10 @@ class AppSettings extends Table {
       boolean().withDefault(const Constant(false))();
   BoolColumn get completionNotificationsEnabled =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get autoPublishToGallery =>
+      boolean().withDefault(const Constant(true))();
+  BoolColumn get locationCaptureEnabled =>
+      boolean().withDefault(const Constant(true))();
   IntColumn get appSeedColorArgb =>
       integer().withDefault(const Constant(kDefaultSeedColorArgb))();
   DateTimeColumn get updatedAt => dateTime()();
@@ -350,7 +354,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -473,6 +477,13 @@ class AppDatabase extends _$AppDatabase {
         // enqueued once the user enables sync, via the catch-up scan.
         await migrator.createTable(nasSyncConfigs);
         await migrator.createTable(nasUploadStates);
+      }
+      if (from < 15 && !appSettingsJustCreated) {
+        await migrator.addColumn(appSettings, appSettings.autoPublishToGallery);
+        await migrator.addColumn(
+          appSettings,
+          appSettings.locationCaptureEnabled,
+        );
       }
       await _ensureGlobalSettingsRow(this);
     },
@@ -1179,10 +1190,10 @@ ORDER BY
 
   Future<CaptureRecord> markReady({
     required String captureId,
-    required String publishedUri,
+    String? publishedUri,
     List<String> supersededUris = const [],
   }) {
-    if (publishedUri.trim().isEmpty) {
+    if (publishedUri != null && publishedUri.trim().isEmpty) {
       throw ArgumentError.value(publishedUri, 'publishedUri');
     }
     // The new URI and its superseded-cleanup tasks commit atomically: a
@@ -1194,11 +1205,15 @@ ORDER BY
         target: CaptureStatus.ready,
         companion: CaptureRecordsCompanion(
           status: const Value(CaptureStatus.ready),
-          publishedUri: Value(publishedUri),
+          publishedUri: publishedUri == null
+              ? const Value.absent()
+              : Value(publishedUri),
           failureReason: const Value(null),
         ),
       );
-      await enqueueSupersededCleanups(captureId, supersededUris);
+      if (publishedUri != null) {
+        await enqueueSupersededCleanups(captureId, supersededUris);
+      }
       return record;
     });
   }
@@ -1267,6 +1282,8 @@ ORDER BY
     bool? locationPermissionPromptDismissed,
     bool? useDynamicColor,
     bool? completionNotificationsEnabled,
+    bool? autoPublishToGallery,
+    bool? locationCaptureEnabled,
     int? appSeedColorArgb,
   }) async {
     final companion = AppSettingsCompanion(
@@ -1296,6 +1313,12 @@ ORDER BY
       completionNotificationsEnabled: completionNotificationsEnabled == null
           ? const Value.absent()
           : Value(completionNotificationsEnabled),
+      autoPublishToGallery: autoPublishToGallery == null
+          ? const Value.absent()
+          : Value(autoPublishToGallery),
+      locationCaptureEnabled: locationCaptureEnabled == null
+          ? const Value.absent()
+          : Value(locationCaptureEnabled),
       appSeedColorArgb: appSeedColorArgb == null
           ? const Value.absent()
           : Value(appSeedColorArgb),

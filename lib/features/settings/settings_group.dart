@@ -71,3 +71,35 @@ class SettingsEntry extends StatelessWidget {
     );
   }
 }
+
+/// First-level boolean toggle: no secondary page, no chevron.
+class SettingsSwitchEntry extends StatelessWidget {
+  const SettingsSwitchEntry({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String title;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final String? subtitle;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile.adaptive(
+      minTileHeight: 48,
+      secondary: Icon(icon),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle!),
+      value: value,
+      onChanged: enabled ? onChanged : null,
+    );
+  }
+}
