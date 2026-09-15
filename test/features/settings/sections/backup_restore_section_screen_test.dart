@@ -10,6 +10,7 @@ import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/projects/project_restore_flow.dart';
 import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust;
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
@@ -269,17 +270,12 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
-          find.descendant(
-            of: find.byType(SnackBar),
-            matching: find.textContaining(failureEntry.value),
-          ),
+          find.textContaining(failureEntry.value),
           findsOneWidget,
           reason: failureEntry.key.name,
         );
         expect(find.textContaining('raw internal'), findsNothing);
-        ScaffoldMessenger.of(
-          tester.element(find.byType(Scaffold).first),
-        ).clearSnackBars();
+        hideAppToast();
         await tester.pumpAndSettle();
       }
     }
@@ -452,17 +448,12 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
 
         expect(
-          find.descendant(
-            of: find.byType(SnackBar),
-            matching: find.textContaining(failureEntry.value),
-          ),
+          find.textContaining(failureEntry.value),
           findsOneWidget,
           reason: failureEntry.key.name,
         );
         expect(find.textContaining('raw internal'), findsNothing);
-        ScaffoldMessenger.of(
-          tester.element(find.byType(Scaffold).first),
-        ).clearSnackBars();
+        hideAppToast();
         await tester.pumpAndSettle();
       }
     }

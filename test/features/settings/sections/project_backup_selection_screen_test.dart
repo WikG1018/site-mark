@@ -11,6 +11,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/workflow/project_bundle_service.dart';
 import 'package:sitemark_system_api/sitemark_system_api.dart';
 
@@ -235,9 +236,17 @@ void main() {
     expect(find.byKey(const Key('backup-save-again')), findsOneWidget);
     expect(find.byKey(const Key('backup-share')), findsOneWidget);
 
+    // The glass toast floats over the bottom actions; dismiss it before the
+    // next tap so the overlay cannot swallow the hit test.
+    hideAppToast();
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('backup-save-again')));
     await tester.pumpAndSettle();
     expect(saveCalls, 2);
+
+    hideAppToast();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('backup-share')));
     await tester.pumpAndSettle();
