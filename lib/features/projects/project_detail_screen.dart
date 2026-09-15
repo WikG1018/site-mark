@@ -401,8 +401,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                         ? const SizedBox.shrink()
                         : AdaptiveFloatingButton(
                             key: const ValueKey('capture-fab'),
-                            heroTag:
-                                'project-capture-fab-${widget.projectId}',
+                            heroTag: 'project-capture-fab-${widget.projectId}',
                             onPressed: () => context.push(
                               '/projects/${widget.projectId}/capture',
                             ),
