@@ -646,18 +646,6 @@ void main() {
   );
 }
 
-Map<Key, Rect> _summaryAndFollowingRects(WidgetTester tester) {
-  const keys = [
-    Key('settings-entry-notification'),
-    Key('backup-restore-menu'),
-    Key('settings-entry-storage'),
-    Key('settings-entry-diagnostics'),
-    Key('settings-entry-language'),
-    Key('settings-entry-about'),
-  ];
-  return {for (final key in keys) key: tester.getRect(find.byKey(key))};
-}
-
 List<String> _visibleSummaryTexts(WidgetTester tester) {
   return [
     for (final text in const ['简体中文', '已开启', '1.0 KB'])
