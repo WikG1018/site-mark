@@ -1067,7 +1067,7 @@ fn wraps_max_length_work_content_within_card_text_area() {
 }
 
 #[test]
-fn exports_selection_zip_grouped_by_project_with_records_and_manifest() {
+fn exports_selection_zip_of_photos_grouped_by_project_folder() {
     let directory = tempdir().unwrap();
     let photo_a = directory.path().join("SM-20260716-001.jpg");
     let photo_b = directory.path().join("SM-20260716-002.jpg");
@@ -1129,35 +1129,24 @@ fn exports_selection_zip_grouped_by_project_with_records_and_manifest() {
     assert_eq!(result.archive_sha256.len(), 64);
     let archive_file = fs::File::open(&archive_path).unwrap();
     let mut archive = ZipArchive::new(archive_file).unwrap();
-    assert!(archive
-        .by_name("projects/project-a/photos/SM-20260716-001.jpg")
-        .is_ok());
-    assert!(archive
-        .by_name("projects/project-b/photos/SM-20260716-002.jpg")
-        .is_ok());
-    assert!(archive.by_name("records.csv").is_ok());
-    assert!(archive.by_name("manifest.json").is_ok());
+    let names: Vec<String> = archive.file_names().map(|name| name.to_string()).collect();
+    assert_eq!(
+        names,
+        vec![
+            "东区厂房改造/SM-20260716-001.jpg".to_string(),
+            "西区市政给水/SM-20260716-002.jpg".to_string(),
+        ]
+    );
+    assert!(archive.by_name("records.csv").is_err());
+    assert!(archive.by_name("manifest.json").is_err());
 
-    let mut csv = Vec::new();
+    let mut bytes = Vec::new();
     archive
-        .by_name("records.csv")
+        .by_name("东区厂房改造/SM-20260716-001.jpg")
         .unwrap()
-        .read_to_end(&mut csv)
+        .read_to_end(&mut bytes)
         .unwrap();
-    assert!(csv.starts_with(&[0xef, 0xbb, 0xbf]));
-    let csv_text = String::from_utf8(csv).unwrap();
-    assert!(csv_text.contains("东区厂房改造"));
-    assert!(csv_text.contains("西区市政给水"));
-
-    let mut manifest = String::new();
-    archive
-        .by_name("manifest.json")
-        .unwrap()
-        .read_to_string(&mut manifest)
-        .unwrap();
-    assert!(manifest.contains("\"schema_version\": 1"));
-    assert!(manifest.contains("project-a"));
-    assert!(manifest.contains("project-b"));
+    assert_eq!(bytes, b"jpeg-a");
 }
 
 #[test]
@@ -1816,7 +1805,7 @@ fn rejects_selection_archives_for_restore() {
     .unwrap();
 
     let error = read_project_archive(archive_path.to_string_lossy().into_owned()).unwrap_err();
-    assert!(error.contains("selection archive"), "{error}");
+    assert!(error.contains("no manifest.json"), "{error}");
 }
 
 #[test]
