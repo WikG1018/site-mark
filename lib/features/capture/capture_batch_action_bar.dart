@@ -19,10 +19,11 @@ import 'package:sitemark/workflow/project_export_service.dart';
 /// unless every selected row is `ready`; every action is disabled when the
 /// selection is empty. Delete-all keeps a count-aware confirmation dialog with
 /// a red confirm button; clear-originals runs on a 5-second delayed timer with
-/// a Snackbar "undo" window instead of a dialog. Each action executes service
+/// a glass-toast "undo" window instead of a dialog. Each action executes service
 /// work sequentially across the selected IDs, surfaces a `completed/total`
 /// progress line under a [LinearProgressIndicator], and reports the aggregated
-/// success/skipped/failed counts in a Snackbar when done.
+/// success/skipped/failed counts in a glass toast when done. Batch runs already
+/// exit selection mode, so the result toast has no trailing action.
 class CaptureBatchActionBar extends StatefulWidget {
   const CaptureBatchActionBar({
     super.key,
@@ -48,7 +49,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   int _total = 0;
 
   /// Pending clear-originals execution. Set while the 5-second undo window is
-  /// open; cancelled by the Snackbar undo action or by [dispose].
+  /// open; cancelled by the toast undo action or by [dispose].
   Timer? _clearOriginalsTimer;
 
   @override
@@ -65,12 +66,10 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
   List<String> get _selectedIds => widget.controller.selectedIds.toList();
 
   Future<void> _runSnapshotWithProgress(
-    String snackbarTitle,
+    String resultTitle,
     List<String> ids,
     Future<CaptureActionResult> Function(List<String> ids) op, {
-    required ScaffoldMessengerState? messenger,
     required AppStrings strings,
-    required CaptureSelectionController controller,
   }) async {
     final snapshot = List<String>.unmodifiable(ids);
     if (snapshot.isEmpty) return;
@@ -96,15 +95,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     } catch (error) {
       failed += snapshot.length;
       if (mounted) {
-        _showResult(
-          messenger,
-          strings,
-          controller,
-          snackbarTitle,
-          succeeded,
-          skipped,
-          failed,
-        );
+        _showResult(strings, resultTitle, succeeded, skipped, failed);
       }
       return;
     } finally {
@@ -118,35 +109,22 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
       }
     }
     if (mounted) {
-      _showResult(
-        messenger,
-        strings,
-        controller,
-        snackbarTitle,
-        succeeded,
-        skipped,
-        failed,
-      );
+      _showResult(strings, resultTitle, succeeded, skipped, failed);
     }
   }
 
   void _showResult(
-    ScaffoldMessengerState? messenger,
     AppStrings strings,
-    CaptureSelectionController controller,
     String title,
     int succeeded,
     int skipped,
     int failed,
   ) {
-    if (messenger == null) return;
+    // Selection already exits after the run; a "view" action would only
+    // repeat that and read as a dead control.
     showAppToast(
       context,
       '$title · ${strings.actionResult(succeeded, skipped, failed)}',
-      action: AppToastAction(
-        label: strings.viewAction,
-        onPressed: controller.exit,
-      ),
     );
   }
 
@@ -179,7 +157,6 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     final exportService = widget.exportService;
     final shareService = widget.shareService;
     final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.maybeOf(context);
     setState(() {
       _busy = true;
       _exporting = true;
@@ -193,27 +170,11 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
       );
       await shareService.shareFile(result.outputZipPath);
       if (mounted) {
-        _showResult(
-          messenger,
-          strings,
-          controller,
-          strings.exportSelection,
-          ids.length,
-          0,
-          0,
-        );
+        _showResult(strings, strings.exportSelection, ids.length, 0, 0);
       }
     } catch (error) {
       if (mounted) {
-        _showResult(
-          messenger,
-          strings,
-          controller,
-          strings.exportSelection,
-          0,
-          0,
-          ids.length,
-        );
+        _showResult(strings, strings.exportSelection, 0, 0, ids.length);
       }
     } finally {
       if (mounted) {
@@ -233,19 +194,16 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     final ids = _selectedIds;
     final mediaService = widget.mediaService;
     final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.maybeOf(context);
     await _runSnapshotWithProgress(
       strings.saveToGallery,
       ids,
       mediaService.republish,
-      messenger: messenger,
       strings: strings,
-      controller: controller,
     );
   }
 
   /// Schedules the clear-originals run after a 5-second undo window instead of
-  /// asking for confirmation up front. The Snackbar action cancels the pending
+  /// asking for confirmation up front. The toast action cancels the pending
   /// timer; only expiry executes the deletion.
   void _clearOriginals() {
     final ids = _selectedIds;
@@ -274,14 +232,11 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     final controller = widget.controller;
     final mediaService = widget.mediaService;
     final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.maybeOf(context);
     await _runSnapshotWithProgress(
       strings.clearOriginals,
       ids,
       mediaService.clearOriginals,
-      messenger: messenger,
       strings: strings,
-      controller: controller,
     );
     // Exit selection mode so the cleared state is visible in the cards.
     if (mounted) controller.exit();
@@ -293,7 +248,6 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
     final controller = widget.controller;
     final mediaService = widget.mediaService;
     final strings = AppStrings.of(context);
-    final messenger = ScaffoldMessenger.maybeOf(context);
     final confirmed = await _confirm(
       strings.deleteAll,
       strings.confirmDeleteAll(ids.length),
@@ -305,9 +259,7 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
       strings.deleteAll,
       ids,
       mediaService.deleteAll,
-      messenger: messenger,
       strings: strings,
-      controller: controller,
     );
     if (mounted) controller.exit();
   }

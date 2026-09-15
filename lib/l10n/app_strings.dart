@@ -631,7 +631,6 @@ class AppStrings {
       ? 'Notifies when background photo processing finishes'
       : '后台照片处理完成时通知';
   String get filterAction => _english ? 'Filter' : '筛选';
-  String get viewAction => _english ? 'View' : '查看';
   String get statusSemanticsPrefix => _english ? 'Status' : '状态';
   String photoSemanticsLabel(String photoNumber) =>
       _english ? 'Photo $photoNumber' : '照片 $photoNumber';

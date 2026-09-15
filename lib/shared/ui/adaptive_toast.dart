@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
@@ -14,12 +12,14 @@ class AppToastAction {
   final VoidCallback onPressed;
 }
 
-/// Shows a transient confirmation message following each platform's shape: a
-/// floating glass capsule over the content on iOS — snackbars are not part of
-/// the Liquid Glass vocabulary — and a Material [SnackBar] everywhere else.
+/// Shows a transient confirmation as a floating glass capsule — the same
+/// chrome vocabulary as the navigation dock and batch action bar.
 ///
-/// [replace] clears any visible toast first instead of queueing behind it,
-/// mirroring `hideCurrentSnackBar` + `showSnackBar` sequences.
+/// Material [SnackBar] is deliberately not used: its full-width bar and
+/// platform-default action styling read as a different design system from the
+/// app's floating glass surfaces.
+///
+/// [replace] clears any visible toast first instead of queueing behind it.
 void showAppToast(
   BuildContext context,
   String message, {
@@ -27,30 +27,13 @@ void showAppToast(
   bool replace = false,
   Duration duration = const Duration(seconds: 4),
 }) {
-  if (defaultTargetPlatform != TargetPlatform.iOS) {
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    // Keep the pre-migration `maybeOf` semantics: without a Scaffold in
-    // scope (bare test harnesses) the toast is a no-op.
-    if (messenger == null) return;
-    _materialMessenger = messenger;
-    if (replace) {
-      messenger
-        ..clearSnackBars()
-        ..removeCurrentSnackBar();
-    }
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: duration,
-        action: action == null
-            ? null
-            : SnackBarAction(label: action.label, onPressed: action.onPressed),
-      ),
-    );
-    return;
+  if (replace) {
+    _removeCurrent();
+  } else if (_currentEntry != null) {
+    // Keep the newest toast only, matching the previous hide+show Material
+    // sequence callers relied on.
+    _animatedDismiss?.call();
   }
-  _dismissTimer?.cancel();
-  _removeCurrent();
   final overlay = Overlay.of(context, rootOverlay: true);
   OverlayEntry? entry;
   entry = OverlayEntry(
@@ -67,40 +50,29 @@ void showAppToast(
   );
   _currentEntry = entry;
   overlay.insert(entry);
-  _dismissTimer = Timer(duration, () => _animatedDismiss?.call());
 }
 
-/// Immediately hides the visible toast, whichever platform is showing it.
+/// Immediately hides the visible toast.
 void hideAppToast() {
-  _dismissTimer?.cancel();
-  _dismissTimer = null;
-  if (defaultTargetPlatform != TargetPlatform.iOS) {
-    final messenger = _materialMessenger;
-    // The stored messenger can be stale (e.g. a disposed test harness);
-    // touching it would animate a disposed controller.
-    if (messenger != null && messenger.mounted) {
-      messenger.clearSnackBars();
-    } else {
-      _materialMessenger = null;
-    }
+  final animated = _animatedDismiss;
+  if (animated != null) {
+    animated();
     return;
   }
-  _animatedDismiss?.call();
+  _removeCurrent();
 }
 
 OverlayEntry? _currentEntry;
-Timer? _dismissTimer;
-ScaffoldMessengerState? _materialMessenger;
 
 /// Set by the visible capsule so timer/hide paths fade out instead of
 /// yanking the capsule off screen.
 void Function()? _animatedDismiss;
 
 void _removeCurrent() {
-  _dismissTimer?.cancel();
-  _dismissTimer = null;
-  _currentEntry?.remove();
+  final entry = _currentEntry;
   _currentEntry = null;
+  _animatedDismiss = null;
+  entry?.remove();
 }
 
 class _ToastCapsule extends StatefulWidget {
@@ -123,6 +95,7 @@ class _ToastCapsule extends StatefulWidget {
 class _ToastCapsuleState extends State<_ToastCapsule>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  Timer? _autoDismiss;
   bool _entranceStarted = false;
 
   @override
@@ -130,6 +103,9 @@ class _ToastCapsuleState extends State<_ToastCapsule>
     super.initState();
     _controller = AnimationController(vsync: this, value: 1);
     _animatedDismiss = _dismissAnimated;
+    // Own the auto-dismiss timer so overlay/route teardown can cancel it in
+    // [dispose] — a module-level timer would outlive a never-built entry.
+    _autoDismiss = Timer(widget.duration, _dismissAnimated);
   }
 
   @override
@@ -145,6 +121,8 @@ class _ToastCapsuleState extends State<_ToastCapsule>
   }
 
   void _dismissAnimated() {
+    _autoDismiss?.cancel();
+    _autoDismiss = null;
     if (!mounted) {
       widget.onDismiss();
       return;
@@ -160,6 +138,8 @@ class _ToastCapsuleState extends State<_ToastCapsule>
 
   @override
   void dispose() {
+    _autoDismiss?.cancel();
+    _autoDismiss = null;
     if (identical(_animatedDismiss, _dismissAnimated)) {
       _animatedDismiss = null;
     }
@@ -170,6 +150,7 @@ class _ToastCapsuleState extends State<_ToastCapsule>
   @override
   Widget build(BuildContext context) {
     final viewPadding = MediaQuery.viewPaddingOf(context);
+    final scheme = Theme.of(context).colorScheme;
     return SafeArea(
       child: Align(
         alignment: Alignment.bottomCenter,
@@ -179,6 +160,9 @@ class _ToastCapsuleState extends State<_ToastCapsule>
             opacity: _controller,
             child: GlassSurface(
               borderRadius: BorderRadius.circular(24),
+              // Match the root dock: one always-on glass layer is affordable
+              // and keeps the toast in the same material family.
+              blurOnAndroid: true,
               child: Material(
                 type: MaterialType.transparency,
                 child: Padding(
@@ -205,6 +189,9 @@ class _ToastCapsuleState extends State<_ToastCapsule>
                             widget.action!.onPressed();
                             _dismissAnimated();
                           },
+                          style: TextButton.styleFrom(
+                            foregroundColor: scheme.primary,
+                          ),
                           child: Text(widget.action!.label),
                         ),
                     ],

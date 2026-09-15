@@ -2085,7 +2085,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.byType(SnackBar), findsNothing);
       expect(find.textContaining('next time the app starts'), findsNothing);
       await unmountTree(tester);
     },
@@ -2125,7 +2125,7 @@ void main() {
 
     expect(find.byKey(const Key('project-list-root')), findsOneWidget);
     expect(find.textContaining('下次启动继续清理'), findsOneWidget);
-    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
     expect(find.textContaining('系统相册'), findsOneWidget);
     await unmountTree(tester);
   });

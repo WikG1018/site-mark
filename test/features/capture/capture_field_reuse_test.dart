@@ -2588,16 +2588,17 @@ void main() {
         await rig.drafts.save(_draft('project-1', 'Before Undo'));
         await rig.pump(tester);
 
-        await _applyTemplateAndWaitForUndo(tester, 'Undo template');
+        await _applyTemplateAndWaitForUndo(
+          tester,
+          'Undo template',
+          undoLabel: AppStrings(environment.locale).undo,
+        );
         rig.expectFields(tester, prefix: 'Undo template');
         expect(rig.fieldText(tester, const Key('notes')), 'Before Undo notes');
 
         await tester.tap(
           find
-              .widgetWithText(
-                SnackBarAction,
-                AppStrings(environment.locale).undo,
-              )
+              .widgetWithText(TextButton, AppStrings(environment.locale).undo)
               .hitTestable(),
         );
         await tester.pumpAndSettle();
@@ -2773,8 +2774,9 @@ Future<void> _applyTemplateFromForm(
 
 Future<void> _applyTemplateAndWaitForUndo(
   WidgetTester tester,
-  String templateName,
-) async {
+  String templateName, {
+  String undoLabel = '撤销',
+}) async {
   final button = find.byKey(const Key('capture-template-button'));
   await tester.ensureVisible(button);
   await tester.tap(button);
@@ -2783,12 +2785,19 @@ Future<void> _applyTemplateAndWaitForUndo(
   for (
     var attempt = 0;
     attempt < 20 &&
-        find.byType(SnackBarAction).hitTestable().evaluate().isEmpty;
+        find
+            .widgetWithText(TextButton, undoLabel)
+            .hitTestable()
+            .evaluate()
+            .isEmpty;
     attempt++
   ) {
     await tester.pump(const Duration(milliseconds: 50));
   }
-  expect(find.byType(SnackBarAction).hitTestable(), findsOneWidget);
+  expect(
+    find.widgetWithText(TextButton, undoLabel).hitTestable(),
+    findsOneWidget,
+  );
 }
 
 void _expectTemplateActionsDisabled(WidgetTester tester) {
