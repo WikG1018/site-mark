@@ -24,9 +24,7 @@ import 'package:sitemark/features/settings/sections/appearance_section_screen.da
 import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
 import 'package:sitemark/features/settings/sections/diagnostics_section_screen.dart';
 import 'package:sitemark/features/settings/sections/language_section_screen.dart';
-import 'package:sitemark/features/settings/sections/location_section_screen.dart';
 import 'package:sitemark/features/settings/sections/nas_sync_section_screen.dart';
-import 'package:sitemark/features/settings/sections/notification_section_screen.dart';
 import 'package:sitemark/features/settings/sections/storage_section_screen.dart';
 import 'package:sitemark/features/settings/sections/watermark_defaults_section_screen.dart';
 import 'package:sitemark/features/settings/sections/project_backup_selection_screen.dart';
@@ -682,20 +680,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                     path: 'storage',
                     pageBuilder: (context, state) =>
                         _sharedAxisPage(state, const StorageSectionScreen()),
-                  ),
-                  GoRoute(
-                    parentNavigatorKey: rootNavigatorKey,
-                    path: 'location',
-                    pageBuilder: (context, state) =>
-                        _sharedAxisPage(state, const LocationSectionScreen()),
-                  ),
-                  GoRoute(
-                    parentNavigatorKey: rootNavigatorKey,
-                    path: 'notification',
-                    pageBuilder: (context, state) => _sharedAxisPage(
-                      state,
-                      const NotificationSectionScreen(),
-                    ),
                   ),
                   GoRoute(
                     parentNavigatorKey: rootNavigatorKey,

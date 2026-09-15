@@ -19,6 +19,8 @@ Future<void> _ensureGlobalSettingsRow(AppDatabase db) async {
           locationPermissionPromptDismissed: const Value(false),
           useDynamicColor: const Value(false),
           completionNotificationsEnabled: const Value(false),
+          autoPublishToGallery: const Value(true),
+          locationCaptureEnabled: const Value(true),
           appSeedColorArgb: const Value(kDefaultSeedColorArgb),
           updatedAt: now,
         ),

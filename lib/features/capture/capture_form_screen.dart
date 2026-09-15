@@ -11,6 +11,7 @@ import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
 import 'package:sitemark/features/capture/capture_template_sheet.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
+import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
@@ -368,7 +369,11 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
               // The capture button path must never trigger a runtime permission
               // request, so only attempt a location read when permission is
               // already granted.
-              useLocationFallback: _permissionState?.locationEnabled ?? false,
+              useLocationFallback:
+                  (_permissionState?.locationEnabled ?? false) &&
+                  (ref.read(appSettingControllerProvider).value
+                          ?.locationCaptureEnabled ??
+                      true),
             ),
           );
     } on ProjectReadOnlyException {

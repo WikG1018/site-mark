@@ -144,6 +144,8 @@ class _DelayedFirstWriteDatabase extends AppDatabase {
     bool? locationPermissionPromptDismissed,
     bool? useDynamicColor,
     bool? completionNotificationsEnabled,
+    bool? autoPublishToGallery,
+    bool? locationCaptureEnabled,
     int? appSeedColorArgb,
   }) async {
     _writeCount++;
@@ -164,6 +166,8 @@ class _DelayedFirstWriteDatabase extends AppDatabase {
       locationPermissionPromptDismissed: locationPermissionPromptDismissed,
       useDynamicColor: useDynamicColor,
       completionNotificationsEnabled: completionNotificationsEnabled,
+      autoPublishToGallery: autoPublishToGallery,
+      locationCaptureEnabled: locationCaptureEnabled,
       appSeedColorArgb: appSeedColorArgb,
     );
   }

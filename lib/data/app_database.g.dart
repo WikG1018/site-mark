@@ -2242,6 +2242,35 @@ class $AppSettingsTable extends AppSettings
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _autoPublishToGalleryMeta =
+      const VerificationMeta('autoPublishToGallery');
+  @override
+  late final GeneratedColumn<bool> autoPublishToGallery = GeneratedColumn<bool>(
+    'auto_publish_to_gallery',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("auto_publish_to_gallery" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _locationCaptureEnabledMeta =
+      const VerificationMeta('locationCaptureEnabled');
+  @override
+  late final GeneratedColumn<bool> locationCaptureEnabled =
+      GeneratedColumn<bool>(
+        'location_capture_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("location_capture_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(true),
+      );
   static const VerificationMeta _appSeedColorArgbMeta = const VerificationMeta(
     'appSeedColorArgb',
   );
@@ -2277,6 +2306,8 @@ class $AppSettingsTable extends AppSettings
     locationPermissionPromptDismissed,
     useDynamicColor,
     completionNotificationsEnabled,
+    autoPublishToGallery,
+    locationCaptureEnabled,
     appSeedColorArgb,
     updatedAt,
   ];
@@ -2370,6 +2401,24 @@ class $AppSettingsTable extends AppSettings
         ),
       );
     }
+    if (data.containsKey('auto_publish_to_gallery')) {
+      context.handle(
+        _autoPublishToGalleryMeta,
+        autoPublishToGallery.isAcceptableOrUnknown(
+          data['auto_publish_to_gallery']!,
+          _autoPublishToGalleryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('location_capture_enabled')) {
+      context.handle(
+        _locationCaptureEnabledMeta,
+        locationCaptureEnabled.isAcceptableOrUnknown(
+          data['location_capture_enabled']!,
+          _locationCaptureEnabledMeta,
+        ),
+      );
+    }
     if (data.containsKey('app_seed_color_argb')) {
       context.handle(
         _appSeedColorArgbMeta,
@@ -2436,6 +2485,14 @@ class $AppSettingsTable extends AppSettings
         DriftSqlType.bool,
         data['${effectivePrefix}completion_notifications_enabled'],
       )!,
+      autoPublishToGallery: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}auto_publish_to_gallery'],
+      )!,
+      locationCaptureEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}location_capture_enabled'],
+      )!,
       appSeedColorArgb: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}app_seed_color_argb'],
@@ -2464,6 +2521,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
   final bool locationPermissionPromptDismissed;
   final bool useDynamicColor;
   final bool completionNotificationsEnabled;
+  final bool autoPublishToGallery;
+  final bool locationCaptureEnabled;
   final int appSeedColorArgb;
   final DateTime updatedAt;
   const AppSetting({
@@ -2477,6 +2536,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     required this.locationPermissionPromptDismissed,
     required this.useDynamicColor,
     required this.completionNotificationsEnabled,
+    required this.autoPublishToGallery,
+    required this.locationCaptureEnabled,
     required this.appSeedColorArgb,
     required this.updatedAt,
   });
@@ -2507,6 +2568,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     map['completion_notifications_enabled'] = Variable<bool>(
       completionNotificationsEnabled,
     );
+    map['auto_publish_to_gallery'] = Variable<bool>(autoPublishToGallery);
+    map['location_capture_enabled'] = Variable<bool>(locationCaptureEnabled);
     map['app_seed_color_argb'] = Variable<int>(appSeedColorArgb);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -2528,6 +2591,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       ),
       useDynamicColor: Value(useDynamicColor),
       completionNotificationsEnabled: Value(completionNotificationsEnabled),
+      autoPublishToGallery: Value(autoPublishToGallery),
+      locationCaptureEnabled: Value(locationCaptureEnabled),
       appSeedColorArgb: Value(appSeedColorArgb),
       updatedAt: Value(updatedAt),
     );
@@ -2561,6 +2626,12 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       completionNotificationsEnabled: serializer.fromJson<bool>(
         json['completionNotificationsEnabled'],
       ),
+      autoPublishToGallery: serializer.fromJson<bool>(
+        json['autoPublishToGallery'],
+      ),
+      locationCaptureEnabled: serializer.fromJson<bool>(
+        json['locationCaptureEnabled'],
+      ),
       appSeedColorArgb: serializer.fromJson<int>(json['appSeedColorArgb']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -2591,6 +2662,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
       'completionNotificationsEnabled': serializer.toJson<bool>(
         completionNotificationsEnabled,
       ),
+      'autoPublishToGallery': serializer.toJson<bool>(autoPublishToGallery),
+      'locationCaptureEnabled': serializer.toJson<bool>(locationCaptureEnabled),
       'appSeedColorArgb': serializer.toJson<int>(appSeedColorArgb),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -2607,6 +2680,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     bool? locationPermissionPromptDismissed,
     bool? useDynamicColor,
     bool? completionNotificationsEnabled,
+    bool? autoPublishToGallery,
+    bool? locationCaptureEnabled,
     int? appSeedColorArgb,
     DateTime? updatedAt,
   }) => AppSetting(
@@ -2627,6 +2702,9 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     useDynamicColor: useDynamicColor ?? this.useDynamicColor,
     completionNotificationsEnabled:
         completionNotificationsEnabled ?? this.completionNotificationsEnabled,
+    autoPublishToGallery: autoPublishToGallery ?? this.autoPublishToGallery,
+    locationCaptureEnabled:
+        locationCaptureEnabled ?? this.locationCaptureEnabled,
     appSeedColorArgb: appSeedColorArgb ?? this.appSeedColorArgb,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -2661,6 +2739,12 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           data.completionNotificationsEnabled.present
           ? data.completionNotificationsEnabled.value
           : this.completionNotificationsEnabled,
+      autoPublishToGallery: data.autoPublishToGallery.present
+          ? data.autoPublishToGallery.value
+          : this.autoPublishToGallery,
+      locationCaptureEnabled: data.locationCaptureEnabled.present
+          ? data.locationCaptureEnabled.value
+          : this.locationCaptureEnabled,
       appSeedColorArgb: data.appSeedColorArgb.present
           ? data.appSeedColorArgb.value
           : this.appSeedColorArgb,
@@ -2687,6 +2771,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           ..write(
             'completionNotificationsEnabled: $completionNotificationsEnabled, ',
           )
+          ..write('autoPublishToGallery: $autoPublishToGallery, ')
+          ..write('locationCaptureEnabled: $locationCaptureEnabled, ')
           ..write('appSeedColorArgb: $appSeedColorArgb, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -2705,6 +2791,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
     locationPermissionPromptDismissed,
     useDynamicColor,
     completionNotificationsEnabled,
+    autoPublishToGallery,
+    locationCaptureEnabled,
     appSeedColorArgb,
     updatedAt,
   );
@@ -2725,6 +2813,8 @@ class AppSetting extends DataClass implements Insertable<AppSetting> {
           other.useDynamicColor == this.useDynamicColor &&
           other.completionNotificationsEnabled ==
               this.completionNotificationsEnabled &&
+          other.autoPublishToGallery == this.autoPublishToGallery &&
+          other.locationCaptureEnabled == this.locationCaptureEnabled &&
           other.appSeedColorArgb == this.appSeedColorArgb &&
           other.updatedAt == this.updatedAt);
 }
@@ -2740,6 +2830,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   final Value<bool> locationPermissionPromptDismissed;
   final Value<bool> useDynamicColor;
   final Value<bool> completionNotificationsEnabled;
+  final Value<bool> autoPublishToGallery;
+  final Value<bool> locationCaptureEnabled;
   final Value<int> appSeedColorArgb;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -2754,6 +2846,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.locationPermissionPromptDismissed = const Value.absent(),
     this.useDynamicColor = const Value.absent(),
     this.completionNotificationsEnabled = const Value.absent(),
+    this.autoPublishToGallery = const Value.absent(),
+    this.locationCaptureEnabled = const Value.absent(),
     this.appSeedColorArgb = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2769,6 +2863,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     this.locationPermissionPromptDismissed = const Value.absent(),
     this.useDynamicColor = const Value.absent(),
     this.completionNotificationsEnabled = const Value.absent(),
+    this.autoPublishToGallery = const Value.absent(),
+    this.locationCaptureEnabled = const Value.absent(),
     this.appSeedColorArgb = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -2784,6 +2880,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Expression<bool>? locationPermissionPromptDismissed,
     Expression<bool>? useDynamicColor,
     Expression<bool>? completionNotificationsEnabled,
+    Expression<bool>? autoPublishToGallery,
+    Expression<bool>? locationCaptureEnabled,
     Expression<int>? appSeedColorArgb,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -2806,6 +2904,10 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       if (useDynamicColor != null) 'use_dynamic_color': useDynamicColor,
       if (completionNotificationsEnabled != null)
         'completion_notifications_enabled': completionNotificationsEnabled,
+      if (autoPublishToGallery != null)
+        'auto_publish_to_gallery': autoPublishToGallery,
+      if (locationCaptureEnabled != null)
+        'location_capture_enabled': locationCaptureEnabled,
       if (appSeedColorArgb != null) 'app_seed_color_argb': appSeedColorArgb,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -2823,6 +2925,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
     Value<bool>? locationPermissionPromptDismissed,
     Value<bool>? useDynamicColor,
     Value<bool>? completionNotificationsEnabled,
+    Value<bool>? autoPublishToGallery,
+    Value<bool>? locationCaptureEnabled,
     Value<int>? appSeedColorArgb,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -2846,6 +2950,9 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
       useDynamicColor: useDynamicColor ?? this.useDynamicColor,
       completionNotificationsEnabled:
           completionNotificationsEnabled ?? this.completionNotificationsEnabled,
+      autoPublishToGallery: autoPublishToGallery ?? this.autoPublishToGallery,
+      locationCaptureEnabled:
+          locationCaptureEnabled ?? this.locationCaptureEnabled,
       appSeedColorArgb: appSeedColorArgb ?? this.appSeedColorArgb,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -2897,6 +3004,16 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
         completionNotificationsEnabled.value,
       );
     }
+    if (autoPublishToGallery.present) {
+      map['auto_publish_to_gallery'] = Variable<bool>(
+        autoPublishToGallery.value,
+      );
+    }
+    if (locationCaptureEnabled.present) {
+      map['location_capture_enabled'] = Variable<bool>(
+        locationCaptureEnabled.value,
+      );
+    }
     if (appSeedColorArgb.present) {
       map['app_seed_color_argb'] = Variable<int>(appSeedColorArgb.value);
     }
@@ -2928,6 +3045,8 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
           ..write(
             'completionNotificationsEnabled: $completionNotificationsEnabled, ',
           )
+          ..write('autoPublishToGallery: $autoPublishToGallery, ')
+          ..write('locationCaptureEnabled: $locationCaptureEnabled, ')
           ..write('appSeedColorArgb: $appSeedColorArgb, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -6580,6 +6699,8 @@ typedef $$AppSettingsTableCreateCompanionBuilder =
       Value<bool> locationPermissionPromptDismissed,
       Value<bool> useDynamicColor,
       Value<bool> completionNotificationsEnabled,
+      Value<bool> autoPublishToGallery,
+      Value<bool> locationCaptureEnabled,
       Value<int> appSeedColorArgb,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -6596,6 +6717,8 @@ typedef $$AppSettingsTableUpdateCompanionBuilder =
       Value<bool> locationPermissionPromptDismissed,
       Value<bool> useDynamicColor,
       Value<bool> completionNotificationsEnabled,
+      Value<bool> autoPublishToGallery,
+      Value<bool> locationCaptureEnabled,
       Value<int> appSeedColorArgb,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -6658,6 +6781,16 @@ class $$AppSettingsTableFilterComposer
 
   ColumnFilters<bool> get completionNotificationsEnabled => $composableBuilder(
     column: $table.completionNotificationsEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get autoPublishToGallery => $composableBuilder(
+    column: $table.autoPublishToGallery,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get locationCaptureEnabled => $composableBuilder(
+    column: $table.locationCaptureEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6734,6 +6867,16 @@ class $$AppSettingsTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<bool> get autoPublishToGallery => $composableBuilder(
+    column: $table.autoPublishToGallery,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get locationCaptureEnabled => $composableBuilder(
+    column: $table.locationCaptureEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get appSeedColorArgb => $composableBuilder(
     column: $table.appSeedColorArgb,
     builder: (column) => ColumnOrderings(column),
@@ -6803,6 +6946,16 @@ class $$AppSettingsTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<bool> get autoPublishToGallery => $composableBuilder(
+    column: $table.autoPublishToGallery,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get locationCaptureEnabled => $composableBuilder(
+    column: $table.locationCaptureEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get appSeedColorArgb => $composableBuilder(
     column: $table.appSeedColorArgb,
     builder: (column) => column,
@@ -6856,6 +7009,8 @@ class $$AppSettingsTableTableManager
                 Value<bool> useDynamicColor = const Value.absent(),
                 Value<bool> completionNotificationsEnabled =
                     const Value.absent(),
+                Value<bool> autoPublishToGallery = const Value.absent(),
+                Value<bool> locationCaptureEnabled = const Value.absent(),
                 Value<int> appSeedColorArgb = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -6872,6 +7027,8 @@ class $$AppSettingsTableTableManager
                     locationPermissionPromptDismissed,
                 useDynamicColor: useDynamicColor,
                 completionNotificationsEnabled: completionNotificationsEnabled,
+                autoPublishToGallery: autoPublishToGallery,
+                locationCaptureEnabled: locationCaptureEnabled,
                 appSeedColorArgb: appSeedColorArgb,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -6891,6 +7048,8 @@ class $$AppSettingsTableTableManager
                 Value<bool> useDynamicColor = const Value.absent(),
                 Value<bool> completionNotificationsEnabled =
                     const Value.absent(),
+                Value<bool> autoPublishToGallery = const Value.absent(),
+                Value<bool> locationCaptureEnabled = const Value.absent(),
                 Value<int> appSeedColorArgb = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -6907,6 +7066,8 @@ class $$AppSettingsTableTableManager
                     locationPermissionPromptDismissed,
                 useDynamicColor: useDynamicColor,
                 completionNotificationsEnabled: completionNotificationsEnabled,
+                autoPublishToGallery: autoPublishToGallery,
+                locationCaptureEnabled: locationCaptureEnabled,
                 appSeedColorArgb: appSeedColorArgb,
                 updatedAt: updatedAt,
                 rowid: rowid,

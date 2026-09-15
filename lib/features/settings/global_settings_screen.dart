@@ -2,17 +2,112 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
+import 'package:sitemark/features/settings/app_setting_controller.dart';
 import 'package:sitemark/features/settings/settings_group.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/navigation/scroll_chrome.dart';
+import 'package:sitemark/platform/notification_service.dart';
+import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
+import 'package:sitemark/workflow/location_permission_service.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart';
 
-class GlobalSettingsScreen extends ConsumerWidget {
+class GlobalSettingsScreen extends ConsumerStatefulWidget {
   const GlobalSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GlobalSettingsScreen> createState() =>
+      _GlobalSettingsScreenState();
+}
+
+class _GlobalSettingsScreenState extends ConsumerState<GlobalSettingsScreen> {
+  bool _requestingLocation = false;
+
+  Future<void> _onLocationChanged(bool value) async {
+    if (_requestingLocation) return;
+    if (!value) {
+      await ref
+          .read(appSettingControllerProvider.notifier)
+          .update((s) => s.copyWith(locationCaptureEnabled: false));
+      return;
+    }
+    setState(() => _requestingLocation = true);
+    try {
+      final service = ref.read(locationPermissionServiceProvider);
+      LocationPermissionViewState state;
+      try {
+        state = await service.load();
+      } catch (_) {
+        state = LocationPermissionViewState(
+          permission: LocationPermissionState.denied,
+          showExplanation: false,
+        );
+      }
+      if (!state.locationEnabled) {
+        if (state.openSettings) {
+          await service.openSettings();
+          try {
+            state = await service.load();
+          } catch (_) {}
+        } else {
+          try {
+            state = await service.request();
+          } catch (_) {}
+        }
+      }
+      if (!mounted) return;
+      await ref
+          .read(appSettingControllerProvider.notifier)
+          .update(
+            (s) => s.copyWith(locationCaptureEnabled: state.locationEnabled),
+          );
+      if (!state.locationEnabled && mounted) {
+        showAppToast(context, AppStrings.of(context).locationDisabledHint);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _requestingLocation = false);
+      }
+    }
+  }
+
+  Future<void> _onCompletionNotificationChanged(bool value) async {
+    if (!value) {
+      await ref
+          .read(appSettingControllerProvider.notifier)
+          .update((s) => s.copyWith(completionNotificationsEnabled: false));
+      return;
+    }
+    var granted = true;
+    try {
+      granted = await ref
+          .read(completionNotificationServiceProvider)
+          .requestPermission();
+    } on UnimplementedError {
+      granted = true;
+    }
+    if (!mounted) return;
+    if (granted) {
+      await ref
+          .read(appSettingControllerProvider.notifier)
+          .update((s) => s.copyWith(completionNotificationsEnabled: true));
+    } else {
+      showAppToast(
+        context,
+        AppStrings.of(context).notificationPermissionDenied,
+      );
+    }
+  }
+
+  Future<void> _onAutoPublishChanged(bool value) async {
+    await ref
+        .read(appSettingControllerProvider.notifier)
+        .update((s) => s.copyWith(autoPublishToGallery: value));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final settings = _settledValue(ref.watch(appSettingsProvider));
     final storageUsage = _settledValue(ref.watch(storageUsageProvider));
@@ -23,11 +118,6 @@ class GlobalSettingsScreen extends ConsumerWidget {
             'en' => strings.english,
             _ => strings.systemLanguage,
           };
-    final notificationSummary = settings == null
-        ? null
-        : settings.completionNotificationsEnabled
-        ? strings.enabled
-        : strings.disabled;
     final storageSummary = storageUsage == null
         ? null
         : formatStorageBytes(storageUsage.totalBytes);
@@ -55,19 +145,34 @@ class GlobalSettingsScreen extends ConsumerWidget {
                   title: strings.newProjectDefaults,
                   route: '/settings/watermark',
                 ),
-                SettingsEntry(
+                SettingsSwitchEntry(
                   key: const Key('settings-entry-location'),
                   icon: Icons.location_on_outlined,
                   title: strings.locationLabel,
-                  route: '/settings/location',
+                  subtitle: strings.locationCaptureSubtitle,
+                  value: settings?.locationCaptureEnabled ?? false,
+                  enabled: settings != null && !_requestingLocation,
+                  onChanged: settings == null ? null : _onLocationChanged,
                 ),
-                SettingsEntry(
+                SettingsSwitchEntry(
                   key: const Key('settings-entry-notification'),
                   icon: Icons.notifications_outlined,
                   title: strings.completionNotificationTitle,
-                  subtitle: notificationSummary,
-                  reserveSubtitleSpace: true,
-                  route: '/settings/notification',
+                  subtitle: strings.completionNotificationSubtitle,
+                  value: settings?.completionNotificationsEnabled ?? false,
+                  enabled: settings != null,
+                  onChanged: settings == null
+                      ? null
+                      : _onCompletionNotificationChanged,
+                ),
+                SettingsSwitchEntry(
+                  key: const Key('settings-entry-auto-publish-gallery'),
+                  icon: Icons.add_to_photos_outlined,
+                  title: strings.autoPublishToGalleryTitle,
+                  subtitle: strings.autoPublishToGallerySubtitle,
+                  value: settings?.autoPublishToGallery ?? true,
+                  enabled: settings != null,
+                  onChanged: settings == null ? null : _onAutoPublishChanged,
                 ),
               ],
             ),
