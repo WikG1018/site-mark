@@ -387,36 +387,27 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                           ),
                   ),
                 ),
-                floatingActionButton: AnimatedSlide(
-                  duration: scrollChromeAnimationOf(context),
-                  curve: AppMotion.emphasized,
-                  offset: ScrollChromeScope.visibleOf(context)
-                      ? Offset.zero
-                      : const Offset(0, 2),
-                  child: IgnorePointer(
-                    ignoring: !ScrollChromeScope.visibleOf(context),
-                    child: AnimatedSwitcher(
-                      duration: AppMotion.durationOf(
-                        context,
-                        AppMotion.medium2,
-                      ),
-                      switchInCurve: AppMotion.emphasized,
-                      switchOutCurve: AppMotion.emphasized,
-                      transitionBuilder: (child, animation) =>
-                          ScaleTransition(scale: animation, child: child),
-                      child: !canCapture
-                          ? const SizedBox.shrink()
-                          : AdaptiveFloatingButton(
-                              key: const ValueKey('capture-fab'),
-                              heroTag:
-                                  'project-capture-fab-${widget.projectId}',
-                              onPressed: () => context.push(
-                                '/projects/${widget.projectId}/capture',
-                              ),
-                              icon: Icons.photo_camera_outlined,
-                              label: strings.capture,
+                // Capture stays parked while scrolling: only the enable/disable
+                // state scales in/out — no scroll-linked shrink or slide.
+                floatingActionButton: IgnorePointer(
+                  ignoring: !canCapture,
+                  child: AnimatedSwitcher(
+                    duration: AppMotion.durationOf(context, AppMotion.medium2),
+                    switchInCurve: AppMotion.emphasized,
+                    switchOutCurve: AppMotion.emphasized,
+                    transitionBuilder: (child, animation) =>
+                        ScaleTransition(scale: animation, child: child),
+                    child: !canCapture
+                        ? const SizedBox.shrink()
+                        : AdaptiveFloatingButton(
+                            key: const ValueKey('capture-fab'),
+                            heroTag: 'project-capture-fab-${widget.projectId}',
+                            onPressed: () => context.push(
+                              '/projects/${widget.projectId}/capture',
                             ),
-                    ),
+                            icon: Icons.photo_camera_outlined,
+                            label: strings.capture,
+                          ),
                   ),
                 ),
               ),

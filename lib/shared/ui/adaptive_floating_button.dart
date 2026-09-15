@@ -1,12 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
-/// Floating action affordance following each platform's shape: a Material
-/// [FloatingActionButton] (circular, or extended when [label] is given)
-/// everywhere else; a Liquid Glass capsule — the iOS 27 floating accessory —
-/// on iOS.
+/// Floating action affordance in the app's glass chrome vocabulary — the
+/// same family as the navigation dock and toast capsule. Used on every
+/// platform so "New project" and "Capture" do not flip between a solid
+/// Material FAB and a glass pill.
 class AdaptiveFloatingButton extends StatelessWidget {
   const AdaptiveFloatingButton({
     super.key,
@@ -29,25 +28,6 @@ class AdaptiveFloatingButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final extended = label != null;
-    if (defaultTargetPlatform != TargetPlatform.iOS) {
-      // The wrapper carries the caller's key; adding it to the inner FAB
-      // too would make finders ambiguous.
-      final button = extended
-          ? FloatingActionButton.extended(
-              heroTag: heroTag,
-              onPressed: onPressed,
-              icon: icon == null ? null : Icon(icon),
-              label: Text(label!),
-            )
-          : FloatingActionButton(
-              heroTag: heroTag,
-              onPressed: onPressed,
-              child: icon == null ? null : Icon(icon),
-            );
-      return tooltip == null
-          ? button
-          : Tooltip(message: tooltip!, child: button);
-    }
     final foreground = Theme.of(context).colorScheme.onSurface;
     final radius = BorderRadius.circular(999);
     final content = Material(
@@ -85,6 +65,9 @@ class AdaptiveFloatingButton extends StatelessWidget {
     final glass = GlassSurface(
       borderRadius: radius,
       blurSigma: 22,
+      // Match the root dock: one always-on glass layer keeps the FAB in the
+      // same material family without a per-list-card blur cost.
+      blurOnAndroid: true,
       child: content,
     );
     return tooltip == null ? glass : Tooltip(message: tooltip!, child: glass);
