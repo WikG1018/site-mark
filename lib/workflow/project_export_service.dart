@@ -113,11 +113,15 @@ class ProjectExportService implements ProjectArchiveExporter {
     );
   }
 
-  /// Exports a cross-project ZIP containing every selected capture grouped by
-  /// project. Rejects any non-`ready` capture, groups by project ID, preserves
-  /// each group's capture-time order, omits originals whose
-  /// `originalDeletedAt` is non-null, and fails an `includeOriginals: true`
-  /// request when any selected original is unavailable.
+  /// Exports a cross-project ZIP of the selected watermarked photos only.
+  ///
+  /// Folders are named by project display name and contain JPEGs only — no
+  /// CSV, manifest, originals, or restore metadata. This is a photo hand-off
+  /// package, not a backup: project backup stays on [exportProject] /
+  /// [exportProjectBundle].
+  ///
+  /// Rejects any non-`ready` capture. [includeOriginals] is ignored: the
+  /// selection archive never embeds private originals.
   Future<ExportProjectResult> exportSelection({
     required List<String> captureIds,
     required bool includeOriginals,

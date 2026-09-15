@@ -216,21 +216,6 @@ struct ExportManifest<'a> {
 }
 
 #[derive(Serialize)]
-struct SelectionManifestProject<'a> {
-    project_id: &'a str,
-    project_name: &'a str,
-    photos: &'a [ExportPhotoRecord],
-}
-
-#[derive(Serialize)]
-struct SelectionManifest<'a> {
-    schema_version: u32,
-    app: &'static str,
-    includes_originals: bool,
-    projects: Vec<SelectionManifestProject<'a>>,
-}
-
-#[derive(Serialize)]
 struct CsvRow<'a> {
     project_name: &'a str,
     photo_number: &'a str,
@@ -645,12 +630,17 @@ pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProject
             "no photos to export",
         ));
     }
+    // Selection export is a photo hand-off ZIP, not a restore archive: it
+    // contains only watermarked JPEGs grouped by project name. Backup /
+    // project ZIP schemas stay on `export_project` / `export_project_bundle`.
+    let mut folder_names = std::collections::HashSet::new();
     for project in &request.projects {
         safe_archive_component(&project.project_id)?;
-        if project.project_name.trim().is_empty() {
+        let folder = safe_project_export_folder(&project.project_name)?;
+        if !folder_names.insert(folder.clone()) {
             return Err(invalid_data(
                 "validate export request",
-                "project name is required",
+                format!("duplicate project export folder {folder}"),
             ));
         }
         let mut seen_numbers = std::collections::HashSet::new();
@@ -660,12 +650,6 @@ pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProject
                 return Err(invalid_data(
                     "validate export request",
                     format!("duplicate photo number {}", photo.photo_number),
-                ));
-            }
-            if request.include_originals && photo.original_path.is_none() {
-                return Err(invalid_data(
-                    "validate export request",
-                    format!("missing original for {}", photo.photo_number),
                 ));
             }
         }
@@ -692,91 +676,18 @@ pub fn export_selection(request: ExportSelectionRequest) -> Result<ExportProject
             .large_file(true);
 
         for project in &request.projects {
-            let safe_project_id = safe_archive_component(&project.project_id)?;
+            let folder = safe_project_export_folder(&project.project_name)?;
             for photo in &project.photos {
                 let safe_number = safe_photo_number_component(&photo.photo_number)?;
                 add_file_to_zip(
                     &mut archive,
                     &photo.watermarked_path,
-                    &format!("projects/{safe_project_id}/photos/{safe_number}.jpg"),
+                    &format!("{folder}/{safe_number}.jpg"),
                     options,
                 )?;
-                if request.include_originals {
-                    let original = photo.original_path.as_deref().ok_or_else(|| {
-                        invalid_data(
-                            "validate export request",
-                            format!("missing original for {}", photo.photo_number),
-                        )
-                    })?;
-                    let extension = Path::new(original)
-                        .extension()
-                        .and_then(|value| value.to_str())
-                        .unwrap_or("jpg")
-                        .to_ascii_lowercase();
-                    add_file_to_zip(
-                        &mut archive,
-                        original,
-                        &format!("projects/{safe_project_id}/originals/{safe_number}.{extension}"),
-                        options,
-                    )?;
-                }
             }
         }
 
-        let mut csv_bytes = vec![0xef, 0xbb, 0xbf];
-        {
-            let mut csv = csv::WriterBuilder::new()
-                .has_headers(true)
-                .from_writer(&mut csv_bytes);
-            for project in &request.projects {
-                for photo in &project.photos {
-                    csv.serialize(CsvRow {
-                        project_name: &project.project_name,
-                        photo_number: &photo.photo_number,
-                        captured_at: &photo.captured_at,
-                        work_location: &photo.work_location,
-                        work_content: &photo.work_content,
-                        photographer: &photo.photographer,
-                        address: photo.address.as_deref().unwrap_or(""),
-                        coordinates: photo.coordinates.as_deref().unwrap_or(""),
-                        notes: photo.notes.as_deref().unwrap_or(""),
-                        original_sha256: &photo.original_sha256,
-                    })
-                    .map_err(|error| invalid_data("write CSV record", error))?;
-                }
-            }
-            csv.flush()
-                .map_err(|error| io_failure("finish CSV", error))?;
-        }
-        archive
-            .start_file("records.csv", options)
-            .map_err(|error| zip_failure("start CSV entry", error))?;
-        archive
-            .write_all(&csv_bytes)
-            .map_err(|error| io_failure("write CSV entry", error))?;
-
-        let manifest_projects: Vec<SelectionManifestProject> = request
-            .projects
-            .iter()
-            .map(|project| SelectionManifestProject {
-                project_id: &project.project_id,
-                project_name: &project.project_name,
-                photos: &project.photos,
-            })
-            .collect();
-        let manifest = serde_json::to_vec_pretty(&SelectionManifest {
-            schema_version: 1,
-            app: "SiteMark",
-            includes_originals: request.include_originals,
-            projects: manifest_projects,
-        })
-        .map_err(|error| invalid_data("serialize manifest", error))?;
-        archive
-            .start_file("manifest.json", options)
-            .map_err(|error| zip_failure("start manifest entry", error))?;
-        archive
-            .write_all(&manifest)
-            .map_err(|error| io_failure("write manifest entry", error))?;
         let mut writer = archive
             .finish()
             .map_err(|error| zip_failure("finish ZIP", error))?;
@@ -1404,6 +1315,45 @@ fn non_empty(value: &Option<String>) -> Option<&str> {
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
+}
+
+/// Sanitizes a project display name into a single ZIP folder component for
+/// photo hand-off exports. Path separators and reserved characters become
+/// underscores; the original CJK name is preserved when safe.
+fn safe_project_export_folder(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(invalid_data(
+            "validate export request",
+            "project name is required",
+        ));
+    }
+    let sanitized: String = trimmed
+        .chars()
+        .map(|character| {
+            if character.is_control()
+                || character == '\u{FEFF}'
+                || matches!(
+                    character,
+                    '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                )
+            {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect();
+    let sanitized = sanitized.trim_matches(|character: char| {
+        character == '.' || character.is_whitespace() || character == '_'
+    });
+    if sanitized.is_empty() {
+        return Err(invalid_data(
+            "validate export request",
+            format!("project name {name:?} cannot be used as an export folder"),
+        ));
+    }
+    Ok(sanitized.to_string())
 }
 
 /// Strict validation for app-generated identifiers (project IDs, UUIDs).
