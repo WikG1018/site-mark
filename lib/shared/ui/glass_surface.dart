@@ -3,6 +3,23 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+/// Shared recipe for always-on floating chrome (dock, FAB, toast, batch bar).
+///
+/// One opacity/blur pair keeps every capsule in the same material family —
+/// a heavier fill on one surface next to a thinner one reads as two different
+/// materials rather than one glass system.
+class GlassChrome {
+  const GlassChrome._();
+
+  /// Surface fill. Low enough that backdrop color still reads through the
+  /// blur; high enough that on-surface icons and labels stay legible.
+  static const double opacity = .58;
+
+  /// Backdrop blur. Slightly stronger than the old per-widget 16/22 split so
+  /// the lower fill still frosts the background into a single wash.
+  static const double blurSigma = 20;
+}
+
 /// A translucent surface that drops backdrop blur when reduced motion is on.
 ///
 /// The reduced-motion fallback keeps the same colors and border but avoids the

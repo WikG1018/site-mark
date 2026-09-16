@@ -64,7 +64,8 @@ class AdaptiveFloatingButton extends StatelessWidget {
     );
     final glass = GlassSurface(
       borderRadius: radius,
-      blurSigma: 22,
+      opacity: GlassChrome.opacity,
+      blurSigma: GlassChrome.blurSigma,
       // Match the root dock: one always-on glass layer keeps the FAB in the
       // same material family without a per-list-card blur cost.
       blurOnAndroid: true,
