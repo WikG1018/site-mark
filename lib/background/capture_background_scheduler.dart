@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
+import 'package:sitemark/background/nas_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/platform/local_notification_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
@@ -324,6 +325,11 @@ void captureCallbackDispatcher() {
     AppDatabase? database;
     try {
       WidgetsFlutterBinding.ensureInitialized();
+      // WorkManager has one top-level dispatcher; NAS periodic/BG tasks are
+      // routed here so a single initialize covers both queues.
+      if (isNasTaskName(taskName)) {
+        return await runNasBackgroundDrainTask();
+      }
       if (taskName == iosCaptureProcessingBgTask) {
         // Opportunistic iOS catch-up (see the design doc's background
         // scheduling downgrade): reconcile pending captures, then re-arm the

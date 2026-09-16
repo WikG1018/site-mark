@@ -266,6 +266,7 @@ class NasSyncCoordinator {
   bool _started = false;
   bool _syncing = false;
   bool _rerunQueued = false;
+  int _failuresThisDrain = 0;
   NasSyncConfig? _lastSeenConfig;
   StreamSubscription? _configSubscription;
   StreamSubscription? _captureUpdatesSubscription;
@@ -361,6 +362,7 @@ class NasSyncCoordinator {
       return;
     }
     _syncing = true;
+    _failuresThisDrain = 0;
     await _emit();
     var pendingLeft = false;
     final deferredThisCycle = <String>{};
@@ -414,9 +416,10 @@ class NasSyncCoordinator {
     } finally {
       _syncing = false;
       await _emit();
-      final snapshot = await _currentSnapshot();
-      if (snapshot.failedCount > 0) {
-        await _notifyFailures(snapshot);
+      // Only alert on failures recorded by *this* drain. Re-notifying on
+      // every capture/config tick for rows that already failed would spam.
+      if (_failuresThisDrain > 0) {
+        await _notifyFailures(await _currentSnapshot());
       }
       if (pendingLeft || _rerunQueued) {
         unawaited(_nudgeBackground());
@@ -536,7 +539,7 @@ class NasSyncCoordinator {
   ) async {
     final capture = await _captureById(captureId);
     if (capture == null) {
-      await _database.markNasUploadFailed(captureId, 'path_invalid');
+      await _recordFailure(captureId, 'path_invalid');
       return _UploadOutcome.failed;
     }
     if (capture.status != CaptureStatus.ready) {
@@ -547,17 +550,17 @@ class NasSyncCoordinator {
     }
     final photoNumber = capture.photoNumber;
     if (photoNumber == null || photoNumber.isEmpty) {
-      await _database.markNasUploadFailed(captureId, 'path_invalid');
+      await _recordFailure(captureId, 'path_invalid');
       return _UploadOutcome.failed;
     }
     final project = await _database.projectById(capture.projectId);
     if (project == null) {
-      await _database.markNasUploadFailed(captureId, 'path_invalid');
+      await _recordFailure(captureId, 'path_invalid');
       return _UploadOutcome.failed;
     }
     final localPath = await _outputPaths.renderedPhotoPath(captureId);
     if (!await File(localPath).exists()) {
-      await _database.markNasUploadFailed(captureId, 'local_io');
+      await _recordFailure(captureId, 'local_io');
       return _UploadOutcome.failed;
     }
     String password;
@@ -593,6 +596,7 @@ class NasSyncCoordinator {
   }
 
   Future<void> _recordFailure(String captureId, String failureCode) async {
+    _failuresThisDrain++;
     await _database.markNasUploadFailed(captureId, failureCode);
     final state = await databaseSelectState(captureId);
     diagnostics?.record(

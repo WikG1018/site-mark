@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/nas_sync_database.dart';
@@ -18,15 +20,27 @@ const iosNasSyncBgTask = 'io.github.wikg1018.sitemark.nas-sync';
 /// Lowest WorkManager period; the OS will not fire more often than this.
 const Duration nasBackgroundPeriod = Duration(minutes: 15);
 
-/// Arms (or keeps) the periodic NAS drain. Called when sync is enabled and
-/// after a foreground drain leaves pending work behind.
+/// Arms (or keeps) the background NAS drain.
+///
+/// Android uses a periodic WorkManager task. iOS has no persistent
+/// WorkManager queue, so an opportunistic BGProcessingTask is submitted
+/// instead (identifier must match Info.plist and AppDelegate).
 Future<void> scheduleNasBackgroundDrain({
   Workmanager? workmanager,
   bool enabled = true,
+  bool? isIos,
 }) async {
   final wm = workmanager ?? Workmanager();
+  final ios = isIos ?? Platform.isIOS;
   if (!enabled) {
     await wm.cancelByUniqueName(nasBackgroundTask);
+    if (ios) {
+      await wm.cancelByUniqueName(iosNasSyncBgTask);
+    }
+    return;
+  }
+  if (ios) {
+    await wm.registerProcessingTask(iosNasSyncBgTask, iosNasSyncBgTask);
     return;
   }
   await wm.registerPeriodicTask(
@@ -59,33 +73,46 @@ NasSyncCoordinator buildHeadlessNasCoordinator(AppDatabase database) {
   );
 }
 
-/// WorkManager entry point for the periodic NAS drain.
+/// Whether [taskName] is a NAS background drain job.
+bool isNasTaskName(String taskName) =>
+    taskName == nasBackgroundTask || taskName == iosNasSyncBgTask;
+
+/// Shared NAS drain body used by the capture dispatcher (WorkManager has a
+/// single top-level dispatcher) and by [nasCallbackDispatcher].
+///
+/// Returns `true` when the queue is idle/disabled so WorkManager does not
+/// reschedule; `false` keeps the task retryable after unexpected errors.
+Future<bool> runNasBackgroundDrainTask() async {
+  AppDatabase? database;
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    database = AppDatabase();
+    final config = await database.nasSyncConfig();
+    if (!config.enabled) {
+      await cancelNasBackgroundDrain();
+      return true;
+    }
+    await buildHeadlessNasCoordinator(database).drainOnce();
+    return true;
+  } catch (_) {
+    return false;
+  } finally {
+    try {
+      await database?.close();
+    } catch (_) {
+      // Closing a broken handle must not escape and cancel later work.
+    }
+  }
+}
+
+/// WorkManager entry point for the periodic NAS drain when this dispatcher
+/// is the one registered with [Workmanager.initialize]. The capture
+/// scheduler owns the production dispatcher; it routes NAS names here via
+/// [isNasTaskName].
 @pragma('vm:entry-point')
 void nasCallbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
-    if (taskName != nasBackgroundTask && taskName != iosNasSyncBgTask) {
-      return true;
-    }
-    AppDatabase? database;
-    try {
-      WidgetsFlutterBinding.ensureInitialized();
-      database = AppDatabase();
-      final config = await database.nasSyncConfig();
-      if (!config.enabled) {
-        await cancelNasBackgroundDrain();
-        return true;
-      }
-      await buildHeadlessNasCoordinator(database).drainOnce();
-      return true;
-    } catch (_) {
-      // Keep the task retryable: WorkManager backoff reschedules a false.
-      return false;
-    } finally {
-      try {
-        await database?.close();
-      } catch (_) {
-        // Closing a broken handle must not escape and cancel later work.
-      }
-    }
+    if (!isNasTaskName(taskName)) return true;
+    return runNasBackgroundDrainTask();
   });
 }
