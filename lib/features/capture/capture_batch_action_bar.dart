@@ -278,6 +278,11 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         return GlassSurface(
           key: const Key('batch-action-bar'),
           borderRadius: BorderRadius.circular(22),
+          // Same glass recipe as the root dock / FAB / toast so selection
+          // mode does not swap materials when the dock withdraws.
+          opacity: GlassChrome.opacity,
+          blurSigma: GlassChrome.blurSigma,
+          blurOnAndroid: true,
           child: SizedBox(
             height: floatingDockHeight,
             child: MediaQuery.withClampedTextScaling(

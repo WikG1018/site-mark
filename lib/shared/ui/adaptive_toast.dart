@@ -160,6 +160,8 @@ class _ToastCapsuleState extends State<_ToastCapsule>
             opacity: _controller,
             child: GlassSurface(
               borderRadius: BorderRadius.circular(24),
+              opacity: GlassChrome.opacity,
+              blurSigma: GlassChrome.blurSigma,
               // Match the root dock: one always-on glass layer is affordable
               // and keeps the toast in the same material family.
               blurOnAndroid: true,

@@ -417,6 +417,34 @@ void main() {
     }
   });
 
+  testWidgets('GlassChrome recipe stays inside the readable glass band', (
+    tester,
+  ) async {
+    // Floating chrome (dock / FAB / toast / batch bar) shares one recipe so
+    // selection mode does not swap materials when the dock withdraws.
+    expect(GlassChrome.opacity, inInclusiveRange(0.55, 0.70));
+    expect(GlassChrome.blurSigma, greaterThanOrEqualTo(16));
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: GlassSurface(
+              opacity: GlassChrome.opacity,
+              blurSigma: GlassChrome.blurSigma,
+              blurOnAndroid: true,
+              child: Text('chrome'),
+            ),
+          ),
+        ),
+      );
+      expect(find.byType(BackdropFilter), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   testWidgets('clamps blur-enabled opacity into the glass band', (
     tester,
   ) async {

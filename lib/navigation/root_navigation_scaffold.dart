@@ -95,6 +95,8 @@ class RootNavigationScaffold extends ConsumerWidget {
                     ? GlassSurface(
                         key: const Key('root-dock'),
                         borderRadius: BorderRadius.circular(22),
+                        opacity: GlassChrome.opacity,
+                        blurSigma: GlassChrome.blurSigma,
                         blurOnAndroid: true,
                         child: SizedBox(
                           height: floatingDockHeight,
