@@ -274,6 +274,10 @@ class NasSyncConfigs extends Table {
 
   BoolColumn get wifiOnly => boolean().withDefault(const Constant(true))();
   BoolColumn get enabled => boolean().withDefault(const Constant(false))();
+
+  /// `upload_only` (default) or `two_way` — see [NasSyncMode].
+  TextColumn get syncMode =>
+      text().withDefault(const Constant('upload_only'))();
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
   @override
@@ -354,7 +358,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -484,6 +488,12 @@ class AppDatabase extends _$AppDatabase {
           appSettings,
           appSettings.locationCaptureEnabled,
         );
+      }
+      // createTable(nasSyncConfigs) at v14 already uses the *current*
+      // schema (including sync_mode). Only ALTER when the table predates
+      // the column — otherwise SQLite raises "duplicate column name".
+      if (from < 16 && from >= 14) {
+        await migrator.addColumn(nasSyncConfigs, nasSyncConfigs.syncMode);
       }
       await _ensureGlobalSettingsRow(this);
     },

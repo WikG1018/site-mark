@@ -40,6 +40,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
   bool _acceptInvalidTls = false;
   bool _wifiOnly = true;
   bool _enabled = false;
+  String _syncMode = 'upload_only';
   String? _knownFingerprint;
   bool _passwordSet = false;
   bool _loaded = false;
@@ -101,6 +102,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
       _acceptInvalidTls = config.acceptInvalidTls;
       _wifiOnly = config.wifiOnly;
       _enabled = config.enabled;
+      _syncMode = config.syncMode;
       _knownFingerprint = config.knownSftpFingerprint;
       _passwordSet = password != null && password.isNotEmpty;
       _pendingCount = states
@@ -249,6 +251,35 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             value: _wifiOnly,
             onChanged: (value) => setState(() => _wifiOnly = value),
           ),
+          const SizedBox(height: 8),
+          Text(
+            strings.nasSyncDirection,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          AdaptiveSegmentedButton<String>(
+            key: const Key('nas-sync-direction'),
+            style: segmentTapTargetStyle,
+            segments: [
+              ButtonSegment(
+                value: 'upload_only',
+                label: Text(strings.nasSyncDirectionUploadOnly),
+              ),
+              ButtonSegment(
+                value: 'two_way',
+                label: Text(strings.nasSyncDirectionTwoWay),
+              ),
+            ],
+            selected: {_syncMode},
+            onSelectionChanged: (value) =>
+                setState(() => _syncMode = value.first),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            strings.nasSyncDirectionHelp,
+            key: const Key('nas-sync-direction-help'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -301,6 +332,17 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
               ),
             ),
           ],
+          if (_lastFailureCode != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton(
+                key: const Key('nas-fix-failure'),
+                onPressed: _busy ? null : () => _fixFailure(strings),
+                child: Text(_fixLabel(strings)),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           OutlinedButton(
             key: const Key('nas-retry-button'),
@@ -311,6 +353,20 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
           Text(
             strings.nasPrivacyNote,
             style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          ExpansionTile(
+            key: const Key('nas-usage'),
+            title: Text(strings.nasUsageTitle),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Text(
+                  strings.nasUsageBody,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
         ],
@@ -388,6 +444,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
           knownSftpFingerprint: fingerprint,
           wifiOnly: _wifiOnly,
           enabled: _enabled,
+          syncMode: _syncMode,
         );
   }
 
@@ -507,6 +564,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
         knownSftpFingerprint: _knownFingerprint,
         wifiOnly: _wifiOnly,
         enabled: _enabled,
+        syncMode: _syncMode,
       );
       final store = ref.read(nasCredentialStoreProvider);
       if (typedPassword.isNotEmpty) {
@@ -601,4 +659,22 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
     'config_invalid' => strings.nasErrorConfigInvalid,
     _ => strings.nasErrorProtocolError,
   };
+
+  String _fixLabel(AppStrings strings) => switch (_lastFailureCode) {
+    'host_key_changed' => strings.nasFixConnectionTest,
+    'auth_failed' || 'config_invalid' => strings.nasFixCheckPassword,
+    _ => strings.nasFixRetry,
+  };
+
+  Future<void> _fixFailure(AppStrings strings) async {
+    switch (_lastFailureCode) {
+      case 'host_key_changed':
+        await _testConnection(strings);
+      case 'auth_failed' || 'config_invalid':
+        if (!mounted) return;
+        showAppToast(context, strings.nasPasswordRequired);
+      default:
+        await _retryFailed();
+    }
+  }
 }

@@ -4252,6 +4252,18 @@ class $NasSyncConfigsTable extends NasSyncConfigs
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _syncModeMeta = const VerificationMeta(
+    'syncMode',
+  );
+  @override
+  late final GeneratedColumn<String> syncMode = GeneratedColumn<String>(
+    'sync_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('upload_only'),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -4276,6 +4288,7 @@ class $NasSyncConfigsTable extends NasSyncConfigs
     knownSftpFingerprint,
     wifiOnly,
     enabled,
+    syncMode,
     updatedAt,
   ];
   @override
@@ -4359,6 +4372,12 @@ class $NasSyncConfigsTable extends NasSyncConfigs
         enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
       );
     }
+    if (data.containsKey('sync_mode')) {
+      context.handle(
+        _syncModeMeta,
+        syncMode.isAcceptableOrUnknown(data['sync_mode']!, _syncModeMeta),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -4418,6 +4437,10 @@ class $NasSyncConfigsTable extends NasSyncConfigs
         DriftSqlType.bool,
         data['${effectivePrefix}enabled'],
       )!,
+      syncMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_mode'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -4456,6 +4479,9 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
   final String? knownSftpFingerprint;
   final bool wifiOnly;
   final bool enabled;
+
+  /// `upload_only` (default) or `two_way` — see [NasSyncMode].
+  final String syncMode;
   final DateTime? updatedAt;
   const NasSyncConfig({
     required this.id,
@@ -4469,6 +4495,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
     this.knownSftpFingerprint,
     required this.wifiOnly,
     required this.enabled,
+    required this.syncMode,
     this.updatedAt,
   });
   @override
@@ -4489,6 +4516,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
     }
     map['wifi_only'] = Variable<bool>(wifiOnly);
     map['enabled'] = Variable<bool>(enabled);
+    map['sync_mode'] = Variable<String>(syncMode);
     if (!nullToAbsent || updatedAt != null) {
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
@@ -4510,6 +4538,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
           : Value(knownSftpFingerprint),
       wifiOnly: Value(wifiOnly),
       enabled: Value(enabled),
+      syncMode: Value(syncMode),
       updatedAt: updatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(updatedAt),
@@ -4535,6 +4564,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
       ),
       wifiOnly: serializer.fromJson<bool>(json['wifiOnly']),
       enabled: serializer.fromJson<bool>(json['enabled']),
+      syncMode: serializer.fromJson<String>(json['syncMode']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
   }
@@ -4553,6 +4583,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
       'knownSftpFingerprint': serializer.toJson<String?>(knownSftpFingerprint),
       'wifiOnly': serializer.toJson<bool>(wifiOnly),
       'enabled': serializer.toJson<bool>(enabled),
+      'syncMode': serializer.toJson<String>(syncMode),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
   }
@@ -4569,6 +4600,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
     Value<String?> knownSftpFingerprint = const Value.absent(),
     bool? wifiOnly,
     bool? enabled,
+    String? syncMode,
     Value<DateTime?> updatedAt = const Value.absent(),
   }) => NasSyncConfig(
     id: id ?? this.id,
@@ -4584,6 +4616,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
         : this.knownSftpFingerprint,
     wifiOnly: wifiOnly ?? this.wifiOnly,
     enabled: enabled ?? this.enabled,
+    syncMode: syncMode ?? this.syncMode,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
   );
   NasSyncConfig copyWithCompanion(NasSyncConfigsCompanion data) {
@@ -4603,6 +4636,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
           : this.knownSftpFingerprint,
       wifiOnly: data.wifiOnly.present ? data.wifiOnly.value : this.wifiOnly,
       enabled: data.enabled.present ? data.enabled.value : this.enabled,
+      syncMode: data.syncMode.present ? data.syncMode.value : this.syncMode,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -4621,6 +4655,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
           ..write('knownSftpFingerprint: $knownSftpFingerprint, ')
           ..write('wifiOnly: $wifiOnly, ')
           ..write('enabled: $enabled, ')
+          ..write('syncMode: $syncMode, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -4639,6 +4674,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
     knownSftpFingerprint,
     wifiOnly,
     enabled,
+    syncMode,
     updatedAt,
   );
   @override
@@ -4656,6 +4692,7 @@ class NasSyncConfig extends DataClass implements Insertable<NasSyncConfig> {
           other.knownSftpFingerprint == this.knownSftpFingerprint &&
           other.wifiOnly == this.wifiOnly &&
           other.enabled == this.enabled &&
+          other.syncMode == this.syncMode &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -4671,6 +4708,7 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
   final Value<String?> knownSftpFingerprint;
   final Value<bool> wifiOnly;
   final Value<bool> enabled;
+  final Value<String> syncMode;
   final Value<DateTime?> updatedAt;
   final Value<int> rowid;
   const NasSyncConfigsCompanion({
@@ -4685,6 +4723,7 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
     this.knownSftpFingerprint = const Value.absent(),
     this.wifiOnly = const Value.absent(),
     this.enabled = const Value.absent(),
+    this.syncMode = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -4700,6 +4739,7 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
     this.knownSftpFingerprint = const Value.absent(),
     this.wifiOnly = const Value.absent(),
     this.enabled = const Value.absent(),
+    this.syncMode = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -4715,6 +4755,7 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
     Expression<String>? knownSftpFingerprint,
     Expression<bool>? wifiOnly,
     Expression<bool>? enabled,
+    Expression<String>? syncMode,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -4731,6 +4772,7 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
         'known_sftp_fingerprint': knownSftpFingerprint,
       if (wifiOnly != null) 'wifi_only': wifiOnly,
       if (enabled != null) 'enabled': enabled,
+      if (syncMode != null) 'sync_mode': syncMode,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -4748,6 +4790,7 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
     Value<String?>? knownSftpFingerprint,
     Value<bool>? wifiOnly,
     Value<bool>? enabled,
+    Value<String>? syncMode,
     Value<DateTime?>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -4763,6 +4806,7 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
       knownSftpFingerprint: knownSftpFingerprint ?? this.knownSftpFingerprint,
       wifiOnly: wifiOnly ?? this.wifiOnly,
       enabled: enabled ?? this.enabled,
+      syncMode: syncMode ?? this.syncMode,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -4806,6 +4850,9 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
     if (enabled.present) {
       map['enabled'] = Variable<bool>(enabled.value);
     }
+    if (syncMode.present) {
+      map['sync_mode'] = Variable<String>(syncMode.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -4829,6 +4876,7 @@ class NasSyncConfigsCompanion extends UpdateCompanion<NasSyncConfig> {
           ..write('knownSftpFingerprint: $knownSftpFingerprint, ')
           ..write('wifiOnly: $wifiOnly, ')
           ..write('enabled: $enabled, ')
+          ..write('syncMode: $syncMode, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -7759,6 +7807,7 @@ typedef $$NasSyncConfigsTableCreateCompanionBuilder =
       Value<String?> knownSftpFingerprint,
       Value<bool> wifiOnly,
       Value<bool> enabled,
+      Value<String> syncMode,
       Value<DateTime?> updatedAt,
       Value<int> rowid,
     });
@@ -7775,6 +7824,7 @@ typedef $$NasSyncConfigsTableUpdateCompanionBuilder =
       Value<String?> knownSftpFingerprint,
       Value<bool> wifiOnly,
       Value<bool> enabled,
+      Value<String> syncMode,
       Value<DateTime?> updatedAt,
       Value<int> rowid,
     });
@@ -7840,6 +7890,11 @@ class $$NasSyncConfigsTableFilterComposer
 
   ColumnFilters<bool> get enabled => $composableBuilder(
     column: $table.enabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncMode => $composableBuilder(
+    column: $table.syncMode,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7913,6 +7968,11 @@ class $$NasSyncConfigsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get syncMode => $composableBuilder(
+    column: $table.syncMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -7965,6 +8025,9 @@ class $$NasSyncConfigsTableAnnotationComposer
   GeneratedColumn<bool> get enabled =>
       $composableBuilder(column: $table.enabled, builder: (column) => column);
 
+  GeneratedColumn<String> get syncMode =>
+      $composableBuilder(column: $table.syncMode, builder: (column) => column);
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
@@ -8013,6 +8076,7 @@ class $$NasSyncConfigsTableTableManager
                 Value<String?> knownSftpFingerprint = const Value.absent(),
                 Value<bool> wifiOnly = const Value.absent(),
                 Value<bool> enabled = const Value.absent(),
+                Value<String> syncMode = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NasSyncConfigsCompanion(
@@ -8027,6 +8091,7 @@ class $$NasSyncConfigsTableTableManager
                 knownSftpFingerprint: knownSftpFingerprint,
                 wifiOnly: wifiOnly,
                 enabled: enabled,
+                syncMode: syncMode,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -8043,6 +8108,7 @@ class $$NasSyncConfigsTableTableManager
                 Value<String?> knownSftpFingerprint = const Value.absent(),
                 Value<bool> wifiOnly = const Value.absent(),
                 Value<bool> enabled = const Value.absent(),
+                Value<String> syncMode = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NasSyncConfigsCompanion.insert(
@@ -8057,6 +8123,7 @@ class $$NasSyncConfigsTableTableManager
                 knownSftpFingerprint: knownSftpFingerprint,
                 wifiOnly: wifiOnly,
                 enabled: enabled,
+                syncMode: syncMode,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

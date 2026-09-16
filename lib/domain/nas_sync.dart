@@ -13,6 +13,26 @@ import 'package:sitemark/domain/photo_number.dart';
 /// Upload bookkeeping states for one capture.
 enum NasUploadStatus { pending, uploaded, failed }
 
+/// How far the NAS queue is allowed to move data.
+///
+/// `uploadOnly` is the original D-023 contract: watermarked JPEGs leave the
+/// device and never come back. `twoWay` additionally restores a missing
+/// local rendered file from the NAS copy when the capture is still ready —
+/// it never invents new captures from remote-only files.
+enum NasSyncMode {
+  uploadOnly('upload_only'),
+  twoWay('two_way');
+
+  const NasSyncMode(this.wireName);
+
+  final String wireName;
+
+  static NasSyncMode fromWire(String? value) => switch (value) {
+    'two_way' => NasSyncMode.twoWay,
+    _ => NasSyncMode.uploadOnly,
+  };
+}
+
 /// Failure codes that only a user action (fix credentials, re-confirm the
 /// host key, complete the configuration) can resolve. The drain parks these
 /// immediately instead of burning the automatic retry budget.

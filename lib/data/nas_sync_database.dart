@@ -34,6 +34,7 @@ NasSyncConfig _defaultNasSyncConfig() {
     knownSftpFingerprint: null,
     wifiOnly: true,
     enabled: false,
+    syncMode: 'upload_only',
     updatedAt: now,
   );
 }
@@ -68,6 +69,7 @@ extension NasSyncDatabase on AppDatabase {
     required String? knownSftpFingerprint,
     required bool wifiOnly,
     required bool enabled,
+    String syncMode = 'upload_only',
   }) async {
     final now = DateTime.now();
     await into(nasSyncConfigs).insertOnConflictUpdate(
@@ -83,6 +85,7 @@ extension NasSyncDatabase on AppDatabase {
         knownSftpFingerprint: Value(knownSftpFingerprint),
         wifiOnly: Value(wifiOnly),
         enabled: Value(enabled),
+        syncMode: Value(syncMode),
         updatedAt: Value(now),
       ),
     );

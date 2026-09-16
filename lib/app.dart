@@ -178,6 +178,10 @@ final nasUploaderProvider = Provider<NasUploader>((ref) {
   return RustNasUploader();
 });
 
+final nasDownloaderProvider = Provider<NasDownloader>((ref) {
+  return RustNasDownloader();
+});
+
 final nasSyncCoordinatorProvider = Provider<NasSyncCoordinator>((ref) {
   final coordinator = NasSyncCoordinator(
     ref.watch(databaseProvider),
@@ -185,6 +189,7 @@ final nasSyncCoordinatorProvider = Provider<NasSyncCoordinator>((ref) {
     ref.watch(nasConnectivityProvider),
     ref.watch(nasUploaderProvider),
     ref.watch(captureOutputPathsProvider),
+    downloader: ref.watch(nasDownloaderProvider),
     diagnostics: ref.watch(diagnosticRecorderProvider),
     checkLocalNetwork: ref.watch(localNetworkAccessProvider).isHostAllowed,
     onBackgroundNudge: () async {
@@ -193,6 +198,18 @@ final nasSyncCoordinatorProvider = Provider<NasSyncCoordinator>((ref) {
         await scheduleNasBackgroundDrain(enabled: config.enabled);
       } on Object {
         // Best-effort background arm; foreground drain still runs.
+      }
+    },
+    onFailureNotify: (failedCount, failureCode) async {
+      try {
+        await ref
+            .read(completionNotificationServiceProvider)
+            .showNasSyncFailed(
+              failedCount: failedCount,
+              failureCode: failureCode,
+            );
+      } on Object {
+        // Unimplemented in tests / plugin failure must not break the drain.
       }
     },
   );

@@ -30,6 +30,8 @@ final class LocalNotificationService implements CompletionNotificationService {
   String? _localeCode;
 
   static const String _channelId = 'capture_ready';
+  static const String _nasChannelId = 'nas_sync';
+  static const int _nasNotificationId = 0x4e4153; // 'NAS'
 
   @override
   Future<void> setLocale(String? localeCode) async {
@@ -48,6 +50,13 @@ final class LocalNotificationService implements CompletionNotificationService {
     description: _isZh
         ? '后台照片处理完成时通知'
         : 'Notifies when background photo processing completes',
+    importance: Importance.high,
+  );
+
+  AndroidNotificationChannel get _nasChannel => AndroidNotificationChannel(
+    _nasChannelId,
+    _isZh ? 'NAS 同步' : 'NAS sync',
+    description: _isZh ? 'NAS 上传失败时通知' : 'Notifies when NAS uploads fail',
     importance: Importance.high,
   );
 
@@ -77,6 +86,11 @@ final class LocalNotificationService implements CompletionNotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(_channel);
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(_nasChannel);
     // Cold start: when the app was launched by tapping a notification, the
     // response does not go through `onDidReceiveNotificationResponse` and
     // must be read back here instead.
@@ -128,6 +142,52 @@ final class LocalNotificationService implements CompletionNotificationService {
         ),
       ),
       payload: captureReadyDeepLink(projectId, captureId),
+    );
+  }
+
+  @override
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  }) async {
+    // NAS failures are always worth surfacing while sync itself is on; they
+    // are not gated by the photo-completion switch.
+    if (failedCount <= 0) return;
+    final channel = _nasChannel;
+    final body = switch (failureCode) {
+      'auth_failed' =>
+        _isZh
+            ? '用户名或密码不正确，请到设置中修改'
+            : 'Incorrect username or password. Update it in settings.',
+      'config_invalid' =>
+        _isZh
+            ? '配置不完整，请检查服务器与密码'
+            : 'Configuration is incomplete. Check server and password.',
+      'host_key_changed' =>
+        _isZh
+            ? '服务器指纹已变化，请重新测试连接'
+            : 'Server fingerprint changed. Run the connection test again.',
+      'quota_insufficient' =>
+        _isZh ? 'NAS 存储空间不足' : 'The NAS is out of storage space.',
+      _ =>
+        _isZh
+            ? '$failedCount 张照片上传失败，点击查看'
+            : '$failedCount photo(s) failed to upload. Tap to review.',
+    };
+    await _plugin.show(
+      id: _nasNotificationId,
+      title: _isZh ? 'NAS 同步失败' : 'NAS sync failed',
+      body: body,
+      notificationDetails: NotificationDetails(
+        android: AndroidNotificationDetails(
+          channel.id,
+          channel.name,
+          channelDescription: channel.description,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+      payload: nasSettingsDeepLink,
     );
   }
 

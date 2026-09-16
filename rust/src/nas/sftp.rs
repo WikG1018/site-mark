@@ -194,6 +194,74 @@ impl NasBackend for SftpBackend {
             }
         }
     }
+
+    fn upload_from_path(
+        &self,
+        dir_segments: &[String],
+        relative_path: &str,
+        local_path: &std::path::Path,
+    ) -> Result<(), NasError> {
+        use std::io::Read;
+        let seen_fingerprint = std::sync::Arc::new(SeenFingerprint::new(None));
+        let sftp = self.connect_sftp(&seen_fingerprint)?;
+        let mut full = root_segments(&self.config.root_path)?;
+        full.extend(dir_segments.iter().cloned());
+        for depth in 1..=full.len() {
+            let path = self.sftp_path(&full[..depth]);
+            block_on(sftp.create_dir(&path))
+                .or_else(|_| block_on(sftp.metadata(&path)).map(|_| ()))
+                .map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
+        }
+        let path = self.sftp_path(&[relative_path.to_string()]);
+        let mut file: File =
+            block_on(sftp.create(&path)).map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
+        let mut source = std::fs::File::open(local_path)
+            .map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        let mut buffer = vec![0u8; 256 * 1024];
+        loop {
+            let read = source
+                .read(&mut buffer)
+                .map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+            if read == 0 {
+                break;
+            }
+            block_on(file.write_all(&buffer[..read]))
+                .map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
+        }
+        block_on(file.flush()).map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
+        block_on(file.shutdown()).map_err(|_| NasError::new(NasErrorCode::ProtocolError))
+    }
+
+    fn get_file_to_path(
+        &self,
+        relative_path: &str,
+        local_path: &std::path::Path,
+    ) -> Result<(), NasError> {
+        use tokio::io::AsyncReadExt;
+        let seen_fingerprint = std::sync::Arc::new(SeenFingerprint::new(None));
+        let sftp = self.connect_sftp(&seen_fingerprint)?;
+        let path = self.sftp_path(&[relative_path.to_string()]);
+        let mut remote = match block_on(sftp.open(&path)) {
+            Ok(file) => file,
+            Err(error) if is_not_found(&error) => {
+                return Err(NasError::new(NasErrorCode::PathInvalid));
+            }
+            Err(_) => return Err(NasError::new(NasErrorCode::ProtocolError)),
+        };
+        let mut out = std::fs::File::create(local_path)
+            .map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        let mut buffer = vec![0u8; 256 * 1024];
+        loop {
+            let read = block_on(remote.read(&mut buffer))
+                .map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
+            if read == 0 {
+                break;
+            }
+            std::io::Write::write_all(&mut out, &buffer[..read])
+                .map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        }
+        Ok(())
+    }
 }
 
 fn write_probe(sftp: &SftpSession, probe_path: &str) -> Result<(), NasError> {

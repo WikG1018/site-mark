@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -168109353;
+  int get rustContentHash => -506323579;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -105,6 +105,8 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<void> crateApiSimpleInitApp();
+
+  Future<void> crateApiNasNasDownload({required NasDownloadRequest request});
 
   Future<NasTestDetails> crateApiNasNasTestConnection({
     required NasConfig config,
@@ -367,6 +369,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<void> crateApiNasNasDownload({required NasDownloadRequest request}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_nas_download_request(request, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_nas_error,
+        ),
+        constMeta: kCrateApiNasNasDownloadConstMeta,
+        argValues: [request],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiNasNasDownloadConstMeta =>
+      const TaskConstMeta(debugName: "nas_download", argNames: ["request"]);
+
+  @override
   Future<NasTestDetails> crateApiNasNasTestConnection({
     required NasConfig config,
   }) {
@@ -378,7 +408,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },
@@ -409,7 +439,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 10,
             port: port_,
           );
         },
@@ -439,7 +469,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 11,
             port: port_,
           );
         },
@@ -472,7 +502,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 12,
             port: port_,
           );
         },
@@ -505,7 +535,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -533,7 +563,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 14,
             port: port_,
           );
         },
@@ -678,6 +708,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NasConfig dco_decode_box_autoadd_nas_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_nas_config(raw);
+  }
+
+  @protected
+  NasDownloadRequest dco_decode_box_autoadd_nas_download_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_nas_download_request(raw);
   }
 
   @protected
@@ -999,6 +1035,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       secureTls: dco_decode_bool(arr[6]),
       acceptInvalidTls: dco_decode_bool(arr[7]),
       knownSftpFingerprint: dco_decode_opt_String(arr[8]),
+    );
+  }
+
+  @protected
+  NasDownloadRequest dco_decode_nas_download_request(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return NasDownloadRequest(
+      config: dco_decode_nas_config(arr[0]),
+      projectKey: dco_decode_String(arr[1]),
+      fileName: dco_decode_String(arr[2]),
+      localPath: dco_decode_String(arr[3]),
     );
   }
 
@@ -1365,6 +1415,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NasConfig sse_decode_box_autoadd_nas_config(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_nas_config(deserializer));
+  }
+
+  @protected
+  NasDownloadRequest sse_decode_box_autoadd_nas_download_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_nas_download_request(deserializer));
   }
 
   @protected
@@ -1782,6 +1840,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  NasDownloadRequest sse_decode_nas_download_request(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_config = sse_decode_nas_config(deserializer);
+    var var_projectKey = sse_decode_String(deserializer);
+    var var_fileName = sse_decode_String(deserializer);
+    var var_localPath = sse_decode_String(deserializer);
+    return NasDownloadRequest(
+      config: var_config,
+      projectKey: var_projectKey,
+      fileName: var_fileName,
+      localPath: var_localPath,
+    );
+  }
+
+  @protected
   NasError sse_decode_nas_error(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_code = sse_decode_nas_error_code(deserializer);
@@ -2187,6 +2262,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_nas_download_request(
+    NasDownloadRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_nas_download_request(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_nas_upload_request(
     NasUploadRequest self,
     SseSerializer serializer,
@@ -2498,6 +2582,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.secureTls, serializer);
     sse_encode_bool(self.acceptInvalidTls, serializer);
     sse_encode_opt_String(self.knownSftpFingerprint, serializer);
+  }
+
+  @protected
+  void sse_encode_nas_download_request(
+    NasDownloadRequest self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_nas_config(self.config, serializer);
+    sse_encode_String(self.projectKey, serializer);
+    sse_encode_String(self.fileName, serializer);
+    sse_encode_String(self.localPath, serializer);
   }
 
   @protected

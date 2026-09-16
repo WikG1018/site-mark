@@ -77,7 +77,27 @@ void main() {
       expect(saved.knownSftpFingerprint, 'SHA256:abc');
       expect(saved.wifiOnly, isFalse);
       expect(saved.enabled, isTrue);
+      expect(saved.syncMode, 'upload_only');
       expect(saved.updatedAt, isNotNull);
+    });
+
+    test('save round-trips two-way sync mode', () async {
+      await database.saveNasSyncConfig(
+        protocol: 'webdav',
+        host: 'nas.local',
+        port: null,
+        username: 'builder',
+        rootPath: '/SiteMark',
+        secureTls: false,
+        acceptInvalidTls: false,
+        knownSftpFingerprint: null,
+        wifiOnly: true,
+        enabled: true,
+        syncMode: 'two_way',
+      );
+      final saved = await database.nasSyncConfig();
+      expect(saved.syncMode, 'two_way');
+      expect(NasSyncMode.fromWire(saved.syncMode), NasSyncMode.twoWay);
     });
   });
 

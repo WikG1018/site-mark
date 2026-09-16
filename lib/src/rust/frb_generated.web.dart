@@ -75,6 +75,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NasConfig dco_decode_box_autoadd_nas_config(dynamic raw);
 
   @protected
+  NasDownloadRequest dco_decode_box_autoadd_nas_download_request(dynamic raw);
+
+  @protected
   NasUploadRequest dco_decode_box_autoadd_nas_upload_request(dynamic raw);
 
   @protected
@@ -171,6 +174,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NasConfig dco_decode_nas_config(dynamic raw);
+
+  @protected
+  NasDownloadRequest dco_decode_nas_download_request(dynamic raw);
 
   @protected
   NasError dco_decode_nas_error(dynamic raw);
@@ -302,6 +308,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   NasConfig sse_decode_box_autoadd_nas_config(SseDeserializer deserializer);
 
   @protected
+  NasDownloadRequest sse_decode_box_autoadd_nas_download_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   NasUploadRequest sse_decode_box_autoadd_nas_upload_request(
     SseDeserializer deserializer,
   );
@@ -424,6 +435,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NasConfig sse_decode_nas_config(SseDeserializer deserializer);
+
+  @protected
+  NasDownloadRequest sse_decode_nas_download_request(
+    SseDeserializer deserializer,
+  );
 
   @protected
   NasError sse_decode_nas_error(SseDeserializer deserializer);
@@ -576,6 +592,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_nas_download_request(
+    NasDownloadRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_nas_upload_request(
     NasUploadRequest self,
     SseSerializer serializer,
@@ -724,6 +746,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_nas_config(NasConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_nas_download_request(
+    NasDownloadRequest self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_nas_error(NasError self, SseSerializer serializer);
