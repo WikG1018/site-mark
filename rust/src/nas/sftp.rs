@@ -210,7 +210,7 @@ impl NasBackend for SftpBackend {
             if !project.file_type().is_dir() {
                 continue;
             }
-            let project_path = self.sftp_path(&[project_name.clone()]);
+            let project_path = self.sftp_path(std::slice::from_ref(&project_name));
             let files = match block_on(sftp.read_dir(&project_path)) {
                 Ok(files) => files,
                 Err(_) => continue,

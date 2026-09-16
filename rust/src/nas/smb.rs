@@ -174,7 +174,7 @@ impl NasBackend for SmbBackend {
                 if !project.is_directory {
                     continue;
                 }
-                let project_path = Self::path_below(&sub, &[project_name.clone()]);
+                let project_path = Self::path_below(&sub, std::slice::from_ref(&project_name));
                 let files = match tree
                     .list_directory(client.connection_mut(), &project_path)
                     .await
