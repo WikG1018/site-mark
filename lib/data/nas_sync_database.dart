@@ -8,6 +8,18 @@ import 'package:sitemark/domain/nas_sync.dart';
 /// `failed`. The user can always retry explicitly, which resets the budget.
 const int kNasMaxUploadAttempts = 5;
 
+/// Base delay of the exponential backoff applied between automatic attempts.
+/// Attempt *n* (1-based) waits `base << min(n-1, 4)` — 30s, 60s, 2m, 4m, 8m —
+/// so a flaky NAS cannot burn the whole budget inside one drain cycle.
+const Duration kNasRetryBackoffBase = Duration(seconds: 30);
+
+/// Backoff applied after [attempts] failed automatic tries (0 = no wait).
+Duration nasRetryBackoff(int attempts) {
+  if (attempts <= 0) return Duration.zero;
+  final shift = (attempts - 1).clamp(0, 4);
+  return kNasRetryBackoffBase * (1 << shift);
+}
+
 NasSyncConfig _defaultNasSyncConfig() {
   final now = DateTime.now();
   return NasSyncConfig(
@@ -110,16 +122,26 @@ extension NasSyncDatabase on AppDatabase {
   }
 
   /// Upload states eligible for automatic processing: pending, with retry
-  /// budget left, whose capture is still ready. Oldest attempt first.
-  Future<List<NasUploadState>> pendingNasUploads() {
-    return (select(nasUploadStates)
-          ..where(
-            (row) =>
-                row.status.equals(NasUploadStatus.pending.name) &
-                row.attempts.isSmallerThanValue(kNasMaxUploadAttempts),
-          )
-          ..orderBy([(row) => OrderingTerm.asc(row.lastAttemptAt)]))
-        .get();
+  /// budget left, and past their exponential backoff window. Oldest attempt
+  /// first. Rows still inside the backoff stay pending but are not returned,
+  /// so one drain cycle cannot burn the whole budget on a down server.
+  Future<List<NasUploadState>> pendingNasUploads() async {
+    final rows =
+        await (select(nasUploadStates)
+              ..where(
+                (row) =>
+                    row.status.equals(NasUploadStatus.pending.name) &
+                    row.attempts.isSmallerThanValue(kNasMaxUploadAttempts),
+              )
+              ..orderBy([(row) => OrderingTerm.asc(row.lastAttemptAt)]))
+            .get();
+    final now = DateTime.now();
+    return rows.where((row) {
+      if (row.attempts <= 0) return true;
+      final last = row.lastAttemptAt;
+      if (last == null) return true;
+      return now.difference(last) >= nasRetryBackoff(row.attempts);
+    }).toList();
   }
 
   /// Every upload state, newest activity first (settings surface).
@@ -142,26 +164,62 @@ extension NasSyncDatabase on AppDatabase {
   }
 
   /// Records a failed attempt. The state parks in `failed` once the retry
-  /// budget is exhausted; below the budget it stays pending for the next
-  /// trigger (new capture, app start, or config change).
+  /// budget is exhausted or the failure is fatal (auth/config/host-key —
+  /// only a user action can resolve those); below the budget it stays
+  /// pending behind the exponential backoff for the next trigger.
   Future<void> markNasUploadFailed(String captureId, String failureCode) async {
     final state = await (select(
       nasUploadStates,
     )..where((row) => row.captureId.equals(captureId))).getSingleOrNull();
     if (state == null) return;
     final attempts = state.attempts + 1;
+    final parked =
+        isNasFatalFailure(failureCode) || attempts >= kNasMaxUploadAttempts;
     await (update(
       nasUploadStates,
     )..where((row) => row.captureId.equals(captureId))).write(
       NasUploadStatesCompanion(
         status: Value(
-          attempts >= kNasMaxUploadAttempts
-              ? NasUploadStatus.failed
-              : NasUploadStatus.pending,
+          parked ? NasUploadStatus.failed : NasUploadStatus.pending,
         ),
         attempts: Value(attempts),
         failureCode: Value(failureCode),
         lastAttemptAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Re-queues one capture after its rendered JPEG changed (re-render /
+  /// regenerate). Resets the budget so the new bytes are uploaded even if
+  /// the previous copy had already succeeded.
+  Future<void> requeueNasUploadForContentChange(String captureId) async {
+    await into(nasUploadStates).insert(
+      NasUploadStatesCompanion.insert(
+        captureId: captureId,
+        status: const Value(NasUploadStatus.pending),
+        attempts: const Value(0),
+      ),
+      onConflict: DoUpdate(
+        (_) => const NasUploadStatesCompanion(
+          status: Value(NasUploadStatus.pending),
+          attempts: Value(0),
+          failureCode: Value(null),
+        ),
+      ),
+    );
+  }
+
+  /// Re-queues every already-uploaded row after the remote target changed
+  /// (host / protocol / root path), so history lands on the new NAS instead
+  /// of silently staying behind on the old one.
+  Future<void> requeueUploadedNasUploadsForTargetChange() async {
+    await (update(
+      nasUploadStates,
+    )..where((row) => row.status.equals(NasUploadStatus.uploaded.name))).write(
+      const NasUploadStatesCompanion(
+        status: Value(NasUploadStatus.pending),
+        attempts: Value(0),
+        failureCode: Value(null),
       ),
     );
   }

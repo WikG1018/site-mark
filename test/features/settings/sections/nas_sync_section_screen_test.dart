@@ -153,6 +153,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('nas-root-field')), '/dav');
     await tester.tap(find.byKey(const Key('nas-enable-switch')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('nas-save-button')));
     await tester.tap(find.byKey(const Key('nas-save-button')));
     await tester.pumpAndSettle();
 
@@ -194,6 +195,27 @@ void main() {
     );
     expect(switchWidget.value, isFalse);
     expect(find.text('请先填写服务器地址'), findsOneWidget);
+  });
+
+  testWidgets('enabling without a password keeps the switch off', (
+    tester,
+  ) async {
+    await pumpScreen(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('nas-host-field')),
+      'nas.local',
+    );
+    await tester.tap(find.byKey(const Key('nas-enable-switch')));
+    await tester.pumpAndSettle();
+
+    final config = await database.nasSyncConfig();
+    expect(config.enabled, isFalse);
+    final switchWidget = tester.widget<SwitchListTile>(
+      find.byKey(const Key('nas-enable-switch')),
+    );
+    expect(switchWidget.value, isFalse);
+    expect(find.text('启用 NAS 同步前请先保存密码'), findsOneWidget);
   });
 
   testWidgets('rejects out-of-range ports and accepts a fixed one', (

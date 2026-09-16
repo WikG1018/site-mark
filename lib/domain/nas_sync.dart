@@ -13,6 +13,19 @@ import 'package:sitemark/domain/photo_number.dart';
 /// Upload bookkeeping states for one capture.
 enum NasUploadStatus { pending, uploaded, failed }
 
+/// Failure codes that only a user action (fix credentials, re-confirm the
+/// host key, complete the configuration) can resolve. The drain parks these
+/// immediately instead of burning the automatic retry budget.
+const Set<String> kNasFatalFailureCodes = {
+  'auth_failed',
+  'config_invalid',
+  'host_key_changed',
+};
+
+/// Whether [failureCode] should stop automatic retries for the row.
+bool isNasFatalFailure(String? failureCode) =>
+    failureCode != null && kNasFatalFailureCodes.contains(failureCode);
+
 /// Remote file name of the uploaded watermarked JPEG for [photoNumber].
 String nasRemoteFileName(String photoNumber) => '$photoNumber.jpg';
 

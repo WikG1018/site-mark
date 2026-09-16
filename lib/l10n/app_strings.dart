@@ -951,6 +951,22 @@ class AppStrings {
       _english ? 'The local photo file is missing' : '本地照片文件缺失';
   String get nasErrorConfigInvalid =>
       _english ? 'The configuration is incomplete' : '配置不完整';
+  String get nasPasswordRequired => _english
+      ? 'Save a password before enabling NAS sync'
+      : '启用 NAS 同步前请先保存密码';
+  String get nasClearPassword => _english ? 'Clear saved password' : '清除已存密码';
+  String get nasPasswordCleared =>
+      _english ? 'Saved password cleared' : '已清除保存的密码';
+  String get nasLastFailureLabel => _english ? 'Last failure' : '最近失败';
+  String get nasRequeuedForTargetChange => _english
+      ? 'Target changed. Previously uploaded photos were re-queued for the new NAS.'
+      : '目标已变更，已上传的照片将重新排队到新的 NAS。';
+  String get nasHostKeyBlockedBanner => _english
+      ? 'Server fingerprint changed. Run Test connection to confirm the new key, then retry.'
+      : '服务器指纹已变化。请重新「测试连接」确认新密钥后再重试。';
+  String get nasBackgroundCatchUpArmed => _english
+      ? 'Pending uploads will continue in the background when the network is available.'
+      : '网络可用时，待上传任务会在后台继续。';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

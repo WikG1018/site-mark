@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show Constant, Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -85,6 +85,11 @@ void main() {
     String id, {
     CaptureStatus status = CaptureStatus.ready,
   }) async {
+    // Write the rendered JPEG before the capture row: the table-update
+    // observer drains as soon as the row appears, and a missing file would
+    // be recorded as local_io.
+    await Directory('${documents.path}/rendered').create(recursive: true);
+    await File('${documents.path}/rendered/$id.jpg').writeAsBytes([1, 2, 3]);
     try {
       await database.createProject(id: 'p1', name: '云湖之城');
     } on ProjectNameConflictException {
@@ -105,8 +110,6 @@ void main() {
             createdAt: DateTime(2026, 9, 1),
           ),
         );
-    await Directory('${documents.path}/rendered').create(recursive: true);
-    await File('${documents.path}/rendered/$id.jpg').writeAsBytes([1, 2, 3]);
   }
 
   NasSyncCoordinator buildCoordinator({
@@ -322,6 +325,75 @@ void main() {
     expect(uploader.jobs, hasLength(1));
   });
 
+  test(
+    'transient failures back off instead of burning the budget in one cycle',
+    () async {
+      await seedReadyCapture('a');
+      final uploader = _FakeUploader(failures: ['connection_failed']);
+      final coordinator = buildCoordinator(
+        connectivity: _FakeConnectivity(true),
+        uploader: uploader,
+      );
+      addTearDown(coordinator.dispose);
+      await database.saveNasSyncConfig(
+        protocol: 'webdav',
+        host: 'nas.local',
+        port: null,
+        username: 'builder',
+        rootPath: '/SiteMark',
+        secureTls: false,
+        acceptInvalidTls: false,
+        knownSftpFingerprint: null,
+        wifiOnly: true,
+        enabled: true,
+      );
+      await coordinator.start();
+      await pumpUntil(coordinator, (s) => !s.active);
+
+      // One attempt only: the row stays pending behind the backoff window.
+      expect(uploader.jobs, hasLength(1));
+      final state = (await database.allNasUploadStates()).single;
+      expect(state.status, NasUploadStatus.pending);
+      expect(state.attempts, 1);
+      expect(state.failureCode, 'connection_failed');
+      expect(await database.pendingNasUploads(), isEmpty);
+    },
+  );
+
+  test('auth_failed parks immediately and stops the drain', () async {
+    await seedReadyCapture('a');
+    await seedReadyCapture('b');
+    final uploader = _FakeUploader(failures: ['auth_failed', 'auth_failed']);
+    final coordinator = buildCoordinator(
+      connectivity: _FakeConnectivity(true),
+      uploader: uploader,
+    );
+    addTearDown(coordinator.dispose);
+    await database.saveNasSyncConfig(
+      protocol: 'webdav',
+      host: 'nas.local',
+      port: null,
+      username: 'builder',
+      rootPath: '/SiteMark',
+      secureTls: false,
+      acceptInvalidTls: false,
+      knownSftpFingerprint: null,
+      wifiOnly: true,
+      enabled: true,
+    );
+    await coordinator.start();
+    await pumpUntil(coordinator, (s) => !s.active);
+
+    // Fatal error: first row parks, the second is never attempted.
+    expect(uploader.jobs, hasLength(1));
+    final states = await database.allNasUploadStates();
+    final failed = states.where((row) => row.status == NasUploadStatus.failed);
+    expect(failed, hasLength(1));
+    expect(failed.single.attempts, 1);
+    expect(failed.single.failureCode, 'auth_failed');
+    expect(states.any((row) => row.status == NasUploadStatus.pending), isTrue);
+  });
+
   test('missing password parks the upload in config_invalid', () async {
     await seedReadyCapture('a');
     final uploader = _FakeUploader();
@@ -347,10 +419,10 @@ void main() {
     await pumpUntil(coordinator, (s) => s.active == false);
 
     expect(uploader.jobs, isEmpty);
-    expect(
-      (await database.allNasUploadStates()).single.failureCode,
-      'config_invalid',
-    );
+    final state = (await database.allNasUploadStates()).single;
+    expect(state.failureCode, 'config_invalid');
+    expect(state.status, NasUploadStatus.failed);
+    expect(state.attempts, 1);
   });
 
   test('missing rendered file parks the upload in local_io', () async {
@@ -384,15 +456,15 @@ void main() {
     );
   });
 
-  test('uploader failures count toward the retry budget', () async {
+  test('transient uploader failures count toward the retry budget', () async {
     await seedReadyCapture('a');
     final uploader = _FakeUploader(
       failures: [
-        'auth_failed',
-        'auth_failed',
-        'auth_failed',
-        'auth_failed',
-        'auth_failed',
+        'connection_failed',
+        'connection_failed',
+        'connection_failed',
+        'connection_failed',
+        'connection_failed',
       ],
     );
     final coordinator = buildCoordinator(
@@ -413,17 +485,74 @@ void main() {
       enabled: true,
     );
     await coordinator.start();
-    await pumpUntil(coordinator, (s) => s.failedCount == 1);
+    await pumpUntil(coordinator, (s) => !s.active);
+    expect(uploader.jobs, hasLength(1));
 
-    expect(uploader.jobs, hasLength(5));
+    // Age the row past the exponential backoff and drain again until the
+    // automatic budget is exhausted.
+    for (var i = 1; i < kNasMaxUploadAttempts; i++) {
+      await (database.update(
+        database.nasUploadStates,
+      )..where((_) => const Constant(true))).write(
+        NasUploadStatesCompanion(
+          lastAttemptAt: Value(
+            DateTime.now().subtract(const Duration(minutes: 30)),
+          ),
+        ),
+      );
+      await coordinator.drainOnce();
+    }
+
     final state = (await database.allNasUploadStates()).single;
     expect(state.status, NasUploadStatus.failed);
-    expect(state.attempts, 5);
+    expect(state.attempts, kNasMaxUploadAttempts);
+    expect(uploader.jobs, hasLength(kNasMaxUploadAttempts));
     expect(await database.pendingNasUploads(), isEmpty);
 
     // An explicit retry re-arms and succeeds (failure list exhausted).
     await coordinator.retryFailedUploads();
     await pumpUntil(coordinator, (s) => s.uploadedCount == 1);
-    expect(uploader.jobs, hasLength(6));
+    expect(uploader.jobs, hasLength(kNasMaxUploadAttempts + 1));
+  });
+
+  test('changing the remote target re-queues uploaded rows', () async {
+    await seedReadyCapture('a');
+    final uploader = _FakeUploader();
+    final coordinator = buildCoordinator(
+      connectivity: _FakeConnectivity(true),
+      uploader: uploader,
+    );
+    addTearDown(coordinator.dispose);
+    await database.saveNasSyncConfig(
+      protocol: 'webdav',
+      host: 'nas.local',
+      port: null,
+      username: 'builder',
+      rootPath: '/SiteMark',
+      secureTls: false,
+      acceptInvalidTls: false,
+      knownSftpFingerprint: null,
+      wifiOnly: true,
+      enabled: true,
+    );
+    await coordinator.start();
+    await pumpUntil(coordinator, (s) => s.uploadedCount == 1);
+    expect(uploader.jobs, hasLength(1));
+
+    await database.saveNasSyncConfig(
+      protocol: 'webdav',
+      host: 'nas2.local',
+      port: null,
+      username: 'builder',
+      rootPath: '/SiteMark',
+      secureTls: false,
+      acceptInvalidTls: false,
+      knownSftpFingerprint: null,
+      wifiOnly: true,
+      enabled: true,
+    );
+    await pumpUntil(coordinator, (s) => s.uploadedCount == 1 && !s.active);
+    expect(uploader.jobs, hasLength(2));
+    expect(uploader.jobs.last.config.host, 'nas2.local');
   });
 }
