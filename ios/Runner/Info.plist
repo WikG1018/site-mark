@@ -37,7 +37,6 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>io.github.wikg1018.sitemark.capture-processing</string>
-		<string>io.github.wikg1018.sitemark.nas-sync</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>

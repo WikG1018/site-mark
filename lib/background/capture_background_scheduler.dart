@@ -334,12 +334,18 @@ void captureCallbackDispatcher() {
         // Opportunistic iOS catch-up (see the design doc's background
         // scheduling downgrade): reconcile pending captures, then re-arm the
         // BGTaskScheduler request this run consumed. Android never dispatches
-        // this name.
+        // this name. Also drains NAS when sync is enabled — iOS allows only
+        // one permitted BGTask identifier.
         database = AppDatabase();
         await reconcilePendingCapturesForBackground(
           database: database,
           client: WorkmanagerBackgroundWorkClient(),
         );
+        try {
+          await buildHeadlessNasCoordinator(database).drainOnce();
+        } catch (_) {
+          // NAS drain is best-effort on the shared catch-up task.
+        }
         return true;
       }
       // iOS dispatches by uniqueName, so a one-off capture job arrives as

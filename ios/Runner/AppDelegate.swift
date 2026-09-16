@@ -15,10 +15,6 @@ import workmanager_apple
     WorkmanagerPlugin.registerBGProcessingTask(
       withIdentifier: "io.github.wikg1018.sitemark.capture-processing"
     )
-    // NAS upload catch-up (two-way restore / queue drain) when NAS sync is on.
-    WorkmanagerPlugin.registerBGProcessingTask(
-      withIdentifier: "io.github.wikg1018.sitemark.nas-sync"
-    )
     // Background tasks run in a separate headless Flutter engine that does
     // not register plugins on its own; without this, the capture dispatcher
     // cannot reach drift/path_provider/the Rust bridge.

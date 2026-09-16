@@ -22,9 +22,9 @@ const Duration nasBackgroundPeriod = Duration(minutes: 15);
 
 /// Arms (or keeps) the background NAS drain.
 ///
-/// Android uses a periodic WorkManager task. iOS has no persistent
-/// WorkManager queue, so an opportunistic BGProcessingTask is submitted
-/// instead (identifier must match Info.plist and AppDelegate).
+/// Android uses a periodic WorkManager task. iOS is limited to one
+/// permitted BGTask identifier (capture-processing); the capture BG catch-up
+/// also drains NAS when sync is enabled, so this is a no-op there.
 Future<void> scheduleNasBackgroundDrain({
   Workmanager? workmanager,
   bool enabled = true,
@@ -32,15 +32,9 @@ Future<void> scheduleNasBackgroundDrain({
 }) async {
   final wm = workmanager ?? Workmanager();
   final ios = isIos ?? Platform.isIOS;
+  if (ios) return;
   if (!enabled) {
     await wm.cancelByUniqueName(nasBackgroundTask);
-    if (ios) {
-      await wm.cancelByUniqueName(iosNasSyncBgTask);
-    }
-    return;
-  }
-  if (ios) {
-    await wm.registerProcessingTask(iosNasSyncBgTask, iosNasSyncBgTask);
     return;
   }
   await wm.registerPeriodicTask(
