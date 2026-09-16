@@ -36,12 +36,17 @@ class CaptureMediaService {
     required this.files,
     CaptureMediaCleanupPendingStore? pendingStore,
     this.diagnostics,
+    this.onAfterDelete,
   }) : pendingStore = pendingStore ?? MemoryCaptureMediaCleanupPendingStore();
 
   /// Optional diagnostics sink. When attached, superseded-cleanup failures,
   /// stalled tasks, journal recoveries, and reconciliation CAS conflicts
   /// become visible in diagnostic bundles instead of silent loops.
   final DiagnosticRecorder? diagnostics;
+
+  /// Invoked after a successful local delete (two-way NAS remote cleanup).
+  /// Must never throw into the user-facing delete path.
+  final Future<void> Function(CaptureRecord record)? onAfterDelete;
 
   /// Failed delete attempts tolerated per superseded URI before the task is
   /// parked (stalled) and excluded from automatic retries. A URI still
@@ -179,6 +184,13 @@ class CaptureMediaService {
         await pendingStore.write(pending);
         await database.deleteCapture(id);
         await _finishCleanup(pending);
+        if (onAfterDelete != null) {
+          try {
+            await onAfterDelete!(record);
+          } catch (_) {
+            // Remote cleanup is best-effort.
+          }
+        }
         succeeded.add(id);
       } catch (_) {
         failures[id] = CaptureMediaFailure.operationFailed;

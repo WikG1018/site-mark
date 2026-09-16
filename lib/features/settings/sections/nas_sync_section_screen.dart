@@ -280,6 +280,17 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             key: const Key('nas-sync-direction-help'),
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (_syncMode == 'two_way') ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('nas-import-button'),
+              onPressed: _busy || !_enabled
+                  ? null
+                  : () => _importFromNas(strings),
+              icon: const Icon(Icons.download_outlined),
+              label: Text(strings.nasImportFromNas),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [
@@ -644,6 +655,26 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
     } finally {
       if (mounted) setState(() => _retrying = false);
     }
+  }
+
+  Future<void> _importFromNas(AppStrings strings) async {
+    setState(() => _retrying = true);
+    var imported = 0;
+    try {
+      imported = await ref.read(nasSyncCoordinatorProvider).importFromNas();
+    } catch (_) {
+      if (mounted) showAppToast(context, strings.nasSaveFailed);
+      return;
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+    if (!mounted) return;
+    showAppToast(
+      context,
+      imported == 0
+          ? strings.nasImportNothing
+          : strings.nasImportedCount(imported),
+    );
   }
 
   String _errorText(AppStrings strings, String code) => switch (code) {

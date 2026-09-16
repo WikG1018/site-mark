@@ -65,3 +65,30 @@ pub fn nas_download(request: NasDownloadRequest) -> Result<(), NasError> {
     }
     backend.get_file_to_path(&relative, Path::new(&request.local_path))
 }
+
+/// One remote JPEG discovered under the configured root.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NasRemoteFile {
+    pub project_key: String,
+    pub file_name: String,
+}
+
+/// Lists remote project folders and their `.jpg` files (one level deep).
+pub fn nas_list(config: NasConfig) -> Result<Vec<NasRemoteFile>, NasError> {
+    let backend = make_backend(&config)?;
+    Ok(backend
+        .list_project_files()?
+        .into_iter()
+        .map(|(project_key, file_name)| NasRemoteFile {
+            project_key,
+            file_name,
+        })
+        .collect())
+}
+
+/// Deletes `{root}/{project_key}/{file_name}`; missing files succeed.
+pub fn nas_delete(request: NasDownloadRequest) -> Result<(), NasError> {
+    let backend = make_backend(&request.config)?;
+    let relative = relative_file_path(&request.project_key, &request.file_name)?;
+    backend.delete_file(&relative)
+}

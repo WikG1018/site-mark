@@ -195,6 +195,40 @@ impl NasBackend for SftpBackend {
         }
     }
 
+    fn list_project_files(&self) -> Result<Vec<(String, String)>, NasError> {
+        let seen_fingerprint = std::sync::Arc::new(SeenFingerprint::new(None));
+        let sftp = self.connect_sftp(&seen_fingerprint)?;
+        let root = self.sftp_path(&[]);
+        let mut out = Vec::new();
+        let projects = block_on(sftp.read_dir(&root))
+            .map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
+        for project in projects {
+            let project_name = project.file_name();
+            if project_name == "." || project_name == ".." || project_name == PROBE_FILE_NAME {
+                continue;
+            }
+            if !project.file_type().is_dir() {
+                continue;
+            }
+            let project_path = self.sftp_path(&[project_name.clone()]);
+            let files = match block_on(sftp.read_dir(&project_path)) {
+                Ok(files) => files,
+                Err(_) => continue,
+            };
+            for file in files {
+                let name = file.file_name();
+                if name == "." || name == ".." || !file.file_type().is_file() {
+                    continue;
+                }
+                if !name.to_ascii_lowercase().ends_with(".jpg") {
+                    continue;
+                }
+                out.push((project_name.clone(), name));
+            }
+        }
+        Ok(out)
+    }
+
     fn upload_from_path(
         &self,
         dir_segments: &[String],

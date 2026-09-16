@@ -160,6 +160,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<NasRemoteFile> dco_decode_list_nas_remote_file(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
@@ -184,6 +187,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NasProtocol dco_decode_nas_protocol(dynamic raw);
+
+  @protected
+  NasRemoteFile dco_decode_nas_remote_file(dynamic raw);
 
   @protected
   NasTestDetails dco_decode_nas_test_details(dynamic raw);
@@ -419,6 +425,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<NasRemoteFile> sse_decode_list_nas_remote_file(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
@@ -447,6 +458,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   NasProtocol sse_decode_nas_protocol(SseDeserializer deserializer);
+
+  @protected
+  NasRemoteFile sse_decode_nas_remote_file(SseDeserializer deserializer);
 
   @protected
   NasTestDetails sse_decode_nas_test_details(SseDeserializer deserializer);
@@ -725,6 +739,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_nas_remote_file(
+    List<NasRemoteFile> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -759,6 +779,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_nas_protocol(NasProtocol self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_nas_remote_file(NasRemoteFile self, SseSerializer serializer);
 
   @protected
   void sse_encode_nas_test_details(
