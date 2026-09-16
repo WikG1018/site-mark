@@ -215,8 +215,8 @@ impl NasBackend for SftpBackend {
         let path = self.sftp_path(&[relative_path.to_string()]);
         let mut file: File =
             block_on(sftp.create(&path)).map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
-        let mut source = std::fs::File::open(local_path)
-            .map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        let mut source =
+            std::fs::File::open(local_path).map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
         let mut buffer = vec![0u8; 256 * 1024];
         loop {
             let read = source
@@ -248,8 +248,8 @@ impl NasBackend for SftpBackend {
             }
             Err(_) => return Err(NasError::new(NasErrorCode::ProtocolError)),
         };
-        let mut out = std::fs::File::create(local_path)
-            .map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        let mut out =
+            std::fs::File::create(local_path).map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
         let mut buffer = vec![0u8; 256 * 1024];
         loop {
             let read = block_on(remote.read(&mut buffer))

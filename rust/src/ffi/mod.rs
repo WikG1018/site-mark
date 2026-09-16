@@ -18,7 +18,9 @@ use crate::api::image_core::{
     ExportProjectRequest, ExportSelectionRequest, ExtractArchivePhotoRequest,
     ExtractProjectBundleEntryRequest, RenderPhotoRequest,
 };
-use crate::api::nas::{nas_download, nas_test_connection, nas_upload, NasDownloadRequest, NasUploadRequest};
+use crate::api::nas::{
+    nas_download, nas_test_connection, nas_upload, NasDownloadRequest, NasUploadRequest,
+};
 use crate::nas::NasConfig;
 
 #[derive(Debug, Deserialize)]

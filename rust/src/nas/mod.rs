@@ -187,8 +187,7 @@ pub(crate) trait NasBackend {
         relative_path: &str,
         local_path: &std::path::Path,
     ) -> Result<(), NasError> {
-        let bytes = std::fs::read(local_path)
-            .map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        let bytes = std::fs::read(local_path).map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
         self.ensure_dirs(dir_segments)?;
         self.put_file(relative_path, bytes)
     }

@@ -164,8 +164,7 @@ impl NasBackend for SmbBackend {
         relative_path: &str,
         local_path: &std::path::Path,
     ) -> Result<(), NasError> {
-        let bytes = std::fs::read(local_path)
-            .map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        let bytes = std::fs::read(local_path).map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
         let (share, sub) = split_root(&self.config)?;
         let mut client = self.connect_client()?;
         block_on_timed(async {
@@ -209,8 +208,7 @@ impl NasBackend for SmbBackend {
         .map_err(|_| NasError::new(NasErrorCode::Timeout))?;
         match result {
             Ok(bytes) if !bytes.is_empty() => {
-                std::fs::write(local_path, bytes)
-                    .map_err(|_| NasError::new(NasErrorCode::LocalIo))
+                std::fs::write(local_path, bytes).map_err(|_| NasError::new(NasErrorCode::LocalIo))
             }
             Ok(_) => Err(NasError::new(NasErrorCode::ProtocolError)),
             Err(error) => match error.kind() {
