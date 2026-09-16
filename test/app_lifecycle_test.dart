@@ -332,6 +332,12 @@ class _FakeCompletionNotificationService
   }) => Future.value();
 
   @override
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  }) async {}
+
+  @override
   Future<void> setEnabled(bool enabled) => Future.value();
 
   @override
@@ -355,6 +361,12 @@ class _FailingCompletionNotificationService
     required String captureId,
     required String photoNumber,
   }) => Future.value();
+
+  @override
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  }) async {}
 
   @override
   Future<void> setEnabled(bool enabled) => Future.value();
@@ -384,6 +396,12 @@ class _TappingCompletionNotificationService
     required String captureId,
     required String photoNumber,
   }) => Future.value();
+
+  @override
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  }) async {}
 
   @override
   Future<void> setEnabled(bool enabled) => Future.value();

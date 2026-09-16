@@ -331,6 +331,12 @@ class _NoopCompletionNotificationService
     required String captureId,
     required String photoNumber,
   }) async {}
+
+  @override
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  }) async {}
 }
 
 /// A [CaptureBackgroundScheduler] that runs the real [CaptureProcessor] inline

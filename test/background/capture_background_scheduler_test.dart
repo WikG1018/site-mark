@@ -521,6 +521,12 @@ class _RecordingCompletionNotificationService
   }
 
   @override
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  }) async {}
+
+  @override
   Future<void> setEnabled(bool enabled) async {
     enabledValues.add(enabled);
   }
