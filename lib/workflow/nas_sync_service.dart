@@ -6,6 +6,8 @@ import 'package:drift/drift.dart' show TableUpdateQuery;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/nas_sync_database.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/nas_sync.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -98,6 +100,12 @@ abstract interface class NasUploader {
   Future<String?> upload(NasUploadJob job);
 }
 
+/// Downloads one remote JPEG back to [NasUploadJob.localPath]. Used by
+/// two-way sync to restore a missing local rendered file.
+abstract interface class NasDownloader {
+  Future<String?> download(NasUploadJob job);
+}
+
 /// Default uploader backed by the Rust NAS core via flutter_rust_bridge.
 class RustNasUploader implements NasUploader {
   @override
@@ -137,6 +145,42 @@ class RustNasUploader implements NasUploader {
   }
 }
 
+/// Default downloader backed by the Rust NAS core via flutter_rust_bridge.
+class RustNasDownloader implements NasDownloader {
+  @override
+  Future<String?> download(NasUploadJob job) async {
+    try {
+      await rust_api.nasDownload(
+        request: rust_api.NasDownloadRequest(
+          config: rust.NasConfig(
+            protocol: switch (job.config.protocol) {
+              'webdav' => rust.NasProtocol.webdav,
+              'sftp' => rust.NasProtocol.sftp,
+              _ => rust.NasProtocol.smb,
+            },
+            host: job.config.host,
+            port: job.config.port,
+            username: job.config.username,
+            password: job.password,
+            rootPath: job.config.rootPath,
+            secureTls: job.config.secureTls,
+            acceptInvalidTls: job.config.acceptInvalidTls,
+            knownSftpFingerprint: job.config.knownSftpFingerprint,
+          ),
+          projectKey: job.projectKey,
+          fileName: job.fileName,
+          localPath: job.localPath,
+        ),
+      );
+      return null;
+    } on rust.NasError catch (error) {
+      return error.code.name;
+    } on Object {
+      return 'protocol_error';
+    }
+  }
+}
+
 /// Live counts shown on the settings surface.
 class NasSyncSnapshot {
   const NasSyncSnapshot({
@@ -144,12 +188,21 @@ class NasSyncSnapshot {
     required this.pendingCount,
     required this.failedCount,
     required this.uploadedCount,
+    this.lastFailureCode,
+    this.hostKeyBlocked = false,
   });
 
   final bool active;
   final int pendingCount;
   final int failedCount;
   final int uploadedCount;
+
+  /// Most recent failure category among failed/pending rows, if any.
+  final String? lastFailureCode;
+
+  /// True when at least one row last failed with `host_key_changed` — the
+  /// queue cannot resume until the user re-confirms the fingerprint.
+  final bool hostKeyBlocked;
 
   static const idle = NasSyncSnapshot(
     active: false,
@@ -161,7 +214,8 @@ class NasSyncSnapshot {
   @override
   String toString() =>
       'NasSyncSnapshot(active: $active, pending: $pendingCount, '
-      'failed: $failedCount, uploaded: $uploadedCount)';
+      'failed: $failedCount, uploaded: $uploadedCount, '
+      'lastFailure: $lastFailureCode, hostKeyBlocked: $hostKeyBlocked)';
 }
 
 /// Drives the NAS upload queue.
@@ -176,8 +230,13 @@ class NasSyncCoordinator {
     this._credentials,
     this._connectivity,
     this._uploader,
-    this._outputPaths,
-  );
+    this._outputPaths, {
+    this.downloader,
+    this.diagnostics,
+    this.checkLocalNetwork,
+    this.onBackgroundNudge,
+    this.onFailureNotify,
+  });
 
   final AppDatabase _database;
   final NasCredentialStore _credentials;
@@ -185,11 +244,30 @@ class NasSyncCoordinator {
   final NasUploader _uploader;
   final CaptureOutputPaths _outputPaths;
 
+  /// Restores missing local rendered files when sync mode is two-way.
+  final NasDownloader? downloader;
+
+  /// Optional diagnostics sink for upload failures.
+  final DiagnosticRecorder? diagnostics;
+
+  /// Non-prompting LAN permission probe. When null, LAN hosts are not
+  /// re-checked during drain (tests and non-Android hosts).
+  final Future<bool> Function(String host)? checkLocalNetwork;
+
+  /// Invoked after a drain leaves pending work behind (backoff, fatal stop,
+  /// connectivity) so the host can arm a background catch-up.
+  final Future<void> Function()? onBackgroundNudge;
+
+  /// Posts a local notification when a drain ends with failed rows.
+  final Future<void> Function(int failedCount, String? failureCode)?
+  onFailureNotify;
+
   final _stateController = StreamController<NasSyncSnapshot>.broadcast();
   bool _started = false;
   bool _syncing = false;
   bool _rerunQueued = false;
-  final _deferredThisCycle = <String>{};
+  int _failuresThisDrain = 0;
+  NasSyncConfig? _lastSeenConfig;
   StreamSubscription? _configSubscription;
   StreamSubscription? _captureUpdatesSubscription;
   StreamSubscription? _connectivitySubscription;
@@ -203,7 +281,7 @@ class NasSyncCoordinator {
     _started = true;
     _configSubscription = _database.watchNasSyncConfig().listen((config) {
       // A config flip (enable/disable, target change) re-arms the queue.
-      unawaited(_refreshAndDrain(catchUp: true));
+      unawaited(_onConfigChanged(config));
     });
     _captureUpdatesSubscription = _database
         .tableUpdates(TableUpdateQuery.onTable(_database.captureRecords))
@@ -228,6 +306,10 @@ class NasSyncCoordinator {
     await _stateController.close();
   }
 
+  /// One-shot drain for the background isolate: no observers, no catch-up
+  /// scan. Safe to call without [start].
+  Future<void> drainOnce() => _drainQueue();
+
   /// Retries every failed row explicitly (user action from settings).
   Future<void> retryFailedUploads() async {
     for (final state in await _database.allNasUploadStates()) {
@@ -238,9 +320,31 @@ class NasSyncCoordinator {
     await _refreshAndDrain();
   }
 
+  Future<void> _onConfigChanged(NasSyncConfig config) async {
+    final previous = _lastSeenConfig;
+    _lastSeenConfig = config;
+    if (previous != null &&
+        config.enabled &&
+        _remoteTargetChanged(previous, config)) {
+      try {
+        await _database.requeueUploadedNasUploadsForTargetChange();
+      } on Object {
+        // Fall through to a normal drain; the next save retries the reset.
+      }
+    }
+    await _refreshAndDrain(catchUp: true);
+  }
+
+  static bool _remoteTargetChanged(NasSyncConfig a, NasSyncConfig b) =>
+      a.protocol != b.protocol ||
+      a.host != b.host ||
+      a.port != b.port ||
+      a.rootPath != b.rootPath;
+
   Future<void> _refreshAndDrain({bool catchUp = false}) async {
     try {
       final config = await _database.nasSyncConfig();
+      _lastSeenConfig ??= config;
       if (catchUp && config.enabled) {
         await _database.enqueueReadyCapturesForNas();
       }
@@ -258,7 +362,10 @@ class NasSyncCoordinator {
       return;
     }
     _syncing = true;
+    _failuresThisDrain = 0;
     await _emit();
+    var pendingLeft = false;
+    final deferredThisCycle = <String>{};
     try {
       while (true) {
         final config = await _database.nasSyncConfig();
@@ -266,63 +373,195 @@ class NasSyncCoordinator {
         final allowed = await _connectivity.allowsUpload(
           wifiOnly: config.wifiOnly,
         );
-        if (!allowed) break;
+        if (!allowed) {
+          pendingLeft = true;
+          break;
+        }
+        if (!await _lanReachable(config)) {
+          // Permission revoked after save: park the cycle without burning
+          // the retry budget on a socket that cannot open.
+          pendingLeft = true;
+          break;
+        }
         final queue = await _database.pendingNasUploads();
         if (queue.isEmpty) break;
 
-        // Re-query after every item so fresh state (user edits, deletions)
-        // is honored and ordering stays deterministic. A capture that is
-        // not ready yet (still processing) is deferred, not failed — once
-        // every queued item is deferred this cycle, stop and wait for the
-        // capture-completed trigger instead of spinning.
         final first = queue.first.captureId;
-        if (_deferredThisCycle.contains(first)) break;
-        final progressed = await _uploadOne(config, first);
-        if (!progressed) _deferredThisCycle.add(first);
+        if (deferredThisCycle.contains(first)) {
+          // Every remaining eligible row already deferred this cycle.
+          pendingLeft = true;
+          break;
+        }
+        final outcome = await _uploadOne(config, first);
         await _emit();
+        switch (outcome) {
+          case _UploadOutcome.deferred:
+            deferredThisCycle.add(first);
+            break;
+          case _UploadOutcome.fatal:
+            // Auth/config/host-key: every remaining row would fail the same
+            // way. Stop and wait for a user action (retry / re-test).
+            pendingLeft = queue.length > 1;
+            return;
+          case _UploadOutcome.failed:
+            // Backoff parks the row out of `pendingNasUploads` for a while.
+            // Keep draining other eligible rows; if this was the only one
+            // the next query is empty and we exit.
+            pendingLeft = true;
+            break;
+          case _UploadOutcome.succeeded:
+            break;
+        }
       }
     } finally {
-      _deferredThisCycle.clear();
       _syncing = false;
       await _emit();
+      // Only alert on failures recorded by *this* drain. Re-notifying on
+      // every capture/config tick for rows that already failed would spam.
+      if (_failuresThisDrain > 0) {
+        await _notifyFailures(await _currentSnapshot());
+      }
+      if (pendingLeft || _rerunQueued) {
+        unawaited(_nudgeBackground());
+      }
     }
     if (_rerunQueued) {
       _rerunQueued = false;
       await _drainQueue();
+      return;
+    }
+    // Two-way: after the upload queue settles, restore any ready capture
+    // whose local rendered JPEG is missing but exists on the NAS.
+    await _maybeRestoreMissing();
+  }
+
+  Future<NasSyncSnapshot> _currentSnapshot() async {
+    final states = await _database.allNasUploadStates();
+    String? lastFailureCode;
+    var hostKeyBlocked = false;
+    for (final row in states) {
+      final code = row.failureCode;
+      if (code == null) continue;
+      if (code == 'host_key_changed') hostKeyBlocked = true;
+      if (row.status == NasUploadStatus.failed) lastFailureCode = code;
+    }
+    return NasSyncSnapshot(
+      active: false,
+      pendingCount: states
+          .where((row) => row.status == NasUploadStatus.pending)
+          .length,
+      failedCount: states
+          .where((row) => row.status == NasUploadStatus.failed)
+          .length,
+      uploadedCount: states
+          .where((row) => row.status == NasUploadStatus.uploaded)
+          .length,
+      lastFailureCode: lastFailureCode,
+      hostKeyBlocked: hostKeyBlocked,
+    );
+  }
+
+  Future<void> _notifyFailures(NasSyncSnapshot snapshot) async {
+    try {
+      await onFailureNotify?.call(
+        snapshot.failedCount,
+        snapshot.lastFailureCode,
+      );
+    } on Object {
+      // Notifications are best-effort.
+    }
+  }
+
+  Future<void> _maybeRestoreMissing() async {
+    final nasDownloader = downloader;
+    if (nasDownloader == null) return;
+    final config = await _database.nasSyncConfig();
+    if (!config.enabled ||
+        NasSyncMode.fromWire(config.syncMode) != NasSyncMode.twoWay) {
+      return;
+    }
+    String password;
+    try {
+      password = await _credentials.read() ?? '';
+    } on Object {
+      return;
+    }
+    if (password.isEmpty) return;
+    final states = await _database.allNasUploadStates();
+    for (final state in states) {
+      if (state.status != NasUploadStatus.uploaded) continue;
+      final capture = await _captureById(state.captureId);
+      if (capture == null || capture.status != CaptureStatus.ready) continue;
+      final photoNumber = capture.photoNumber;
+      if (photoNumber == null || photoNumber.isEmpty) continue;
+      final project = await _database.projectById(capture.projectId);
+      if (project == null) continue;
+      final localPath = await _outputPaths.renderedPhotoPath(state.captureId);
+      if (await File(localPath).exists()) continue;
+      await nasDownloader.download(
+        NasUploadJob(
+          config: config,
+          password: password,
+          localPath: localPath,
+          projectKey: nasProjectKey(project.name),
+          fileName: nasRemoteFileName(photoNumber),
+        ),
+      );
+    }
+  }
+
+  Future<bool> _lanReachable(NasSyncConfig config) async {
+    final check = checkLocalNetwork;
+    if (check == null || config.host.isEmpty) return true;
+    if (!isLanNasHost(config.host)) return true;
+    try {
+      return await check(config.host);
+    } on Object {
+      return false;
+    }
+  }
+
+  Future<void> _nudgeBackground() async {
+    try {
+      await onBackgroundNudge?.call();
+    } on Object {
+      // Background scheduling is best-effort; the next foreground drain
+      // still runs.
     }
   }
 
   /// Uploads one capture. Local errors (missing photo number, missing file,
   /// missing password) map into the Rust failure taxonomy so the settings
-  /// surface shows one consistent vocabulary. Returns false when the row
-  /// was only deferred (capture not ready yet) — the drain treats that as
-  /// "no progress" and stops once every queued item defers.
-  Future<bool> _uploadOne(NasSyncConfig config, String captureId) async {
+  /// surface shows one consistent vocabulary.
+  Future<_UploadOutcome> _uploadOne(
+    NasSyncConfig config,
+    String captureId,
+  ) async {
     final capture = await _captureById(captureId);
     if (capture == null) {
-      await _database.markNasUploadFailed(captureId, 'path_invalid');
-      return true;
+      await _recordFailure(captureId, 'path_invalid');
+      return _UploadOutcome.failed;
     }
     if (capture.status != CaptureStatus.ready) {
       // The capture changed while queued; keep the job pending and let the
       // processing-completed table update re-trigger the drain.
       await _database.deferNasUpload(captureId);
-      return false;
+      return _UploadOutcome.deferred;
     }
     final photoNumber = capture.photoNumber;
     if (photoNumber == null || photoNumber.isEmpty) {
-      await _database.markNasUploadFailed(captureId, 'path_invalid');
-      return true;
+      await _recordFailure(captureId, 'path_invalid');
+      return _UploadOutcome.failed;
     }
     final project = await _database.projectById(capture.projectId);
     if (project == null) {
-      await _database.markNasUploadFailed(captureId, 'path_invalid');
-      return true;
+      await _recordFailure(captureId, 'path_invalid');
+      return _UploadOutcome.failed;
     }
     final localPath = await _outputPaths.renderedPhotoPath(captureId);
     if (!await File(localPath).exists()) {
-      await _database.markNasUploadFailed(captureId, 'local_io');
-      return true;
+      await _recordFailure(captureId, 'local_io');
+      return _UploadOutcome.failed;
     }
     String password;
     try {
@@ -330,12 +569,12 @@ class NasSyncCoordinator {
     } on Object {
       // Secure-storage breakage must burn a retry budget like any other
       // failure, not bubble out of the drain loop.
-      await _database.markNasUploadFailed(captureId, 'config_invalid');
-      return true;
+      await _recordFailure(captureId, 'config_invalid');
+      return _UploadOutcome.fatal;
     }
     if (password.isEmpty) {
-      await _database.markNasUploadFailed(captureId, 'config_invalid');
-      return true;
+      await _recordFailure(captureId, 'config_invalid');
+      return _UploadOutcome.fatal;
     }
     final failureCode = await _uploader.upload(
       NasUploadJob(
@@ -348,10 +587,40 @@ class NasSyncCoordinator {
     );
     if (failureCode == null) {
       await _database.markNasUploaded(captureId);
-    } else {
-      await _database.markNasUploadFailed(captureId, failureCode);
+      return _UploadOutcome.succeeded;
     }
-    return true;
+    await _recordFailure(captureId, failureCode);
+    return isNasFatalFailure(failureCode)
+        ? _UploadOutcome.fatal
+        : _UploadOutcome.failed;
+  }
+
+  Future<void> _recordFailure(String captureId, String failureCode) async {
+    _failuresThisDrain++;
+    await _database.markNasUploadFailed(captureId, failureCode);
+    final state = await databaseSelectState(captureId);
+    diagnostics?.record(
+      DiagnosticEvent(
+        timestamp: DateTime.now(),
+        category: DiagnosticCategory.nas,
+        outcome: DiagnosticOutcome.failed,
+        code: switch (failureCode) {
+          'auth_failed' || 'config_invalid' => DiagnosticCode.unexpected,
+          'host_key_changed' => DiagnosticCode.permissionDenied,
+          'quota_insufficient' => DiagnosticCode.insufficientStorage,
+          'local_io' => DiagnosticCode.unexpected,
+          _ => DiagnosticCode.unexpected,
+        },
+        count: 1,
+        retryCount: state?.attempts,
+      ),
+    );
+  }
+
+  Future<NasUploadState?> databaseSelectState(String captureId) {
+    return (_database.select(
+      _database.nasUploadStates,
+    )..where((row) => row.captureId.equals(captureId))).getSingleOrNull();
   }
 
   Future<CaptureRecord?> _captureById(String captureId) {
@@ -364,6 +633,17 @@ class NasSyncCoordinator {
     if (_stateController.isClosed) return;
     final states = await _database.allNasUploadStates();
     if (_stateController.isClosed) return;
+    String? lastFailureCode;
+    var hostKeyBlocked = false;
+    for (final row in states) {
+      final code = row.failureCode;
+      if (code == null) continue;
+      if (code == 'host_key_changed') hostKeyBlocked = true;
+      lastFailureCode ??= code;
+      if (row.status == NasUploadStatus.failed) {
+        lastFailureCode = code;
+      }
+    }
     _stateController.add(
       NasSyncSnapshot(
         active: _syncing,
@@ -376,7 +656,11 @@ class NasSyncCoordinator {
         uploadedCount: states
             .where((row) => row.status == NasUploadStatus.uploaded)
             .length,
+        lastFailureCode: lastFailureCode,
+        hostKeyBlocked: hostKeyBlocked,
       ),
     );
   }
 }
+
+enum _UploadOutcome { succeeded, failed, deferred, fatal }

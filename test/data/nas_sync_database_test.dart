@@ -77,7 +77,27 @@ void main() {
       expect(saved.knownSftpFingerprint, 'SHA256:abc');
       expect(saved.wifiOnly, isFalse);
       expect(saved.enabled, isTrue);
+      expect(saved.syncMode, 'upload_only');
       expect(saved.updatedAt, isNotNull);
+    });
+
+    test('save round-trips two-way sync mode', () async {
+      await database.saveNasSyncConfig(
+        protocol: 'webdav',
+        host: 'nas.local',
+        port: null,
+        username: 'builder',
+        rootPath: '/SiteMark',
+        secureTls: false,
+        acceptInvalidTls: false,
+        knownSftpFingerprint: null,
+        wifiOnly: true,
+        enabled: true,
+        syncMode: 'two_way',
+      );
+      final saved = await database.nasSyncConfig();
+      expect(saved.syncMode, 'two_way');
+      expect(NasSyncMode.fromWire(saved.syncMode), NasSyncMode.twoWay);
     });
   });
 
@@ -155,21 +175,77 @@ void main() {
         await seedCapture('x');
         await database.upsertNasUploadPending('x');
 
-        await database.markNasUploadFailed('x', 'auth_failed');
+        await database.markNasUploadFailed('x', 'connection_failed');
         var state = (await database.allNasUploadStates()).single;
         expect(state.attempts, 1);
         expect(state.status, NasUploadStatus.pending);
-        expect(state.failureCode, 'auth_failed');
+        expect(state.failureCode, 'connection_failed');
         expect(state.lastAttemptAt, isNotNull);
+        // Inside the exponential backoff window: not served to the drain.
+        expect(await database.pendingNasUploads(), isEmpty);
 
         for (var i = 0; i < kNasMaxUploadAttempts - 1; i++) {
-          await database.markNasUploadFailed('x', 'auth_failed');
+          await database.markNasUploadFailed('x', 'connection_failed');
         }
         state = (await database.allNasUploadStates()).single;
         expect(state.attempts, kNasMaxUploadAttempts);
         expect(state.status, NasUploadStatus.failed);
         // Exhausted rows are no longer served automatically.
         expect(await database.pendingNasUploads(), isEmpty);
+      },
+    );
+
+    test(
+      'fatal failures park immediately without burning the budget',
+      () async {
+        await seedProject();
+        await seedCapture('x');
+        await database.upsertNasUploadPending('x');
+
+        await database.markNasUploadFailed('x', 'auth_failed');
+
+        final state = (await database.allNasUploadStates()).single;
+        expect(state.attempts, 1);
+        expect(state.status, NasUploadStatus.failed);
+        expect(state.failureCode, 'auth_failed');
+        expect(await database.pendingNasUploads(), isEmpty);
+      },
+    );
+
+    test('requeueNasUploadForContentChange resets an uploaded row', () async {
+      await seedProject();
+      await seedCapture('x');
+      await database.upsertNasUploadPending('x');
+      await database.markNasUploaded('x');
+
+      await database.requeueNasUploadForContentChange('x');
+
+      final state = (await database.allNasUploadStates()).single;
+      expect(state.status, NasUploadStatus.pending);
+      expect(state.attempts, 0);
+      expect(state.failureCode, isNull);
+      expect((await database.pendingNasUploads()).single.captureId, 'x');
+    });
+
+    test(
+      'requeueUploadedNasUploadsForTargetChange resets only uploaded rows',
+      () async {
+        await seedProject();
+        await seedCapture('done');
+        await seedCapture('waiting');
+        await database.upsertNasUploadPending('done');
+        await database.upsertNasUploadPending('waiting');
+        await database.markNasUploaded('done');
+
+        await database.requeueUploadedNasUploadsForTargetChange();
+
+        final byId = {
+          for (final row in await database.allNasUploadStates())
+            row.captureId: row,
+        };
+        expect(byId['done']!.status, NasUploadStatus.pending);
+        expect(byId['done']!.attempts, 0);
+        expect(byId['waiting']!.status, NasUploadStatus.pending);
       },
     );
 

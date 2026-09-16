@@ -951,6 +951,49 @@ class AppStrings {
       _english ? 'The local photo file is missing' : '本地照片文件缺失';
   String get nasErrorConfigInvalid =>
       _english ? 'The configuration is incomplete' : '配置不完整';
+  String get nasPasswordRequired => _english
+      ? 'Save a password before enabling NAS sync'
+      : '启用 NAS 同步前请先保存密码';
+  String get nasClearPassword => _english ? 'Clear saved password' : '清除已存密码';
+  String get nasPasswordCleared =>
+      _english ? 'Saved password cleared' : '已清除保存的密码';
+  String get nasLastFailureLabel => _english ? 'Last failure' : '最近失败';
+  String get nasRequeuedForTargetChange => _english
+      ? 'Target changed. Previously uploaded photos were re-queued for the new NAS.'
+      : '目标已变更，已上传的照片将重新排队到新的 NAS。';
+  String get nasHostKeyBlockedBanner => _english
+      ? 'Server fingerprint changed. Run Test connection to confirm the new key, then retry.'
+      : '服务器指纹已变化。请重新「测试连接」确认新密钥后再重试。';
+  String get nasBackgroundCatchUpArmed => _english
+      ? 'Pending uploads will continue in the background when the network is available.'
+      : '网络可用时，待上传任务会在后台继续。';
+  String get nasSyncDirection => _english ? 'Sync direction' : '同步方向';
+  String get nasSyncDirectionUploadOnly => _english ? 'Upload only' : '仅上传';
+  String get nasSyncDirectionTwoWay => _english ? 'Two-way' : '双向';
+  String get nasSyncDirectionHelp => _english
+      ? 'Upload only: watermarked photos are copied to the NAS and never pulled back.\n'
+            'Two-way: if a ready photo is missing on this phone, it is restored from the NAS copy. '
+            'Files that exist only on the NAS are not imported automatically.'
+      : '仅上传：水印成片复制到 NAS，不会拉回本机。\n'
+            '双向：本机缺失的成片会从 NAS 副本恢复；'
+            'NAS 上多出来的文件不会自动导入。';
+  String get nasUsageTitle => _english ? 'How it works' : '使用说明';
+  String get nasUsageBody => _english
+      ? '• Photos upload to {root}/{project}/{photo number}.jpg. Folders are created automatically.\n'
+            '• The folder name is the sanitized project name; renaming a project only affects future uploads.\n'
+            '• Passwords stay in system secure storage and never enter backups or diagnostics.\n'
+            '• Wi-Fi only pauses the queue on cellular; it resumes when Wi-Fi returns.\n'
+            '• Failed uploads retry with backoff. Fatal errors (password / fingerprint) wait for you.\n'
+            '• Deleting a photo on the phone does not delete the NAS copy.'
+      : '• 照片上传到 {根目录}/{项目}/{照片编号}.jpg，目录会自动创建。\n'
+            '• 文件夹名是净化后的项目名；改项目名只影响之后的新上传。\n'
+            '• 密码保存在系统安全存储，不会进入备份或诊断。\n'
+            '• 「仅 Wi-Fi」会在蜂窝网络暂停，回到 Wi-Fi 后继续。\n'
+            '• 失败会退避重试；密码/指纹等致命错误会停下来等你处理。\n'
+            '• 本机删除照片不会删除 NAS 上的副本。';
+  String get nasFixConnectionTest => _english ? 'Test connection' : '测试连接';
+  String get nasFixRetry => _english ? 'Retry failed uploads' : '重试失败的上传';
+  String get nasFixCheckPassword => _english ? 'Update password' : '修改密码';
 }
 
 class _AppStringsDelegate extends LocalizationsDelegate<AppStrings> {

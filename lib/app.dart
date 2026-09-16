@@ -9,7 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
+import 'package:sitemark/background/nas_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/data/nas_sync_database.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/diagnostics/diagnostic_bundle_service.dart';
@@ -176,6 +178,10 @@ final nasUploaderProvider = Provider<NasUploader>((ref) {
   return RustNasUploader();
 });
 
+final nasDownloaderProvider = Provider<NasDownloader>((ref) {
+  return RustNasDownloader();
+});
+
 final nasSyncCoordinatorProvider = Provider<NasSyncCoordinator>((ref) {
   final coordinator = NasSyncCoordinator(
     ref.watch(databaseProvider),
@@ -183,6 +189,29 @@ final nasSyncCoordinatorProvider = Provider<NasSyncCoordinator>((ref) {
     ref.watch(nasConnectivityProvider),
     ref.watch(nasUploaderProvider),
     ref.watch(captureOutputPathsProvider),
+    downloader: ref.watch(nasDownloaderProvider),
+    diagnostics: ref.watch(diagnosticRecorderProvider),
+    checkLocalNetwork: ref.watch(localNetworkAccessProvider).isHostAllowed,
+    onBackgroundNudge: () async {
+      try {
+        final config = await ref.read(databaseProvider).nasSyncConfig();
+        await scheduleNasBackgroundDrain(enabled: config.enabled);
+      } on Object {
+        // Best-effort background arm; foreground drain still runs.
+      }
+    },
+    onFailureNotify: (failedCount, failureCode) async {
+      try {
+        await ref
+            .read(completionNotificationServiceProvider)
+            .showNasSyncFailed(
+              failedCount: failedCount,
+              failureCode: failureCode,
+            );
+      } on Object {
+        // Unimplemented in tests / plugin failure must not break the drain.
+      }
+    },
   );
   ref.onDispose(coordinator.dispose);
   return coordinator;

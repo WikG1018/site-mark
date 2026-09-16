@@ -1165,6 +1165,12 @@ class _FakeCompletionNotificationService
   }) => Future.value();
 
   @override
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  }) async {}
+
+  @override
   Future<void> setEnabled(bool enabled) => Future.value();
 
   @override

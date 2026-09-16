@@ -157,6 +157,66 @@ impl NasBackend for SmbBackend {
             },
         }
     }
+
+    fn upload_from_path(
+        &self,
+        dir_segments: &[String],
+        relative_path: &str,
+        local_path: &std::path::Path,
+    ) -> Result<(), NasError> {
+        let bytes = std::fs::read(local_path).map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        let (share, sub) = split_root(&self.config)?;
+        let mut client = self.connect_client()?;
+        block_on_timed(async {
+            let tree = client.connect_share(&share).await?;
+            let mut full = sub.clone();
+            full.extend(dir_segments.iter().cloned());
+            for depth in 1..=full.len() {
+                tree.create_directory(
+                    client.connection_mut(),
+                    &Self::path_below(&full[..depth], &[]),
+                )
+                .await?;
+            }
+            let path = Self::path_below(&sub, &[relative_path.to_string()]);
+            let mut upload = client.upload(&tree, &path, &bytes).await?;
+            while upload.write_next_chunk().await? {}
+            Ok::<(), smb2::Error>(())
+        })
+        .map_err(|_| NasError::new(NasErrorCode::Timeout))?
+        .map_err(super::map_smb_error)?;
+        Ok(())
+    }
+
+    fn get_file_to_path(
+        &self,
+        relative_path: &str,
+        local_path: &std::path::Path,
+    ) -> Result<(), NasError> {
+        let (share, sub) = split_root(&self.config)?;
+        let mut client = self.connect_client()?;
+        let result = block_on_timed(async {
+            let tree = client.connect_share(&share).await?;
+            let path = Self::path_below(&sub, &[relative_path.to_string()]);
+            let mut download = client.download(&tree, &path).await?;
+            let mut bytes = Vec::new();
+            while let Some(chunk) = download.next_chunk().await {
+                bytes.extend_from_slice(&chunk?);
+            }
+            Ok::<Vec<u8>, smb2::Error>(bytes)
+        })
+        .map_err(|_| NasError::new(NasErrorCode::Timeout))?;
+        match result {
+            Ok(bytes) if !bytes.is_empty() => {
+                std::fs::write(local_path, bytes).map_err(|_| NasError::new(NasErrorCode::LocalIo))
+            }
+            Ok(_) => Err(NasError::new(NasErrorCode::ProtocolError)),
+            Err(error) => match error.kind() {
+                smb2::ErrorKind::NotFound => Err(NasError::new(NasErrorCode::PathInvalid)),
+                _ => Err(super::map_smb_error(error)),
+            },
+        }
+    }
 }
 
 #[cfg(test)]

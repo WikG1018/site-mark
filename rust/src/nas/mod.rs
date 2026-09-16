@@ -176,6 +176,30 @@ pub(crate) trait NasBackend {
     fn stat_file(&self, relative_path: &str) -> Result<Option<u64>, NasError>;
     /// Deletes the file; deleting an already-absent file succeeds.
     fn delete_file(&self, relative_path: &str) -> Result<(), NasError>;
+
+    /// Uploads a local file after creating [dir_segments], preferably on a
+    /// single connection and without loading the whole JPEG into memory.
+    /// The default keeps the old two-step behavior for backends that only
+    /// accept a known-size body.
+    fn upload_from_path(
+        &self,
+        dir_segments: &[String],
+        relative_path: &str,
+        local_path: &std::path::Path,
+    ) -> Result<(), NasError> {
+        let bytes = std::fs::read(local_path).map_err(|_| NasError::new(NasErrorCode::LocalIo))?;
+        self.ensure_dirs(dir_segments)?;
+        self.put_file(relative_path, bytes)
+    }
+
+    /// Downloads `relative_path` into `local_path`, creating parent
+    /// directories as needed. Missing remote files map to
+    /// [NasErrorCode::PathInvalid].
+    fn get_file_to_path(
+        &self,
+        relative_path: &str,
+        local_path: &std::path::Path,
+    ) -> Result<(), NasError>;
 }
 
 /// Name of the small canary file written (and removed again) by

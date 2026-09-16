@@ -22,6 +22,13 @@ abstract class CompletionNotificationService {
     required String photoNumber,
   });
 
+  /// Posts a NAS sync failure notification whose tap deep-links to the NAS
+  /// settings page. Best-effort: never throws into the upload drain.
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  });
+
   /// Persists the master on/off switch used as the send gate.
   Future<void> setEnabled(bool enabled);
 
@@ -44,3 +51,6 @@ final completionNotificationServiceProvider =
 /// landing on the capture detail page.
 String captureReadyDeepLink(String projectId, String captureId) =>
     '/projects/$projectId/captures/$captureId';
+
+/// Deep-link path for NAS failure notifications.
+const String nasSettingsDeepLink = '/settings/nas';

@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import '../nas.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
 
 /// Probes the configured server: connectivity, authentication and root
 /// writability. Returns protocol details (the SFTP host key fingerprint)
@@ -17,11 +17,48 @@ Future<NasTestDetails> nasTestConnection({required NasConfig config}) =>
 
 /// Uploads the local file to `{root}/{project_key}/{file_name}`, creating
 /// every missing directory on the way and overwriting previous content so
-/// retries converge. Reads the whole file into memory first: watermarked
-/// JPEGs are single-digit megabytes and every protocol here prefers a
-/// known-size body over streaming bookkeeping.
+/// retries converge. SFTP/SMB stream from disk on a single connection;
+/// WebDAV still needs a known-size body.
 Future<void> nasUpload({required NasUploadRequest request}) =>
     RustLib.instance.api.crateApiNasNasUpload(request: request);
+
+/// Downloads `{root}/{project_key}/{file_name}` to [NasDownloadRequest::local_path].
+Future<void> nasDownload({required NasDownloadRequest request}) =>
+    RustLib.instance.api.crateApiNasNasDownload(request: request);
+
+/// One download job used by two-way sync to restore a missing local copy.
+class NasDownloadRequest {
+  final NasConfig config;
+  final String projectKey;
+  final String fileName;
+
+  /// Destination path for the restored JPEG.
+  final String localPath;
+
+  const NasDownloadRequest({
+    required this.config,
+    required this.projectKey,
+    required this.fileName,
+    required this.localPath,
+  });
+
+  @override
+  int get hashCode =>
+      config.hashCode ^
+      projectKey.hashCode ^
+      fileName.hashCode ^
+      localPath.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NasDownloadRequest &&
+          runtimeType == other.runtimeType &&
+          config == other.config &&
+          projectKey == other.projectKey &&
+          fileName == other.fileName &&
+          localPath == other.localPath;
+}
 
 /// One upload job: where the file comes from and where it goes.
 class NasUploadRequest {

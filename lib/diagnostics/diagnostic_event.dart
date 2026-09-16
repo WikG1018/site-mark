@@ -8,6 +8,7 @@ enum DiagnosticCategory {
   restore,
   deletion,
   permission,
+  nas,
 }
 
 enum DiagnosticOutcome { success, cancelled, blocked, failed }

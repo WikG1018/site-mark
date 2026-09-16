@@ -71,4 +71,12 @@ class LocalNetworkAccess {
     }
     return state == LocationPermissionState.granted;
   }
+
+  /// Non-prompting probe used by the upload drain: never shows a system
+  /// dialog. Returns false when a LAN host is not currently permitted.
+  Future<bool> isHostAllowed(String host) async {
+    if (!isLanNasHost(host)) return true;
+    final state = await _permission.current();
+    return state == LocationPermissionState.granted;
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/data/nas_sync_database.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
@@ -346,6 +347,9 @@ class CaptureWorkflow {
     // scratch (clearing the stale published URI and hash). The edited
     // description fields persist because the reset does not touch them.
     final reset = await database.resetCaptureForRetry(captureId);
+    // The rendered JPEG will change, so any previous NAS copy is stale.
+    // Re-queue immediately so the next ready transition uploads the new bytes.
+    await database.requeueNasUploadForContentChange(captureId);
     await scheduler.enqueue(captureId);
     return reset;
   }

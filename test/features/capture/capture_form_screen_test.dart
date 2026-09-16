@@ -584,6 +584,12 @@ class _NoOpCompletionNotificationService
     required String captureId,
     required String photoNumber,
   }) => Future.value();
+
+  @override
+  Future<void> showNasSyncFailed({
+    required int failedCount,
+    required String? failureCode,
+  }) async {}
 }
 
 class _CaptureFormPlatform implements PlatformServices {

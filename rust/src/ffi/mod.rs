@@ -18,7 +18,9 @@ use crate::api::image_core::{
     ExportProjectRequest, ExportSelectionRequest, ExtractArchivePhotoRequest,
     ExtractProjectBundleEntryRequest, RenderPhotoRequest,
 };
-use crate::api::nas::{nas_test_connection, nas_upload, NasUploadRequest};
+use crate::api::nas::{
+    nas_download, nas_test_connection, nas_upload, NasDownloadRequest, NasUploadRequest,
+};
 use crate::nas::NasConfig;
 
 #[derive(Debug, Deserialize)]
@@ -97,6 +99,11 @@ fn dispatch(call: JsonCall) -> Result<Value, String> {
         "nasUpload" => {
             let request: NasUploadRequest = parse_payload(call.payload)?;
             nas_upload(request).map_err(|error| error.to_string())?;
+            Ok(Value::Null)
+        }
+        "nasDownload" => {
+            let request: NasDownloadRequest = parse_payload(call.payload)?;
+            nas_download(request).map_err(|error| error.to_string())?;
             Ok(Value::Null)
         }
         _ => Err("invalid_data:unsupported operation".to_string()),

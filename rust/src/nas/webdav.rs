@@ -268,6 +268,31 @@ impl NasBackend for WebdavBackend {
             Err(other) => Err(Self::map_response_error(other)),
         }
     }
+
+    fn get_file_to_path(
+        &self,
+        relative_path: &str,
+        local_path: &std::path::Path,
+    ) -> Result<(), NasError> {
+        use std::io::Read;
+        let url = self.file_url(relative_path)?;
+        let response = match self.agent.get(&url).call() {
+            Ok(response) => response,
+            Err(ureq::Error::Status(404, _)) => {
+                return Err(NasError::new(NasErrorCode::PathInvalid));
+            }
+            Err(other) => return Err(Self::map_response_error(other)),
+        };
+        let mut body = Vec::new();
+        response
+            .into_reader()
+            .read_to_end(&mut body)
+            .map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
+        if body.is_empty() {
+            return Err(NasError::new(NasErrorCode::ProtocolError));
+        }
+        std::fs::write(local_path, &body).map_err(|_| NasError::new(NasErrorCode::LocalIo))
+    }
 }
 
 #[cfg(test)]
