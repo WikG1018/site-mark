@@ -357,6 +357,8 @@ final captureMediaServiceProvider = Provider<CaptureMediaService>((ref) {
     files: ref.watch(privateFileStoreProvider),
     pendingStore: ref.watch(captureMediaCleanupPendingStoreProvider),
     diagnostics: ref.watch(diagnosticRecorderProvider),
+    onAfterDelete: (record) =>
+        ref.read(nasSyncCoordinatorProvider).deleteRemoteForCapture(record),
   );
 });
 

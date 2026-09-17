@@ -15,7 +15,8 @@ import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/src/rust/api/nas.dart' as rust_api;
 import 'package:sitemark/src/rust/nas.dart' as rust;
-import 'package:sitemark/workflow/nas_sync_service.dart' show NasSyncSnapshot;
+import 'package:sitemark/workflow/nas_sync_service.dart'
+    show NasImportCandidate, NasSyncSnapshot;
 
 /// NAS sync configuration (settings, data & safety). The password lives in
 /// secure storage only — the form keeps it in memory and writes it through
@@ -280,6 +281,17 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
             key: const Key('nas-sync-direction-help'),
             style: Theme.of(context).textTheme.bodySmall,
           ),
+          if (_syncMode == 'two_way') ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('nas-import-button'),
+              onPressed: _busy || !_enabled
+                  ? null
+                  : () => _importFromNas(strings),
+              icon: const Icon(Icons.download_outlined),
+              label: Text(strings.nasImportFromNas),
+            ),
+          ],
           const SizedBox(height: 16),
           Row(
             children: [
@@ -644,6 +656,115 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
     } finally {
       if (mounted) setState(() => _retrying = false);
     }
+  }
+
+  Future<void> _importFromNas(AppStrings strings) async {
+    setState(() => _retrying = true);
+    List<NasImportCandidate> candidates;
+    try {
+      candidates = await ref
+          .read(nasSyncCoordinatorProvider)
+          .previewNasImport();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _retrying = false);
+        showAppToast(context, strings.nasSaveFailed);
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _retrying = false);
+    if (candidates.isEmpty) {
+      showAppToast(context, strings.nasImportPickerEmpty);
+      return;
+    }
+    final selected = await _pickImportProjects(strings, candidates);
+    if (selected == null || selected.isEmpty || !mounted) return;
+    setState(() => _retrying = true);
+    var imported = 0;
+    try {
+      imported = await ref
+          .read(nasSyncCoordinatorProvider)
+          .importNasProjects(selected);
+    } catch (_) {
+      if (mounted) showAppToast(context, strings.nasSaveFailed);
+      return;
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+    if (!mounted) return;
+    showAppToast(
+      context,
+      imported == 0
+          ? strings.nasImportNothing
+          : strings.nasImportedCount(imported),
+    );
+  }
+
+  Future<List<NasImportCandidate>?> _pickImportProjects(
+    AppStrings strings,
+    List<NasImportCandidate> candidates,
+  ) {
+    final checked = {
+      for (final candidate in candidates) candidate.projectKey: true,
+    };
+    return showDialog<List<NasImportCandidate>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(strings.nasImportPickerTitle),
+              content: SizedBox(
+                width: 360,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: candidates.length,
+                  itemBuilder: (context, index) {
+                    final candidate = candidates[index];
+                    final subtitle = candidate.existsLocally
+                        ? strings.nasImportProjectSubtitle(candidate.photoCount)
+                        : '${strings.nasImportNewProjectTag} · '
+                              '${strings.nasImportProjectSubtitle(candidate.photoCount)}';
+                    return CheckboxListTile(
+                      key: Key('nas-import-${candidate.projectKey}'),
+                      value: checked[candidate.projectKey] ?? false,
+                      title: Text(candidate.projectKey),
+                      subtitle: Text(subtitle),
+                      onChanged: (value) {
+                        setState(() {
+                          checked[candidate.projectKey] = value ?? false;
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    MaterialLocalizations.of(context).cancelButtonLabel,
+                  ),
+                ),
+                FilledButton(
+                  key: const Key('nas-import-confirm'),
+                  onPressed: () {
+                    final selected = candidates
+                        .where(
+                          (candidate) => checked[candidate.projectKey] ?? false,
+                        )
+                        .toList();
+                    Navigator.of(dialogContext).pop(selected);
+                  },
+                  child: Text(strings.nasImportConfirm),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   String _errorText(AppStrings strings, String code) => switch (code) {

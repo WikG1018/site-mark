@@ -187,6 +187,73 @@ impl WebdavBackend {
             _ => NasError::new(NasErrorCode::ProtocolError),
         }
     }
+
+    /// Depth-1 PROPFIND returning child hrefs (percent-decoded last path
+    /// segments are produced by the caller via [last_path_segment]).
+    fn propfind_depth1(&self, url: &str) -> Result<Vec<String>, NasError> {
+        const BODY: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<a:propfind xmlns:a="DAV:"><a:prop><a:resourcetype/></a:prop></a:propfind>"#;
+        let response = self
+            .agent
+            .request("PROPFIND", url)
+            .set("Depth", "1")
+            .set("Content-Type", "application/xml; charset=utf-8")
+            .send_string(BODY)
+            .map_err(Self::map_response_error)?;
+        match response.status() {
+            200..=299 => {}
+            status => return Err(Self::map_status(status)),
+        }
+        let body = response
+            .into_string()
+            .map_err(|_| NasError::new(NasErrorCode::ProtocolError))?;
+        Ok(extract_hrefs(&body))
+    }
+}
+
+/// Extracts `<href>...</href>` values from a PROPFIND multistatus body.
+fn extract_hrefs(xml: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = xml;
+    while let Some(start) = rest.find("<href>") {
+        rest = &rest[start + 6..];
+        if let Some(end) = rest.find("</href>") {
+            out.push(rest[..end].trim().to_string());
+            rest = &rest[end + 7..];
+        } else {
+            break;
+        }
+    }
+    out
+}
+
+/// Last non-empty path segment of a WebDAV href, percent-decoded.
+fn last_path_segment(href: &str) -> String {
+    let without_query = href.split(['?', '#']).next().unwrap_or(href);
+    let trimmed = without_query.trim_end_matches('/');
+    let segment = match trimmed.rfind('/') {
+        Some(index) => &trimmed[index + 1..],
+        None => trimmed,
+    };
+    percent_decode(segment)
+}
+
+fn percent_decode(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(&value[i + 1..i + 3], 16) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| value.to_string())
 }
 
 impl NasBackend for WebdavBackend {
@@ -267,6 +334,32 @@ impl NasBackend for WebdavBackend {
             Err(ureq::Error::Status(status, _)) => Err(Self::map_status(status)),
             Err(other) => Err(Self::map_response_error(other)),
         }
+    }
+
+    fn list_project_files(&self) -> Result<Vec<(String, String)>, NasError> {
+        let root = root_segments(&self.config.root_path)?;
+        let root_url = self.url_for(&root, true)?;
+        let mut out = Vec::new();
+        for href in self.propfind_depth1(&root_url)? {
+            let name = last_path_segment(&href);
+            if name.is_empty() || name == PROBE_FILE_NAME || !href.ends_with('/') {
+                continue;
+            }
+            let mut project_segments = root.clone();
+            project_segments.push(name.clone());
+            let project_url = self.url_for(&project_segments, true)?;
+            for file_href in self.propfind_depth1(&project_url)? {
+                let file_name = last_path_segment(&file_href);
+                if file_href.ends_with('/')
+                    || file_name.is_empty()
+                    || !file_name.to_ascii_lowercase().ends_with(".jpg")
+                {
+                    continue;
+                }
+                out.push((name.clone(), file_name));
+            }
+        }
+        Ok(out)
     }
 
     fn get_file_to_path(

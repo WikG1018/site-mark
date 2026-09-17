@@ -177,6 +177,10 @@ pub(crate) trait NasBackend {
     /// Deletes the file; deleting an already-absent file succeeds.
     fn delete_file(&self, relative_path: &str) -> Result<(), NasError>;
 
+    /// Lists `{project}/{file}` pairs under the configured root, one level
+    /// deep. Used by two-way sync to import remote-only photos.
+    fn list_project_files(&self) -> Result<Vec<(String, String)>, NasError>;
+
     /// Uploads a local file after creating [dir_segments], preferably on a
     /// single connection and without loading the whole JPEG into memory.
     /// The default keeps the old two-step behavior for backends that only
