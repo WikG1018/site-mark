@@ -10,6 +10,8 @@ import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/nas_sync.dart';
+import 'package:sitemark/domain/project_name.dart'
+    show ProjectNameConflictException;
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/src/rust/api/image_core.dart' as rust_images;
 import 'package:sitemark/src/rust/api/nas.dart' as rust_api;
@@ -220,6 +222,30 @@ class NasSyncSnapshot {
       'lastFailure: $lastFailureCode, hostKeyBlocked: $hostKeyBlocked)';
 }
 
+/// One remote NAS project folder with photos that can be imported.
+class NasImportCandidate {
+  const NasImportCandidate({
+    required this.projectKey,
+    required this.existsLocally,
+    required this.localProjectId,
+    required this.fileNames,
+  });
+
+  /// Sanitized folder name on the NAS (`{root}/{projectKey}/…`).
+  final String projectKey;
+
+  /// Whether a local project already uses this key.
+  final bool existsLocally;
+
+  /// Local project id when [existsLocally].
+  final String? localProjectId;
+
+  /// Remote `.jpg` file names that are not already present locally.
+  final List<String> fileNames;
+
+  int get photoCount => fileNames.length;
+}
+
 /// Drives the NAS upload queue.
 ///
 /// Observer pattern: nothing in the capture processor knows about NAS. The
@@ -312,71 +338,141 @@ class NasSyncCoordinator {
   /// scan. Safe to call without [start].
   Future<void> drainOnce() => _drainQueue();
 
-  /// Imports remote-only JPEGs as new ready captures (two-way mode).
-  /// Returns how many photos were imported. Manual action from settings.
-  Future<int> importFromNas() async {
-    final config = await _database.nasSyncConfig();
-    if (!config.enabled ||
-        NasSyncMode.fromWire(config.syncMode) != NasSyncMode.twoWay) {
-      return 0;
-    }
-    String password;
-    try {
-      password = await _credentials.read() ?? '';
-    } on Object {
-      return 0;
-    }
-    if (password.isEmpty) return 0;
+  /// Lists remote projects and the photos that are not yet on this phone.
+  /// Used by the settings import picker before anything is written.
+  Future<List<NasImportCandidate>> previewNasImport() async {
+    final credentials = await _twoWayCredentials();
+    if (credentials == null) return const [];
+    final (config, password) = credentials;
     final rustConfig = _rustConfig(config, password);
     final remoteFiles = await rust_api.nasList(config: rustConfig);
     final projects = await _database.getProjects();
     final byKey = {
       for (final project in projects) nasProjectKey(project.name): project,
     };
-    var imported = 0;
+    final byProjectKey = <String, List<String>>{};
     for (final remote in remoteFiles) {
-      final project = byKey[remote.projectKey];
-      if (project == null) continue;
       if (!remote.fileName.toLowerCase().endsWith('.jpg')) continue;
       final photoNumber = remote.fileName.substring(
         0,
         remote.fileName.length - 4,
       );
       if (photoNumber.isEmpty) continue;
-      final existing = await _captureByPhotoNumber(project.id, photoNumber);
-      if (existing != null) continue;
-      final captureId = const Uuid().v4();
-      final localPath = await _outputPaths.renderedPhotoPath(captureId);
-      await rust_api.nasDownload(
-        request: rust_api.NasDownloadRequest(
-          config: rustConfig,
-          projectKey: remote.projectKey,
-          fileName: remote.fileName,
-          localPath: localPath,
+      byProjectKey
+          .putIfAbsent(remote.projectKey, () => [])
+          .add(remote.fileName);
+    }
+    final candidates = <NasImportCandidate>[];
+    for (final entry in byProjectKey.entries) {
+      final project = byKey[entry.key];
+      final missing = <String>[];
+      for (final fileName in entry.value) {
+        final photoNumber = fileName.substring(0, fileName.length - 4);
+        if (project != null) {
+          final existing = await _captureByPhotoNumber(project.id, photoNumber);
+          if (existing != null) continue;
+        }
+        missing.add(fileName);
+      }
+      if (missing.isEmpty) continue;
+      candidates.add(
+        NasImportCandidate(
+          projectKey: entry.key,
+          existsLocally: project != null,
+          localProjectId: project?.id,
+          fileNames: missing,
         ),
       );
-      final sha256 = await rust_images.sha256File(path: localPath);
-      final now = DateTime.now();
-      await _database.insertRestoredCapture(
-        id: captureId,
-        projectId: project.id,
-        photoNumber: photoNumber,
-        // The watermarked JPEG is the only artifact NAS keeps; the private
-        // original never left the source device.
-        originalPath: localPath,
-        workLocation: 'NAS',
-        workContent: photoNumber,
-        photographer: 'NAS',
-        originalSha256: sha256,
-        createdAt: now,
-        capturedAt: now,
-        originalDeletedAt: now,
-      );
-      await _database.upsertNasUploadPending(captureId);
-      await _database.markNasUploaded(captureId);
-      imported++;
+    }
+    candidates.sort((a, b) => a.projectKey.compareTo(b.projectKey));
+    return candidates;
+  }
+
+  /// Imports the selected remote projects. Creates a local project when the
+  /// NAS folder has no matching one. Returns the number of photos imported.
+  Future<int> importNasProjects(List<NasImportCandidate> selected) async {
+    if (selected.isEmpty) return 0;
+    final credentials = await _twoWayCredentials();
+    if (credentials == null) return 0;
+    final (config, password) = credentials;
+    final rustConfig = _rustConfig(config, password);
+    var imported = 0;
+    for (final candidate in selected) {
+      var projectId = candidate.localProjectId;
+      if (projectId == null) {
+        try {
+          final project = await _database.createProject(
+            id: const Uuid().v4(),
+            name: candidate.projectKey,
+          );
+          projectId = project.id;
+        } on ProjectNameConflictException {
+          // Another device/session created the same name; reuse it.
+          final projects = await _database.getProjects();
+          projectId = projects
+              .where(
+                (project) =>
+                    nasProjectKey(project.name) == candidate.projectKey,
+              )
+              .map((project) => project.id)
+              .firstOrNull;
+          if (projectId == null) continue;
+        }
+      }
+      for (final fileName in candidate.fileNames) {
+        final photoNumber = fileName.substring(0, fileName.length - 4);
+        if (photoNumber.isEmpty) continue;
+        final existing = await _captureByPhotoNumber(projectId, photoNumber);
+        if (existing != null) continue;
+        final captureId = const Uuid().v4();
+        final localPath = await _outputPaths.renderedPhotoPath(captureId);
+        await rust_api.nasDownload(
+          request: rust_api.NasDownloadRequest(
+            config: rustConfig,
+            projectKey: candidate.projectKey,
+            fileName: fileName,
+            localPath: localPath,
+          ),
+        );
+        final sha256 = await rust_images.sha256File(path: localPath);
+        final now = DateTime.now();
+        await _database.insertRestoredCapture(
+          id: captureId,
+          projectId: projectId,
+          photoNumber: photoNumber,
+          // The watermarked JPEG is the only artifact NAS keeps; the private
+          // original never left the source device.
+          originalPath: localPath,
+          workLocation: 'NAS',
+          workContent: photoNumber,
+          photographer: 'NAS',
+          originalSha256: sha256,
+          createdAt: now,
+          capturedAt: now,
+          originalDeletedAt: now,
+        );
+        await _database.upsertNasUploadPending(captureId);
+        await _database.markNasUploaded(captureId);
+        imported++;
+      }
     }
     return imported;
+  }
+
+  Future<(NasSyncConfig, String)?> _twoWayCredentials() async {
+    final config = await _database.nasSyncConfig();
+    if (!config.enabled ||
+        NasSyncMode.fromWire(config.syncMode) != NasSyncMode.twoWay) {
+      return null;
+    }
+    String password;
+    try {
+      password = await _credentials.read() ?? '';
+    } on Object {
+      return null;
+    }
+    if (password.isEmpty) return null;
+    return (config, password);
   }
 
   /// Deletes the remote JPEG for [record] when two-way sync is on.

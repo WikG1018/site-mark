@@ -978,10 +978,18 @@ class AppStrings {
             '双向：把 NAS 上本机没有的照片导入为新记录；'
             '在本机删除记录时会同时删除 NAS 上的副本。';
   String get nasImportFromNas => _english ? 'Import from NAS' : '从 NAS 导入';
+  String get nasImportPickerTitle =>
+      _english ? 'Select NAS projects to import' : '选择要导入的 NAS 项目';
+  String get nasImportPickerEmpty =>
+      _english ? 'No new photos found on the NAS' : 'NAS 上没有需要导入的新照片';
+  String get nasImportNewProjectTag => _english ? 'New project' : '新建项目';
+  String nasImportProjectSubtitle(int count) =>
+      _english ? '$count photo(s)' : '$count 张照片';
+  String get nasImportConfirm => _english ? 'Import' : '导入';
   String nasImportedCount(int count) =>
       _english ? 'Imported $count photo(s) from NAS' : '已从 NAS 导入 $count 张照片';
   String get nasImportNothing =>
-      _english ? 'No new photos found on the NAS' : 'NAS 上没有需要导入的新照片';
+      _english ? 'Nothing selected to import' : '未选择要导入的内容';
   String get nasUsageTitle => _english ? 'How it works' : '使用说明';
   String get nasUsageBody => _english
       ? '• Photos upload to {root}/{project}/{photo number}.jpg. Folders are created automatically.\n'
