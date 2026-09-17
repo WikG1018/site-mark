@@ -158,6 +158,47 @@ impl NasBackend for SmbBackend {
         }
     }
 
+    fn list_project_files(&self) -> Result<Vec<(String, String)>, NasError> {
+        let (share, sub) = split_root(&self.config)?;
+        let mut client = self.connect_client()?;
+        let listed = block_on_timed(async {
+            let tree = client.connect_share(&share).await?;
+            let root = Self::path_below(&sub, &[]);
+            let projects = tree.list_directory(client.connection_mut(), &root).await?;
+            let mut out = Vec::new();
+            for project in projects {
+                let project_name = project.name;
+                if project_name == "." || project_name == ".." || project_name == PROBE_FILE_NAME {
+                    continue;
+                }
+                if !project.is_directory {
+                    continue;
+                }
+                let project_path = Self::path_below(&sub, std::slice::from_ref(&project_name));
+                let files = match tree
+                    .list_directory(client.connection_mut(), &project_path)
+                    .await
+                {
+                    Ok(files) => files,
+                    Err(_) => continue,
+                };
+                for file in files {
+                    let name = file.name;
+                    if name == "." || name == ".." || file.is_directory {
+                        continue;
+                    }
+                    if !name.to_ascii_lowercase().ends_with(".jpg") {
+                        continue;
+                    }
+                    out.push((project_name.clone(), name));
+                }
+            }
+            Ok::<Vec<(String, String)>, smb2::Error>(out)
+        })
+        .map_err(|_| NasError::new(NasErrorCode::Timeout))?;
+        listed.map_err(super::map_smb_error)
+    }
+
     fn upload_from_path(
         &self,
         dir_segments: &[String],

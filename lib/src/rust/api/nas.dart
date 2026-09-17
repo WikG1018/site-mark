@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 import '../nas.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 
 /// Probes the configured server: connectivity, authentication and root
 /// writability. Returns protocol details (the SFTP host key fingerprint)
@@ -25,6 +25,14 @@ Future<void> nasUpload({required NasUploadRequest request}) =>
 /// Downloads `{root}/{project_key}/{file_name}` to [NasDownloadRequest::local_path].
 Future<void> nasDownload({required NasDownloadRequest request}) =>
     RustLib.instance.api.crateApiNasNasDownload(request: request);
+
+/// Lists remote project folders and their `.jpg` files (one level deep).
+Future<List<NasRemoteFile>> nasList({required NasConfig config}) =>
+    RustLib.instance.api.crateApiNasNasList(config: config);
+
+/// Deletes `{root}/{project_key}/{file_name}`; missing files succeed.
+Future<void> nasDelete({required NasDownloadRequest request}) =>
+    RustLib.instance.api.crateApiNasNasDelete(request: request);
 
 /// One download job used by two-way sync to restore a missing local copy.
 class NasDownloadRequest {
@@ -58,6 +66,25 @@ class NasDownloadRequest {
           projectKey == other.projectKey &&
           fileName == other.fileName &&
           localPath == other.localPath;
+}
+
+/// One remote JPEG discovered under the configured root.
+class NasRemoteFile {
+  final String projectKey;
+  final String fileName;
+
+  const NasRemoteFile({required this.projectKey, required this.fileName});
+
+  @override
+  int get hashCode => projectKey.hashCode ^ fileName.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NasRemoteFile &&
+          runtimeType == other.runtimeType &&
+          projectKey == other.projectKey &&
+          fileName == other.fileName;
 }
 
 /// One upload job: where the file comes from and where it goes.

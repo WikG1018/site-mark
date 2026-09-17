@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:drift/drift.dart' show TableUpdateQuery;
+import 'package:drift/drift.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/nas_sync_database.dart';
@@ -10,9 +10,13 @@ import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/nas_sync.dart';
+import 'package:sitemark/domain/project_name.dart'
+    show ProjectNameConflictException;
 import 'package:sitemark/platform/platform_services.dart';
+import 'package:sitemark/src/rust/api/image_core.dart' as rust_images;
 import 'package:sitemark/src/rust/api/nas.dart' as rust_api;
 import 'package:sitemark/src/rust/nas.dart' as rust;
+import 'package:uuid/uuid.dart';
 
 /// Where the NAS password lives between uploads. Implementations must keep
 /// the secret out of SQLite, backups and diagnostics (decision D-023).
@@ -218,6 +222,30 @@ class NasSyncSnapshot {
       'lastFailure: $lastFailureCode, hostKeyBlocked: $hostKeyBlocked)';
 }
 
+/// One remote NAS project folder with photos that can be imported.
+class NasImportCandidate {
+  const NasImportCandidate({
+    required this.projectKey,
+    required this.existsLocally,
+    required this.localProjectId,
+    required this.fileNames,
+  });
+
+  /// Sanitized folder name on the NAS (`{root}/{projectKey}/…`).
+  final String projectKey;
+
+  /// Whether a local project already uses this key.
+  final bool existsLocally;
+
+  /// Local project id when [existsLocally].
+  final String? localProjectId;
+
+  /// Remote `.jpg` file names that are not already present locally.
+  final List<String> fileNames;
+
+  int get photoCount => fileNames.length;
+}
+
 /// Drives the NAS upload queue.
 ///
 /// Observer pattern: nothing in the capture processor knows about NAS. The
@@ -309,6 +337,207 @@ class NasSyncCoordinator {
   /// One-shot drain for the background isolate: no observers, no catch-up
   /// scan. Safe to call without [start].
   Future<void> drainOnce() => _drainQueue();
+
+  /// Lists remote projects and the photos that are not yet on this phone.
+  /// Used by the settings import picker before anything is written.
+  Future<List<NasImportCandidate>> previewNasImport() async {
+    final credentials = await _twoWayCredentials();
+    if (credentials == null) return const [];
+    final (config, password) = credentials;
+    final rustConfig = _rustConfig(config, password);
+    final remoteFiles = await rust_api.nasList(config: rustConfig);
+    final projects = await _database.getProjects();
+    final byKey = {
+      for (final project in projects) nasProjectKey(project.name): project,
+    };
+    final byProjectKey = <String, List<String>>{};
+    for (final remote in remoteFiles) {
+      if (!remote.fileName.toLowerCase().endsWith('.jpg')) continue;
+      final photoNumber = remote.fileName.substring(
+        0,
+        remote.fileName.length - 4,
+      );
+      if (photoNumber.isEmpty) continue;
+      byProjectKey
+          .putIfAbsent(remote.projectKey, () => [])
+          .add(remote.fileName);
+    }
+    final candidates = <NasImportCandidate>[];
+    for (final entry in byProjectKey.entries) {
+      final project = byKey[entry.key];
+      final missing = <String>[];
+      for (final fileName in entry.value) {
+        final photoNumber = fileName.substring(0, fileName.length - 4);
+        if (project != null) {
+          final existing = await _captureByPhotoNumber(project.id, photoNumber);
+          if (existing != null) continue;
+        }
+        missing.add(fileName);
+      }
+      if (missing.isEmpty) continue;
+      candidates.add(
+        NasImportCandidate(
+          projectKey: entry.key,
+          existsLocally: project != null,
+          localProjectId: project?.id,
+          fileNames: missing,
+        ),
+      );
+    }
+    candidates.sort((a, b) => a.projectKey.compareTo(b.projectKey));
+    return candidates;
+  }
+
+  /// Imports the selected remote projects. Creates a local project when the
+  /// NAS folder has no matching one. Returns the number of photos imported.
+  Future<int> importNasProjects(List<NasImportCandidate> selected) async {
+    if (selected.isEmpty) return 0;
+    final credentials = await _twoWayCredentials();
+    if (credentials == null) return 0;
+    final (config, password) = credentials;
+    final rustConfig = _rustConfig(config, password);
+    var imported = 0;
+    for (final candidate in selected) {
+      var projectId = candidate.localProjectId;
+      if (projectId == null) {
+        try {
+          final project = await _database.createProject(
+            id: const Uuid().v4(),
+            name: candidate.projectKey,
+          );
+          projectId = project.id;
+        } on ProjectNameConflictException {
+          // Another device/session created the same name; reuse it.
+          final projects = await _database.getProjects();
+          projectId = projects
+              .where(
+                (project) =>
+                    nasProjectKey(project.name) == candidate.projectKey,
+              )
+              .map((project) => project.id)
+              .firstOrNull;
+          if (projectId == null) continue;
+        }
+      }
+      for (final fileName in candidate.fileNames) {
+        final photoNumber = fileName.substring(0, fileName.length - 4);
+        if (photoNumber.isEmpty) continue;
+        final existing = await _captureByPhotoNumber(projectId, photoNumber);
+        if (existing != null) continue;
+        final captureId = const Uuid().v4();
+        final localPath = await _outputPaths.renderedPhotoPath(captureId);
+        await rust_api.nasDownload(
+          request: rust_api.NasDownloadRequest(
+            config: rustConfig,
+            projectKey: candidate.projectKey,
+            fileName: fileName,
+            localPath: localPath,
+          ),
+        );
+        final sha256 = await rust_images.sha256File(path: localPath);
+        final now = DateTime.now();
+        await _database.insertRestoredCapture(
+          id: captureId,
+          projectId: projectId,
+          photoNumber: photoNumber,
+          // The watermarked JPEG is the only artifact NAS keeps; the private
+          // original never left the source device.
+          originalPath: localPath,
+          workLocation: 'NAS',
+          workContent: photoNumber,
+          photographer: 'NAS',
+          originalSha256: sha256,
+          createdAt: now,
+          capturedAt: now,
+          originalDeletedAt: now,
+        );
+        await _database.upsertNasUploadPending(captureId);
+        await _database.markNasUploaded(captureId);
+        imported++;
+      }
+    }
+    return imported;
+  }
+
+  Future<(NasSyncConfig, String)?> _twoWayCredentials() async {
+    final config = await _database.nasSyncConfig();
+    if (!config.enabled ||
+        NasSyncMode.fromWire(config.syncMode) != NasSyncMode.twoWay) {
+      return null;
+    }
+    String password;
+    try {
+      password = await _credentials.read() ?? '';
+    } on Object {
+      return null;
+    }
+    if (password.isEmpty) return null;
+    return (config, password);
+  }
+
+  /// Deletes the remote JPEG for [record] when two-way sync is on.
+  /// Best-effort: missing files and transport errors are swallowed so the
+  /// local delete never fails because of the NAS.
+  Future<void> deleteRemoteForCapture(CaptureRecord record) async {
+    final photoNumber = record.photoNumber;
+    if (photoNumber == null || photoNumber.isEmpty) return;
+    final config = await _database.nasSyncConfig();
+    if (!config.enabled ||
+        NasSyncMode.fromWire(config.syncMode) != NasSyncMode.twoWay) {
+      return;
+    }
+    String password;
+    try {
+      password = await _credentials.read() ?? '';
+    } on Object {
+      return;
+    }
+    if (password.isEmpty) return;
+    final project = await _database.projectById(record.projectId);
+    if (project == null) return;
+    try {
+      await rust_api.nasDelete(
+        request: rust_api.NasDownloadRequest(
+          config: _rustConfig(config, password),
+          projectKey: nasProjectKey(project.name),
+          fileName: nasRemoteFileName(photoNumber),
+          localPath: '',
+        ),
+      );
+    } on Object {
+      // Best-effort remote cleanup.
+    }
+  }
+
+  rust.NasConfig _rustConfig(NasSyncConfig config, String password) {
+    return rust.NasConfig(
+      protocol: switch (config.protocol) {
+        'webdav' => rust.NasProtocol.webdav,
+        'sftp' => rust.NasProtocol.sftp,
+        _ => rust.NasProtocol.smb,
+      },
+      host: config.host,
+      port: config.port,
+      username: config.username,
+      password: password,
+      rootPath: config.rootPath,
+      secureTls: config.secureTls,
+      acceptInvalidTls: config.acceptInvalidTls,
+      knownSftpFingerprint: config.knownSftpFingerprint,
+    );
+  }
+
+  Future<CaptureRecord?> _captureByPhotoNumber(
+    String projectId,
+    String photoNumber,
+  ) {
+    return (_database.select(_database.captureRecords)..where(
+          (row) =>
+              row.projectId.equals(projectId) &
+              row.photoNumber.equals(photoNumber),
+        ))
+        .getSingleOrNull();
+  }
 
   /// Retries every failed row explicitly (user action from settings).
   Future<void> retryFailedUploads() async {
@@ -428,11 +657,7 @@ class NasSyncCoordinator {
     if (_rerunQueued) {
       _rerunQueued = false;
       await _drainQueue();
-      return;
     }
-    // Two-way: after the upload queue settles, restore any ready capture
-    // whose local rendered JPEG is missing but exists on the NAS.
-    await _maybeRestoreMissing();
   }
 
   Future<NasSyncSnapshot> _currentSnapshot() async {
@@ -469,44 +694,6 @@ class NasSyncCoordinator {
       );
     } on Object {
       // Notifications are best-effort.
-    }
-  }
-
-  Future<void> _maybeRestoreMissing() async {
-    final nasDownloader = downloader;
-    if (nasDownloader == null) return;
-    final config = await _database.nasSyncConfig();
-    if (!config.enabled ||
-        NasSyncMode.fromWire(config.syncMode) != NasSyncMode.twoWay) {
-      return;
-    }
-    String password;
-    try {
-      password = await _credentials.read() ?? '';
-    } on Object {
-      return;
-    }
-    if (password.isEmpty) return;
-    final states = await _database.allNasUploadStates();
-    for (final state in states) {
-      if (state.status != NasUploadStatus.uploaded) continue;
-      final capture = await _captureById(state.captureId);
-      if (capture == null || capture.status != CaptureStatus.ready) continue;
-      final photoNumber = capture.photoNumber;
-      if (photoNumber == null || photoNumber.isEmpty) continue;
-      final project = await _database.projectById(capture.projectId);
-      if (project == null) continue;
-      final localPath = await _outputPaths.renderedPhotoPath(state.captureId);
-      if (await File(localPath).exists()) continue;
-      await nasDownloader.download(
-        NasUploadJob(
-          config: config,
-          password: password,
-          localPath: localPath,
-          projectKey: nasProjectKey(project.name),
-          fileName: nasRemoteFileName(photoNumber),
-        ),
-      );
     }
   }
 
