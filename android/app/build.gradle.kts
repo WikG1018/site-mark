@@ -48,6 +48,13 @@ android {
         targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // minSdk 31 (Android 12) devices that need 32-bit ARM are vanishingly
+        // rare; dropping armeabi-v7a from release APKs saves a full native
+        // library copy in the universal package. arm64-v8a is the primary
+        // ship target; x86_64 stays for emulators and rare Intel devices.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -63,13 +70,15 @@ android {
 
     buildTypes {
         release {
-            // Disable R8 code minification and resource shrinking. R8 obfuscation
-            // breaks flutter_rust_bridge FFI bindings and WorkManager callback
-            // dispatchers, causing the app to crash immediately on launch in
-            // release builds. SiteMark is an offline app, so APK size is not a
-            // critical concern.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 + resource shrinking cut Java/Kotlin and unused resources.
+            // Keep rules in proguard-rules.pro cover WorkManager dispatchers,
+            // notification receivers, and JNI entry points used by FRB.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }

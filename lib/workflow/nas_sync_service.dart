@@ -100,12 +100,6 @@ abstract interface class NasUploader {
   Future<String?> upload(NasUploadJob job);
 }
 
-/// Downloads one remote JPEG back to [NasUploadJob.localPath]. Used by
-/// two-way sync to restore a missing local rendered file.
-abstract interface class NasDownloader {
-  Future<String?> download(NasUploadJob job);
-}
-
 /// Default uploader backed by the Rust NAS core via flutter_rust_bridge.
 class RustNasUploader implements NasUploader {
   @override
@@ -140,42 +134,6 @@ class RustNasUploader implements NasUploader {
       // Anything outside the Rust taxonomy (bridge/decode breakage, e.g. a
       // port that survived client validation) must not escape as an
       // unhandled async error — the queue records it and moves on.
-      return 'protocol_error';
-    }
-  }
-}
-
-/// Default downloader backed by the Rust NAS core via flutter_rust_bridge.
-class RustNasDownloader implements NasDownloader {
-  @override
-  Future<String?> download(NasUploadJob job) async {
-    try {
-      await rust_api.nasDownload(
-        request: rust_api.NasDownloadRequest(
-          config: rust.NasConfig(
-            protocol: switch (job.config.protocol) {
-              'webdav' => rust.NasProtocol.webdav,
-              'sftp' => rust.NasProtocol.sftp,
-              _ => rust.NasProtocol.smb,
-            },
-            host: job.config.host,
-            port: job.config.port,
-            username: job.config.username,
-            password: job.password,
-            rootPath: job.config.rootPath,
-            secureTls: job.config.secureTls,
-            acceptInvalidTls: job.config.acceptInvalidTls,
-            knownSftpFingerprint: job.config.knownSftpFingerprint,
-          ),
-          projectKey: job.projectKey,
-          fileName: job.fileName,
-          localPath: job.localPath,
-        ),
-      );
-      return null;
-    } on rust.NasError catch (error) {
-      return error.code.name;
-    } on Object {
       return 'protocol_error';
     }
   }
@@ -231,7 +189,6 @@ class NasSyncCoordinator {
     this._connectivity,
     this._uploader,
     this._outputPaths, {
-    this.downloader,
     this.diagnostics,
     this.checkLocalNetwork,
     this.onBackgroundNudge,
@@ -243,9 +200,6 @@ class NasSyncCoordinator {
   final NasConnectivity _connectivity;
   final NasUploader _uploader;
   final CaptureOutputPaths _outputPaths;
-
-  /// Restores missing local rendered files when sync mode is two-way.
-  final NasDownloader? downloader;
 
   /// Optional diagnostics sink for upload failures.
   final DiagnosticRecorder? diagnostics;
@@ -428,11 +382,7 @@ class NasSyncCoordinator {
     if (_rerunQueued) {
       _rerunQueued = false;
       await _drainQueue();
-      return;
     }
-    // Two-way: after the upload queue settles, restore any ready capture
-    // whose local rendered JPEG is missing but exists on the NAS.
-    await _maybeRestoreMissing();
   }
 
   Future<NasSyncSnapshot> _currentSnapshot() async {
@@ -469,44 +419,6 @@ class NasSyncCoordinator {
       );
     } on Object {
       // Notifications are best-effort.
-    }
-  }
-
-  Future<void> _maybeRestoreMissing() async {
-    final nasDownloader = downloader;
-    if (nasDownloader == null) return;
-    final config = await _database.nasSyncConfig();
-    if (!config.enabled ||
-        NasSyncMode.fromWire(config.syncMode) != NasSyncMode.twoWay) {
-      return;
-    }
-    String password;
-    try {
-      password = await _credentials.read() ?? '';
-    } on Object {
-      return;
-    }
-    if (password.isEmpty) return;
-    final states = await _database.allNasUploadStates();
-    for (final state in states) {
-      if (state.status != NasUploadStatus.uploaded) continue;
-      final capture = await _captureById(state.captureId);
-      if (capture == null || capture.status != CaptureStatus.ready) continue;
-      final photoNumber = capture.photoNumber;
-      if (photoNumber == null || photoNumber.isEmpty) continue;
-      final project = await _database.projectById(capture.projectId);
-      if (project == null) continue;
-      final localPath = await _outputPaths.renderedPhotoPath(state.captureId);
-      if (await File(localPath).exists()) continue;
-      await nasDownloader.download(
-        NasUploadJob(
-          config: config,
-          password: password,
-          localPath: localPath,
-          projectKey: nasProjectKey(project.name),
-          fileName: nasRemoteFileName(photoNumber),
-        ),
-      );
     }
   }
 
