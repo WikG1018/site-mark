@@ -48,13 +48,6 @@ android {
         targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // minSdk 31 (Android 12) devices that need 32-bit ARM are vanishingly
-        // rare; dropping armeabi-v7a from release APKs saves a full native
-        // library copy in the universal package. arm64-v8a is the primary
-        // ship target; x86_64 stays for emulators and rare Intel devices.
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
     }
 
     signingConfigs {

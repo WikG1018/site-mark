@@ -84,9 +84,14 @@ jobs:
           ORG_GRADLE_PROJECT_requireReleaseSigning: 'true'
         run: |
           mkdir -p dist
-          flutter build apk --release --split-per-abi
+          # minSdk 31 devices that need 32-bit ARM are vanishingly rare;
+          # drop armeabi-v7a so the universal package does not ship a third
+          # native library. --target-platform also keeps --split-per-abi
+          # from conflicting with a Gradle abiFilters list.
+          flutter build apk --release --split-per-abi \
+            --target-platform android-arm64,android-x64
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/sitemark-${GITHUB_REF_NAME}-arm64.apk
-          flutter build apk --release
+          flutter build apk --release --target-platform android-arm64,android-x64
           cp build/app/outputs/flutter-apk/app-release.apk dist/sitemark-${GITHUB_REF_NAME}-universal.apk
       - name: Verify APK signatures and metadata
         run: |
