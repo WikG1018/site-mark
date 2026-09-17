@@ -52,3 +52,12 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
 
 [dev-dependencies]
 tempfile = "3.27.0"
+
+# Release APKs ship the cdylib inside the Flutter Android/iOS packages.
+# Strip symbols and LTO cut native .so size without changing panic semantics
+# (the HarmonyOS C ABI still relies on catch_unwind).
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = 3

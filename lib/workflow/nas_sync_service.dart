@@ -104,12 +104,6 @@ abstract interface class NasUploader {
   Future<String?> upload(NasUploadJob job);
 }
 
-/// Downloads one remote JPEG back to [NasUploadJob.localPath]. Used by
-/// two-way sync to restore a missing local rendered file.
-abstract interface class NasDownloader {
-  Future<String?> download(NasUploadJob job);
-}
-
 /// Default uploader backed by the Rust NAS core via flutter_rust_bridge.
 class RustNasUploader implements NasUploader {
   @override
@@ -144,42 +138,6 @@ class RustNasUploader implements NasUploader {
       // Anything outside the Rust taxonomy (bridge/decode breakage, e.g. a
       // port that survived client validation) must not escape as an
       // unhandled async error — the queue records it and moves on.
-      return 'protocol_error';
-    }
-  }
-}
-
-/// Default downloader backed by the Rust NAS core via flutter_rust_bridge.
-class RustNasDownloader implements NasDownloader {
-  @override
-  Future<String?> download(NasUploadJob job) async {
-    try {
-      await rust_api.nasDownload(
-        request: rust_api.NasDownloadRequest(
-          config: rust.NasConfig(
-            protocol: switch (job.config.protocol) {
-              'webdav' => rust.NasProtocol.webdav,
-              'sftp' => rust.NasProtocol.sftp,
-              _ => rust.NasProtocol.smb,
-            },
-            host: job.config.host,
-            port: job.config.port,
-            username: job.config.username,
-            password: job.password,
-            rootPath: job.config.rootPath,
-            secureTls: job.config.secureTls,
-            acceptInvalidTls: job.config.acceptInvalidTls,
-            knownSftpFingerprint: job.config.knownSftpFingerprint,
-          ),
-          projectKey: job.projectKey,
-          fileName: job.fileName,
-          localPath: job.localPath,
-        ),
-      );
-      return null;
-    } on rust.NasError catch (error) {
-      return error.code.name;
-    } on Object {
       return 'protocol_error';
     }
   }
@@ -259,7 +217,6 @@ class NasSyncCoordinator {
     this._connectivity,
     this._uploader,
     this._outputPaths, {
-    this.downloader,
     this.diagnostics,
     this.checkLocalNetwork,
     this.onBackgroundNudge,
@@ -271,9 +228,6 @@ class NasSyncCoordinator {
   final NasConnectivity _connectivity;
   final NasUploader _uploader;
   final CaptureOutputPaths _outputPaths;
-
-  /// Restores missing local rendered files when sync mode is two-way.
-  final NasDownloader? downloader;
 
   /// Optional diagnostics sink for upload failures.
   final DiagnosticRecorder? diagnostics;

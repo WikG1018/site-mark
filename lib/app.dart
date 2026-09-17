@@ -178,10 +178,6 @@ final nasUploaderProvider = Provider<NasUploader>((ref) {
   return RustNasUploader();
 });
 
-final nasDownloaderProvider = Provider<NasDownloader>((ref) {
-  return RustNasDownloader();
-});
-
 final nasSyncCoordinatorProvider = Provider<NasSyncCoordinator>((ref) {
   final coordinator = NasSyncCoordinator(
     ref.watch(databaseProvider),
@@ -189,7 +185,6 @@ final nasSyncCoordinatorProvider = Provider<NasSyncCoordinator>((ref) {
     ref.watch(nasConnectivityProvider),
     ref.watch(nasUploaderProvider),
     ref.watch(captureOutputPathsProvider),
-    downloader: ref.watch(nasDownloaderProvider),
     diagnostics: ref.watch(diagnosticRecorderProvider),
     checkLocalNetwork: ref.watch(localNetworkAccessProvider).isHostAllowed,
     onBackgroundNudge: () async {
