@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:sitemark/shared/ui/glass_surface.dart';
+import 'package:sitemark/shared/ui/press_scale.dart';
 
 /// Floating action affordance in the app's glass chrome vocabulary — the
 /// same family as the navigation dock and toast capsule. Used on every
@@ -30,12 +32,12 @@ class AdaptiveFloatingButton extends StatelessWidget {
     final extended = label != null;
     final foreground = Theme.of(context).colorScheme.onSurface;
     final radius = BorderRadius.circular(999);
+    // PressScale owns the press/tap gesture (scale-down under the finger,
+    // spring settle on release); the ink-free glass pill keeps its hover
+    // styling from GlassSurface alone.
     final content = Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: radius,
-        child: extended
+      child: extended
             ? Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 18,
@@ -69,7 +71,11 @@ class AdaptiveFloatingButton extends StatelessWidget {
       // Match the root dock: one always-on glass layer keeps the FAB in the
       // same material family without a per-list-card blur cost.
       blurOnAndroid: true,
-      child: content,
+      child: PressScale(
+        onPressed: onPressed,
+        haptic: HapticFeedback.lightImpact,
+        child: content,
+      ),
     );
     return tooltip == null ? glass : Tooltip(message: tooltip!, child: glass);
   }

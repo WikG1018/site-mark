@@ -32,7 +32,14 @@ class AdaptiveSegmentedButton<T extends Object> extends StatelessWidget {
       return SegmentedButton<T>(
         segments: segments,
         selected: selected,
-        onSelectionChanged: onSelectionChanged,
+        // Material's control ships without haptics while the iOS branch
+        // ticks natively; parity lives here, on real changes only.
+        onSelectionChanged: (value) {
+          if (!setEquals(value, selected)) {
+            HapticFeedback.selectionClick();
+          }
+          onSelectionChanged(value);
+        },
         style: style,
       );
     }

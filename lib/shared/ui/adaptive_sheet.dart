@@ -38,6 +38,7 @@ class AppSheetAction<T> {
 }
 
 void _resolveAction<T>(AppSheetAction<T> action, BuildContext sheetContext) {
+  HapticFeedback.selectionClick();
   action.onPressed?.call();
   Navigator.of(sheetContext).pop(action.result);
 }

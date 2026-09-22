@@ -205,6 +205,7 @@ class _ToastCapsuleState extends State<_ToastCapsule>
                           if (widget.action != null)
                             TextButton(
                               onPressed: () {
+                                HapticFeedback.selectionClick();
                                 widget.action!.onPressed();
                                 _dismissAnimated();
                               },

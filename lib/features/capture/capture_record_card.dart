@@ -14,6 +14,7 @@ import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_selection_mark.dart';
+import 'package:sitemark/shared/ui/press_scale.dart';
 import 'package:sitemark/motion.dart';
 
 /// Shared capture list item used by both the project detail and the global
@@ -67,6 +68,8 @@ class CaptureRecordCard extends ConsumerStatefulWidget {
 class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
   late Future<OriginalPhotoState> _originalState;
   String? _resolvedPreviewPath;
+  // Drives the card's press-scale response from the InkWell's own gesture.
+  final PressScaleController _press = PressScaleController();
   late final FutureOr<bool> Function(String) _previewFileExists =
       _previewFileExistsForPath;
 
@@ -82,6 +85,12 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     if (_originalStateInputsChanged(oldWidget.summary.capture)) {
       _originalState = _readOriginalState();
     }
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
   }
 
   Future<OriginalPhotoState> _readOriginalState() {
@@ -273,7 +282,9 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     );
     final useStackedLayout = MediaQuery.textScalerOf(context).scale(14) >= 21;
     final colors = Theme.of(context).colorScheme;
-    return Card(
+    return PressScaleView(
+      controller: _press,
+      child: Card(
       clipBehavior: Clip.antiAlias,
       color: widget.selected
           ? colors.secondaryContainer.withValues(alpha: .45)
@@ -286,6 +297,9 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
           : null,
       child: InkWell(
         onTap: cardTap,
+        onTapDown: (_) => _press.press(),
+        onTapUp: (_) => _press.release(),
+        onTapCancel: _press.release,
         onLongPress: !widget.selectionMode && widget.selectable
             ? () {
                 HapticFeedback.mediumImpact();
