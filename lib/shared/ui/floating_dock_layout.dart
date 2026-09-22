@@ -76,7 +76,7 @@ class FloatingDockLayout extends StatelessWidget {
             child: AnimatedSwitcher(
               key: dockKey,
               duration: duration,
-              switchInCurve: AppMotion.emphasizedDecelerate,
+              switchInCurve: AppMotion.springSlideRise,
               switchOutCurve: AppMotion.emphasizedAccelerate,
               transitionBuilder: (child, animation) => FadeTransition(
                 opacity: animation,
@@ -111,7 +111,7 @@ Widget _slideChrome({
 }) {
   return AnimatedSlide(
     duration: duration,
-    curve: AppMotion.emphasized,
+    curve: AppMotion.springSnapBack,
     offset: visible ? Offset.zero : hiddenOffset,
     child: IgnorePointer(ignoring: !visible, child: child),
   );

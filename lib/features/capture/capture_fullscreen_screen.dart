@@ -509,7 +509,7 @@ class _CaptureFullscreenScreenState
     _scaleAnimation = Matrix4Tween(begin: current, end: end).animate(
       CurvedAnimation(
         parent: _scaleController,
-        curve: AppMotion.emphasizedDecelerate,
+        curve: AppMotion.springScaleSettle,
       ),
     );
     _scaleTargetPhotoId = targetPhotoId;
@@ -537,10 +537,7 @@ class _CaptureFullscreenScreenState
       return;
     }
     _dragAnimation = Tween<double>(begin: offset, end: 0).animate(
-      CurvedAnimation(
-        parent: _dragController,
-        curve: AppMotion.emphasizedDecelerate,
-      ),
+      CurvedAnimation(parent: _dragController, curve: AppMotion.springSnapBack),
     );
     _dragController.forward(from: 0);
   }
