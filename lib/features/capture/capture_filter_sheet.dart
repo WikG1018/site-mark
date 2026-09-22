@@ -5,6 +5,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 
 typedef CaptureDateOptionsLoader =
     Future<CaptureDateOptions> Function(CaptureFilter draft);
@@ -306,7 +307,7 @@ class _CaptureFilterSheetState extends State<CaptureFilterSheet> {
                     widget.disableAnimations ||
                         MediaQuery.disableAnimationsOf(context)
                     ? Duration.zero
-                    : const Duration(milliseconds: 150),
+                    : AppMotion.short4,
                 opacity: enabled ? 1 : 0.45,
                 child: Wrap(spacing: 8, runSpacing: 4, children: children),
               ),

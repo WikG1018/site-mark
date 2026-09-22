@@ -95,6 +95,10 @@ class _ToastCapsule extends StatefulWidget {
 class _ToastCapsuleState extends State<_ToastCapsule>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+
+  /// Drives the capsule's rise/settle motion: a spring on entrance for the
+  /// "life" pop, an accelerate-out curve on dismiss.
+  late final CurvedAnimation _motion;
   Timer? _autoDismiss;
   bool _entranceStarted = false;
 
@@ -102,6 +106,11 @@ class _ToastCapsuleState extends State<_ToastCapsule>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, value: 1);
+    _motion = CurvedAnimation(
+      parent: _controller,
+      curve: AppMotion.springSlideRise,
+      reverseCurve: AppMotion.emphasizedAccelerate,
+    );
     _animatedDismiss = _dismissAnimated;
     // Own the auto-dismiss timer so overlay/route teardown can cancel it in
     // [dispose] — a module-level timer would outlive a never-built entry.
@@ -143,6 +152,7 @@ class _ToastCapsuleState extends State<_ToastCapsule>
     if (identical(_animatedDismiss, _dismissAnimated)) {
       _animatedDismiss = null;
     }
+    _motion.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -158,45 +168,54 @@ class _ToastCapsuleState extends State<_ToastCapsule>
           padding: EdgeInsets.fromLTRB(20, 0, 20, viewPadding.bottom + 16),
           child: FadeTransition(
             opacity: _controller,
-            child: GlassSurface(
-              borderRadius: BorderRadius.circular(24),
-              opacity: GlassChrome.opacity,
-              blurSigma: GlassChrome.blurSigma,
-              // Match the root dock: one always-on glass layer is affordable
-              // and keeps the toast in the same material family.
-              blurOnAndroid: true,
-              child: Material(
-                type: MaterialType.transparency,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Text(
-                            widget.message,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 14),
-                          ),
-                        ),
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, .28),
+                end: Offset.zero,
+              ).animate(_motion),
+              child: ScaleTransition(
+                scale: Tween<double>(begin: .9, end: 1).animate(_motion),
+                child: GlassSurface(
+                  borderRadius: BorderRadius.circular(24),
+                  opacity: GlassChrome.opacity,
+                  blurSigma: GlassChrome.blurSigma,
+                  // Match the root dock: one always-on glass layer is affordable
+                  // and keeps the toast in the same material family.
+                  blurOnAndroid: true,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
                       ),
-                      if (widget.action != null)
-                        TextButton(
-                          onPressed: () {
-                            widget.action!.onPressed();
-                            _dismissAnimated();
-                          },
-                          style: TextButton.styleFrom(
-                            foregroundColor: scheme.primary,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Text(
+                                widget.message,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ),
                           ),
-                          child: Text(widget.action!.label),
-                        ),
-                    ],
+                          if (widget.action != null)
+                            TextButton(
+                              onPressed: () {
+                                widget.action!.onPressed();
+                                _dismissAnimated();
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: scheme.primary,
+                              ),
+                              child: Text(widget.action!.label),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),

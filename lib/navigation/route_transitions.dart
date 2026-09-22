@@ -65,7 +65,8 @@ Widget _androidPageSlide({
                   (1 - _androidEnterOpacityFloor) * progress;
         final scale =
             _androidEnterScaleStart +
-            (1 - _androidEnterScaleStart) * animation.value;
+            (1 - _androidEnterScaleStart) *
+                AppMotion.springSnapBack.transform(animation.value);
         return FadeTransition(
           opacity: AlwaysStoppedAnimation<double>(opacity),
           child: SlideTransition(
@@ -181,14 +182,13 @@ Widget buildProjectDetailRouteTransition({
 
   final curvedAnimation = CurvedAnimation(
     parent: animation,
-    curve: AppMotion.emphasizedDecelerate,
+    curve: AppMotion.springSnapBack,
     reverseCurve: AppMotion.emphasizedAccelerate,
   );
   final position = Tween<Offset>(
     begin: const Offset(0.045, 0),
     end: Offset.zero,
   ).animate(curvedAnimation);
-
   return ClipRect(
     key: const Key('project-detail-route-clip'),
     child: FadeTransition(

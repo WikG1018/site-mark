@@ -1,5 +1,30 @@
+import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+
+/// A [Curve] sampled from a spring's normalized displacement.
+///
+/// Springs deliver the "life" of motion (a small overshoot before settling)
+/// that a plain cubic can never express. Endpoints are snapped exactly to
+/// 0/1 — whatever residual the one-second sample carries is divided out —
+/// so these curves are safe for value-space drivers whose extremes must be
+/// exact (visibility, scale targets, dismiss snap-back).
+class SpringCurve extends Curve {
+  const SpringCurve(this.description);
+
+  final SpringDescription description;
+
+  @override
+  double transformInternal(double t) {
+    final simulation = SpringSimulation(description, 0, 1, 0);
+    final value = simulation.x(t);
+    final end = simulation.x(1);
+    return end == 0 ? value : value / end;
+  }
+
+  @override
+  String toString() => 'SpringCurve($description)';
+}
 
 abstract final class AppMotion {
   static const Duration rootSwitch = Duration(milliseconds: 220);
@@ -23,6 +48,34 @@ abstract final class AppMotion {
   static const Cubic standard = Cubic(0.2, 0.0, 0.0, 1.0);
   static const Cubic standardDecelerate = Cubic(0.0, 0.0, 0.0, 1.0);
   static const Cubic standardAccelerate = Cubic(0.3, 0.0, 1.0, 1.0);
+
+  // Springs (engineering parameters: Flutter's iOS family default —
+  // mass .5 / stiffness 100 — at three damping ratios; the lightly
+  // underdamped band carries the "life" overshoot without reading as
+  // wobble). `SpringDescription.withDampingRatio` is not const, so the
+  // derived curves are `static final`.
+  /// Near-critical spring for dismiss snap-back and chrome slides.
+  static final SpringDescription springSnap =
+      SpringDescription.withDampingRatio(mass: 0.5, stiffness: 100, ratio: 1);
+
+  /// Lightly underdamped spring for scale/settle motion.
+  static final SpringDescription springSettle =
+      SpringDescription.withDampingRatio(mass: 0.5, stiffness: 100, ratio: .92);
+
+  /// Taut underdamped spring for pill/panel rises.
+  static final SpringDescription springRise =
+      SpringDescription.withDampingRatio(mass: 0.5, stiffness: 140, ratio: .85);
+
+  /// Snap-back motion (dismiss return, chrome hide/show): ends exactly at
+  /// the target with a whisper of settle.
+  static final SpringCurve springSnapBack = SpringCurve(springSnap);
+
+  /// Scale settle (press release, zoom settle, toast entrance): visible
+  /// but restrained overshoot past the target.
+  static final SpringCurve springScaleSettle = SpringCurve(springSettle);
+
+  /// Pill/panel rise (toast, dock, floating chrome): the most life.
+  static final SpringCurve springSlideRise = SpringCurve(springRise);
 
   /// Returns [duration] unless the user has enabled system reduce-motion,
   /// in which case animations collapse to zero for accessibility.
