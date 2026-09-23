@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.28`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.29`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -10,14 +10,14 @@ English | [简体中文](README.md)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.28-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.28)
+[![Latest](https://img.shields.io/badge/latest-v1.0.29-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.29)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.13-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)
 
-**Current stable version (Latest): [`v1.0.28`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.28)**
+**Current stable version (Latest): [`v1.0.29`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.29)**
 
 **Current HarmonyOS native version: [`native-v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13) (HarmonyOS NEXT, unsigned HAP)**
 
-Requires Android 12 (API 31) or later. `v1.0.28` is set as Latest: HyperOS-style motion and material upgrade (springs, press-scale with semantic haptics, one glass recipe, list entrance and viewer physics); MiSans subset as the UI face. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
+Requires Android 12 (API 31) or later. `v1.0.29` is set as Latest: fixes the ghosted photo Hero flight (original flight restored). `v1.0.28` brought the HyperOS-style motion/material upgrade and the MiSans subset. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
 
 ## Download
 
@@ -25,9 +25,9 @@ Requires Android 12 (API 31) or later. `v1.0.28` is set as Latest: HyperOS-style
 
 | Package | Applies to | Download |
 | --- | --- | --- |
-| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.28-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.28/sitemark-v1.0.28-arm64.apk) |
-| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.28-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.28/sitemark-v1.0.28-universal.apk) |
-| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.28/SHA256SUMS.txt) |
+| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.29-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/sitemark-v1.0.29-arm64.apk) |
+| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.29-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/sitemark-v1.0.29-universal.apk) |
+| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/SHA256SUMS.txt) |
 
 ### HarmonyOS native (native-v1.0.13)
 
@@ -68,7 +68,8 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releases) for the full notes.
 
-- **v1.0.28** (Latest): HyperOS-style motion and material upgrade — spring motion engine and unified popup/sheet transitions, press-scale with semantic haptics, material tokens and one glass recipe, list entrance + unified Hero + viewer rubber-band/fling; motion/material spec doc; MiSans subset as the UI face (About-screen credit).
+- **v1.0.29** (Latest): fixes the ghosted photo Hero flight — endpoints are plain Heroes again so the destination photo no longer paints under the flying shuttle; drops the content-rect wrap that resized the hero child mid-flight.
+- **v1.0.28**: HyperOS-style motion and material upgrade — spring motion engine and unified popup/sheet transitions, press-scale with semantic haptics, material tokens and one glass recipe, list entrance + unified Hero + viewer rubber-band/fling; motion/material spec doc; MiSans subset as the UI face (About-screen credit).
 - **v1.0.27**: NAS two-way import picker and delete sync; smaller APKs via R8, drop armv7, Rust strip.
 - **v1.0.26**: NAS backoff/background drain/failure alerts/two-way picker and usage help; streamed single-connection SFTP uploads; unified glass chrome opacity.
 - **v1.0.25**: first-level settings toggles (save to gallery / location / completion notifications); selection export as project folders of photos only; glass capsule toasts without the dead View action; glass FABs on all platforms with a scroll-stable capture button.
@@ -280,7 +281,7 @@ The release gates for the current version include:
 
 When HarmonyOS native code is involved, the checks additionally cover the HarmonyOS manifest's minimal permission set and dual-ABI configuration, and run Rust Clippy/tests for the `ohos-native` feature separately. ArkTS tests and HAP packaging need the DevEco Studio SDK and are currently verified in a local DevEco environment.
 
-Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.28` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
+Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.29` is set as Latest; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
 
 ## Local build
 

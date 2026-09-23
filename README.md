@@ -2,10 +2,10 @@
 
 [English](README_EN.md) | 简体中文
 
-> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.28`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.29`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
-(Latest `v1.0.28`, targeting Android 17), a native HarmonyOS NEXT implementation published
+(Latest `v1.0.29`, targeting Android 17), a native HarmonyOS NEXT implementation published
 alongside it, and an iOS build on the shared Flutter codebase that is fully adapted
 (iOS 26/27-style UI, background catch-up, dark mode) and awaits an Apple Developer
 account for signed distribution — no installable package yet. All product lines live on a
@@ -17,14 +17,14 @@ single branch.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.28-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.28)
+[![Latest](https://img.shields.io/badge/latest-v1.0.29-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.29)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.13-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)
 
-**当前稳定版本（Latest）：[`v1.0.28`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.28)**
+**当前稳定版本（Latest）：[`v1.0.29`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.29)**
 
 **鸿蒙原生版当前版本：[`native-v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)（HarmonyOS NEXT，未签名 HAP）**
 
-支持 Android 12（API 31）及以上系统。`v1.0.28` 已设为 Latest：澎湃OS 风格动效/材质升级（弹簧动效、按压缩放与语义触感、统一玻璃材质、列表进出场与看图物理）；UI 字体嵌入 MiSans 子集。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.29` 已设为 Latest：修复照片 Hero 飞行重影（恢复原有飞行动画）。`v1.0.28` 起为澎湃OS 风格动效/材质升级与 MiSans 子集。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 
 ## 下载
@@ -33,9 +33,9 @@ single branch.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.28-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.28/sitemark-v1.0.28-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.28-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.28/sitemark-v1.0.28-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.28/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.29-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/sitemark-v1.0.29-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.29-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/sitemark-v1.0.29-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/SHA256SUMS.txt) |
 
 ### 鸿蒙原生版（native-v1.0.13）
 
@@ -76,7 +76,8 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
-- **v1.0.28**（Latest）：澎湃OS 风格动效/材质升级——弹簧动效引擎与统一弹窗/面板转场、按压缩放+语义触感、材质 token 与统一玻璃配方、列表进出场 + Hero 统一 + 看图橡皮筋/惯性；新增动效材质规范文档；UI 字体嵌入 MiSans 子集（About 页署名）。
+- **v1.0.29**（Latest）：修复照片 Hero 飞行重影——终点恢复为裸 Hero，飞行时不再把目的地图叠在 shuttle 下；去掉会在飞行中改尺寸的 content-rect 包裹。
+- **v1.0.28**：澎湃OS 风格动效/材质升级——弹簧动效引擎与统一弹窗/面板转场、按压缩放+语义触感、材质 token 与统一玻璃配方、列表进出场 + Hero 统一 + 看图橡皮筋/惯性；新增动效材质规范文档；UI 字体嵌入 MiSans 子集（About 页署名）。
 - **v1.0.27**：NAS 双向导入（勾选项目）与删除同步；R8 + 去 armv7 + Rust strip 缩小安装包。
 - **v1.0.26**：NAS 退避/后台续传/失败通知/双向选型与使用说明；SFTP 流式单连接上传；统一玻璃 chrome 透明度。
 - **v1.0.25**：设置一级开关（保存至相册 / 定位 / 完成通知）、导出所选改为按项目分文件夹的纯图片 ZIP、删除提示改为玻璃胶囊并去掉无效「查看」、FAB 全平台玻璃风格且拍摄按钮不再随滚动收缩。
@@ -288,7 +289,7 @@ HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Prefere
 
 涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.28` 已设为 Latest；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.29` 已设为 Latest；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
