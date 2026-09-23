@@ -54,6 +54,16 @@ Thumbs.db
 # IDE / AI agent
 .trae/
 .codex-remote-attachments/
+.workbuddy/
+.zcode/
+
+# Local scratch / tool output (never source)
+.tmp/
+.tmp-export/
+android/.kotlin/
+
+# Nested checkouts of this repo (local clones used as scratch trees)
+/site-mark/
 
 # Temporary diff / patch files
 /pr18.diff
