@@ -1,0 +1,21 @@
+MiSans 字体知识产权许可协议（摘要）
+MiSans Font Intellectual Property License (summary)
+
+完整协议原文见同目录 LICENSE-MiSans.pdf（官方下载包 / hyperos.mi.com/font）。
+The complete agreement is LICENSE-MiSans.pdf in this directory (official
+package / https://hyperos.mi.com/font).
+
+要点 / Key terms:
+1. 免费商用，可用于产品、包装、广告。
+   Free for commercial use, including products, packaging, and advertising.
+2. 允许作为 UI 字体随应用分发（嵌入式使用）。
+   Embedding and redistribution as part of an application is allowed.
+3. 您应在软件中特别注明使用了 MiSans 字体。
+   The software must note that it uses MiSans (see the About screen).
+4. 不得对 MiSans 字体或其任何单独组件进行改编或二次开发（不得改绘轮廓）。
+   Do not modify or remix the font outlines or its components.
+5. 不得单独将字体文件对外出租、再许可、出借或出售。
+   Do not rent, sublicense, lend, or sell the font files alone.
+
+字体版权归小米科技有限责任公司所有。
+Typeface copyright © Xiaomi.

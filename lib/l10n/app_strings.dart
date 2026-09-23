@@ -511,6 +511,13 @@ class AppStrings {
   String get license => _english ? 'License' : '许可证';
   String get licenseValue => 'Apache-2.0';
   String get licenses => _english ? 'Open-source licenses' : '开源许可证';
+  String get fontCredit => _english ? 'Typeface' : '字体';
+  String get fontCreditValue => _english
+      ? 'MiSans © Xiaomi. Used under the MiSans license.'
+      : 'MiSans © Xiaomi。依据 MiSans 字体许可协议使用。';
+  String get fontCreditDetail => _english
+      ? 'MiSans is a free-for-commercial-use typeface by Xiaomi. This app embeds a subset of MiSans Regular and Medium. Typeface copyright © Xiaomi. You may not modify the font outlines or redistribute the font files alone.'
+      : 'MiSans 是小米推出的免费商用字体。本应用内嵌了 MiSans Regular / Medium 子集。字体版权归小米所有。禁止改绘字体轮廓或单独再分发字体文件。';
   String get opacityHint => _english
       ? 'Drag to set the new-project watermark opacity. Saved on release.'
       : '拖动以设置新建项目的水印透明度，松开后保存。';

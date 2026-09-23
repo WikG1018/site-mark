@@ -22,6 +22,16 @@ ThemeData _buildThemeData(ColorScheme colorScheme) {
   return ThemeData(
     colorScheme: colorScheme,
     useMaterial3: true,
+    // MiSans (Xiaomi HyperOS) as the UI face; missing glyphs (rare hanzi,
+    // emoji) fall through to the platform sans stack.
+    fontFamily: 'MiSans',
+    fontFamilyFallback: const <String>[
+      'PingFang SC',
+      'Microsoft YaHei',
+      'Noto Sans SC',
+      'Roboto',
+      'sans-serif',
+    ],
     // Cupertino buttons dim on press; ink splashes are not part of the iOS
     // press vocabulary. Android keeps the M3 InkSparkle.
     splashFactory: defaultTargetPlatform == TargetPlatform.iOS
