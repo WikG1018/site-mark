@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
+import 'package:sitemark/features/capture/capture_photo_hero.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
@@ -53,6 +55,7 @@ class CaptureFullscreenScreen extends ConsumerStatefulWidget {
     required List<CaptureFullscreenPhoto> photos,
     this.initialIndex = 0,
     this.heroTag,
+    this.heroFit = BoxFit.contain,
   }) : _photos = photos,
        sequence = null,
        assert(photos.isNotEmpty, 'photos must not be empty'),
@@ -62,6 +65,7 @@ class CaptureFullscreenScreen extends ConsumerStatefulWidget {
     super.key,
     required this.sequence,
     this.heroTag,
+    this.heroFit = BoxFit.contain,
   }) : _photos = const [],
        initialIndex = 0;
 
@@ -78,6 +82,12 @@ class CaptureFullscreenScreen extends ConsumerStatefulWidget {
   /// instead of covering it with an opaque route transition. `null` (no
   /// paired hero, e.g. non-ready records) falls back to the plain push.
   final String? heroTag;
+
+  /// Framing the hero flight lands on ([BoxFit.cover] when the flight comes
+  /// from a list thumbnail, [BoxFit.contain] from a detail preview). The
+  /// fullscreen photo itself always renders contain; only the hero endpoint
+  /// follows this fit so the shuttle and the tapped source agree on crop.
+  final BoxFit heroFit;
 
   factory CaptureFullscreenScreen.fromPaths({
     Key? key,
@@ -146,8 +156,19 @@ class _CaptureFullscreenScreenState
     vsync: this,
     duration: AppMotion.medium2,
   );
+  late final AnimationController _panController = AnimationController(
+    vsync: this,
+    duration: AppMotion.long2,
+  );
   Animation<Matrix4>? _scaleAnimation;
   Animation<double>? _dragAnimation;
+
+  /// Frames of the current one-finger pan while zoomed; on release their
+  /// velocity becomes fling inertia (or a rubber-band settle at the edges).
+  final VelocityTracker _panVelocityTracker = VelocityTracker.withKind(
+    PointerDeviceKind.touch,
+  );
+  Animation<Offset>? _panInertiaAnimation;
 
   /// Continuous dismiss-drag offset. Driven through a [ValueNotifier] so
   /// pointer-move frames only rebuild the current photo's transform, not the
@@ -250,6 +271,7 @@ class _CaptureFullscreenScreenState
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _scaleController.dispose();
     _dragController.dispose();
+    _panController.dispose();
     _dragOffset.dispose();
     _pageController.dispose();
     _disposePhotoControllers();
@@ -412,31 +434,89 @@ class _CaptureFullscreenScreenState
 
   void _onPointerMove(PointerMoveEvent event) {
     if (!_pinchPointers.containsKey(event.pointer)) return;
-    final previous = _pinchPointers[event.pointer]!;
     _pinchPointers[event.pointer] = event.localPosition;
     if (_pinchPointers.length == 2) {
       _pinchUpdate(_pinchPointers.values.toList());
     } else if (_pinchPointers.length == 1 && _zoomed && !_multiTouch) {
-      _panUpdate(event.localPosition - previous);
+      _panUpdate(event);
     }
   }
 
   /// One-finger pan while zoomed, driven through the same controller as the
   /// pinch. The InteractiveViewer keeps pan disabled so its recognizer never
   /// fights the PageView swipe or the dismiss drag at 1x.
-  void _panUpdate(Offset delta) {
+  void _panUpdate(PointerMoveEvent event) {
     final photoId = _currentPhotoId;
-    if (photoId == null || delta == Offset.zero) return;
+    final previous = _pinchPointers[event.pointer];
+    if (photoId == null || previous == null) return;
+    final delta = event.localPosition - previous;
+    if (delta == Offset.zero) return;
     final (scale, pan) = _decomposeTransform(_controllerFor(photoId).value);
-    _controllerFor(photoId).value = _composeTransform(
-      scale,
-      _clampPan(scale, pan + delta),
+    // Rubber-band: past the content edge the photo yields at a quarter of
+    // the finger's pace, so the boundary is felt without a hard stop.
+    final raw = pan + delta;
+    final clamped = _clampPan(scale, raw);
+    final overscroll = raw - clamped;
+    final rubber = clamped + overscroll * 0.25;
+    _controllerFor(photoId).value = _composeTransform(scale, rubber);
+    // Sample the true (unclamped) finger pace for release inertia; the
+    // event's time stamp stands in for a high-res sample clock so test
+    // synthesizer frames still accumulate.
+    _panVelocityTracker.addPosition(
+      event.timeStamp,
+      Offset(rubber.dx, rubber.dy),
     );
   }
 
   void _onPointerUpOrCancel(PointerEvent event) {
     if (_pinchPointers.remove(event.pointer) == null) return;
-    if (_pinchPointers.length < 2) _pinchEnd();
+    if (_pinchPointers.length < 2) {
+      final photoId = _currentPhotoId;
+      if (photoId != null && !_multiTouch && _zoomed) {
+        _settlePan(photoId);
+      }
+      _pinchEnd();
+    }
+  }
+
+  /// Release physics for the zoomed pan: fling carries inertia (a
+  /// friction-clamped decay in real pixels), a slow release at an edge snaps
+  /// back, and a still finger just relaxes any rubber-band stretch.
+  void _settlePan(String photoId) {
+    final velocity = _panVelocityTracker.getVelocity();
+    final speed = velocity.pixelsPerSecond.distance;
+    final (scale, pan) = _decomposeTransform(_controllerFor(photoId).value);
+    final clamped = _clampPan(scale, pan);
+    Offset end;
+    if ((pan - clamped).distance > 0.5) {
+      // Rubber-band stretch must relax — even when the finger was still.
+      end = clamped;
+    } else if (speed > 300) {
+      final fling = clamped + velocity.pixelsPerSecond * 0.18;
+      end = _clampPan(scale, fling);
+    } else {
+      end = clamped;
+    }
+    if (MediaQuery.disableAnimationsOf(context) || end == pan) {
+      _controllerFor(photoId).value = _composeTransform(scale, end);
+      return;
+    }
+    _panInertiaAnimation = Tween<Offset>(begin: pan, end: end).animate(
+      CurvedAnimation(parent: _panController, curve: AppMotion.springSnapBack),
+    );
+    _panController.forward(from: 0).whenCompleteOrCancel(() {
+      if (!mounted || _panInertiaAnimation == null) return;
+      // Settle any residual: a fling that lands mid-air must still end on a
+      // legal (edge-touching) pan.
+      final (finalScale, finalPan) = _decomposeTransform(
+        _controllerFor(photoId).value,
+      );
+      _controllerFor(photoId).value = _composeTransform(
+        finalScale,
+        _clampPan(finalScale, finalPan),
+      );
+      _panInertiaAnimation = null;
+    });
   }
 
   /// Begins a two-finger pinch from whatever scale the photo currently has —
@@ -485,6 +565,29 @@ class _CaptureFullscreenScreenState
     setState(() => _multiTouch = false);
   }
 
+  /// Scale that fits the photo's content rect exactly inside the viewport
+  /// (letterboxed height or width), for the double-tap-to-content zoom. Falls
+  /// back to the classic 2x when the frame cannot be measured yet.
+  double _contentRectScale() {
+    final frame = _frameRenderBox();
+    final size = context.size;
+    if (frame == null || size == null) return 2.0;
+    final photoSize = frame.size;
+    if (photoSize.isEmpty) return 2.0;
+    final fitted = size.width / photoSize.width;
+    final contain = math.min(size.width / photoSize.width, size.height / photoSize.height);
+    final scale = fitted / contain;
+    return scale.clamp(1.2, _maxZoomScale);
+  }
+
+  RenderBox? _frameRenderBox() {
+    final photoId = _currentPhotoId;
+    if (photoId == null) return null;
+    final key = _frameKeys[photoId];
+    final context = key?.currentContext;
+    return context?.findRenderObject() as RenderBox?;
+  }
+
   void _handleDoubleTap() {
     final targetPhotoId = _currentPhotoId;
     if (targetPhotoId == null) return;
@@ -497,6 +600,10 @@ class _CaptureFullscreenScreenState
       final focal =
           _doubleTapPosition ??
           (size == null ? Offset.zero : size.center(Offset.zero));
+      // Double-tap zooms to the photo's content rect (the exact letterboxed
+      // fit), so the second tap lands on what the user pointed at instead of
+      // an arbitrary 2x.
+      final zoom = _contentRectScale();
       end = Matrix4.identity()
         ..translateByDouble(focal.dx, focal.dy, 0, 1)
         ..scaleByDouble(2.0, 2.0, 2.0, 1)
@@ -598,6 +705,9 @@ class _CaptureFullscreenScreenState
                 ),
                 initialPath: photo.initialPath,
                 missingPhoto: _missingPhoto(context),
+                heroTag: heroForThisPage,
+                heroFit: widget.heroFit,
+                heroPath: photo.initialPath,
               );
 
               return KeyedSubtree(
@@ -655,12 +765,7 @@ class _CaptureFullscreenScreenState
                                 child: Semantics(
                                   label: strings.fullscreenPhotoSemantics,
                                   liveRegion: false,
-                                  child: heroForThisPage == null
-                                      ? frame
-                                      : Hero(
-                                          tag: heroForThisPage,
-                                          child: frame,
-                                        ),
+                                  child: frame,
                                 ),
                               ),
                             )
@@ -684,16 +789,11 @@ class _CaptureFullscreenScreenState
                                 panEnabled: false,
                                 scaleEnabled: false,
                                 child: Center(
-                                  child: Semantics(
-                                    label: strings.fullscreenPhotoSemantics,
-                                    liveRegion: true,
-                                    child: heroForThisPage == null
-                                        ? frame
-                                        : Hero(
-                                            tag: heroForThisPage,
-                                            child: frame,
-                                          ),
-                                  ),
+                                child: Semantics(
+                                  label: strings.fullscreenPhotoSemantics,
+                                  liveRegion: true,
+                                  child: frame,
+                                ),
                                 ),
                               ),
                             ),
@@ -790,12 +890,26 @@ class _FullscreenPhotoFrame extends StatefulWidget {
     required this.pathFuture,
     required this.initialPath,
     required this.missingPhoto,
+    this.heroTag,
+    this.heroFit = BoxFit.contain,
+    this.heroPath,
   });
 
   final ImageProvider<Object>? previewImage;
   final Future<String?> pathFuture;
   final String? initialPath;
   final Widget missingPhoto;
+
+  /// Resolved photo path for the hero shuttle; falls back to [initialPath]
+  /// when the full-resolution file is still resolving.
+  final String? heroPath;
+
+  /// Tag for the entry photo's hero endpoint; null (or a sealed frame) means
+  /// no Hero is wrapped.
+  final String? heroTag;
+
+  /// Framing the hero endpoint uses; see [CaptureFullscreenScreen.heroFit].
+  final BoxFit heroFit;
 
   @override
   State<_FullscreenPhotoFrame> createState() => _FullscreenPhotoFrameState();
@@ -804,6 +918,12 @@ class _FullscreenPhotoFrame extends StatefulWidget {
 class _FullscreenPhotoFrameState extends State<_FullscreenPhotoFrame> {
   bool _previewFailed = false;
   String? _failedTargetPath;
+
+  /// Set once [build] has produced its first frame: only the frame that
+  /// exists at push time may carry a hero tag. A rebuilt frame (path
+  /// resolution, sequence prepend) must never pick the tag up again — a
+  /// Hero entering mid-flight reads as a duplicate, the classic ghost.
+  bool _heroSealed = false;
 
   @override
   void didUpdateWidget(covariant _FullscreenPhotoFrame oldWidget) {
@@ -837,7 +957,11 @@ class _FullscreenPhotoFrameState extends State<_FullscreenPhotoFrame> {
   @override
   Widget build(BuildContext context) {
     final preview = widget.previewImage;
-    return FutureBuilder<String?>(
+    // Only the frame that existed at push time may carry the hero tag: see
+    // [_heroSealed]. The tag then unwraps on the next rebuild so a later
+    // frame change can never produce a second hero of the same tag mid-flight.
+    final heroTag = widget.heroTag;
+    Widget content = FutureBuilder<String?>(
       future: widget.pathFuture,
       initialData: widget.initialPath,
       builder: (context, snapshot) {
@@ -883,5 +1007,15 @@ class _FullscreenPhotoFrameState extends State<_FullscreenPhotoFrame> {
         );
       },
     );
+    if (heroTag != null && !_heroSealed && widget.heroPath != null) {
+      _heroSealed = true;
+      content = CapturePhotoHeroFrame(
+        tag: heroTag,
+        path: widget.heroPath!,
+        fit: widget.heroFit,
+        child: content,
+      );
+    }
+    return content;
   }
 }

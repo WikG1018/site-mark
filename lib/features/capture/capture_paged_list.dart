@@ -21,6 +21,15 @@ typedef CapturePagedItemBuilder =
       List<CaptureSummary> visibleRows,
     );
 
+/// Builds one list row with an entrance-rise/fade wrapper.
+///
+/// [rise] is 0..1: 0 when the row is still off-viewport (the scrollable has
+/// not laid it out yet), 1 once it has entered. Rows that were already on
+/// screen when the list first painted start at 1 so a cold open does not
+/// replay an entrance for the visible page.
+typedef CapturePagedItemEntranceBuilder =
+    Widget Function(BuildContext context, Widget child, double rise);
+
 typedef CapturePagedGroupKey = String Function(CaptureSummary summary);
 
 /// Lazy capture list that owns scrolling, loaded-row watches, and page chrome.
@@ -31,6 +40,8 @@ class CapturePagedList extends StatefulWidget {
     required this.source,
     required this.emptyMessage,
     required this.itemBuilder,
+    this.itemEntrance,
+    this.entranceSettledCount = 0,
     this.sliversBefore = const [],
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 96),
     this.skeletonKey = const Key('capture-list-skeleton'),
@@ -52,6 +63,15 @@ class CapturePagedList extends StatefulWidget {
   final CaptureQuerySource source;
   final String emptyMessage;
   final CapturePagedItemBuilder itemBuilder;
+
+  /// Optional entrance-rise wrapper for rows. See
+  /// [CapturePagedItemEntranceBuilder].
+  final CapturePagedItemEntranceBuilder? itemEntrance;
+
+  /// Number of rows to leave settled at the top of a fresh list — the rows
+  /// that were already on screen when the list first painted do not replay
+  /// an entrance. Beyond this index, every new row rises once.
+  final int entranceSettledCount;
   final List<Widget> sliversBefore;
   final EdgeInsetsGeometry padding;
   final Key skeletonKey;
@@ -71,6 +91,11 @@ class _CapturePagedListState extends State<CapturePagedList> {
   final GlobalKey _viewportKey = GlobalKey();
   final Map<String, GlobalKey> _rowKeys = <String, GlobalKey>{};
   final Map<String, String> _rowGroups = <String, String>{};
+
+  /// Rows whose entrance already fired. A row animates in once, on its first
+  /// build after entering the tree — never again when the pager reorders or
+  /// the sequence prepends rows above it.
+  final Set<String> _enteredRowIds = <String>{};
   late final ScrollController _ownedScrollController = ScrollController(
     keepScrollOffset: true,
   );
@@ -525,10 +550,16 @@ class _CapturePagedListState extends State<CapturePagedList> {
     } else {
       _rowGroups[id] = groupKey(summary);
     }
-    return KeyedSubtree(
-      key: rowKey,
-      child: widget.itemBuilder(context, summary, state.rows),
-    );
+    var child = widget.itemBuilder(context, summary, state.rows);
+    final entrance = widget.itemEntrance;
+    if (entrance != null) {
+      // One-shot per row: the first build that reaches here is the row's
+      // entrance; later builds keep it settled so reorders and prepends
+      // never replay the animation.
+      final isNew = _enteredRowIds.add(id);
+      child = entrance(context, child, isNew ? 0 : 1);
+    }
+    return KeyedSubtree(key: rowKey, child: child);
   }
 
   Widget _buildSkeletonStatus(double viewportHeight) {

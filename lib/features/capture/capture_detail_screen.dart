@@ -254,9 +254,11 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                   // Keep one HeroState alive while file metadata and preview
                   // resolution arrive. Replacing the Hero during a forward
                   // flight makes Flutter abandon the destination shuttle.
-                  preview = Hero(
+                  preview = CapturePhotoHeroFrame(
                     key: ValueKey('capture-photo-slot-${capture.id}'),
                     tag: heroTag,
+                    path: widget.initialImagePath ?? '',
+                    fit: BoxFit.contain,
                     child: preview,
                   );
                 }

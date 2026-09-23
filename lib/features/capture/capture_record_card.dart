@@ -134,6 +134,9 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
           outputPaths: ref.watch(captureOutputPathsProvider),
           thumbnail: true,
           fileExists: _previewFileExists,
+          // Thumbnails cover their square clip; the hero shuttle carries the
+          // same fit so the flight never flips framing mid-air.
+          fit: BoxFit.cover,
           heroTag: capture.status == CaptureStatus.ready
               ? 'capture-photo-${capture.id}'
               : null,

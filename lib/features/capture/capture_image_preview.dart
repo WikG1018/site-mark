@@ -24,6 +24,10 @@ class CaptureImagePreview extends StatefulWidget {
     this.onOpen,
     this.fileExists,
     this.source = CapturePreviewSource.bestAvailable,
+    // Intrinsic aspect: previews keep the photo's own aspect so the detail
+    // hero and its fullscreen pair share one content rect. Thumbnails opt
+    // out and keep the host's fixed square/clip.
+    this.fit,
     this.heroTag,
     this.heroDestination = false,
     this.initialImagePath,
@@ -38,6 +42,12 @@ class CaptureImagePreview extends StatefulWidget {
   final VoidCallback? onOpen;
   final FutureOr<bool> Function(String path)? fileExists;
   final CapturePreviewSource source;
+
+  /// Explicit override for the image fit. Null keeps the historical rule
+  /// (thumbnails cover, previews contain). The detail hero and its
+  /// fullscreen pair share one fit so the shuttle never flips framing
+  /// mid-flight.
+  final BoxFit? fit;
   final String? heroTag;
   final bool heroDestination;
   final String? initialImagePath;
@@ -261,7 +271,12 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     if (widget.heroTag != null &&
         !widget.thumbnail &&
         !widget.heroDestination) {
-      return Hero(tag: widget.heroTag!, child: preview);
+      return CapturePhotoHeroFrame(
+        tag: widget.heroTag!,
+        path: widget.initialImagePath ?? '',
+        fit: widget.fit ?? BoxFit.contain,
+        child: preview,
+      );
     }
     return preview;
   }
@@ -318,7 +333,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
         );
         final image = Image(
           image: provider,
-          fit: widget.thumbnail ? BoxFit.cover : BoxFit.contain,
+          fit: widget.fit ?? (widget.thumbnail ? BoxFit.cover : BoxFit.contain),
           gaplessPlayback: widget.heroTag != null || widget.heroDestination,
           frameBuilder:
               widget.heroDestination ||
@@ -420,9 +435,17 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     // Paired with the source page's capture-photo-{id} hero when present, so
     // opening fullscreen flies the photo instead of covering it.
     final heroTag = widget.heroTag;
+    // The flight carries the tapped preview's framing (cover for thumbnails,
+    // contain for detail), so the shuttle and the endpoints agree on the crop
+    // and the photo does not flip framing mid-flight.
+    final flightFit = widget.fit ?? (widget.thumbnail ? BoxFit.cover : BoxFit.contain);
     final CaptureFullscreenScreen page;
     if (navigationContext == null || querySource == null) {
-      page = CaptureFullscreenScreen(photos: [currentPhoto], heroTag: heroTag);
+      page = CaptureFullscreenScreen(
+        photos: [currentPhoto],
+        heroTag: heroTag,
+        heroFit: flightFit,
+      );
     } else {
       final cursors = <String, CapturePageCursor>{
         currentCapture.id: navigationContext.cursor,
@@ -471,6 +494,7 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
       page = CaptureFullscreenScreen.sequence(
         sequence: sequence,
         heroTag: heroTag,
+        heroFit: flightFit,
       );
     }
 
