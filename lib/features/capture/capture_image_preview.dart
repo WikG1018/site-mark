@@ -268,15 +268,12 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     // destination (detail keeps a stable outer Hero across preview
     // resolution); otherwise the preview wraps itself so list thumbnails
     // (CapturePhotoHero) and other callers stay flight sources.
+    // Plain Hero endpoint — no placeholderBuilder, so the photo does not
+    // linger under the flying shuttle (ghosted double-image).
     if (widget.heroTag != null &&
         !widget.thumbnail &&
         !widget.heroDestination) {
-      return CapturePhotoHeroFrame(
-        tag: widget.heroTag!,
-        path: widget.initialImagePath ?? '',
-        fit: widget.fit ?? BoxFit.contain,
-        child: preview,
-      );
+      return Hero(tag: widget.heroTag!, child: preview);
     }
     return preview;
   }
