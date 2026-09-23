@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
@@ -99,7 +100,14 @@ class SettingsSwitchEntry extends StatelessWidget {
       title: Text(title),
       subtitle: subtitle == null ? null : Text(subtitle!),
       value: value,
-      onChanged: enabled ? onChanged : null,
+      // Every switch flip ticks (MiHaptic transient language): settings
+      // toggles were the quietest controls in the app.
+      onChanged: enabled && onChanged != null
+          ? (next) {
+              HapticFeedback.lightImpact();
+              onChanged!(next);
+            }
+          : null,
     );
   }
 }

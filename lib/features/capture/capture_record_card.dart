@@ -14,6 +14,7 @@ import 'package:sitemark/domain/original_photo_state.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_selection_mark.dart';
+import 'package:sitemark/shared/ui/press_scale.dart';
 import 'package:sitemark/motion.dart';
 
 /// Shared capture list item used by both the project detail and the global
@@ -273,44 +274,49 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     );
     final useStackedLayout = MediaQuery.textScalerOf(context).scale(14) >= 21;
     final colors = Theme.of(context).colorScheme;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      color: widget.selected
-          ? colors.secondaryContainer.withValues(alpha: .45)
-          : null,
-      shape: widget.selected
-          ? RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: colors.primary, width: 2),
-            )
-          : null,
-      child: InkWell(
-        onTap: cardTap,
-        onLongPress: !widget.selectionMode && widget.selectable
-            ? () {
-                HapticFeedback.mediumImpact();
-                widget.onSelectedChanged?.call(true);
-              }
+    return PressScaleView(
+      // The InkWell keeps taps and long-press; the view only adds the
+      // press scale. Row taps navigate — semantic haptics stay with the
+      // long-press and selection toggles below.
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        color: widget.selected
+            ? colors.secondaryContainer.withValues(alpha: .45)
             : null,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: useStackedLayout
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [preview]),
-                    const SizedBox(height: 8),
-                    details,
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    preview,
-                    const SizedBox(width: 12),
-                    Expanded(child: details),
-                  ],
-                ),
+        shape: widget.selected
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: colors.primary, width: 2),
+              )
+            : null,
+        child: InkWell(
+          onTap: cardTap,
+          onLongPress: !widget.selectionMode && widget.selectable
+              ? () {
+                  HapticFeedback.mediumImpact();
+                  widget.onSelectedChanged?.call(true);
+                }
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: useStackedLayout
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [preview]),
+                      const SizedBox(height: 8),
+                      details,
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      preview,
+                      const SizedBox(width: 12),
+                      Expanded(child: details),
+                    ],
+                  ),
+          ),
         ),
       ),
     );

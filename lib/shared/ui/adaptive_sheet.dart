@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// One row of an adaptive action sheet ([showAppActionSheet]).
 class AppSheetAction<T> {
@@ -38,6 +39,7 @@ class AppSheetAction<T> {
 }
 
 void _resolveAction<T>(AppSheetAction<T> action, BuildContext sheetContext) {
+  HapticFeedback.selectionClick();
   action.onPressed?.call();
   Navigator.of(sheetContext).pop(action.result);
 }

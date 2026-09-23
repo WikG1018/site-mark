@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// One structured action of an [showAppDialog] alert.
 ///
@@ -81,6 +82,7 @@ Widget buildAdaptiveAlertDialog<T>({
   List<AppDialogAction<T>> actions = const [],
 }) {
   void popWith(AppDialogAction<T> action) {
+    HapticFeedback.selectionClick();
     action.onPressed?.call();
     if (action.autoPop) {
       Navigator.of(dialogContext).pop(action.result);

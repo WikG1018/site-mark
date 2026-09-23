@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
@@ -205,6 +206,7 @@ class _ToastCapsuleState extends State<_ToastCapsule>
                           if (widget.action != null)
                             TextButton(
                               onPressed: () {
+                                HapticFeedback.selectionClick();
                                 widget.action!.onPressed();
                                 _dismissAnimated();
                               },
