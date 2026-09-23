@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
@@ -99,7 +100,7 @@ class _ProjectWatermarkSettingsScreenState
               ),
               const SizedBox(height: 12),
               ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: const BorderRadius.all(AppRadius.sm),
                 child: AspectRatio(
                   aspectRatio: 4 / 3,
                   child: Container(
@@ -317,7 +318,7 @@ class _WatermarkPreviewCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: const BorderRadius.all(AppRadius.xs),
         border: Border(left: BorderSide(color: accentColor, width: 3)),
       ),
       child: Column(

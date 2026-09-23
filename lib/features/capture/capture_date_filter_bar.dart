@@ -4,6 +4,7 @@ import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/scroll_chrome.dart';
 
 /// Cascading year → month → day filter for capture lists.
@@ -134,6 +135,7 @@ class _CaptureDateFilterBarState extends State<CaptureDateFilterBar> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      sheetAnimationStyle: AppMotion.sheetStyleOf(context),
       builder: (context) => _NarrowFilterSheet(
         filter: widget.filter,
         options: _options,

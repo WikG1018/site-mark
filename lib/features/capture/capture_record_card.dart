@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_failure_guidance.dart';
@@ -127,7 +128,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
       width: 96,
       height: 96,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: const BorderRadius.all(AppRadius.xs),
         child: CaptureImagePreview(
           capture: capture,
           outputPaths: ref.watch(captureOutputPathsProvider),
@@ -157,7 +158,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
                 color: Theme.of(
                   context,
                 ).colorScheme.surface.withValues(alpha: .92),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: const BorderRadius.all(AppRadius.xs),
                 child: Center(
                   child: AdaptiveSelectionMark(
                     selected: widget.selected,
@@ -285,7 +286,7 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
             : null,
         shape: widget.selected
             ? RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: const BorderRadius.all(AppRadius.sm),
                 side: BorderSide(color: colors.primary, width: 2),
               )
             : null,

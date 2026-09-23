@@ -82,4 +82,34 @@ abstract final class AppMotion {
   static Duration durationOf(BuildContext context, Duration duration) {
     return MediaQuery.disableAnimationsOf(context) ? Duration.zero : duration;
   }
+
+  /// Popup motion for [showDialog]-style routes: the material fade+scale
+  /// transition carried by the snap-back spring, so a dialog arrives in the
+  /// same motion language as pages instead of a stock 150 ms fade. Exits
+  /// accelerate out decisively; reduce-motion collapses to none.
+  static AnimationStyle dialogStyleOf(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return AnimationStyle.noAnimation;
+    }
+    return AnimationStyle(
+      curve: springSnapBack,
+      duration: const Duration(milliseconds: 220),
+      reverseCurve: standardAccelerate,
+      reverseDuration: short4,
+    );
+  }
+
+  /// Bottom-sheet counterpart of [dialogStyleOf]: a sheet is a longer
+  /// travel, so it takes the page duration with the same snap-back curve.
+  static AnimationStyle sheetStyleOf(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      return AnimationStyle.noAnimation;
+    }
+    return AnimationStyle(
+      curve: springSnapBack,
+      duration: medium2,
+      reverseCurve: standardAccelerate,
+      reverseDuration: short4,
+    );
+  }
 }

@@ -5,6 +5,7 @@ import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/adaptive_selection_mark.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
@@ -141,6 +142,7 @@ class _ProjectBackupSelectionScreenState
     showDialog<void>(
       context: context,
       barrierDismissible: false,
+      animationStyle: AppMotion.dialogStyleOf(context),
       builder: (dialogContext) => PopScope(
         canPop: false,
         child: buildAdaptiveAlertDialog<void>(

@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/features/capture/compact_filter_menu.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
@@ -902,7 +903,7 @@ void main() {
       expect(tester.getSize(menuFinder).height, 48);
       expect(shape, isA<RoundedRectangleBorder>());
       final border = shape! as RoundedRectangleBorder;
-      expect(border.borderRadius, BorderRadius.circular(10));
+      expect(border.borderRadius, const BorderRadius.all(AppRadius.xs));
       expect(
         (tester.getCenter(buttonFinder).dx -
                 tester.getCenter(find.text('全部年份')).dx)
@@ -937,7 +938,7 @@ void main() {
     expect(menuShape, isA<RoundedRectangleBorder>());
     expect(
       (menuShape! as RoundedRectangleBorder).borderRadius,
-      BorderRadius.circular(14),
+      const BorderRadius.all(AppRadius.md),
     );
 
     await tester.tap(menuFinder);

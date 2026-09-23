@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/domain/app_storage_usage.dart';
 import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/features/settings/sections/backup_restore_section_screen.dart';
@@ -133,7 +134,7 @@ void main() {
     for (final surface in tester.widgetList<GlassSurface>(
       find.byType(GlassSurface),
     )) {
-      expect(surface.borderRadius, const BorderRadius.all(Radius.circular(20)));
+      expect(surface.borderRadius, const BorderRadius.all(AppRadius.lg));
     }
   });
 

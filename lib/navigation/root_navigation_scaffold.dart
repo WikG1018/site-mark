@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
@@ -94,10 +95,11 @@ class RootNavigationScaffold extends ConsumerWidget {
                 dock: showRootNavigation && !hideForSelection
                     ? GlassSurface(
                         key: const Key('root-dock'),
-                        borderRadius: BorderRadius.circular(22),
-                        opacity: GlassChrome.opacity,
-                        blurSigma: GlassChrome.blurSigma,
+                        borderRadius: const BorderRadius.all(AppRadius.xl),
+                        // Defaults carry the one glass recipe; the dock adds
+                        // the Android blur opt-in and the one chrome depth.
                         blurOnAndroid: true,
+                        boxShadow: AppShadow.chrome(context),
                         child: SizedBox(
                           height: floatingDockHeight,
                           child: RootNavigationDock(

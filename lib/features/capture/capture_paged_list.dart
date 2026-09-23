@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_pager_controller.dart';
@@ -609,7 +610,7 @@ class _CaptureCardSkeleton extends StatelessWidget {
               width: 96,
               height: 96,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: const BorderRadius.all(AppRadius.xs),
                 child: const ColoredBox(color: Colors.grey),
               ),
             ),

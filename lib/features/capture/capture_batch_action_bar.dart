@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/features/capture/capture_selection_controller.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
@@ -277,12 +278,11 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
         final useCountOnly = MediaQuery.textScalerOf(context).scale(14) > 22;
         return GlassSurface(
           key: const Key('batch-action-bar'),
-          borderRadius: BorderRadius.circular(22),
-          // Same glass recipe as the root dock / FAB / toast so selection
-          // mode does not swap materials when the dock withdraws.
-          opacity: GlassChrome.opacity,
-          blurSigma: GlassChrome.blurSigma,
+          borderRadius: const BorderRadius.all(AppRadius.xl),
+          // Defaults carry the one glass recipe and the one chrome depth, so
+          // selection mode does not swap materials when the dock withdraws.
           blurOnAndroid: true,
+          boxShadow: AppShadow.chrome(context),
           child: SizedBox(
             height: floatingDockHeight,
             child: MediaQuery.withClampedTextScaling(
@@ -391,7 +391,7 @@ class _CompactProgress extends StatelessWidget {
           LinearProgressIndicator(
             minHeight: 2,
             value: total == 0 ? null : completed / total,
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: const BorderRadius.all(AppRadius.pill),
           ),
           const SizedBox(height: 4),
           Text(
@@ -441,11 +441,11 @@ class _ActionButton extends StatelessWidget {
         child: Material(
           key: Key('batch-action-$actionKey-surface'),
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: const BorderRadius.all(AppRadius.sm),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: enabled ? onPressed : null,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: const BorderRadius.all(AppRadius.sm),
             child: Center(
               child: ExcludeSemantics(
                 child: Column(

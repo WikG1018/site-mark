@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:sitemark/design_tokens.dart';
 
 /// Shared recipe for always-on floating chrome (dock, FAB, toast, batch bar).
 ///
@@ -15,8 +16,8 @@ class GlassChrome {
   /// blur; high enough that on-surface icons and labels stay legible.
   static const double opacity = .58;
 
-  /// Backdrop blur. Slightly stronger than the old per-widget 16/22 split so
-  /// the lower fill still frosts the background into a single wash.
+  /// Backdrop blur. Strong enough that the low fill still frosts the
+  /// background into a single wash.
   static const double blurSigma = 20;
 }
 
@@ -27,16 +28,22 @@ class GlassChrome {
 ///
 /// Optional top highlight, inset border and extremely subtle overlay tint
 /// increase perceived glass thickness without a second live blur pass.
+///
+/// Defaults read straight from [GlassChrome] — the one glass recipe. A
+/// caller that wants a different look changes the recipe, not a fork of it;
+/// divergent per-surface opacity/blur is exactly how one material family
+/// drifts into two.
 class GlassSurface extends StatelessWidget {
   const GlassSurface({
     super.key,
     required this.child,
-    this.borderRadius = const BorderRadius.all(Radius.circular(20)),
+    this.borderRadius = const BorderRadius.all(AppRadius.lg),
     this.padding,
-    this.opacity = .72,
-    this.blurSigma = 16,
+    this.opacity = GlassChrome.opacity,
+    this.blurSigma = GlassChrome.blurSigma,
     this.blurOnAndroid = false,
     this.enableOverlay = true,
+    this.boxShadow,
   });
 
   final Widget child;
@@ -55,6 +62,11 @@ class GlassSurface extends StatelessWidget {
   /// [BlendMode.overlay] **under** the child content (chrome only).
   /// This is not grain/noise texture. Set to false to skip the overlay layer.
   final bool enableOverlay;
+
+  /// Drop shadow for surfaces that float over content (see
+  /// [AppShadow.chrome]). It paints outside the clip; content that sits in a
+  /// card stays flat — only hovering chrome carries depth.
+  final List<BoxShadow>? boxShadow;
 
   @override
   Widget build(BuildContext context) {
@@ -143,8 +155,18 @@ class GlassSurface extends StatelessWidget {
         child: content,
       );
     }
-    return RepaintBoundary(
+    final clipped = RepaintBoundary(
       child: ClipRRect(borderRadius: borderRadius, child: content),
+    );
+    if (boxShadow == null) return clipped;
+    // The clip would cut a child-bound shadow, so depth wraps the clipped
+    // glass from outside.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: borderRadius,
+        boxShadow: boxShadow,
+      ),
+      child: clipped,
     );
   }
 }
@@ -154,7 +176,7 @@ class GlassCard extends StatelessWidget {
     super.key,
     required this.child,
     this.onTap,
-    this.borderRadius = const BorderRadius.all(Radius.circular(20)),
+    this.borderRadius = const BorderRadius.all(AppRadius.lg),
     this.padding = const EdgeInsets.all(16),
   });
 

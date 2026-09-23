@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 import 'package:sitemark/shared/ui/press_scale.dart';
 
@@ -30,7 +31,7 @@ class AdaptiveFloatingButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final extended = label != null;
     final foreground = Theme.of(context).colorScheme.onSurface;
-    final radius = BorderRadius.circular(999);
+    const radius = BorderRadius.all(AppRadius.pill);
     // PressScale owns the press/tap gesture (scale-down under the finger,
     // spring settle on release); the ink-free glass pill keeps its hover
     // styling from GlassSurface alone.
@@ -61,11 +62,11 @@ class AdaptiveFloatingButton extends StatelessWidget {
     );
     final glass = GlassSurface(
       borderRadius: radius,
-      opacity: GlassChrome.opacity,
-      blurSigma: GlassChrome.blurSigma,
       // Match the root dock: one always-on glass layer keeps the FAB in the
-      // same material family without a per-list-card blur cost.
+      // same material family without a per-list-card blur cost, and the same
+      // chrome depth keeps every hover at one altitude.
       blurOnAndroid: true,
+      boxShadow: AppShadow.chrome(context),
       child: PressScale(
         // No press haptic: the FAB opens a screen — a navigation hop is not
         // a semantic action. Haptics stay with the action itself (e.g. the

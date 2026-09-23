@@ -8,6 +8,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_name.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
@@ -136,6 +137,7 @@ Future<void> runProjectRestoreFlow(
     final projectNames = await showDialog<Map<String, String>>(
       context: context,
       barrierDismissible: false,
+      animationStyle: AppMotion.dialogStyleOf(context),
       builder: (dialogContext) => _RestorePreviewDialog(
         prepared: prepared!,
         initialNames: initialNames,
@@ -273,6 +275,7 @@ void _showBlockingProgress(BuildContext context, String label) {
   showDialog<void>(
     context: context,
     barrierDismissible: false,
+    animationStyle: AppMotion.dialogStyleOf(context),
     builder: (dialogContext) => PopScope(
       canPop: false,
       child: buildAdaptiveAlertDialog<void>(
@@ -297,6 +300,7 @@ void _showRestoreProgress(
   showDialog<void>(
     context: context,
     barrierDismissible: false,
+    animationStyle: AppMotion.dialogStyleOf(context),
     builder: (dialogContext) => PopScope(
       canPop: false,
       child: buildAdaptiveAlertDialog<void>(
