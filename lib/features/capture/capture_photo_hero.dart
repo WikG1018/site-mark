@@ -2,9 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-/// Flight layer for record-photo Heroes, shared by the thumbnail Heroes
-/// ([CapturePhotoHero]) and the fullscreen viewer's hero endpoints
-/// ([CapturePhotoHeroFrame]).
+/// Flight layer for record-photo Heroes.
+///
+/// Only the flight *source* (list thumbnail) supplies this shuttle. Photo
+/// endpoints (detail / fullscreen) stay on a plain [Hero] with the default
+/// placeholder — painting the destination child under the shuttle is what
+/// produces the ghosted double-image during the flight.
 ///
 /// The list and detail previews have different layouts and decode sizes. The
 /// flight therefore avoids reusing either preview subtree, which can contain
@@ -98,50 +101,6 @@ class CapturePhotoHero extends StatelessWidget {
       // Keep the list thumbnail painted underneath the overlay. The default
       // empty placeholder creates a one-frame hole when the reverse flight is
       // handed back to the destination route.
-      placeholderBuilder: (context, heroSize, child) => child,
-      flightShuttleBuilder:
-          (
-            flightContext,
-            animation,
-            direction,
-            fromHeroContext,
-            toHeroContext,
-          ) => capturePhotoHeroFlightShuttle(
-            path: path,
-            flightContext: flightContext,
-            animation: animation,
-          ),
-      child: child,
-    );
-  }
-}
-
-/// Hero endpoint used by the fullscreen viewer's entry photo.
-///
-/// The tag lives here (not on the photo frame) so a frame rebuild can never
-/// produce a second Hero of the same tag mid-flight — the classic ghost. The
-/// endpoint sizes to the photo's content box at [fit], so the flight lands on
-/// the same framing the tapped source showed (cover from a thumbnail, contain
-/// from a detail preview).
-class CapturePhotoHeroFrame extends StatelessWidget {
-  const CapturePhotoHeroFrame({
-    super.key,
-    required this.tag,
-    required this.path,
-    required this.child,
-    this.fit = BoxFit.contain,
-  });
-
-  final String tag;
-  final String path;
-  final BoxFit fit;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (MediaQuery.disableAnimationsOf(context)) return child;
-    return Hero(
-      tag: tag,
       placeholderBuilder: (context, heroSize, child) => child,
       flightShuttleBuilder:
           (

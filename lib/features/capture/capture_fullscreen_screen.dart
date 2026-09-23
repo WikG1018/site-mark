@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
-import 'package:sitemark/features/capture/capture_photo_hero.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
@@ -17,7 +16,7 @@ export 'package:sitemark/features/capture/capture_fullscreen_sequence.dart'
 
 /// Clamps [pan] for `screen = scale * local + pan` (top-left origin).
 ///
-/// A symmetric ±(scale-1)/2 range assumes a centered origin. After a
+/// A symmetric 卤(scale-1)/2 range assumes a centered origin. After a
 /// centered pinch or double-tap the translation already sits on that
 /// range's negative wall, so a left drag cannot bring the right edge
 /// of a full-width photo into view.
@@ -42,7 +41,7 @@ double contentRectFillScale(Size viewport, Size photoSize) {
   );
   if (contain == 0 || !contain.isFinite || !fitted.isFinite) return 2.0;
   final scale = fitted / contain;
-  // No letterbox to close — keep classic 2x so double-tap still has a target.
+  // No letterbox to close 鈥?keep classic 2x so double-tap still has a target.
   if (scale <= 1.05) return 2.0;
   return scale.clamp(1.2, 4.0);
 }
@@ -450,7 +449,7 @@ class _CaptureFullscreenScreenState
 
   /// Gestures drive the [InteractiveViewer]'s controller directly (the viewer
   /// itself has both pan and scale disabled), so a two-finger pinch works
-  /// from 1x — previously the viewer pinned the transform at 1x until a
+  /// from 1x 鈥?previously the viewer pinned the transform at 1x until a
   /// double tap zoomed in first.
   (double, Offset) _decomposeTransform(Matrix4 value) =>
       (value.getMaxScaleOnAxis(), Offset(value.storage[12], value.storage[13]));
@@ -532,7 +531,7 @@ class _CaptureFullscreenScreenState
     final clamped = _clampPan(scale, pan);
     Offset end;
     if ((pan - clamped).distance > 0.5) {
-      // Rubber-band stretch must relax — even when the finger was still.
+      // Rubber-band stretch must relax 鈥?even when the finger was still.
       end = clamped;
     } else if (speed > 300) {
       final fling = clamped + velocity.pixelsPerSecond * 0.18;
@@ -565,8 +564,7 @@ class _CaptureFullscreenScreenState
     });
   }
 
-  /// Begins a two-finger pinch from whatever scale the photo currently has —
-  /// importantly including 1x.
+  /// Begins a two-finger pinch from whatever scale the photo currently has 鈥?  /// importantly including 1x.
   void _pinchStart(List<Offset> pointers) {
     final photoId = _currentPhotoId;
     if (photoId == null) return;
@@ -747,10 +745,16 @@ class _CaptureFullscreenScreenState
                 ),
                 initialPath: photo.initialPath,
                 missingPhoto: _missingPhoto(context),
-                heroTag: heroForThisPage,
-                heroFit: widget.heroFit,
-                heroPath: photo.initialPath,
               );
+              // Plain Hero endpoint. No placeholderBuilder and no custom
+              // shuttle: the destination photo must stay hidden while the
+              // source's CapturePhotoHero shuttle flies, otherwise the two
+              // copies read as a ghosted double-image. The entry photo is
+              // matched BY SNAPSHOT ID, not by index 鈥?prepending adjacent
+              // records shifts every index and would retarget the tag.
+              final heroFrame = heroForThisPage == null
+                  ? frame
+                  : Hero(tag: heroForThisPage, child: frame);
 
               return KeyedSubtree(
                 key: ValueKey(
@@ -815,7 +819,7 @@ class _CaptureFullscreenScreenState
                                             'fullscreen-photo-frame-${photo.id}',
                                       ),
                                     ),
-                                    child: frame,
+                                    child: heroFrame,
                                   ),
                                 ),
                               ),
@@ -851,7 +855,7 @@ class _CaptureFullscreenScreenState
                                               'fullscreen-photo-frame-${photo.id}',
                                         ),
                                       ),
-                                      child: frame,
+                                      child: heroFrame,
                                     ),
                                   ),
                                 ),
@@ -950,26 +954,12 @@ class _FullscreenPhotoFrame extends StatefulWidget {
     required this.pathFuture,
     required this.initialPath,
     required this.missingPhoto,
-    this.heroTag,
-    this.heroFit = BoxFit.contain,
-    this.heroPath,
   });
 
   final ImageProvider<Object>? previewImage;
   final Future<String?> pathFuture;
   final String? initialPath;
   final Widget missingPhoto;
-
-  /// Resolved photo path for the hero shuttle; falls back to [initialPath]
-  /// when the full-resolution file is still resolving.
-  final String? heroPath;
-
-  /// Tag for the entry photo's hero endpoint; null (or a sealed frame) means
-  /// no Hero is wrapped.
-  final String? heroTag;
-
-  /// Framing the hero endpoint uses; see [CaptureFullscreenScreen.heroFit].
-  final BoxFit heroFit;
 
   @override
   State<_FullscreenPhotoFrame> createState() => _FullscreenPhotoFrameState();
@@ -978,28 +968,6 @@ class _FullscreenPhotoFrame extends StatefulWidget {
 class _FullscreenPhotoFrameState extends State<_FullscreenPhotoFrame> {
   bool _previewFailed = false;
   String? _failedTargetPath;
-
-  /// Set once [build] has produced its first frame: only the frame that
-  /// exists at push time may carry a hero tag. A later rebuild (path
-  /// resolution, sequence prepend) keeps the claimed tag so the flight
-  /// endpoint stays in the tree, and a frame that started without a tag
-  /// never claims one mid-flight — that is the classic ghost.
-  bool _heroSealed = false;
-  String? _claimedHeroTag;
-
-  /// Intrinsic pixel size of the first decoded image (preview or target),
-  /// used to lay the photo out at its contain-fit content rect so the
-  /// double-tap content zoom has something real to measure.
-  Size? _imageSize;
-  ImageProvider<Object>? _resolvedProvider;
-  ImageStream? _sizeStream;
-  ImageStreamListener? _sizeListener;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _resolveImageSize();
-  }
 
   @override
   void didUpdateWidget(covariant _FullscreenPhotoFrame oldWidget) {
@@ -1010,46 +978,6 @@ class _FullscreenPhotoFrameState extends State<_FullscreenPhotoFrame> {
     if (oldWidget.pathFuture != widget.pathFuture) {
       _failedTargetPath = null;
     }
-    if (oldWidget.previewImage != widget.previewImage ||
-        oldWidget.initialPath != widget.initialPath) {
-      _resolveImageSize();
-    }
-  }
-
-  @override
-  void dispose() {
-    final listener = _sizeListener;
-    if (listener != null) _sizeStream?.removeListener(listener);
-    super.dispose();
-  }
-
-  void _resolveImageSize() {
-    final provider =
-        widget.previewImage ??
-        (widget.initialPath == null
-            ? null
-            : FileImage(File(widget.initialPath!)));
-    if (provider == null) return;
-    if (identical(_resolvedProvider, provider)) return;
-    final listener = _sizeListener;
-    if (listener != null) _sizeStream?.removeListener(listener);
-    _sizeListener = null;
-    _sizeStream = null;
-    _resolvedProvider = provider;
-    final stream = provider.resolve(createLocalImageConfiguration(context));
-    void onImage(ImageInfo info, bool synchronousCall) {
-      final image = info.image;
-      final size = Size(image.width.toDouble(), image.height.toDouble());
-      if (!size.isEmpty && size != _imageSize) {
-        _imageSize = size;
-        if (!synchronousCall && mounted) setState(() {});
-      }
-    }
-
-    final newListener = ImageStreamListener(onImage);
-    _sizeStream = stream;
-    _sizeListener = newListener;
-    stream.addListener(newListener);
   }
 
   void _markPreviewFailed() {
@@ -1073,17 +1001,7 @@ class _FullscreenPhotoFrameState extends State<_FullscreenPhotoFrame> {
   @override
   Widget build(BuildContext context) {
     final preview = widget.previewImage;
-    // Seal on the first build: claim the hero only if tag and path are both
-    // ready at push time, then keep that claim for every later rebuild so
-    // the endpoint never drops mid-flight and never appears twice.
-    if (!_heroSealed) {
-      _heroSealed = true;
-      if (widget.heroTag != null && widget.heroPath != null) {
-        _claimedHeroTag = widget.heroTag;
-      }
-    }
-    final heroTag = _claimedHeroTag;
-    final Widget photoStack = FutureBuilder<String?>(
+    return FutureBuilder<String?>(
       future: widget.pathFuture,
       initialData: widget.initialPath,
       builder: (context, snapshot) {
@@ -1129,39 +1047,5 @@ class _FullscreenPhotoFrameState extends State<_FullscreenPhotoFrame> {
         );
       },
     );
-    // Lay out at the contain-fit content rect when the image dimensions are
-    // known, so [_frameRenderBox] measures the letterboxed photo instead of
-    // the full viewport. Without dimensions (missing file) the stack keeps
-    // filling and double-tap falls back to classic 2x.
-    final imageSize = _imageSize;
-    Widget content;
-    if (imageSize == null) {
-      content = photoStack;
-    } else {
-      content = LayoutBuilder(
-        builder: (context, constraints) {
-          final viewport = constraints.biggest;
-          final fitted = containSize(viewport, imageSize);
-          return Center(
-            widthFactor: 1,
-            heightFactor: 1,
-            child: SizedBox(
-              width: fitted.width,
-              height: fitted.height,
-              child: photoStack,
-            ),
-          );
-        },
-      );
-    }
-    if (heroTag != null && widget.heroPath != null) {
-      content = CapturePhotoHeroFrame(
-        tag: heroTag,
-        path: widget.heroPath!,
-        fit: widget.heroFit,
-        child: content,
-      );
-    }
-    return content;
   }
 }
