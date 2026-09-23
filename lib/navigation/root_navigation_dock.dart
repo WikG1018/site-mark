@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 
@@ -67,23 +68,17 @@ class RootNavigationDock extends StatelessWidget {
                           ),
                         ],
                       ),
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: const BorderRadius.all(AppRadius.lg),
                       border: Border.all(
                         color: scheme.onSurface.withValues(alpha: .14),
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: scheme.shadow.withValues(
-                            alpha: isDark ? .14 : .08,
-                          ),
-                          blurRadius: isDark ? 14 : 12,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
+                      // The one chrome depth: the indicator hovers inside the
+                      // glass exactly as the capsule hovers over the page.
+                      boxShadow: AppShadow.chrome(context),
                     ),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: const BorderRadius.all(AppRadius.lg),
                         border: Border.all(
                           color: Colors.white.withValues(
                             alpha: isDark ? 0.08 : 0.18,
@@ -154,7 +149,7 @@ class _RootDestinationButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final radius = BorderRadius.circular(18);
+    const radius = BorderRadius.all(AppRadius.lg);
     final duration = AppMotion.durationOf(context, AppMotion.short4);
     final foreground = selected ? colors.onSurface : colors.onSurfaceVariant;
     return Tooltip(

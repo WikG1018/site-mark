@@ -46,9 +46,7 @@ Future<CaptureRequiredFieldsSnapshot?> showCaptureTemplateSheet({
     isScrollControlled: true,
     isDismissible: false,
     enableDrag: false,
-    sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
-        ? AnimationStyle.noAnimation
-        : null,
+    sheetAnimationStyle: AppMotion.sheetStyleOf(context),
     builder: (context) {
       final route = ModalRoute.of(context);
       if (route != null) controller?.attach(route);
@@ -212,9 +210,7 @@ class _CaptureTemplateSheetState extends State<_CaptureTemplateSheet> {
     try {
       confirmed = await showDialog<bool>(
         context: context,
-        animationStyle: MediaQuery.disableAnimationsOf(context)
-            ? AnimationStyle.noAnimation
-            : null,
+        animationStyle: AppMotion.dialogStyleOf(context),
         builder: (dialogContext) {
           final route = ModalRoute.of(dialogContext);
           if (route != null) routeController.attach(route);

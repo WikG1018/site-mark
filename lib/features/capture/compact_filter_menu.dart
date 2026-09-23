@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sitemark/design_tokens.dart';
 
 /// Compact 48dp dropdown-style filter menu for one-row filter bars.
 ///
@@ -40,7 +41,9 @@ class CompactFilterMenu<T> extends StatelessWidget {
         minimumSize: const WidgetStatePropertyAll(Size(152, 0)),
         maximumSize: const WidgetStatePropertyAll(Size(280, double.infinity)),
         shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          RoundedRectangleBorder(
+            borderRadius: const BorderRadius.all(AppRadius.md),
+          ),
         ),
       ),
       alignmentOffset: const Offset(0, 6),
@@ -60,7 +63,7 @@ class CompactFilterMenu<T> extends StatelessWidget {
               minimumSize: const Size(0, 44),
               padding: const EdgeInsets.symmetric(horizontal: 12),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: const BorderRadius.all(AppRadius.xs),
               ),
             ),
             leadingIcon: entry.$1 == selectedValue
@@ -78,7 +81,7 @@ class CompactFilterMenu<T> extends StatelessWidget {
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: const BorderRadius.all(AppRadius.xs),
             ),
           ),
           child: Center(

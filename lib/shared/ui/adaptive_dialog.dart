@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:sitemark/motion.dart';
 
 /// One structured action of an [showAppDialog] alert.
 ///
@@ -62,6 +63,7 @@ Future<T?> showAppDialog<T>({
   return showDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
+    animationStyle: AppMotion.dialogStyleOf(context),
     builder: (dialogContext) => buildAdaptiveAlertDialog<T>(
       dialogContext: dialogContext,
       title: title,

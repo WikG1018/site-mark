@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:sitemark/motion.dart';
 
 /// One row of an adaptive action sheet ([showAppActionSheet]).
 class AppSheetAction<T> {
@@ -136,6 +137,7 @@ Future<T?> showAppActionSheet<T>({
     useSafeArea: true,
     isScrollControlled: true,
     showDragHandle: true,
+    sheetAnimationStyle: AppMotion.sheetStyleOf(context),
     builder: (sheetContext) {
       final errorColor = Theme.of(sheetContext).colorScheme.error;
       final hasHeader = title != null || message != null;

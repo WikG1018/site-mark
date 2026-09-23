@@ -60,4 +60,52 @@ void main() {
     );
     expect(resolved, Duration.zero);
   });
+
+  testWidgets('popup styles carry the snap-back spring', (tester) async {
+    late AnimationStyle dialogStyle;
+    late AnimationStyle sheetStyle;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            dialogStyle = AppMotion.dialogStyleOf(context);
+            sheetStyle = AppMotion.sheetStyleOf(context);
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
+    expect(dialogStyle.curve, AppMotion.springSnapBack);
+    expect(sheetStyle.curve, AppMotion.springSnapBack);
+    // A sheet is a longer travel than a dialog: longer enter, same language.
+    expect(
+      sheetStyle.duration!.inMilliseconds,
+      greaterThan(dialogStyle.duration!.inMilliseconds),
+    );
+  });
+
+  testWidgets('popup styles collapse to none under reduce-motion', (
+    tester,
+  ) async {
+    late AnimationStyle dialogStyle;
+    late AnimationStyle sheetStyle;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Builder(
+            builder: (context) {
+              dialogStyle = AppMotion.dialogStyleOf(context);
+              sheetStyle = AppMotion.sheetStyleOf(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ),
+    );
+    expect(dialogStyle.duration, Duration.zero);
+    expect(sheetStyle.duration, Duration.zero);
+    expect(dialogStyle.reverseDuration, Duration.zero);
+    expect(sheetStyle.reverseDuration, Duration.zero);
+  });
 }

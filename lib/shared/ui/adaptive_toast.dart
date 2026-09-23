@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
@@ -177,12 +178,11 @@ class _ToastCapsuleState extends State<_ToastCapsule>
               child: ScaleTransition(
                 scale: Tween<double>(begin: .9, end: 1).animate(_motion),
                 child: GlassSurface(
-                  borderRadius: BorderRadius.circular(24),
-                  opacity: GlassChrome.opacity,
-                  blurSigma: GlassChrome.blurSigma,
+                  borderRadius: const BorderRadius.all(AppRadius.xl),
                   // Match the root dock: one always-on glass layer is affordable
                   // and keeps the toast in the same material family.
                   blurOnAndroid: true,
+                  boxShadow: AppShadow.chrome(context),
                   child: Material(
                     type: MaterialType.transparency,
                     child: Padding(

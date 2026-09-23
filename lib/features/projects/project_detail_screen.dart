@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/capture_filter.dart';
 import 'package:sitemark/domain/capture_list_query.dart';
@@ -597,6 +598,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   Future<void> _renameProject(Project project) async {
     final renamed = await showDialog<Project>(
       context: context,
+      animationStyle: AppMotion.dialogStyleOf(context),
       builder: (dialogContext) => _RenameProjectDialog(
         project: project,
         database: ref.read(databaseProvider),
@@ -681,6 +683,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
     if (!mounted) return;
     final result = await showDialog<ProjectDeletionResult>(
       context: context,
+      animationStyle: AppMotion.dialogStyleOf(context),
       builder: (dialogContext) => _DeleteProjectDialog(
         projectId: project.id,
         preview: preview,
@@ -961,7 +964,7 @@ class _ProjectHeader extends StatelessWidget {
     };
     return GlassSurface(
       key: const Key('project-summary'),
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: const BorderRadius.all(AppRadius.lg),
       padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
       child: Row(
         children: [
@@ -1034,7 +1037,7 @@ class _ProjectStatusBanner extends StatelessWidget {
     return Material(
       key: const Key('project-status-banner'),
       color: colors.secondaryContainer,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: const BorderRadius.all(AppRadius.sm),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
         child: Row(

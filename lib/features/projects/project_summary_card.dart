@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/domain/project_summary.dart';
 import 'package:sitemark/l10n/app_strings.dart';
@@ -124,7 +125,7 @@ class _ProjectThumbnailState extends State<_ProjectThumbnail> {
       child: AspectRatio(
         aspectRatio: 1,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: const BorderRadius.all(AppRadius.sm),
           child: RepaintBoundary(
             child: FutureBuilder<File?>(
               key: ObjectKey(_file),
@@ -210,7 +211,7 @@ class _MetaChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: const BorderRadius.all(AppRadius.pill),
       ),
       child: Text(label, style: Theme.of(context).textTheme.labelMedium),
     );

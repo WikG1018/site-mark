@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/shared/ui/glass_surface.dart';
 
 class SettingsGroup extends StatelessWidget {
@@ -19,6 +20,7 @@ class SettingsGroup extends StatelessWidget {
           child: Text(title, style: Theme.of(context).textTheme.labelLarge),
         ),
         GlassSurface(
+          borderRadius: const BorderRadius.all(AppRadius.lg),
           child: Material(
             color: Colors.transparent,
             child: Column(children: _withDividers(children)),

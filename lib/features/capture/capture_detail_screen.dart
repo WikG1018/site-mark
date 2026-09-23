@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/domain/capture_display_name.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_failure_guidance.dart';
@@ -226,7 +227,7 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                 Widget preview = AspectRatio(
                   aspectRatio: 4 / 3,
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: const BorderRadius.all(AppRadius.sm),
                     child: AnimatedSwitcher(
                       duration: AppMotion.medium2,
                       child: CaptureImagePreview(
@@ -310,7 +311,9 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                                 color: Theme.of(
                                   context,
                                 ).colorScheme.errorContainer,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: const BorderRadius.all(
+                                  AppRadius.sm,
+                                ),
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,

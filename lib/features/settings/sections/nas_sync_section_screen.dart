@@ -9,6 +9,7 @@ import 'package:sitemark/data/nas_sync_database.dart';
 import 'package:sitemark/domain/nas_sync.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/motion.dart';
 import 'package:sitemark/shared/ui/adaptive_dialog.dart';
 import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
@@ -710,6 +711,7 @@ class _NasSyncSectionScreenState extends ConsumerState<NasSyncSectionScreen> {
     };
     return showDialog<List<NasImportCandidate>>(
       context: context,
+      animationStyle: AppMotion.dialogStyleOf(context),
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {

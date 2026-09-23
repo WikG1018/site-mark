@@ -169,9 +169,7 @@ class _CaptureRecentSuggestionsState extends State<CaptureRecentSuggestions> {
     try {
       selected = await showDialog<String>(
         context: context,
-        animationStyle: MediaQuery.disableAnimationsOf(context)
-            ? AnimationStyle.noAnimation
-            : null,
+        animationStyle: AppMotion.dialogStyleOf(context),
         builder: (dialogContext) {
           final route = ModalRoute.of(dialogContext);
           if (route != null) routeController.attach(route);
