@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:sitemark/shared/ui/glass_surface.dart';
 import 'package:sitemark/shared/ui/press_scale.dart';
@@ -38,31 +37,27 @@ class AdaptiveFloatingButton extends StatelessWidget {
     final content = Material(
       color: Colors.transparent,
       child: extended
-            ? Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 14,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (icon != null) Icon(icon, size: 22, color: foreground),
-                    const SizedBox(width: 8),
-                    Text(
-                      label!,
-                      style: TextStyle(
-                        color: foreground,
-                        fontWeight: FontWeight.w600,
-                      ),
+          ? Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (icon != null) Icon(icon, size: 22, color: foreground),
+                  const SizedBox(width: 8),
+                  Text(
+                    label!,
+                    style: TextStyle(
+                      color: foreground,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
-                ),
-              )
-            : Padding(
-                padding: const EdgeInsets.all(16),
-                child: Icon(icon, size: 24, color: foreground),
+                  ),
+                ],
               ),
-      ),
+            )
+          : Padding(
+              padding: const EdgeInsets.all(16),
+              child: Icon(icon, size: 24, color: foreground),
+            ),
     );
     final glass = GlassSurface(
       borderRadius: radius,
@@ -72,8 +67,10 @@ class AdaptiveFloatingButton extends StatelessWidget {
       // same material family without a per-list-card blur cost.
       blurOnAndroid: true,
       child: PressScale(
+        // No press haptic: the FAB opens a screen — a navigation hop is not
+        // a semantic action. Haptics stay with the action itself (e.g. the
+        // form's submit tick) so one action reads as exactly one touch.
         onPressed: onPressed,
-        haptic: HapticFeedback.lightImpact,
         child: content,
       ),
     );

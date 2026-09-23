@@ -68,8 +68,6 @@ class CaptureRecordCard extends ConsumerStatefulWidget {
 class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
   late Future<OriginalPhotoState> _originalState;
   String? _resolvedPreviewPath;
-  // Drives the card's press-scale response from the InkWell's own gesture.
-  final PressScaleController _press = PressScaleController();
   late final FutureOr<bool> Function(String) _previewFileExists =
       _previewFileExistsForPath;
 
@@ -85,12 +83,6 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     if (_originalStateInputsChanged(oldWidget.summary.capture)) {
       _originalState = _readOriginalState();
     }
-  }
-
-  @override
-  void dispose() {
-    _press.dispose();
-    super.dispose();
   }
 
   Future<OriginalPhotoState> _readOriginalState() {
@@ -283,48 +275,48 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     final useStackedLayout = MediaQuery.textScalerOf(context).scale(14) >= 21;
     final colors = Theme.of(context).colorScheme;
     return PressScaleView(
-      controller: _press,
+      // The InkWell keeps taps and long-press; the view only adds the
+      // press scale. Row taps navigate — semantic haptics stay with the
+      // long-press and selection toggles below.
       child: Card(
-      clipBehavior: Clip.antiAlias,
-      color: widget.selected
-          ? colors.secondaryContainer.withValues(alpha: .45)
-          : null,
-      shape: widget.selected
-          ? RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: colors.primary, width: 2),
-            )
-          : null,
-      child: InkWell(
-        onTap: cardTap,
-        onTapDown: (_) => _press.press(),
-        onTapUp: (_) => _press.release(),
-        onTapCancel: _press.release,
-        onLongPress: !widget.selectionMode && widget.selectable
-            ? () {
-                HapticFeedback.mediumImpact();
-                widget.onSelectedChanged?.call(true);
-              }
+        clipBehavior: Clip.antiAlias,
+        color: widget.selected
+            ? colors.secondaryContainer.withValues(alpha: .45)
             : null,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: useStackedLayout
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [preview]),
-                    const SizedBox(height: 8),
-                    details,
-                  ],
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    preview,
-                    const SizedBox(width: 12),
-                    Expanded(child: details),
-                  ],
-                ),
+        shape: widget.selected
+            ? RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: colors.primary, width: 2),
+              )
+            : null,
+        child: InkWell(
+          onTap: cardTap,
+          onLongPress: !widget.selectionMode && widget.selectable
+              ? () {
+                  HapticFeedback.mediumImpact();
+                  widget.onSelectedChanged?.call(true);
+                }
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: useStackedLayout
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [preview]),
+                      const SizedBox(height: 8),
+                      details,
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      preview,
+                      const SizedBox(width: 12),
+                      Expanded(child: details),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
