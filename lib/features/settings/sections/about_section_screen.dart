@@ -97,6 +97,19 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
             title: Text(strings.license),
             subtitle: Text(strings.licenseValue),
           ),
+          ListTile(
+            key: const Key('font-credit'),
+            leading: const Icon(Icons.text_fields_outlined),
+            title: Text(strings.fontCredit),
+            subtitle: Text(strings.fontCreditValue),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              strings.fontCreditDetail,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
           const SizedBox(height: 8),
           FilledButton.tonalIcon(
             onPressed: () => showLicensePage(
