@@ -438,7 +438,8 @@ class _CaptureImagePreviewState extends State<CaptureImagePreview> {
     // The flight carries the tapped preview's framing (cover for thumbnails,
     // contain for detail), so the shuttle and the endpoints agree on the crop
     // and the photo does not flip framing mid-flight.
-    final flightFit = widget.fit ?? (widget.thumbnail ? BoxFit.cover : BoxFit.contain);
+    final flightFit =
+        widget.fit ?? (widget.thumbnail ? BoxFit.cover : BoxFit.contain);
     final CaptureFullscreenScreen page;
     if (navigationContext == null || querySource == null) {
       page = CaptureFullscreenScreen(

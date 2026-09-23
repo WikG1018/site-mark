@@ -20,6 +20,7 @@ import 'package:sitemark/features/capture/capture_detail_action_sheet.dart';
 import 'package:sitemark/features/capture/capture_detail_tabs.dart';
 import 'package:sitemark/features/capture/capture_fullscreen_sequence.dart';
 import 'package:sitemark/features/capture/capture_image_preview.dart';
+import 'package:sitemark/features/capture/capture_photo_hero.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';

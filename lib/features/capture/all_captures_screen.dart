@@ -368,6 +368,8 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                           ? strings.filteredEmpty
                           : strings.noCaptures,
                       itemBuilder: _buildCaptureCard,
+                      itemEntrance: capturePagedItemEntrance,
+                      entranceSettledCount: 6,
                       padding: EdgeInsets.fromLTRB(
                         16,
                         4 + scrollChromeTopInsetOf(context),

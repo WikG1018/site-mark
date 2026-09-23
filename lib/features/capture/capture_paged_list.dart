@@ -30,6 +30,67 @@ typedef CapturePagedItemBuilder =
 typedef CapturePagedItemEntranceBuilder =
     Widget Function(BuildContext context, Widget child, double rise);
 
+/// Shared entrance wrapper for [CapturePagedList.itemEntrance].
+///
+/// New rows fade in and rise 4% of their height on [AppMotion.springSlideRise].
+/// [rise] is 0 for a row's first entrance and 1 once settled; reduce-motion
+/// collapses to an instant show so the row never starts off-viewport.
+Widget capturePagedItemEntrance(
+  BuildContext context,
+  Widget child,
+  double rise,
+) {
+  if (rise >= 1 || MediaQuery.disableAnimationsOf(context)) return child;
+  return _CaptureItemEntrance(child: child);
+}
+
+class _CaptureItemEntrance extends StatefulWidget {
+  const _CaptureItemEntrance({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_CaptureItemEntrance> createState() => _CaptureItemEntranceState();
+}
+
+class _CaptureItemEntranceState extends State<_CaptureItemEntrance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: AppMotion.medium4,
+  );
+  late final Animation<double> _rise = CurvedAnimation(
+    parent: _controller,
+    curve: AppMotion.springSlideRise,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _rise,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.04),
+          end: Offset.zero,
+        ).animate(_rise),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 typedef CapturePagedGroupKey = String Function(CaptureSummary summary);
 
 /// Lazy capture list that owns scrolling, loaded-row watches, and page chrome.
@@ -555,9 +616,11 @@ class _CapturePagedListState extends State<CapturePagedList> {
     if (entrance != null) {
       // One-shot per row: the first build that reaches here is the row's
       // entrance; later builds keep it settled so reorders and prepends
-      // never replay the animation.
+      // never replay the animation. The top [entranceSettledCount] rows of a
+      // fresh list were already on screen at first paint and stay settled.
       final isNew = _enteredRowIds.add(id);
-      child = entrance(context, child, isNew ? 0 : 1);
+      final settledBand = index < widget.entranceSettledCount;
+      child = entrance(context, child, (isNew && !settledBand) ? 0 : 1);
     }
     return KeyedSubtree(key: rowKey, child: child);
   }

@@ -450,6 +450,8 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       skeletonKey: const Key('project-capture-list-skeleton'),
       contentKey: const Key('project-capture-list-content'),
       skeletonItemCount: 4,
+      itemEntrance: capturePagedItemEntrance,
+      entranceSettledCount: 4,
       padding: EdgeInsets.fromLTRB(
         16,
         4,
