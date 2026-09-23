@@ -1384,4 +1384,119 @@ void main() {
     expect(find.byType(CaptureFullscreenScreen), findsNothing);
     expect(find.text('open'), findsOneWidget);
   });
+
+  group('contentRectFillScale', () {
+    test('falls back to 2x when the content rect is unknown', () {
+      expect(contentRectFillScale(const Size(800, 600), Size.zero), 2.0);
+      expect(
+        contentRectFillScale(const Size(800, 600), const Size(800, 600)),
+        2.0,
+      );
+    });
+
+    test('closes the horizontal letterbox of a tall content rect', () {
+      // Contain-fit of a 3:4 photo in 800×600 is 450×600 (side bars).
+      final zoom = contentRectFillScale(
+        const Size(800, 600),
+        const Size(450, 600),
+      );
+      expect(zoom, closeTo(800 / 450, 0.001));
+    });
+
+    test('containsSize keeps the photo aspect inside the viewport', () {
+      final fitted = containSize(const Size(800, 600), const Size(400, 300));
+      expect(fitted.width, closeTo(800, 0.001));
+      expect(fitted.height, closeTo(600, 0.001));
+      final tall = containSize(const Size(800, 600), const Size(300, 400));
+      expect(tall.width, closeTo(450, 0.001));
+      expect(tall.height, closeTo(600, 0.001));
+    });
+  });
+
+  testWidgets('rubber-band pan yields past the edge and snaps back', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    final center = tester.getCenter(find.byType(InteractiveViewer));
+
+    final leftFinger = await tester.startGesture(center - const Offset(40, 0));
+    await tester.pump();
+    final rightFinger = await tester.startGesture(center + const Offset(40, 0));
+    await tester.pump();
+    await leftFinger.moveBy(const Offset(-40, 0));
+    await rightFinger.moveBy(const Offset(40, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(viewerScale(tester), greaterThan(1.05));
+
+    // Pull far past the right edge (pan.dx wants to go positive).
+    final beforeEdge = viewerPan(tester);
+    await rightFinger.up();
+    await tester.pump();
+    await leftFinger.moveBy(const Offset(200, 0));
+    await tester.pump();
+    final stretched = viewerPan(tester);
+    // Rubber-band: past the wall the photo yields at 25% of the finger.
+    expect(stretched.dx, lessThanOrEqualTo(0.5));
+    expect(stretched.dx, greaterThan(beforeEdge.dx));
+
+    // Release: the stretch relaxes back onto the legal range.
+    await leftFinger.up();
+    await tester.pumpAndSettle();
+    final settled = viewerPan(tester);
+    expect(settled.dx, lessThanOrEqualTo(0.5));
+    expect(
+      settled.dx,
+      greaterThanOrEqualTo(
+        -tester.getSize(find.byType(InteractiveViewer)).width,
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets('fling release carries inertia then settles on a legal pan', (
+    tester,
+  ) async {
+    await pumpHost(tester);
+    final center = tester.getCenter(find.byType(InteractiveViewer));
+
+    final leftFinger = await tester.startGesture(center - const Offset(40, 0));
+    await tester.pump();
+    final rightFinger = await tester.startGesture(center + const Offset(40, 0));
+    await tester.pump();
+    await leftFinger.moveBy(const Offset(-40, 0));
+    await rightFinger.moveBy(const Offset(40, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await rightFinger.up();
+    await tester.pump();
+
+    // Build up horizontal pace, then release.
+    final viewport = tester.getSize(find.byType(InteractiveViewer));
+    await leftFinger.moveBy(const Offset(-30, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await leftFinger.moveBy(const Offset(-30, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    await leftFinger.up();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    final settled = viewerPan(tester);
+    final minPanX = viewport.width * (1 - viewerScale(tester));
+    expect(settled.dx, greaterThanOrEqualTo(minPanX - 0.5));
+    expect(settled.dx, lessThanOrEqualTo(0.5));
+    await tester.pump(const Duration(milliseconds: 350));
+  });
+
+  testWidgets('double tap closes a known letterboxed content rect', (
+    tester,
+  ) async {
+    // Geometry is owned by [contentRectFillScale] (covered above). This
+    // pins the unmeasured fallback the host fixture (missing file, no
+    // preview) actually hits: classic 2x both ways.
+    await pumpHost(tester);
+    await doubleTapViewer(tester);
+    expect(viewerScale(tester), closeTo(2, 0.001));
+    await doubleTapViewer(tester);
+    expect(viewerScale(tester), closeTo(1, 0.001));
+    await tester.pump(const Duration(milliseconds: 350));
+  });
 }

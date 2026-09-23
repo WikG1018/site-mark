@@ -979,6 +979,131 @@ void main() {
       await _unmount(tester);
     },
   );
+
+  testWidgets('row entrance fires once per row and settles the top band', (
+    tester,
+  ) async {
+    final source = _FakeCaptureQuerySource()
+      ..enqueue(
+        () => Future.value(_page(List.generate(12, _summary), hasMore: false)),
+      );
+    final controller = CapturePagerController(source);
+    unawaited(controller.setQuery(const CaptureListQuery()));
+    addTearDown(() async {
+      controller.dispose();
+      await source.dispose();
+    });
+
+    final rises = <String, List<double>>{};
+    await tester.pumpWidget(
+      _localized(
+        home: Scaffold(
+          body: CapturePagedList(
+            controller: controller,
+            source: source,
+            emptyMessage: '没有记录',
+            entranceSettledCount: 3,
+            itemBuilder: (context, summary, _) => _EntranceProbe(
+              id: summary.capture.id,
+              rises: rises,
+              child: SizedBox(
+                key: Key('row-${summary.capture.id}'),
+                height: 64,
+                child: Text(summary.capture.workLocation),
+              ),
+            ),
+            itemEntrance: (context, child, rise) {
+              if (child is _EntranceProbe) {
+                rises.putIfAbsent(child.id, () => <double>[]).add(rise);
+              }
+              return child;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(rises, isNotEmpty);
+    // Top settled band starts still; later rows ask for a rise (0) once.
+    expect(rises['capture-0']!.first, 1);
+    expect(rises['capture-1']!.first, 1);
+    expect(rises['capture-2']!.first, 1);
+    expect(rises['capture-3']!.first, 0);
+    expect(rises['capture-4']!.first, 0);
+    // One-shot: no row ever asks for a second rise.
+    for (final entry in rises.entries) {
+      expect(
+        entry.value.where((rise) => rise == 0).length,
+        lessThanOrEqualTo(1),
+        reason: '${entry.key} rose more than once',
+      );
+    }
+
+    // Rebuild (watched-row churn) must not replay the entrance.
+    final before = {
+      for (final entry in rises.entries) entry.key: entry.value.length,
+    };
+    controller.replaceWatchedRows(List.of(controller.state.rows));
+    await tester.pump();
+    await tester.pump();
+    for (final entry in rises.entries) {
+      expect(entry.value, isNotEmpty, reason: entry.key);
+      expect(
+        entry.value.where((rise) => rise == 0).length,
+        lessThanOrEqualTo(1),
+        reason: '${entry.key} replayed',
+      );
+      expect(
+        entry.value.length,
+        greaterThanOrEqualTo(before[entry.key]!),
+        reason: entry.key,
+      );
+    }
+    await _unmount(tester);
+  });
+
+  testWidgets(
+    'capturePagedItemEntrance settles immediately under reduce-motion',
+    (tester) async {
+      late Widget built;
+      await tester.pumpWidget(
+        _localized(
+          disableAnimations: true,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                built = capturePagedItemEntrance(
+                  context,
+                  const Text('row', key: Key('row')),
+                  0,
+                );
+                return built;
+              },
+            ),
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('row')), findsOneWidget);
+      expect(built, isA<Text>());
+      await _unmount(tester);
+    },
+  );
+}
+
+class _EntranceProbe extends StatelessWidget {
+  const _EntranceProbe({
+    required this.id,
+    required this.rises,
+    required this.child,
+  });
+
+  final String id;
+  final Map<String, List<double>> rises;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
 }
 
 final class _FakeCaptureQuerySource implements CaptureQuerySource {

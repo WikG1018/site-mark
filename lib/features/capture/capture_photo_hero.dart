@@ -2,6 +2,58 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+/// Flight layer for record-photo Heroes, shared by the thumbnail Heroes
+/// ([CapturePhotoHero]) and the fullscreen viewer's hero endpoints
+/// ([CapturePhotoHeroFrame]).
+///
+/// The list and detail previews have different layouts and decode sizes. The
+/// flight therefore avoids reusing either preview subtree, which can contain
+/// async resolution and fade animations. Both flight images share one provider
+/// and keep the prior frame visible while Flutter resolves it. The two layers
+/// cross-fade cover → contain framing so the shuttle holds the source
+/// thumbnail's crop at takeoff and settles into the endpoint's framing — the
+/// photo never flips crop mid-flight.
+Widget capturePhotoHeroFlightShuttle({
+  required String path,
+  required BuildContext flightContext,
+  required Animation<double> animation,
+}) {
+  final provider = ResizeImage.resizeIfNeeded(
+    CapturePhotoHero.flightCacheWidth(flightContext),
+    null,
+    FileImage(File(path)),
+  );
+  // FadeTransition rebuilds only its opacity layer; the two Image
+  // widgets stay stable so mid-flight frames do not re-create the
+  // decode-bound image subtrees every tick.
+  return KeyedSubtree(
+    key: const Key('capture-photo-hero-flight'),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        FadeTransition(
+          opacity: ReverseAnimation(animation),
+          child: Image(
+            image: provider,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.medium,
+          ),
+        ),
+        FadeTransition(
+          opacity: animation,
+          child: Image(
+            image: provider,
+            fit: BoxFit.contain,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.medium,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 /// A record-photo Hero with a stable image-only flight layer.
 ///
 /// The list and detail previews have different layouts and decode sizes. The
@@ -54,42 +106,55 @@ class CapturePhotoHero extends StatelessWidget {
             direction,
             fromHeroContext,
             toHeroContext,
-          ) {
-            final provider = ResizeImage.resizeIfNeeded(
-              flightCacheWidth(flightContext),
-              null,
-              FileImage(File(path)),
-            );
-            // FadeTransition rebuilds only its opacity layer; the two Image
-            // widgets stay stable so mid-flight frames do not re-create the
-            // decode-bound image subtrees every tick.
-            return KeyedSubtree(
-              key: const Key('capture-photo-hero-flight'),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  FadeTransition(
-                    opacity: ReverseAnimation(animation),
-                    child: Image(
-                      image: provider,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                      filterQuality: FilterQuality.medium,
-                    ),
-                  ),
-                  FadeTransition(
-                    opacity: animation,
-                    child: Image(
-                      image: provider,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
-                      filterQuality: FilterQuality.medium,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
+          ) => capturePhotoHeroFlightShuttle(
+            path: path,
+            flightContext: flightContext,
+            animation: animation,
+          ),
+      child: child,
+    );
+  }
+}
+
+/// Hero endpoint used by the fullscreen viewer's entry photo.
+///
+/// The tag lives here (not on the photo frame) so a frame rebuild can never
+/// produce a second Hero of the same tag mid-flight — the classic ghost. The
+/// endpoint sizes to the photo's content box at [fit], so the flight lands on
+/// the same framing the tapped source showed (cover from a thumbnail, contain
+/// from a detail preview).
+class CapturePhotoHeroFrame extends StatelessWidget {
+  const CapturePhotoHeroFrame({
+    super.key,
+    required this.tag,
+    required this.path,
+    required this.child,
+    this.fit = BoxFit.contain,
+  });
+
+  final String tag;
+  final String path;
+  final BoxFit fit;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
+    return Hero(
+      tag: tag,
+      placeholderBuilder: (context, heroSize, child) => child,
+      flightShuttleBuilder:
+          (
+            flightContext,
+            animation,
+            direction,
+            fromHeroContext,
+            toHeroContext,
+          ) => capturePhotoHeroFlightShuttle(
+            path: path,
+            flightContext: flightContext,
+            animation: animation,
+          ),
       child: child,
     );
   }
