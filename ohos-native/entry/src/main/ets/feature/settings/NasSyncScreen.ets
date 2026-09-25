@@ -333,7 +333,12 @@ export struct NasSyncScreen {
       if (this.database !== null) {
         this.counts = await this.database.countNasUploadStates();
       }
-      Haptics.lightImpact();
+      if (imported > 0) {
+        // Imported records must show up without waiting for the next
+        // capture or queue event to refresh the observers.
+        AppRuntime.require().notifyDataChanged();
+        Haptics.lightImpact();
+      }
       this.showToast(tr(`已从 NAS 恢复 ${imported} 张照片`, `Restored ${imported} photos from the NAS`), false);
     } catch (error) {
       hilog.error(LOG_DOMAIN, LOG_TAG, 'nas import failed: %{public}s', (error as Error).message);
@@ -432,7 +437,7 @@ export struct NasSyncScreen {
               ForEach(this.importGroups, (group: NasImportPreviewGroup) => {
                 Row({ space: 10 }) {
                   Checkbox({ name: group.projectKey, group: 'nasImport' })
-                    .select(true)
+                    .select(this.importSelected.includes(group.projectKey))
                     .selectedColor(UiTokens.PRIMARY)
                     .onChange((selected: boolean) => this.toggleImportSelection(group.projectKey, selected))
                   Column({ space: 2 }) {

@@ -475,8 +475,10 @@ export class NasSyncService {
     await this.syncNow();
   }
 
-  /// Two-way gates shared by preview/import: enabled + two_way + network +
-  /// stored password, mirroring Dart's _twoWayCredentials.
+  /// Two-way gates shared by preview/import: enabled + two_way + stored
+  /// password, mirroring Dart's _twoWayCredentials. Deliberately NO network
+  /// check here — an offline run must surface the native call's failure, not
+  /// masquerade as "nothing to restore".
   private async twoWayCredentials(): Promise<NasSyncConfigRecord | null> {
     const config = await this.database.nasSyncConfig();
     if (!config.enabled || !NasTwoWayPolicy.isTwoWay(config.syncMode)) {
@@ -484,9 +486,6 @@ export class NasSyncService {
     }
     const password = await this.secrets.read();
     if (password === null || password.length === 0) {
-      return null;
-    }
-    if (!await this.networkAllows(config.wifiOnly)) {
       return null;
     }
     return config;

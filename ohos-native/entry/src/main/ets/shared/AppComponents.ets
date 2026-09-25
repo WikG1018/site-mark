@@ -36,9 +36,10 @@ export function messageTransition(): TransitionEffect {
  * springRise, exactly once per row id. Callers arm entrance only after the
  * first page lands, so cold-start rows appear without a stagger; the seen
  * set keeps reorders, prepends, and LazyForEach re-creations from
- * replaying. Disabled or already-seen rows get a no-op transition. */
+ * replaying. Disabled, already-seen, or reduce-motion rows get a no-op
+ * transition. */
 export function rowEntranceEffect(seenIds: Set<string>, id: string, enabled: boolean): TransitionEffect {
-  if (!enabled || seenIds.has(id)) {
+  if (!enabled || MotionPolicy.reduceMotion || seenIds.has(id)) {
     return TransitionEffect.IDENTITY;
   }
   seenIds.add(id);

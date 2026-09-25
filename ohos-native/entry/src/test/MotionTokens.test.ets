@@ -31,6 +31,7 @@ export default function motionTokensTest(): void {
       expect(MotionTokens.emphasizedDecelerate() !== undefined).assertTrue();
       expect(MotionTokens.emphasizedAccelerate() !== undefined).assertTrue();
       expect(MotionTokens.standard() !== undefined).assertTrue();
+      expect(MotionTokens.standardDecelerate() !== undefined).assertTrue();
       expect(MotionTokens.standardAccelerate() !== undefined).assertTrue();
     });
 
