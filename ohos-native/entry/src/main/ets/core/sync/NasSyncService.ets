@@ -176,7 +176,9 @@ export class NasNativeBridge {
     request.path = localPath;
     const response = await this.call<string>('sha256', request);
     if (!response.ok || response.value === null) {
-      throw new Error('local_io');
+      // nas:-prefixed so nasFailureCode classifies it instead of falling
+      // through to protocol_error.
+      throw new Error('nas:local_io');
     }
     return response.value;
   }
