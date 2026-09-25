@@ -17,9 +17,19 @@ import { SAFE_AREA_TOP_VP, topPaddingVp } from './SystemBars';
 export function panelTransition(distanceVp: number = 24): TransitionEffect {
   return TransitionEffect.asymmetric(
     TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: distanceVp }))
-      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }),
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: MotionTokens.springSnap() }),
     TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: distanceVp }))
-      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseIn }));
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.standardAccelerate() }));
+}
+
+/** Inline status/message rows rise like toasts (spec §3.3/§3.2): springRise
+ * in with a small 8vp lift, accelerate out. Same reduce-motion collapse. */
+export function messageTransition(): TransitionEffect {
+  return TransitionEffect.asymmetric(
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 8 }))
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM4), curve: MotionTokens.springRise() }),
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 8 }))
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.standardAccelerate() }));
 }
 
 export class SegmentOption {
@@ -249,7 +259,7 @@ export struct SettingRow {
       .constraintSize({ minHeight: 64 })
       .padding({ left: 16, right: 16, top: 9, bottom: 9 })
       .backgroundColor(this.pressed ? UiTokens.SURFACE_MUTED : Color.Transparent)
-      .animation({ duration: MotionPolicy.duration(90), curve: Curve.EaseOut })
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.springSettle() })
       .onTouch((event: TouchEvent): void => {
         this.pressed = event.type === TouchType.Down || event.type === TouchType.Move;
       })

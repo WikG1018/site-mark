@@ -1,7 +1,7 @@
 import hilog from '@ohos.hilog';
 import { AppDatabase, NasSyncConfigRecord, NasUploadCounts } from '../../data/database/AppDatabase';
 import { AppRuntime } from '../../app/AppRuntime';
-import { LifecycleSegment, SectionHeader, SegmentOption } from '../../shared/AppComponents';
+import { LifecycleSegment, messageTransition, SectionHeader, SegmentOption } from '../../shared/AppComponents';
 import { FormField } from '../../shared/FormComponents';
 import { tr } from '../../shared/AppText';
 import { UiTokens } from '../../shared/UiTokens';
@@ -361,7 +361,7 @@ export struct NasSyncScreen {
             if (this.message.length > 0) {
               Text(this.message).fontSize(12)
                 .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.TEXT_SECONDARY)
-                .width('100%')
+                .width('100%').transition(messageTransition())
             }
           }
           .constraintSize({ minHeight: 64 })

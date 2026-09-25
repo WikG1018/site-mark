@@ -7,7 +7,7 @@ import { CAPTURE_TEMPLATE_LIMIT_PER_PROJECT, CAPTURE_TEMPLATE_NAME_MAX_LENGTH, c
   normalizeCaptureTemplateName, resolveWatermarkLocale } from '../../domain/DomainRules';
 import { CaptureStatus, ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, DateFilterRow, EmptyPanel, FilterToolbar,
-  InlineErrorPanel, ListSkeleton, SectionHeader, panelTransition } from '../../shared/AppComponents';
+  InlineErrorPanel, ListSkeleton, SectionHeader, messageTransition, panelTransition } from '../../shared/AppComponents';
 import { formatBytes, formatDateTime, imageUri, statusLabel } from '../../shared/Formatters';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { UiTokens } from '../../shared/UiTokens';
@@ -662,12 +662,12 @@ export struct AllRecordsView {
       }
       .width('100%')
       .translate({ y: this.chromeVisible ? 0 : -(UiTokens.TOP_BAR_HEIGHT + 108) })
-      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: MotionTokens.springSnap() })
       .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
         if (this.message.length > 0) {
           Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER :
             UiTokens.PRIMARY).padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, bottom: 6 })
-            .width('100%').transition(panelTransition(0))
+            .width('100%').transition(messageTransition())
         }
         if (this.controller.loadingInitial && this.captureCount() === 0) {
           ListSkeleton({ rows: 3 })
@@ -1950,7 +1950,7 @@ export struct CaptureDetailScreen {
               .padding(18).width('100%').backgroundColor(UiTokens.GLASS).borderRadius(UiTokens.CARD_RADIUS)
               if (this.message.length > 0) {
                 Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY).width('100%')
-                  .transition(panelTransition(0))
+                  .transition(messageTransition())
               }
               Row({ space: 8 }) {
                 if (this.capture!.status === CaptureStatus.READY) {
@@ -2207,7 +2207,7 @@ export struct CaptureEditorScreen {
               .fontSize(13).fontColor(UiTokens.TEXT_SECONDARY).lineHeight(20).width('100%')
             if (this.message.length > 0) {
               Text(this.message).fontSize(13).fontColor(UiTokens.DANGER).width('100%')
-                .transition(panelTransition(0))
+                .transition(messageTransition())
             }
             }
             .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 12,

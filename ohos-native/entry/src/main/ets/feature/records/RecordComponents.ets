@@ -5,6 +5,7 @@ import { UiTokens } from '../../shared/UiTokens';
 import { tr } from '../../shared/AppText';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 import { MotionPolicy } from '../../shared/MotionPolicy';
+import { MotionTokens } from '../../shared/MotionTokens';
 import { panelTransition } from '../../shared/AppComponents';
 
 @Component
@@ -78,7 +79,7 @@ export struct CaptureCard {
           .border({ width: 2, color: Color.White })
           .borderRadius(16)
           .margin(7)
-          .animation({ duration: MotionPolicy.duration(120), curve: Curve.EaseOut })
+          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.emphasizedDecelerate() })
           .transition(panelTransition(0))
       }
       if (this.capture.status === 'failed') {
@@ -132,7 +133,7 @@ export struct CaptureCard {
     .padding(14)
     .width('100%')
     .backgroundColor(this.pressed ? UiTokens.SURFACE_MUTED : UiTokens.GLASS)
-    .animation({ duration: MotionPolicy.duration(90), curve: Curve.EaseOut })
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.springSettle() })
     .borderRadius(UiTokens.CARD_RADIUS)
     .border({ width: 1, color: this.selected ? UiTokens.PRIMARY : UiTokens.OUTLINE_SUBTLE })
     .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
