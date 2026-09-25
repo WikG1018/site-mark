@@ -7,6 +7,7 @@ import { tr } from '../../shared/AppText';
 import { imageUri } from '../../shared/Formatters';
 import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { MotionPolicy } from '../../shared/MotionPolicy';
+import { MotionTokens } from '../../shared/MotionTokens';
 import { UiTokens } from '../../shared/UiTokens';
 import { PhotoViewerWindowController, PhotoViewerWindowLoader } from './PhotoViewerWindow';
 import { PhotoViewerGestureState, PhotoViewerPanTracker, RecordNavigationSeedStore,
@@ -204,7 +205,7 @@ export struct PhotoViewerScreen {
 
   private animateTransform(update: () => void): void {
     this.getUIContext().animateTo({
-      duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD),
+      duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4),
       curve: Curve.EaseOut
     }, update);
   }

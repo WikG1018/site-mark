@@ -11,6 +11,7 @@ import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, DateFilterR
 import { formatBytes, formatDateTime, imageUri, statusLabel } from '../../shared/Formatters';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { UiTokens } from '../../shared/UiTokens';
+import { MotionTokens } from '../../shared/MotionTokens';
 import { CaptureCard, CaptureInfoRow } from './RecordComponents';
 import { ProjectBackupService } from '../backup/BackupService';
 import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
@@ -660,7 +661,7 @@ export struct AllRecordsView {
       }
       .width('100%')
       .translate({ y: this.chromeVisible ? 0 : -(UiTokens.TOP_BAR_HEIGHT + 108) })
-      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_CHROME), curve: Curve.EaseOut })
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
       .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
         if (this.message.length > 0) {
           Text(this.message).fontSize(13).fontColor(this.messageError ? UiTokens.DANGER :

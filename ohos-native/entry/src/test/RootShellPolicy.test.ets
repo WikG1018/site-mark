@@ -3,6 +3,7 @@ import { MotionPolicy } from '../main/ets/shared/MotionPolicy';
 import { RootLifecycleCoordinator, RootShellPolicy, RootTabCoordinator } from
   '../main/ets/shared/RootShellPolicy';
 import { UiTokens } from '../main/ets/shared/UiTokens';
+import { MotionTokens } from '../main/ets/shared/MotionTokens';
 
 export default function rootShellPolicyTest(): void {
   describe('RootShellPolicy', () => {
@@ -45,9 +46,9 @@ export default function rootShellPolicyTest(): void {
     it('uses standard motion normally and removes motion and blur when reduced', 0, () => {
       MotionPolicy.reduceMotion = false;
       const normal = RootShellPolicy.motion(1);
-      expect(normal.pageDuration).assertEqual(UiTokens.MOTION_STANDARD);
-      expect(normal.fadeDuration).assertEqual(UiTokens.MOTION_STANDARD);
-      expect(normal.dockDuration).assertEqual(UiTokens.MOTION_STANDARD);
+      expect(normal.pageDuration).assertEqual(MotionTokens.DURATION_SHORT4);
+      expect(normal.fadeDuration).assertEqual(MotionTokens.DURATION_SHORT4);
+      expect(normal.dockDuration).assertEqual(MotionTokens.DURATION_SHORT4);
       expect(normal.enterX).assertEqual(24);
       expect(normal.exitX).assertEqual(-16);
       expect(normal.dockBlur).assertEqual(24);

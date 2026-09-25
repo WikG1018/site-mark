@@ -42,4 +42,44 @@ export default function uiTokensTest(): void {
       expect(UiTokens.onColorFor(0xFF176B55)).assertEqual('#FFFFFF');
     });
   });
+
+  describe('UiTokens material tokens', () => {
+    it('exposes the six-step AppRadius scale', 0, () => {
+      expect(UiTokens.RADIUS_XS).assertEqual(8);
+      expect(UiTokens.RADIUS_SM).assertEqual(12);
+      expect(UiTokens.RADIUS_MD).assertEqual(16);
+      expect(UiTokens.RADIUS_LG).assertEqual(20);
+      expect(UiTokens.RADIUS_XL).assertEqual(24);
+    });
+
+    it('lands the legacy radius aliases on the scale', 0, () => {
+      expect(UiTokens.CARD_RADIUS).assertEqual(UiTokens.RADIUS_LG);
+      expect(UiTokens.CONTROL_RADIUS).assertEqual(UiTokens.RADIUS_SM);
+    });
+
+    it('derives the glass fill from the surface color per recipe tier', 0, () => {
+      expect(UiTokens.GLASS_OPACITY).assertEqual(0.58);
+      expect(UiTokens.GLASS_OPACITY_NO_BLUR).assertEqual(0.68);
+      UiTokens.apply(false, AccentSwatches.defaultArgb());
+      expect(UiTokens.SURFACE).assertEqual('#F9FCF9');
+      expect(UiTokens.GLASS).assertEqual('#94F9FCF9');
+      expect(UiTokens.GLASS_STRONG).assertEqual('#ADF9FCF9');
+      expect(UiTokens.DOCK).assertEqual(UiTokens.GLASS);
+      UiTokens.apply(true, AccentSwatches.defaultArgb());
+      expect(UiTokens.SURFACE).assertEqual('#171D19');
+      expect(UiTokens.GLASS).assertEqual('#94171D19');
+      expect(UiTokens.GLASS_STRONG).assertEqual('#AD171D19');
+      expect(UiTokens.DOCK).assertEqual(UiTokens.GLASS);
+    });
+
+    it('keeps one floating-chrome shadow recipe', 0, () => {
+      UiTokens.apply(false, AccentSwatches.defaultArgb());
+      expect(UiTokens.CHROME_SHADOW_COLOR).assertEqual('#14000000');
+      expect(UiTokens.CHROME_SHADOW_BLUR).assertEqual(12);
+      expect(UiTokens.CHROME_SHADOW_OFFSET_Y).assertEqual(3);
+      UiTokens.apply(true, AccentSwatches.defaultArgb());
+      expect(UiTokens.CHROME_SHADOW_COLOR).assertEqual('#24000000');
+      expect(UiTokens.CHROME_SHADOW_BLUR).assertEqual(14);
+    });
+  });
 }

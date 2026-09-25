@@ -10,6 +10,7 @@ import { DetailMediaSwapCoordinator, PhotoViewerGestureState, PhotoViewerPanTrac
 import { ListPageCoordinator } from '../main/ets/shared/ListPageCoordinator';
 import { RootShellPolicy } from '../main/ets/shared/RootShellPolicy';
 import { UiTokens } from '../main/ets/shared/UiTokens';
+import { MotionTokens } from '../main/ets/shared/MotionTokens';
 
 class ScheduledTask {
   id: number;
@@ -534,7 +535,7 @@ export default function recordUiCoordinatorTest(): void {
     });
 
     it('gives the viewer swipe a dedicated slower duration than generic UI motion', 0, () => {
-      expect(ViewerNodePolicy.SWIPE_DURATION > UiTokens.MOTION_STANDARD).assertTrue();
+      expect(ViewerNodePolicy.SWIPE_DURATION > MotionTokens.DURATION_SHORT4).assertTrue();
     });
 
     it('creates one 2048 node and bounded 1024 neighbors with stable keys', 0, () => {
