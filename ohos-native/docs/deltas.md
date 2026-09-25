@@ -40,7 +40,8 @@
 | 视觉/无障碍 | 统一 token、悬浮 Dock、动态字体批量栏、44vp 热区和双语语义已实现 | 遵循减少动画；大字体通过策略计算布局 | 中文/英文、浅色/深色、大字体、减少动画四组设备走查 |
 | 安装包签名 | 本地可产出 debug unsigned HAP，项目未配置 `signingConfigs` | 仅作为可复现开发产物，不作为正式发行包 | 发布证书签名，并完成全新安装、覆盖安装和卸载边界测试 |
 | 首启隐私同意门 | 鸿蒙有首启同意门：同意前不初始化运行时，“退出应用”为显式选择；Android 无首启门（关于页静态隐私说明） | 同意前不读写任何用户数据；为上架合规新增，非能力缺失 | 真机验证首启同意、退出与再次启动流程 |
-| 触感反馈 | 进入选择模式 mediumImpact、勾选记录 selectionClick（`@kit.SensorServiceKit` vibrator，time 型短振动）；已声明 `VIBRATE` 权限；Android 批量操作 heavyImpact 与表单提交 lightImpact 场景未映射 | 振动失败静默跳过，不阻塞点击 | 真机确认两类振动的强度与时机；评估补齐批量与表单场景 |
+| 触感反馈 | 四档 time 型振动（16/16/32/48ms，对齐 Android 触感契约）：dock/分段切换与勾选 selectionClick、表单与设置保存成功 lightImpact、进入选择模式 mediumImpact、批量删除二次确认与项目删除 heavyImpact；导航表面与校验失败静音 | 振动失败静默跳过，不阻塞点击；强度映射为工程近似（★），非 MiHaptic 原生档位 | 真机确认四档强度与时机是否需要改 preset 振动 |
+| 应用字体 | 内嵌 MiSans 子集（Regular/Medium，rawfile，许可随包）已在启动注册；ArkUI 无全局 fontFamily，当前仅关于页（品牌面）应用，其余正文为系统 HarmonyOS Sans | 注册失败静默回退系统字体，不阻塞启动；不混排同屏两种正文字体 | 全量应用待 AppText 组件化重构后评估；真机核对关于页字形与包体增量（约 3.4MB） |
 | 自动化 CI | 公用 runner 不预装可再分发的 DevEco/HarmonyOS SDK | CI 校验 manifest 与 Rust/Flutter；ArkTS/HAP 由本地 DevEco 门禁给证据 | 提供合规专用 runner 后补 HAP 远程构建 |
 | 窗口沉浸 / 系统栏 | 当前为尝试 edge-to-edge（`setWindowLayoutFullScreen` + 透明栏 + inset 避让）。模拟器 `127.0.0.1:5555` 手势导航 dump 仍见 EntryAbility root y=137 / StatusBar 136px，SCB `immersive is false` | 根壳系统栏保持显示；查看器 immersive-sticky 隐藏系统栏，退出只恢复栏可见性与图标色，窗口不关全屏 | 真机手势/三键/折叠/多窗 |
 

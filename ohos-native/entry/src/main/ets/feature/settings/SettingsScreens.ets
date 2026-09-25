@@ -16,6 +16,7 @@ import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr, userFacingMessage } from '../../shared/AppText';
 import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
+import { AppFont } from '../../shared/AppFont';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { ScrollChromeCoordinator } from '../../shared/ScrollChromePolicy';
@@ -784,13 +785,19 @@ export struct AboutScreen {
           onBack: (): void => { this.pathStack.pop(); } })
         Scroll() {
           Column({ space: 14 }) {
+            // The About page is the brand surface: it renders in the embedded
+            // MiSans subset while the rest of the app stays on the system
+            // font (ArkUI has no global fontFamily; see deltas.md).
             Text('SiteMark').fontSize(30).fontWeight(FontWeight.Bold).fontColor(UiTokens.PRIMARY)
+              .fontFamily(AppFont.FAMILY)
             Text(tr('工程印记 · 鸿蒙原生版', 'SiteMark · Native HarmonyOS')).fontSize(18)
-              .fontWeight(FontWeight.Medium)
+              .fontWeight(FontWeight.Medium).fontFamily(AppFont.FAMILY_MEDIUM)
             Text(this.versionLabel).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
+              .fontFamily(AppFont.FAMILY)
             Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无第三方云同步；照片和项目数据在本机处理。可选 NAS 默认同步关闭。',
               'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or third-party cloud sync; photos and project data are processed on-device. Optional NAS sync stays off by default.'))
               .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).textAlign(TextAlign.Center)
+              .fontFamily(AppFont.FAMILY)
             Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
             Button(tr('GitHub 代码仓库\ngithub.com/WikG1018/site-mark',
               'GitHub repository\ngithub.com/WikG1018/site-mark'))
@@ -804,6 +811,9 @@ export struct AboutScreen {
             Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
             Text(tr('本项目以 Apache-2.0 许可证开源，第三方组件声明见仓库 THIRD_PARTY_NOTICES.md。',
               'This project is open source under the Apache-2.0 license; third-party notices are in THIRD_PARTY_NOTICES.md in the repository.'))
+              .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
+            Text(tr('内嵌 MiSans 字体子集（Regular/Medium），版权归小米所有，按 MiSans 字体知识产权许可协议授权使用。',
+              'Ships a MiSans font subset (Regular/Medium) © Xiaomi, used under the MiSans Font Intellectual Property License.'))
               .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
           }
           .padding(20).width('100%').backgroundColor(UiTokens.SURFACE)
