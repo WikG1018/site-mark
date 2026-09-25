@@ -37,6 +37,7 @@ import uiTokensTest from './UiTokens.test';
 import motionTokensTest from './MotionTokens.test';
 import pressGestureTest from './PressGesture.test';
 import hapticsTest from './Haptics.test';
+import viewerTransformPolicyTest from './ViewerTransformPolicy.test';
 import scrollChromePolicyTest from './ScrollChromePolicy.test';
 
 export default function testsuite(): void {
@@ -79,5 +80,6 @@ export default function testsuite(): void {
   motionTokensTest();
   pressGestureTest();
   hapticsTest();
+  viewerTransformPolicyTest();
   scrollChromePolicyTest();
 }
