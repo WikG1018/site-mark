@@ -39,6 +39,7 @@ import pressGestureTest from './PressGesture.test';
 import hapticsTest from './Haptics.test';
 import viewerTransformPolicyTest from './ViewerTransformPolicy.test';
 import appFontTest from './AppFont.test';
+import nasTwoWayPolicyTest from './NasTwoWayPolicy.test';
 import scrollChromePolicyTest from './ScrollChromePolicy.test';
 
 export default function testsuite(): void {
@@ -83,5 +84,6 @@ export default function testsuite(): void {
   hapticsTest();
   viewerTransformPolicyTest();
   appFontTest();
+  nasTwoWayPolicyTest();
   scrollChromePolicyTest();
 }
