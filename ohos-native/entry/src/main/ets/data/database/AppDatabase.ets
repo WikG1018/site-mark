@@ -21,10 +21,21 @@ export interface CaptureWorkflowDatabase {
   captureById(id: string): Promise<CaptureRecord | null>;
 }
 
+/** (project name, photo number) pair for NAS import previews (H5). */
+export class ProjectPhotoNumberRow {
+  readonly projectName: string;
+  readonly photoNumber: string;
+
+  constructor(projectName: string, photoNumber: string) {
+    this.projectName = projectName;
+    this.photoNumber = photoNumber;
+  }
+}
+
 const DATABASE_NAME: string = 'sitemark_native.db';
 // Bump when a change alters the persisted schema. Stores opened from an older
 // build run the pending SCHEMA_MIGRATIONS steps before the new value is written.
-const DATABASE_SCHEMA_VERSION: number = 15;
+const DATABASE_SCHEMA_VERSION: number = 16;
 const DEFAULT_PAGE_SIZE: number = 50;
 
 interface SchemaMigration {
@@ -65,6 +76,17 @@ const SCHEMA_MIGRATIONS: SchemaMigration[] = [
         last_attempt_at INTEGER,
         uploaded_at INTEGER
       )`,
+    ],
+  },
+  {
+    // Two-way NAS sync (H5, Android #164 parity): upload_only keeps the
+    // D-023 export-only contract; two_way additionally restores missing
+    // photos and removes remote copies after local deletes. Existing rows
+    // backfill to upload_only — no behavior change until the user opts in.
+    version: 16,
+    statements: [
+      `ALTER TABLE nas_sync_config ADD COLUMN sync_mode TEXT NOT NULL DEFAULT 'upload_only'
+        CHECK(sync_mode IN ('upload_only','two_way'))`,
     ],
   },
 ];
@@ -202,6 +224,7 @@ const SCHEMA_STATEMENTS: string[] = [
     known_sftp_fingerprint TEXT,
     wifi_only INTEGER NOT NULL DEFAULT 1 CHECK(wifi_only IN (0,1)),
     enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+    sync_mode TEXT NOT NULL DEFAULT 'upload_only' CHECK(sync_mode IN ('upload_only','two_way')),
     updated_at INTEGER
   )`,
   `CREATE TABLE IF NOT EXISTS nas_upload_state (
@@ -1327,7 +1350,7 @@ export class AppDatabase implements CaptureWorkflowDatabase {
   async nasSyncConfig(): Promise<NasSyncConfigRecord> {
     const rows = await this.store.querySql(
       'SELECT id,protocol,host,port,username,root_path,secure_tls,accept_invalid_tls,' +
-      'known_sftp_fingerprint,wifi_only,enabled,updated_at FROM nas_sync_config WHERE id=? LIMIT 1',
+      'known_sftp_fingerprint,wifi_only,enabled,sync_mode,updated_at FROM nas_sync_config WHERE id=? LIMIT 1',
       ['global']);
     try {
       if (!rows.goToFirstRow()) {
@@ -1346,7 +1369,8 @@ export class AppDatabase implements CaptureWorkflowDatabase {
         rows.isColumnNull(fingerprintIdx) ? null : rows.getString(fingerprintIdx),
         rows.getLong(rows.getColumnIndex('wifi_only')) === 1,
         rows.getLong(rows.getColumnIndex('enabled')) === 1,
-        rows.getLong(rows.getColumnIndex('updated_at'))
+        rows.getLong(rows.getColumnIndex('updated_at')),
+        rows.getString(rows.getColumnIndex('sync_mode')) === 'two_way' ? 'two_way' : 'upload_only'
       );
     } finally {
       rows.close();
@@ -1357,12 +1381,13 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     await this.store.executeSql(
       `INSERT OR REPLACE INTO nas_sync_config
         (id,protocol,host,port,username,root_path,secure_tls,accept_invalid_tls,
-         known_sftp_fingerprint,wifi_only,enabled,updated_at)
-       VALUES('global',?,?,?,?,?,?,?,?,?,?,?)`,
+         known_sftp_fingerprint,wifi_only,enabled,sync_mode,updated_at)
+       VALUES('global',?,?,?,?,?,?,?,?,?,?,?,?)`,
       [config.protocol, config.host, config.port, config.username, config.rootPath,
         config.secureTls ? 1 : 0, config.acceptInvalidTls ? 1 : 0,
         config.knownSftpFingerprint, config.wifiOnly ? 1 : 0,
-        config.enabled ? 1 : 0, Date.now()]);
+        config.enabled ? 1 : 0,
+        config.syncMode === 'two_way' ? 'two_way' : 'upload_only', Date.now()]);
   }
 
   /** Insert-only enqueue: an existing state (e.g. uploaded) is never downgraded. */
@@ -1371,9 +1396,27 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       "INSERT OR IGNORE INTO nas_upload_state(capture_id) VALUES(?)", [captureId]);
   }
 
-  /** Enqueues every ready capture without a state yet (catch-up scan). */
-  async enqueueReadyCapturesForNas(): Promise<number> {
+  /** All (project name, photo number) pairs for NAS import previews. */
+  async capturePhotoNumbersByProjectName(): Promise<ProjectPhotoNumberRow[]> {
     const rows = await this.store.querySql(
+      "SELECT p.name AS project_name, c.photo_number AS photo_number FROM projects p " +
+      "JOIN captures c ON c.project_id = p.id " +
+      "WHERE c.photo_number IS NOT NULL AND c.photo_number != ''");
+    const pairs: ProjectPhotoNumberRow[] = [];
+    try {
+      while (rows.goToNextRow()) {
+        pairs.push(new ProjectPhotoNumberRow(
+          rows.getString(rows.getColumnIndex('project_name')),
+          rows.getString(rows.getColumnIndex('photo_number'))));
+      }
+    } finally {
+      rows.close();
+    }
+    return pairs;
+  }
+
+  /** Enqueues every ready capture without a state yet (catch-up scan). */
+  async enqueueReadyCapturesForNas(): Promise<number> {    const rows = await this.store.querySql(
       "SELECT c.id FROM captures c LEFT JOIN nas_upload_state n ON n.capture_id=c.id " +
       "WHERE c.status='ready' AND n.capture_id IS NULL");
     const ids: Array<string> = [];
@@ -1496,11 +1539,14 @@ export class NasSyncConfigRecord {
   wifiOnly: boolean = true;
   enabled: boolean = false;
   updatedAt: number = 0;
+  /// 'upload_only' (D-023 default) or 'two_way' (H5: restore + remote delete).
+  syncMode: string = 'upload_only';
 
   constructor(protocol: string = 'webdav', host: string = '', port: number | null = null,
     username: string = '', rootPath: string = '/', secureTls: boolean = false,
     acceptInvalidTls: boolean = false, knownSftpFingerprint: string | null = null,
-    wifiOnly: boolean = true, enabled: boolean = false, updatedAt: number = 0) {
+    wifiOnly: boolean = true, enabled: boolean = false, updatedAt: number = 0,
+    syncMode: string = 'upload_only') {
     this.protocol = protocol;
     this.host = host;
     this.port = port;
@@ -1512,6 +1558,7 @@ export class NasSyncConfigRecord {
     this.wifiOnly = wifiOnly;
     this.enabled = enabled;
     this.updatedAt = updatedAt;
+    this.syncMode = syncMode === 'two_way' ? 'two_way' : 'upload_only';
   }
 }
 

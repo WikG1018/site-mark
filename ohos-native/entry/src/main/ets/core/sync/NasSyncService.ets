@@ -4,6 +4,8 @@ import asset from '@ohos.security.asset';
 import hilog from '@ohos.hilog';
 import util from '@ohos.util';
 import { AppDatabase, NasSyncConfigRecord, NasUploadCounts } from '../../data/database/AppDatabase';
+import { CaptureRecord } from '../../domain/Models';
+import { NasImportCandidateGroup, NasRemoteFileEntry, NasTwoWayPolicy } from './NasTwoWayPolicy';
 
 const LOG_DOMAIN: number = 0x5100;
 const LOG_TAG: string = 'NasSync';
@@ -12,6 +14,45 @@ interface NativeResponse<T> {
   ok: boolean;
   value: T | null;
   error: string | null;
+}
+
+interface NasListValue {
+  project_key: string;
+  file_name: string;
+}
+
+/** nasList outcome: a failure category, or the remote {project, file} rows. */
+export class NasListOutcome {
+  readonly failure: string | null;
+  readonly entries: NasRemoteFileEntry[];
+
+  constructor(failure: string | null, entries: NasRemoteFileEntry[]) {
+    this.failure = failure;
+    this.entries = entries;
+  }
+}
+
+/** One import-preview group: policy candidates plus the local project match. */
+export class NasImportPreviewGroup {
+  readonly projectKey: string;
+  readonly photoNumbers: string[];
+  readonly existsLocally: boolean;
+
+  constructor(projectKey: string, photoNumbers: string[], existsLocally: boolean) {
+    this.projectKey = projectKey;
+    this.photoNumbers = photoNumbers;
+    this.existsLocally = existsLocally;
+  }
+}
+
+export class NasImportPreviewResult {
+  readonly failure: string | null;
+  readonly groups: NasImportPreviewGroup[];
+
+  constructor(failure: string | null, groups: NasImportPreviewGroup[]) {
+    this.failure = failure;
+    this.groups = groups;
+  }
 }
 
 interface NasTestDetailsValue {
@@ -79,6 +120,35 @@ export class NasNativeBridge {
     payload.file_name = fileName;
     payload.local_path = localPath;
     const response = await this.call<Object>('nasUpload', payload);
+    if (response.ok) {
+      return null;
+    }
+    return nasFailureCode(response.error ?? 'protocol_error');
+  }
+
+  /** Two-way preview input: the remote {project, file} rows (H5). */
+  async list(config: NasSyncConfigRecord, password: string): Promise<NasListOutcome> {
+    const response = await this.call<NasListValue[]>('nasList', nasConfigPayload(config, password));
+    if (!response.ok) {
+      return new NasListOutcome(nasFailureCode(response.error ?? 'protocol_error'), []);
+    }
+    const entries: NasRemoteFileEntry[] = [];
+    const rows = response.value ?? [];
+    for (let i = 0; i < rows.length; i += 1) {
+      entries.push({ projectKey: rows[i].project_key, fileName: rows[i].file_name });
+    }
+    return new NasListOutcome(null, entries);
+  }
+
+  /** Best-effort remote delete of one uploaded JPEG (H5). */
+  async delete(config: NasSyncConfigRecord, password: string, projectKey: string,
+    fileName: string): Promise<string | null> {
+    const payload = new NasUploadPayload();
+    payload.config = nasConfigPayload(config, password);
+    payload.project_key = projectKey;
+    payload.file_name = fileName;
+    payload.local_path = '';
+    const response = await this.call<Object>('nasDelete', payload);
     if (response.ok) {
       return null;
     }
@@ -371,6 +441,84 @@ export class NasSyncService {
   async retryFailed(): Promise<void> {
     await this.database.resetFailedNasUploads();
     await this.syncNow();
+  }
+
+  /// Two-way gates shared by preview/import: enabled + two_way + network +
+  /// stored password, mirroring Dart's _twoWayCredentials.
+  private async twoWayCredentials(): Promise<NasSyncConfigRecord | null> {
+    const config = await this.database.nasSyncConfig();
+    if (!config.enabled || !NasTwoWayPolicy.isTwoWay(config.syncMode)) {
+      return null;
+    }
+    const password = await this.secrets.read();
+    if (password === null || password.length === 0) {
+      return null;
+    }
+    if (!await this.networkAllows(config.wifiOnly)) {
+      return null;
+    }
+    return config;
+  }
+
+  /** Read-only import preview (H5). Nothing is written; the settings screen
+   * shows the groups and the user picks what to import. */
+  async previewImport(): Promise<NasImportPreviewResult> {
+    const config = await this.twoWayCredentials();
+    if (config === null) {
+      return new NasImportPreviewResult(null, []);
+    }
+    const password = await this.secrets.read() ?? '';
+    const listed = await this.bridge.list(config, password);
+    if (listed.failure !== null) {
+      return new NasImportPreviewResult(listed.failure, []);
+    }
+    const localIndex = await this.localPhotoIndex();
+    const candidates: NasImportCandidateGroup[] =
+      NasTwoWayPolicy.importCandidates(listed.entries, localIndex);
+    const groups: NasImportPreviewGroup[] = [];
+    for (let i = 0; i < candidates.length; i += 1) {
+      groups.push(new NasImportPreviewGroup(candidates[i].projectKey,
+        candidates[i].photoNumbers, localIndex.has(candidates[i].projectKey)));
+    }
+    return new NasImportPreviewResult(null, groups);
+  }
+
+  /** Local photo numbers keyed by sanitized project key (import matching). */
+  private async localPhotoIndex(): Promise<Map<string, Set<string>>> {
+    const rows = await this.database.capturePhotoNumbersByProjectName();
+    const index = new Map<string, Set<string>>();
+    for (let i = 0; i < rows.length; i += 1) {
+      const key = sanitizeProjectKey(rows[i].projectName);
+      let numbers = index.get(key);
+      if (numbers === undefined) {
+        numbers = new Set<string>();
+        index.set(key, numbers);
+      }
+      numbers.add(rows[i].photoNumber);
+    }
+    return index;
+  }
+
+  /** Best-effort remote delete after a local delete (H5, Dart parity):
+   * any failure is swallowed so the local delete never depends on the NAS. */
+  async deleteRemoteForCapture(capture: CaptureRecord): Promise<void> {
+    try {
+      if (capture.photoNumber.length === 0) {
+        return;
+      }
+      const config = await this.database.nasSyncConfig();
+      if (!config.enabled || !NasTwoWayPolicy.isTwoWay(config.syncMode)) {
+        return;
+      }
+      const password = await this.secrets.read();
+      if (password === null || password.length === 0) {
+        return;
+      }
+      await this.bridge.delete(config, password, sanitizeProjectKey(capture.projectName),
+        `${capture.photoNumber}.jpg`);
+    } catch (_) {
+      // Remote cleanup is best-effort by contract.
+    }
   }
 }
 

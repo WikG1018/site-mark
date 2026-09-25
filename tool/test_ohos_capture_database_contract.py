@@ -302,9 +302,13 @@ class HarmonyCaptureDatabaseContractTest(unittest.TestCase):
 
 
 def nas_table_sql() -> list[str]:
-    """The two NAS DDL statements from both SCHEMA_STATEMENTS and the v15 migration."""
+    """NAS DDL in source order: the v15 migration CREATEs, the v16 two-way
+    ALTER, then the SCHEMA_STATEMENTS CREATEs for fresh stores. Executing
+    them in this order reproduces the real upgrade path (v15 table + v16
+    column) — the later IF NOT EXISTS creates are no-ops."""
     statements = re.findall(r"`(CREATE TABLE IF NOT EXISTS nas_\w+ \(.*?\))`", source(), re.S)
-    return statements
+    statements += re.findall(r"`(ALTER TABLE nas_sync_config ADD COLUMN .*?)`", source(), re.S)
+    return sorted(statements, key=source().index)
 
 
 class HarmonyNasSyncContractTest(unittest.TestCase):
@@ -312,10 +316,15 @@ class HarmonyNasSyncContractTest(unittest.TestCase):
 
     def test_nas_tables_declared_for_fresh_and_migrated_stores(self) -> None:
         statements = nas_table_sql()
-        # Declared once for fresh stores and once (idempotently) in the v15 migration.
-        self.assertEqual(len(statements), 4, statements)
+        # v15 declares both tables for pre-NAS stores, v16 ALTERs in the
+        # two-way mode column, and SCHEMA_STATEMENTS declares the current
+        # shape for fresh stores.
+        self.assertEqual(len(statements), 5, statements)
         for statement in statements:
-            self.assertIn("CREATE TABLE IF NOT EXISTS", statement)
+            self.assertTrue(
+                statement.startswith("CREATE TABLE IF NOT EXISTS") or
+                statement.startswith("ALTER TABLE nas_sync_config"),
+                statement)
 
     def test_nas_config_table_enforces_singleton_and_defaults(self) -> None:
         connection = sqlite3.connect(":memory:")
@@ -332,13 +341,19 @@ class HarmonyNasSyncContractTest(unittest.TestCase):
                 "INSERT INTO nas_sync_config(id) VALUES('global')")
         # Defaults mirror the Flutter line's config row.
         row = connection.execute(
-            "SELECT protocol, host, secure_tls, accept_invalid_tls, wifi_only, enabled "
+            "SELECT protocol, host, secure_tls, accept_invalid_tls, wifi_only, enabled, sync_mode "
             "FROM nas_sync_config WHERE id='global'").fetchone()
-        self.assertEqual(row, ("webdav", "", 1, 0, 1, 0))
+        self.assertEqual(row, ("webdav", "", 1, 0, 1, 0, "upload_only"))
         # Protocol vocabulary is closed.
         with self.assertRaises(sqlite3.IntegrityError):
             connection.execute(
                 "INSERT INTO nas_sync_config(id, protocol) VALUES('other', 'ftp')")
+        # Sync-mode vocabulary is closed; two_way is the only other member.
+        connection.execute(
+            "INSERT OR REPLACE INTO nas_sync_config(id, sync_mode) VALUES('other', 'two_way')")
+        with self.assertRaises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO nas_sync_config(id, sync_mode) VALUES('another', 'mirror')")
 
     def test_nas_upload_state_rejects_unknown_status_and_orphans(self) -> None:
         connection = sqlite3.connect(":memory:")
@@ -364,8 +379,9 @@ class HarmonyNasSyncContractTest(unittest.TestCase):
             connection.execute(
                 "INSERT INTO nas_upload_state(capture_id) VALUES('missing')")
 
-    def test_schema_version_bumped_to_fifteen(self) -> None:
-        self.assertIn("DATABASE_SCHEMA_VERSION: number = 15", source())
+    def test_schema_version_bumped_to_sixteen(self) -> None:
+        # v15 introduced the NAS tables; v16 adds the two-way sync_mode column.
+        self.assertIn("DATABASE_SCHEMA_VERSION: number = 16", source())
 
 
 if __name__ == "__main__":
