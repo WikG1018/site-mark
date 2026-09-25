@@ -10,6 +10,7 @@ import { MotionPolicy } from '../../shared/MotionPolicy';
 import { MotionTokens } from '../../shared/MotionTokens';
 import { UiTokens } from '../../shared/UiTokens';
 import { PhotoViewerWindowController, PhotoViewerWindowLoader } from './PhotoViewerWindow';
+import { ViewerTransformPolicy } from './ViewerTransformPolicy';
 import { PhotoViewerGestureState, PhotoViewerPanTracker, RecordNavigationSeedStore,
   ViewerFullImageCoordinator, ViewerFullImageRequest, ViewerNavigationSeedCoordinator,
   ViewerNodePolicy, ViewerRenderedVersionTracker } from './RecordUiCoordinator';
@@ -35,6 +36,12 @@ export struct PhotoViewerScreen {
   private readonly fullImage: ViewerFullImageCoordinator = new ViewerFullImageCoordinator();
   private panBaseX: number = 0;
   private panBaseY: number = 0;
+  /// Release-velocity sampling (vp and ms) for the damped inertia settle.
+  private panSampleTime: number = -1;
+  private panSampleX: number = 0;
+  private panSampleY: number = 0;
+  private panVelocityX: number = 0;
+  private panVelocityY: number = 0;
   private readonly panTracker: PhotoViewerPanTracker = new PhotoViewerPanTracker();
   private viewportWidth: number = 0;
   private viewportHeight: number = 0;
@@ -206,7 +213,7 @@ export struct PhotoViewerScreen {
   private animateTransform(update: () => void): void {
     this.getUIContext().animateTo({
       duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4),
-      curve: Curve.EaseOut
+      curve: MotionTokens.springSettle()
     }, update);
   }
 
@@ -227,7 +234,9 @@ export struct PhotoViewerScreen {
     if (this.viewerScale > 1) {
       this.resetScale();
     } else {
-      this.gestureState.zoomTo(2.5);
+      // Content-rect fill cannot be measured without the photo's intrinsic
+      // size, so double-tap rides the spec's 2x fallback (spec §3.5).
+      this.gestureState.zoomTo(ViewerTransformPolicy.doubleTapTarget(null));
       this.animateTransform((): void => {
         this.viewerScale = this.gestureState.scale;
         this.panOffsetX = 0;
@@ -254,6 +263,9 @@ export struct PhotoViewerScreen {
   private beginPan(): void {
     this.panBaseX = this.panOffsetX;
     this.panBaseY = this.panOffsetY;
+    this.panSampleTime = -1;
+    this.panVelocityX = 0;
+    this.panVelocityY = 0;
   }
 
   private handleViewerTouch(event: TouchEvent): void {
@@ -269,15 +281,65 @@ export struct PhotoViewerScreen {
     }
     if (progressed) {
       this.updatePan(this.panTracker.deltaX, this.panTracker.deltaY);
+      this.samplePanVelocity(touch.x, touch.y, event.timestamp);
+      return;
     }
+    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.settlePan();
+    }
+  }
+
+  private samplePanVelocity(x: number, y: number, timeStampMs: number): void {
+    if (this.panSampleTime >= 0 && timeStampMs > this.panSampleTime) {
+      const dtMs = timeStampMs - this.panSampleTime;
+      this.panVelocityX = (x - this.panSampleX) / dtMs * 1000;
+      this.panVelocityY = (y - this.panSampleY) / dtMs * 1000;
+    }
+    this.panSampleTime = timeStampMs;
+    this.panSampleX = x;
+    this.panSampleY = y;
+  }
+
+  /// Release: drift by the damped velocity, hard-clamp to the pan bound,
+  /// glide with a decelerate curve — or spring back when the finger left the
+  /// photo beyond its bound (rubber band) or the drift overshot it.
+  private settlePan(): void {
+    if (this.viewerScale <= 1) {
+      return;
+    }
+    const maxX = Math.max(0, (this.viewerScale - 1) * this.viewportWidth / 2);
+    const maxY = Math.max(0, (this.viewerScale - 1) * this.viewportHeight / 2);
+    const rawX = this.panOffsetX + ViewerTransformPolicy.inertiaOffset(this.panVelocityX);
+    const rawY = this.panOffsetY + ViewerTransformPolicy.inertiaOffset(this.panVelocityY);
+    const targetX = Math.max(-maxX, Math.min(maxX, Number.isFinite(rawX) ? rawX : 0));
+    const targetY = Math.max(-maxY, Math.min(maxY, Number.isFinite(rawY) ? rawY : 0));
+    const beyond = Math.abs(rawX) > maxX || Math.abs(rawY) > maxY ||
+      Math.abs(this.panOffsetX) > maxX || Math.abs(this.panOffsetY) > maxY;
+    this.getUIContext().animateTo({
+      duration: MotionPolicy.duration(MotionTokens.DURATION_LONG2),
+      curve: beyond ? MotionTokens.springSnap() : MotionTokens.standardDecelerate(),
+    }, (): void => {
+      this.panOffsetX = targetX;
+      this.panOffsetY = targetY;
+    });
+    this.panVelocityX = 0;
+    this.panVelocityY = 0;
   }
 
   private updatePan(x: number, y: number): void {
     if (this.viewerScale <= 1) {
       return;
     }
-    this.panOffsetX = this.clampAxis(this.panBaseX + x, this.viewportWidth);
-    this.panOffsetY = this.clampAxis(this.panBaseY + y, this.viewportHeight);
+    this.panOffsetX = ViewerTransformPolicy.rubberBand(this.panBaseX + x, this.panMaxOffsetX());
+    this.panOffsetY = ViewerTransformPolicy.rubberBand(this.panBaseY + y, this.panMaxOffsetY());
+  }
+
+  private panMaxOffsetX(): number {
+    return Math.max(0, (this.viewerScale - 1) * this.viewportWidth / 2);
+  }
+
+  private panMaxOffsetY(): number {
+    return Math.max(0, (this.viewerScale - 1) * this.viewportHeight / 2);
   }
 
   private clampPan(): void {

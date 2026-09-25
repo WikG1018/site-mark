@@ -61,6 +61,7 @@ export class MotionTokens {
   static readonly CUBIC_EMPHASIZED_DECELERATE: number[] = [0.05, 0.7, 0.1, 1.0];
   static readonly CUBIC_EMPHASIZED_ACCELERATE: number[] = [0.3, 0.0, 0.8, 0.15];
   static readonly CUBIC_STANDARD: number[] = [0.2, 0.0, 0.0, 1.0];
+  static readonly CUBIC_STANDARD_DECELERATE: number[] = [0.0, 0.0, 0.0, 1.0];
   static readonly CUBIC_STANDARD_ACCELERATE: number[] = [0.3, 0.0, 1.0, 1.0];
 
   static emphasized(): MotionCurve {
@@ -80,6 +81,11 @@ export class MotionTokens {
 
   static standard(): MotionCurve {
     const p = MotionTokens.CUBIC_STANDARD;
+    return curves.cubicBezierCurve(p[0], p[1], p[2], p[3]);
+  }
+
+  static standardDecelerate(): MotionCurve {
+    const p = MotionTokens.CUBIC_STANDARD_DECELERATE;
     return curves.cubicBezierCurve(p[0], p[1], p[2], p[3]);
   }
 
