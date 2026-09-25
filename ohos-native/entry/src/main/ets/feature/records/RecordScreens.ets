@@ -21,6 +21,7 @@ import { ListPageCoordinator } from '../../shared/ListPageCoordinator';
 import { clampFirstVisibleIndex } from '../../shared/ScreenStateStore';
 import { AppImage, ImageDecodePolicy } from '../../shared/AppImage';
 import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
+import { PressGesturePolicy, PressGestureState, pressGestureEventOf } from '../../shared/PressGesture';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { CaptureDraftSnapshot, CaptureDraftValidation, CaptureFormLifecycle, CaptureFormMetrics,
   CaptureUndoCoordinator, RecentCaptureSeed, SingleFlightRequestCoordinator,
@@ -1174,6 +1175,7 @@ export struct CaptureFormScreen {
       this.templateName = '';
       this.templateNameError = '';
       this.renamingTemplateId = '';
+      Haptics.lightImpact();
       this.setMessage(tr('拍摄模板已保存', 'Capture template saved'), false);
     } catch (error) {
       if (this.lifecycle.accept(generation)) {
@@ -1211,10 +1213,16 @@ export struct CaptureFormScreen {
     }
   }
 
+  /// Press-scale state for the primary capture button (spec §6.1).
+  @State private capturePressed: boolean = false;
+  private capturePress: PressGestureState = PressGestureState.idle();
+
   private async capture(): Promise<void> {
     if (this.busy || this.project === null) {
       return;
     }
+    // Invalid submits stay silent (spec §6.2); the highlighted fields carry
+    // the failure. The haptic fires on capture success instead.
     const validation = validateCaptureDraft(this.workLocation, this.workContent, this.photographer, this.notes);
     this.applyValidation(validation);
     if (!validation.valid) {
@@ -1237,6 +1245,7 @@ export struct CaptureFormScreen {
       });
       if (generation !== this.captureGeneration) return;
       if (result.captured) {
+        Haptics.lightImpact();
         const next = applyCaptureOutcome(this.currentSnapshot(), true);
         this.notes = next.notes;
         this.setMessage(result.debugInjected ? tr(
@@ -1518,6 +1527,23 @@ export struct CaptureFormScreen {
               .height(56).fontSize(17).fontWeight(FontWeight.Bold).fontColor(UiTokens.ON_PRIMARY)
               .backgroundColor(UiTokens.PRIMARY).borderRadius(28).width('100%')
               .enabled(!this.busy && this.project?.lifecycleStatus === ProjectLifecycleStatus.ACTIVE)
+              .scale({
+                x: this.capturePressed && !MotionPolicy.reduceMotion ? PressGesturePolicy.SCALE : 1,
+                y: this.capturePressed && !MotionPolicy.reduceMotion ? PressGesturePolicy.SCALE : 1,
+              })
+              .onTouch((event: TouchEvent): void => {
+                this.capturePress =
+                  PressGesturePolicy.next(this.capturePress, pressGestureEventOf(event));
+                const pressed = this.capturePress.pressed;
+                if (pressed !== this.capturePressed) {
+                  this.getUIContext().animateTo({
+                    duration: MotionTokens.DURATION_SHORT4,
+                    curve: MotionTokens.springSettle(),
+                  }, (): void => {
+                    this.capturePressed = pressed;
+                  });
+                }
+              })
               .onClick((): void => { this.capture(); })
             Text(tr('拍照由系统相机完成。返回后水印在后台串行处理，工程部位、工作内容和拍摄人会保留。',
               'The system camera takes the photo. Watermarks process serially after you return; location, work, and photographer are retained.'))

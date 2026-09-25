@@ -2,6 +2,8 @@ import { UiTokens } from './UiTokens';
 import { choiceAccessibilityText, joinAccessibilityText } from './AccessibilityText';
 import { MotionPolicy } from './MotionPolicy';
 import { MotionTokens } from './MotionTokens';
+import { Haptics } from './Feedback';
+import { PressGesturePolicy, PressGestureState, pressGestureEventOf } from './PressGesture';
 import { AccentSwatch, AccentSwatches } from './AccentSwatches';
 import { themeSeedAccessibilityText, watermarkAccentAccessibilityText, WatermarkAccentOption }
   from './AccentAccessibility';
@@ -337,7 +339,10 @@ export struct LifecycleSegment {
           .borderRadius(this.chipRadius())
           .enabled(this.controlEnabled)
           .accessibilityText(choiceAccessibilityText(option.label, this.selectedValue === option.value))
-          .onClick((): void => this.onSelect(option.value))
+          .onClick((): void => {
+            Haptics.selectionClick();
+            this.onSelect(option.value);
+          })
       }, (option: SegmentOption): string => option.value)
     }
     .width('100%')
@@ -396,6 +401,22 @@ export struct BatchActionBar {
   @Prop actionHeight: number = 68;
   @Prop actionLabelMaxLines: number = 2;
   onAction: (id: string) => void = (_id: string): void => {};
+  @State private pressedActionId: string = '';
+  private pressStates: Map<string, PressGestureState> = new Map();
+
+  private applyPress(id: string, next: PressGestureState): void {
+    if (next.pressed === (this.pressedActionId === id)) {
+      this.pressStates.set(id, next);
+      return;
+    }
+    this.getUIContext().animateTo({
+      duration: MotionTokens.DURATION_SHORT4,
+      curve: MotionTokens.springSettle(),
+    }, (): void => {
+      this.pressedActionId = next.pressed ? id : '';
+    });
+    this.pressStates.set(id, next);
+  }
 
   build() {
     Column({ space: 3 }) {
@@ -430,6 +451,14 @@ export struct BatchActionBar {
           .backgroundColor(Color.Transparent)
           .borderRadius(UiTokens.CONTROL_RADIUS)
           .accessibilityText(item.accessibilityLabel.length > 0 ? item.accessibilityLabel : item.label)
+          .scale({
+            x: this.pressedActionId === item.id && !MotionPolicy.reduceMotion ? PressGesturePolicy.SCALE : 1,
+            y: this.pressedActionId === item.id && !MotionPolicy.reduceMotion ? PressGesturePolicy.SCALE : 1,
+          })
+          .onTouch((event: TouchEvent): void => {
+            const previous = this.pressStates.get(item.id) ?? PressGestureState.idle();
+            this.applyPress(item.id, PressGesturePolicy.next(previous, pressGestureEventOf(event)));
+          })
           .onClick((): void => this.onAction(item.id))
         }, (item: BatchActionItem): string => item.id)
       }
