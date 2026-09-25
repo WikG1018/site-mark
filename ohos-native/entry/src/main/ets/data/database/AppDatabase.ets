@@ -21,6 +21,17 @@ export interface CaptureWorkflowDatabase {
   captureById(id: string): Promise<CaptureRecord | null>;
 }
 
+/** (project name, photo number) pair for NAS import previews (H5). */
+export class ProjectPhotoNumberRow {
+  readonly projectName: string;
+  readonly photoNumber: string;
+
+  constructor(projectName: string, photoNumber: string) {
+    this.projectName = projectName;
+    this.photoNumber = photoNumber;
+  }
+}
+
 const DATABASE_NAME: string = 'sitemark_native.db';
 // Bump when a change alters the persisted schema. Stores opened from an older
 // build run the pending SCHEMA_MIGRATIONS steps before the new value is written.
@@ -1385,9 +1396,27 @@ export class AppDatabase implements CaptureWorkflowDatabase {
       "INSERT OR IGNORE INTO nas_upload_state(capture_id) VALUES(?)", [captureId]);
   }
 
-  /** Enqueues every ready capture without a state yet (catch-up scan). */
-  async enqueueReadyCapturesForNas(): Promise<number> {
+  /** All (project name, photo number) pairs for NAS import previews. */
+  async capturePhotoNumbersByProjectName(): Promise<ProjectPhotoNumberRow[]> {
     const rows = await this.store.querySql(
+      "SELECT p.name AS project_name, c.photo_number AS photo_number FROM projects p " +
+      "JOIN captures c ON c.project_id = p.id " +
+      "WHERE c.photo_number IS NOT NULL AND c.photo_number != ''");
+    const pairs: ProjectPhotoNumberRow[] = [];
+    try {
+      while (rows.goToNextRow()) {
+        pairs.push(new ProjectPhotoNumberRow(
+          rows.getString(rows.getColumnIndex('project_name')),
+          rows.getString(rows.getColumnIndex('photo_number'))));
+      }
+    } finally {
+      rows.close();
+    }
+    return pairs;
+  }
+
+  /** Enqueues every ready capture without a state yet (catch-up scan). */
+  async enqueueReadyCapturesForNas(): Promise<number> {    const rows = await this.store.querySql(
       "SELECT c.id FROM captures c LEFT JOIN nas_upload_state n ON n.capture_id=c.id " +
       "WHERE c.status='ready' AND n.capture_id IS NULL");
     const ids: Array<string> = [];

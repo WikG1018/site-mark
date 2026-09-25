@@ -186,7 +186,14 @@ export class AppRuntime {
   async deleteCapture(captureId: string): Promise<void> {
     const started = Date.now();
     try {
+      // Two-way NAS (H5): clean the remote copy best-effort AFTER the local
+      // delete is scheduled — the local result never depends on the NAS.
+      const capture = await this.database.captureById(captureId);
       await this.database.scheduleCaptureDeletion(captureId);
+      if (capture !== null) {
+        this.nasSync.deleteRemoteForCapture(capture).catch((): void => {
+        });
+      }
       await this.privateFileCleanup.reconcile();
       await this.recordDiagnosticBestEffort('capture_delete', 'success', Date.now() - started);
       this.notifyDataChanged();
