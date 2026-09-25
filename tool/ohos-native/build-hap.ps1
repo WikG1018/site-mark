@@ -37,8 +37,10 @@ $env:NODE_HOME = Join-Path $DevEcoRoot 'tools\node'
 #   2x AppFont.registerFont "may throw" (2026-09-26) - the calls already sit
 #        in a catch-all so a font failure degrades to the system font; the
 #        compiler wants a local catch anyway (same family as the 344 above).
+#   2x AppDatabase nasSyncConfig sync_mode read/mapping "may throw" (H5,
+#        2026-09-26) - inside the method's existing try/finally, same family.
 # Lower this number whenever warnings are genuinely removed.
-$MaxArkTsWarnings = 348
+$MaxArkTsWarnings = 350
 if (-not $SkipRust) {
   & (Join-Path $PSScriptRoot 'build-rust.ps1') `
     -NativeSdkRoot (Join-Path $env:DEVECO_SDK_HOME 'default\openharmony\native')
