@@ -18,11 +18,11 @@ single branch.
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
 [![Latest](https://img.shields.io/badge/latest-v1.0.29-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.29)
-[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.13-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)
+[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.14-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14)
 
 **当前稳定版本（Latest）：[`v1.0.29`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.29)**
 
-**鸿蒙原生版当前版本：[`native-v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)（HarmonyOS NEXT，未签名 HAP）**
+**鸿蒙原生版当前版本：[`native-v1.0.14`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14)（HarmonyOS NEXT，未签名 HAP）**
 
 支持 Android 12（API 31）及以上系统。`v1.0.29` 已设为 Latest：修复照片 Hero 飞行重影（恢复原有飞行动画）。`v1.0.28` 起为澎湃OS 风格动效/材质升级与 MiSans 子集。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
@@ -37,12 +37,12 @@ single branch.
 | universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.29-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/sitemark-v1.0.29-universal.apk) |
 | SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/SHA256SUMS.txt) |
 
-### 鸿蒙原生版（native-v1.0.13）
+### 鸿蒙原生版（native-v1.0.14）
 
 | 安装包 | 适用设备/说明 | 下载 |
 | --- | --- | --- |
-| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [sitemark-native-v1.0.13-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.13/sitemark-native-v1.0.13-unsigned.hap) |
-| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.13/SHA256SUMS.txt) |
+| HarmonyOS HAP | **未签名**，需在 DevEco/hdc 环境自行签名后安装；正式签名需 AGC 发布证书（见 `tool/ohos-native/sign-hap.ps1`）。当前发布的 HAP 为 debug 构建变体（未签名的 release 包无法直接安装） | [sitemark-native-v1.0.14-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.14/sitemark-native-v1.0.14-unsigned.hap) |
+| HarmonyOS SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.14/SHA256SUMS.txt) |
 
 > [!WARNING]
 > 卸载 SiteMark 会删除应用数据库、应用私有原图和私有水印文件。已经发布到系统相册 `Pictures/SiteMark` 的水印照片通常仍会保留。卸载、换机或处理签名冲突前，请先进入“设置 → 备份与恢复”，备份重要项目并把 ZIP 保存到可靠位置。
@@ -51,7 +51,7 @@ single branch.
 
 `ohos-native/` 是独立的 Stage + ArkTS + ArkUI 实现，不使用社区 Flutter 鸿蒙适配层，与 Android 版同仓库单分支演进。它已在 DevEco NEXT 模拟器跑通项目、拍摄处理、记录管理、水印、备份恢复、存储与诊断主流程，图像与 ZIP 规则复用 Android 版的同一 Rust 核心。
 
-当前提供 `native-v1.0.13` 的 unsigned HAP（见上方下载表），**尚未提供签名的鸿蒙安装包，也未上架华为应用市场**；真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成应用市场发布。
+当前提供 `native-v1.0.14` 的 unsigned HAP（见上方下载表）：澎湃OS 风格动效/材质对齐 Android v1.0.29（弹簧、按压缩放、触感四档、玻璃单配方、看图物理）、NAS 双向同步（恢复/远端删除）与内嵌 MiSans 子集（关于页署名）。，**尚未提供签名的鸿蒙安装包，也未上架华为应用市场**；真机相机、相册权限和性能仍需在 HarmonyOS NEXT 真机复验。请不要把模拟器结果解读为已完成应用市场发布。
 
 - [鸿蒙原生版说明与构建](ohos-native/README.md)
 - [平台差异与验证边界](ohos-native/docs/deltas.md)
@@ -84,7 +84,7 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 - **v1.0.24**：全屏预览重影修复——从非首条记录进入全屏时，Hero 此前钉在初始索引上，相邻记录前插后标记落到错误照片、当前照片在飞行图层下原地显示；现按入口照片 ID 跟随，相邻预取推迟到转场结束。
 - **v1.0.23**：安卓动效深度修复——转场 scale 位于 RepaintBoundary 外侧、照片详情冻结底层 secondary、Tab 非对称 FadeThrough、全屏拖动只重建当前页、图片缓存 96MB、列表预取 500px、藏栏阈值 16px；iOS 恢复原生导航 chrome / 边缘滑动返回并修复插件生命周期。
 - **v1.0.22**：安卓动效流畅度与质感优化——一级 Tab 短行程交叉淡入淡出，二级页进入轻量淡入 + 缩放深度，全屏下拉/ Hero 减少重建，图片缓存放宽，列表卡片关闭 BlendMode.overlay，滚动藏栏 220ms。
-- **v1.0.21 / native-v1.0.13**：二级页返回动画修复——退场改为滑向右侧 30% 并同步淡出，下层页面被覆盖时轻移 4%、返回时回位；安卓动效保持省帧（列表卡片停用实时模糊，导航 dock 保留）。
+- **v1.0.21 / native-v1.0.14**：二级页返回动画修复——退场改为滑向右侧 30% 并同步淡出，下层页面被覆盖时轻移 4%、返回时回位；安卓动效保持省帧（列表卡片停用实时模糊，导航 dock 保留）。
 - **v1.0.20 / native-v1.0.12**：安卓流畅度修复——列表卡片与页面停用实时 BackdropFilter（导航 dock 安卓保留真实模糊），安卓页面转场改为单层轻量滑动；项目详情顶距修正。
 - **v1.0.19 / native-v1.0.11**：滚动藏栏动画放慢到 280ms；项目列表去掉多余顶距；滚动时顶栏不再变深。
 - **v1.0.18 / native-v1.0.10**：全屏预览两指放大后单指可拖到照片右侧；列表页下滚隐藏顶栏和底栏、上滚再出现。

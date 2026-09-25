@@ -282,7 +282,14 @@ struct Index {
 
   private switchTab(index: number): void {
     ScrollChromeCoordinator.shared().reset();
-    this.runTabAction(this.tabCoordinator.request(index));
+    const action = this.tabCoordinator.request(index);
+    // Dock switches tick once per user intent (spec §6.2); runTabAction is
+    // also re-entered with coordinator finish actions, so the haptic lives
+    // here — not there — to stay exactly one per switch.
+    if (action.started) {
+      Haptics.selectionClick();
+    }
+    this.runTabAction(action);
   }
 
   /// Dock press-scale state (spec §6.1: one finger at a time, so one index
@@ -295,9 +302,6 @@ struct Index {
     if (!action.started) {
       return;
     }
-    // Dock/segment switches tick once on a successful switch (spec §6.2);
-    // reduce-motion keeps the haptic — it is the feedback channel.
-    Haptics.selectionClick();
     const motion: RootMotionSpec = RootShellPolicy.motion(action.direction);
     if (motion.dockDuration === 0) {
       this.tabDirection = action.direction;

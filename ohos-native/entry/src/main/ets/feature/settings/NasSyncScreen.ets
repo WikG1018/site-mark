@@ -7,6 +7,8 @@ import { tr } from '../../shared/AppText';
 import { UiTokens } from '../../shared/UiTokens';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
+import { nasFailureCode, NasImportPreviewGroup } from '../../core/sync/NasSyncService';
+import { Haptics } from '../../shared/Feedback';
 
 const LOG_DOMAIN: number = 0x5100;
 const LOG_TAG: string = 'NasSyncScreen';
@@ -30,6 +32,9 @@ export struct NasSyncScreen {
   @State private acceptInvalidTls: boolean = false;
   @State private wifiOnly: boolean = true;
   @State private syncEnabled: boolean = false;
+  @State private syncMode: string = 'upload_only';
+  @State private importGroups: NasImportPreviewGroup[] = [];
+  @State private importSelected: string[] = [];
   @State private loaded: boolean = false;
   @State private busy: boolean = false;
   @State private message: string = '';
@@ -75,6 +80,7 @@ export struct NasSyncScreen {
     this.acceptInvalidTls = config.acceptInvalidTls;
     this.wifiOnly = config.wifiOnly;
     this.syncEnabled = config.enabled;
+    this.syncMode = config.syncMode;
     this.counts = await this.database.countNasUploadStates();
     this.loaded = true;
   }
@@ -98,6 +104,7 @@ export struct NasSyncScreen {
     config.knownSftpFingerprint = this.knownFingerprint;
     config.wifiOnly = this.wifiOnly;
     config.enabled = this.syncEnabled;
+    config.syncMode = this.syncMode === 'two_way' ? 'two_way' : 'upload_only';
     config.updatedAt = Date.now();
     return config;
   }
@@ -271,6 +278,71 @@ export struct NasSyncScreen {
     }
   }
 
+  /// Read-only NAS scan for remote-only photos (two-way mode only; the
+  /// service gates credentials and network, mirroring the Dart flow).
+  private async refreshImportPreview(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+    this.busy = true;
+    try {
+      const result = await AppRuntime.require().nasSync.previewImport();
+      if (result.failure !== null) {
+        this.importGroups = [];
+        this.importSelected = [];
+        this.showToast(this.failureText(result.failure), true);
+        return;
+      }
+      this.importGroups = result.groups;
+      this.importSelected = result.groups.map((g: NasImportPreviewGroup): string => g.projectKey);
+      if (result.groups.length === 0) {
+        this.showToast(tr('NAS 上没有可恢复的照片', 'No restorable photos on the NAS'), false);
+      }
+    } catch (error) {
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'nas preview failed: %{public}s', (error as Error).message);
+      this.showToast(tr('暂时无法读取 NAS 照片，请稍后重试', 'Could not read NAS photos; try again later'), true);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private toggleImportSelection(projectKey: string, selected: boolean): void {
+    Haptics.selectionClick();
+    const next: string[] = this.importSelected.filter((key: string): boolean => key !== projectKey);
+    if (selected) {
+      next.push(projectKey);
+    }
+    this.importSelected = next;
+  }
+
+  private async runImport(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+    const selected = this.importGroups.filter((g: NasImportPreviewGroup): boolean =>
+      this.importSelected.includes(g.projectKey));
+    if (selected.length === 0) {
+      this.showToast(tr('请先勾选要恢复的项目', 'Select the projects to restore first'), true);
+      return;
+    }
+    this.busy = true;
+    try {
+      const imported = await AppRuntime.require().nasSync.importProjects(selected);
+      this.importGroups = [];
+      this.importSelected = [];
+      if (this.database !== null) {
+        this.counts = await this.database.countNasUploadStates();
+      }
+      Haptics.lightImpact();
+      this.showToast(tr(`已从 NAS 恢复 ${imported} 张照片`, `Restored ${imported} photos from the NAS`), false);
+    } catch (error) {
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'nas import failed: %{public}s', (error as Error).message);
+      this.showToast(this.failureText(nasFailureCode((error as Error).message)), true);
+    } finally {
+      this.busy = false;
+    }
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
@@ -337,6 +409,53 @@ export struct NasSyncScreen {
             }
             this.toggleRow(tr('仅 Wi-Fi 上传', 'Upload on Wi-Fi only'), this.wifiOnly,
               (value: boolean) => { this.wifiOnly = value; })
+            Text(tr('同步模式', 'Sync mode'))
+              .fontSize(16).fontWeight(FontWeight.Medium).fontColor(UiTokens.TEXT).width('100%')
+            LifecycleSegment({
+              options: [
+                new SegmentOption('upload_only', tr('仅上传', 'Upload only')),
+                new SegmentOption('two_way', tr('双向同步', 'Two-way'))
+              ],
+              selectedValue: this.syncMode,
+              controlEnabled: !this.busy,
+              onSelect: (value: string): void => { this.syncMode = value; }
+            })
+            Text(tr('仅上传：照片只从本机发出。双向：本机删除的照片会同时清理 NAS 副本，且可从这里恢复 NAS 上本机没有的照片。',
+              'Upload only: photos leave this device only. Two-way: photos deleted here also remove the NAS copy, and photos the NAS has but this device lacks can be restored here.'))
+              .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).width('100%')
+            if (this.syncMode === 'two_way' && this.syncEnabled) {
+              Button(this.busy ? tr('正在读取…', 'Reading…') :
+                tr('查找 NAS 上可恢复的照片', 'Find restorable photos on the NAS'))
+                .buttonStyle(ButtonStyleMode.NORMAL).width('100%')
+                .enabled(!this.busy)
+                .onClick(() => this.refreshImportPreview())
+              ForEach(this.importGroups, (group: NasImportPreviewGroup) => {
+                Row({ space: 10 }) {
+                  Checkbox({ name: group.projectKey, group: 'nasImport' })
+                    .select(true)
+                    .selectedColor(UiTokens.PRIMARY)
+                    .onChange((selected: boolean) => this.toggleImportSelection(group.projectKey, selected))
+                  Column({ space: 2 }) {
+                    Text(group.projectKey).fontSize(14).fontWeight(FontWeight.Medium)
+                      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    Text(group.existsLocally ?
+                      tr(`已有项目 · 可恢复 ${group.photoNumbers.length} 张`,
+                        `Existing project · ${group.photoNumbers.length} to restore`) :
+                      tr(`将新建项目 · 可恢复 ${group.photoNumbers.length} 张`,
+                        `New project · ${group.photoNumbers.length} to restore`))
+                      .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY)
+                  }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                }
+                .width('100%').padding({ top: 8, bottom: 8 })
+              }, (group: NasImportPreviewGroup): string => group.projectKey)
+              if (this.importGroups.length > 0) {
+                Button(this.busy ? tr('正在恢复…', 'Restoring…') :
+                  tr(`导入选中的 ${this.importSelected.length} 个项目`, `Import ${this.importSelected.length} selected projects`))
+                  .buttonStyle(ButtonStyleMode.EMPHASIZED).width('100%')
+                  .enabled(!this.busy && this.importSelected.length > 0)
+                  .onClick(() => this.runImport())
+              }
+            }
             Row({ space: 12 }) {
               Button(tr('测试连接', 'Test connection'))
                 .buttonStyle(ButtonStyleMode.NORMAL).role(ButtonRole.NORMAL)

@@ -7,7 +7,8 @@ import { CaptureCard } from '../records/RecordComponents';
 import { RecordBatchLayoutPolicy, RecordNavigationSeedStore,
   RecordSelectionCoordinator } from '../records/RecordUiCoordinator';
 import { AccentSwatchRow, AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, DateFilterRow, EmptyPanel, InlineErrorPanel,
-  LifecycleSegment, ListSkeleton, SectionHeader, SegmentOption, messageTransition, panelTransition } from '../../shared/AppComponents';
+  LifecycleSegment, ListSkeleton, SectionHeader, SegmentOption, messageTransition, panelTransition,
+  rowEntranceEffect } from '../../shared/AppComponents';
 import { AccentSwatches } from '../../shared/AccentSwatches';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
@@ -549,6 +550,10 @@ export struct ProjectDetailScreen {
   private readonly projectOperations: ProjectOperationCoordinator = new ProjectOperationCoordinator();
   private contentGeneration: number = 0;
   private savedFirstVisibleIndex: number = 0;
+  /// Row entrance state (spec §3.5): armed only after the first page so
+  /// cold-start rows don't stagger; seen ids replay nothing.
+  private entranceSeen: Set<string> = new Set();
+  private entranceArmed: boolean = false;
   private readonly pageState: ListPageCoordinator = new ListPageCoordinator();
   private projectId: string = '';
   private readonly refreshListener: () => void = (): void => { this.refreshContent(); };
@@ -1374,6 +1379,7 @@ export struct ProjectDetailScreen {
                       onOpen: (): void => this.openCapture(capture),
                       onToggle: (): void => this.toggleCapture(capture.id) })
                   }
+                  .transition(rowEntranceEffect(this.entranceSeen, capture.id, this.entranceArmed))
                 }, (capture: CaptureRecord): string => capture.id)
               }
               if (this.captureCount() > 0 && (this.controller.loadingInitial || this.controller.loadingMore)) {
@@ -1407,7 +1413,10 @@ export struct ProjectDetailScreen {
               this.savedFirstVisibleIndex = Math.max(0, start);
               this.saveDetailState();
             })
-            .onReachEnd((): void => { this.controller.loadNext(); })
+            .onReachEnd((): void => {
+              this.entranceArmed = true;
+              this.controller.loadNext();
+            })
           } else if (this.projectLoadError.length > 0) {
             Column() {
               InlineErrorPanel({ message: this.projectLoadError, retryLabel: tr('重试', 'Retry'),

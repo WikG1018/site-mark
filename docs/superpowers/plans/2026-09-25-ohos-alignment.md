@@ -59,4 +59,6 @@
 
 ## 记录
 
-- （实施时追加）
+- H0 #179、H1 #180、H2 #181、H3a #182、H3b #183、H4 #184、H5（设计/策略/迁移/桥接/预览/远端删除）#185 已合并。
+- 本 PR（收尾批次）：H5 导入执行器 + 设置页模式切换与恢复流；H3 列表行入场（`rowEntranceEffect`，首屏后武装、每行一次，记录与项目详情两列表）；触感契约修复（dock 切换触感从 runTabAction 移至 switchTab——finish 动作也是 started，原实现会双响）；H6 评估落 deltas（批量栏无死动作、导出已随共享 Rust 获得照片结构、#158 一级开关不移植）；H7 版本 bump native-v1.0.14 + README/NEXT_AGENT_PROMPT/deltas。
+- 本地门禁：build-hap -RunTests 全绿（285 测试）、host 契约测试 15/15、警告预算内；真机项全部如实登记 deltas.md 待补。

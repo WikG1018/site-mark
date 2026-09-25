@@ -72,7 +72,7 @@ export class AppRuntime {
     this.notifications = new CompletionNotifications(context);
     const processor = new CaptureProcessor(database, this.pipeline, this.services, context.filesDir,
       (_captureId: string, _succeeded: boolean): void => this.notifyDataChanged(), this.notifications);
-    this.nasSync = new NasSyncService(database);
+    this.nasSync = new NasSyncService(database, context.filesDir);
     // Observer pattern: the NAS queue is refreshed after every processed
     // capture. The service no-ops immediately unless sync is enabled, so
     // the capture pipeline itself stays NAS-unaware.

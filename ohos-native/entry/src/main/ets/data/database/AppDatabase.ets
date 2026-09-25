@@ -1415,8 +1415,38 @@ export class AppDatabase implements CaptureWorkflowDatabase {
     return pairs;
   }
 
+  /** Whether a project already holds a photo number (NAS import dedup, H5). */
+  async capturePhotoNumberExists(projectId: string, photoNumber: string): Promise<boolean> {
+    const rows = await this.store.querySql(
+      'SELECT 1 FROM captures WHERE project_id=? AND photo_number=? LIMIT 1',
+      [projectId, photoNumber]);
+    try {
+      return rows.goToFirstRow();
+    } finally {
+      rows.close();
+    }
+  }
+
+  /// NAS import restore insert (H5, mirroring Dart insertRestoredCapture):
+  /// the watermarked JPEG is the only artifact NAS keeps, so it plays both
+  /// the original and the rendered path; the record lands ready with the
+  /// original already marked deleted.
+  async insertNasImportedCapture(id: string, projectId: string, photoNumber: string,
+    localPath: string, sha256: string, timestamp: number): Promise<void> {
+    await this.store.executeSql(
+      `INSERT INTO captures(id,project_id,photo_number,work_location,work_content,photographer,
+        notes,original_path,rendered_path,original_sha256,status,created_at,captured_at,
+        original_deleted_at,watermark_locale_code)
+       VALUES(?,?,?,'NAS',?,'NAS','',?,?,?,?,?,?,?,'zh')`,
+      [id, projectId, photoNumber, photoNumber, localPath, localPath, sha256,
+        CaptureStatus.READY, timestamp, timestamp, timestamp]);
+    await this.store.executeSql('UPDATE projects SET updated_at=? WHERE id=?',
+      [Date.now(), projectId]);
+  }
+
   /** Enqueues every ready capture without a state yet (catch-up scan). */
-  async enqueueReadyCapturesForNas(): Promise<number> {    const rows = await this.store.querySql(
+  async enqueueReadyCapturesForNas(): Promise<number> {
+    const rows = await this.store.querySql(
       "SELECT c.id FROM captures c LEFT JOIN nas_upload_state n ON n.capture_id=c.id " +
       "WHERE c.status='ready' AND n.capture_id IS NULL");
     const ids: Array<string> = [];

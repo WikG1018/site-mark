@@ -43,8 +43,11 @@ $env:NODE_HOME = Join-Path $DevEcoRoot 'tools\node'
 #        bridge list/delete + preview gates and the AppDatabase photo-index
 #        query; each sits in a method whose caller already catches (the sync
 #        cycle catch or the best-effort delete contract), same family.
+#   5x H5 import + entrance batch "may throw" (2026-09-26) - bridge
+#        download/sha256, the import insert/dedup queries, and the settings
+#        preview call; callers catch and classify, same family.
 # Lower this number whenever warnings are genuinely removed.
-$MaxArkTsWarnings = 357
+$MaxArkTsWarnings = 362
 if (-not $SkipRust) {
   & (Join-Path $PSScriptRoot 'build-rust.ps1') `
     -NativeSdkRoot (Join-Path $env:DEVECO_SDK_HOME 'default\openharmony\native')

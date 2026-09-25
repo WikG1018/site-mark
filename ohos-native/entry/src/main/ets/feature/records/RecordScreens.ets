@@ -7,7 +7,8 @@ import { CAPTURE_TEMPLATE_LIMIT_PER_PROJECT, CAPTURE_TEMPLATE_NAME_MAX_LENGTH, c
   normalizeCaptureTemplateName, resolveWatermarkLocale } from '../../domain/DomainRules';
 import { CaptureStatus, ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, DateFilterRow, EmptyPanel, FilterToolbar,
-  InlineErrorPanel, ListSkeleton, SectionHeader, messageTransition, panelTransition } from '../../shared/AppComponents';
+  InlineErrorPanel, ListSkeleton, SectionHeader, messageTransition, panelTransition,
+  rowEntranceEffect } from '../../shared/AppComponents';
 import { formatBytes, formatDateTime, imageUri, statusLabel } from '../../shared/Formatters';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { UiTokens } from '../../shared/UiTokens';
@@ -81,6 +82,10 @@ export struct AllRecordsView {
   private readonly selection: RecordSelectionCoordinator = new RecordSelectionCoordinator();
   private readonly refreshGate: RecordRefreshGate = new RecordRefreshGate();
   private savedFirstVisibleIndex: number = 0;
+  /// Row entrance state (spec §3.5): armed only after the first page so
+  /// cold-start rows don't stagger; seen ids replay nothing.
+  private entranceSeen: Set<string> = new Set();
+  private entranceArmed: boolean = false;
   private restoreTimer: number = -1;
   private contentGeneration: number = 0;
   private projectsGeneration: number = 0;
@@ -695,6 +700,7 @@ export struct AllRecordsView {
                   selected: this.selection.selectedIds.indexOf(capture.id) >= 0, showProject: true,
                   onOpen: (): void => this.open(capture), onToggle: (): void => this.toggle(capture.id) })
               }
+              .transition(rowEntranceEffect(this.entranceSeen, capture.id, this.entranceArmed))
             }, (capture: CaptureRecord): string => capture.id)
             if (this.controller.loadingInitial || this.controller.loadingMore) {
               ListItem() { LoadingProgress().width(30).height(30).color(UiTokens.PRIMARY) }
@@ -723,7 +729,10 @@ export struct AllRecordsView {
             this.savedFirstVisibleIndex = Math.max(0, start);
             this.saveCaptureState();
           })
-          .onReachEnd((): void => { this.controller.loadNext(); })
+          .onReachEnd((): void => {
+            this.entranceArmed = true;
+            this.controller.loadNext();
+          })
         }
       }
       .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
