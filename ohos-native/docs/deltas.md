@@ -42,6 +42,9 @@
 | 首启隐私同意门 | 鸿蒙有首启同意门：同意前不初始化运行时，“退出应用”为显式选择；Android 无首启门（关于页静态隐私说明） | 同意前不读写任何用户数据；为上架合规新增，非能力缺失 | 真机验证首启同意、退出与再次启动流程 |
 | 触感反馈 | 四档 time 型振动（16/16/32/48ms，对齐 Android 触感契约）：dock/分段切换与勾选 selectionClick、表单与设置保存成功 lightImpact、进入选择模式 mediumImpact、批量删除二次确认与项目删除 heavyImpact；导航表面与校验失败静音 | 振动失败静默跳过，不阻塞点击；强度映射为工程近似（★），非 MiHaptic 原生档位 | 真机确认四档强度与时机是否需要改 preset 振动 |
 | 应用字体 | 内嵌 MiSans 子集（Regular/Medium，rawfile，许可随包）已在启动注册；ArkUI 无全局 fontFamily，当前仅关于页（品牌面）应用，其余正文为系统 HarmonyOS Sans | 注册失败静默回退系统字体，不阻塞启动；不混排同屏两种正文字体 | 全量应用待 AppText 组件化重构后评估；真机核对关于页字形与包体增量（约 3.4MB） |
+| 动效/材质 token 体系 | 已按 D-024 对齐 Android（对齐源 `docs/motion-and-material-spec.md`）：MotionTokens 时长/弹簧/曲线、UiTokens 六档圆角与玻璃/阴影单配方、panel 弹簧转场、消息行上升、按压缩放 0.96、触感四档、dock/分段/批量按钮按压视觉、列表行入场（首屏后武装、每行一次）、看图橡皮筋/惯性/双击回退 2x | springMotion 的 response 为 ArkUI 换算值（★ 工程自选），dampingFraction 与 Flutter 阻尼比一致；全部动效经 MotionPolicy 折叠减少动画 | 真机手感走查（弹簧响应、惯性系数、双击缩放），对照 Android 逐场景 A/B |
+| NAS 双向同步 | `two_way` 模式（schema v16，默认 `upload_only` 不改行为）：设置页模式切换 + 「查找 NAS 上可恢复的照片」预览/勾选/导入；本机删除时 best-effort 清理远端副本（本地删除永不因 NAS 失败）；语义对齐 Android #164，复用 Rust C ABI nasList/nasDownload/nasDelete/nasSha256 | 无双向合并/冲突解决（NAS 侧为导出副本，D-023）；不做后台自动导入；导入失败即中断且已导入照片保留（同 Dart） | 本地 NAS 服务模拟器冒烟 + 真机网络路径验证待补 |
+| 设置一级开关（Android #158） | 评估结论：不移植。通知开关设置页已有（同级）；图库走系统 picker 无常驻权限可关；定位为按需单次授权，无"一级开关"语义 | 不引入 Android 专属的权限开关面板；属平台能力差异而非缺失 | 无 |
 | 自动化 CI | 公用 runner 不预装可再分发的 DevEco/HarmonyOS SDK | CI 校验 manifest 与 Rust/Flutter；ArkTS/HAP 由本地 DevEco 门禁给证据 | 提供合规专用 runner 后补 HAP 远程构建 |
 | 窗口沉浸 / 系统栏 | 当前为尝试 edge-to-edge（`setWindowLayoutFullScreen` + 透明栏 + inset 避让）。模拟器 `127.0.0.1:5555` 手势导航 dump 仍见 EntryAbility root y=137 / StatusBar 136px，SCB `immersive is false` | 根壳系统栏保持显示；查看器 immersive-sticky 隐藏系统栏，退出只恢复栏可见性与图标色，窗口不关全屏 | 真机手势/三键/折叠/多窗 |
 

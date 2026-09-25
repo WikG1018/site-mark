@@ -32,6 +32,23 @@ export function messageTransition(): TransitionEffect {
       .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.standardAccelerate() }));
 }
 
+/** List row entrance (spec §3.5, Phase D parity): fade + 16vp lift with
+ * springRise, exactly once per row id. Callers arm entrance only after the
+ * first page lands, so cold-start rows appear without a stagger; the seen
+ * set keeps reorders, prepends, and LazyForEach re-creations from
+ * replaying. Disabled, already-seen, or reduce-motion rows get a no-op
+ * transition. */
+export function rowEntranceEffect(seenIds: Set<string>, id: string, enabled: boolean): TransitionEffect {
+  if (!enabled || MotionPolicy.reduceMotion || seenIds.has(id)) {
+    return TransitionEffect.IDENTITY;
+  }
+  seenIds.add(id);
+  return TransitionEffect.asymmetric(
+    TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: 16 }))
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM4), curve: MotionTokens.springRise() }),
+    TransitionEffect.IDENTITY);
+}
+
 export class SegmentOption {
   value: string;
   label: string;

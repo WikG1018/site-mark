@@ -52,11 +52,5 @@ export default function nasTwoWayPolicyTest(): void {
       local.set('p', new Set<string>(['1']));
       expect(NasTwoWayPolicy.importCandidates(remote, local).length).assertEqual(0);
     });
-
-    it('gates remote deletes on two-way mode and an actual upload', 0, () => {
-      expect(NasTwoWayPolicy.shouldDeleteRemote('two_way', true)).assertTrue();
-      expect(NasTwoWayPolicy.shouldDeleteRemote('two_way', false)).assertFalse();
-      expect(NasTwoWayPolicy.shouldDeleteRemote('upload_only', true)).assertFalse();
-    });
   });
 }

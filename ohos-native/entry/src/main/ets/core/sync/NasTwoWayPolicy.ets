@@ -73,10 +73,4 @@ export class NasTwoWayPolicy {
       a.projectKey < b.projectKey ? -1 : a.projectKey > b.projectKey ? 1 : 0);
     return groups;
   }
-
-  /** Remote-delete guard: only two-way mode deletes, and only when the
-   * record actually reached the NAS. Local deletes never depend on it. */
-  static shouldDeleteRemote(mode: string, uploaded: boolean): boolean {
-    return NasTwoWayPolicy.isTwoWay(mode) && uploaded;
-  }
 }

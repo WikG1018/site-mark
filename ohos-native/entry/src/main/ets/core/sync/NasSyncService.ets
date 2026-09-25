@@ -154,6 +154,38 @@ export class NasNativeBridge {
     }
     return nasFailureCode(response.error ?? 'protocol_error');
   }
+
+  /** Two-way import: fetch one remote JPEG into the private renders dir (H5). */
+  async download(config: NasSyncConfigRecord, password: string, projectKey: string,
+    fileName: string, localPath: string): Promise<string | null> {
+    const payload = new NasUploadPayload();
+    payload.config = nasConfigPayload(config, password);
+    payload.project_key = projectKey;
+    payload.file_name = fileName;
+    payload.local_path = localPath;
+    const response = await this.call<Object>('nasDownload', payload);
+    if (response.ok) {
+      return null;
+    }
+    return nasFailureCode(response.error ?? 'protocol_error');
+  }
+
+  /** SHA-256 of a local file (import bookkeeping, same as Dart). */
+  async sha256(localPath: string): Promise<string> {
+    const request = new PathPayload();
+    request.path = localPath;
+    const response = await this.call<string>('sha256', request);
+    if (!response.ok || response.value === null) {
+      // nas:-prefixed so nasFailureCode classifies it instead of falling
+      // through to protocol_error.
+      throw new Error('nas:local_io');
+    }
+    return response.value;
+  }
+}
+
+class PathPayload {
+  path: string = '';
 }
 
 function nasConfigPayload(config: NasSyncConfigRecord, password: string): NasConfigPayload {
@@ -248,13 +280,15 @@ export class NasSyncService {
   readonly bridge: NasNativeBridge = new NasNativeBridge();
   readonly secrets: NasSecretStore = new NasSecretStore();
   private readonly database: AppDatabase;
+  private readonly filesDir: string;
   private syncing: boolean = false;
   private rerunQueued: boolean = false;
   private netConnection: connection.NetConnection | null = null;
   private countsListeners: Array<(counts: NasUploadCounts) => void> = [];
 
-  constructor(database: AppDatabase) {
+  constructor(database: AppDatabase, filesDir: string) {
     this.database = database;
+    this.filesDir = filesDir;
   }
 
   /**
@@ -443,8 +477,10 @@ export class NasSyncService {
     await this.syncNow();
   }
 
-  /// Two-way gates shared by preview/import: enabled + two_way + network +
-  /// stored password, mirroring Dart's _twoWayCredentials.
+  /// Two-way gates shared by preview/import: enabled + two_way + stored
+  /// password, mirroring Dart's _twoWayCredentials. Deliberately NO network
+  /// check here — an offline run must surface the native call's failure, not
+  /// masquerade as "nothing to restore".
   private async twoWayCredentials(): Promise<NasSyncConfigRecord | null> {
     const config = await this.database.nasSyncConfig();
     if (!config.enabled || !NasTwoWayPolicy.isTwoWay(config.syncMode)) {
@@ -452,9 +488,6 @@ export class NasSyncService {
     }
     const password = await this.secrets.read();
     if (password === null || password.length === 0) {
-      return null;
-    }
-    if (!await this.networkAllows(config.wifiOnly)) {
       return null;
     }
     return config;
@@ -518,6 +551,79 @@ export class NasSyncService {
         `${capture.photoNumber}.jpg`);
     } catch (_) {
       // Remote cleanup is best-effort by contract.
+    }
+  }
+
+  /** Imports the selected preview groups (H5, Dart importNasProjects
+   * parity). Creates missing local projects named after the NAS key; a
+   * download or hash failure aborts the run with a `nas:{code}` error —
+   * already-imported photos stay, exactly like Dart. Returns the count. */
+  async importProjects(selected: NasImportPreviewGroup[]): Promise<number> {
+    if (selected.length === 0) {
+      return 0;
+    }
+    const config = await this.twoWayCredentials();
+    if (config === null) {
+      return 0;
+    }
+    const password = await this.secrets.read() ?? '';
+    let imported = 0;
+    for (let g = 0; g < selected.length; g += 1) {
+      const group = selected[g];
+      const projectId = await this.resolveImportProjectId(group.projectKey);
+      if (projectId === null) {
+        continue;
+      }
+      for (let i = 0; i < group.photoNumbers.length; i += 1) {
+        const photoNumber = group.photoNumbers[i];
+        if (await this.database.capturePhotoNumberExists(projectId, photoNumber)) {
+          continue;
+        }
+        const captureId = util.generateRandomUUID();
+        const localPath = `${this.filesDir}/renders/${captureId}.jpg`;
+        const failure = await this.bridge.download(config, password, group.projectKey,
+          `${photoNumber}.jpg`, localPath);
+        if (failure !== null) {
+          throw new Error(`nas:${failure}`);
+        }
+        const sha256 = await this.bridge.sha256(localPath);
+        const now = Date.now();
+        await this.database.insertNasImportedCapture(captureId, projectId, photoNumber,
+          localPath, sha256, now);
+        // Queue bookkeeping marks the photo as already delivered so the
+        // upload drain never re-uploads an import.
+        await this.database.upsertNasUploadPending(captureId);
+        await this.database.markNasUploaded(captureId);
+        imported += 1;
+      }
+    }
+    return imported;
+  }
+
+  /// Existing local project matching the NAS key, or a fresh one created
+  /// with the key as its name; a name conflict reuses the winner (Dart
+  /// ProjectNameConflictException path).
+  private async resolveImportProjectId(projectKey: string): Promise<string | null> {
+    const existing = await this.database.listProjectsForFilter();
+    for (let i = 0; i < existing.length; i += 1) {
+      if (sanitizeProjectKey(existing[i].name) === projectKey) {
+        return existing[i].id;
+      }
+    }
+    try {
+      const created = await this.database.createProject(projectKey);
+      return created.id;
+    } catch (error) {
+      if ((error as Error).message !== 'project_name_conflict') {
+        throw error as Error;
+      }
+      const projects = await this.database.listProjectsForFilter();
+      for (let i = 0; i < projects.length; i += 1) {
+        if (sanitizeProjectKey(projects[i].name) === projectKey) {
+          return projects[i].id;
+        }
+      }
+      return null;
     }
   }
 }
