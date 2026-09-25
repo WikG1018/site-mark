@@ -15,6 +15,8 @@ import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, Setting
 import { NasSyncScreen } from '../feature/settings/NasSyncScreen';
 import { UiTokens } from '../shared/UiTokens';
 import { MotionTokens } from '../shared/MotionTokens';
+import { Haptics } from '../shared/Feedback';
+import { PressGesturePolicy, PressGestureState, pressGestureEventOf } from '../shared/PressGesture';
 import { AccentSwatches } from '../shared/AccentSwatches';
 import { AppText, tr } from '../shared/AppText';
 import { panelTransition } from '../shared/AppComponents';
@@ -283,10 +285,19 @@ struct Index {
     this.runTabAction(this.tabCoordinator.request(index));
   }
 
+  /// Dock press-scale state (spec §6.1: one finger at a time, so one index
+  /// tracks the pressed item; slop cancel lives in PressGestureState).
+  @State private dockPressedIndex: number = -1;
+  private dockPressStates: PressGestureState[] =
+    [PressGestureState.idle(), PressGestureState.idle(), PressGestureState.idle()];
+
   private runTabAction(action: RootTabAction): void {
     if (!action.started) {
       return;
     }
+    // Dock/segment switches tick once on a successful switch (spec §6.2);
+    // reduce-motion keeps the haptic — it is the feedback channel.
+    Haptics.selectionClick();
     const motion: RootMotionSpec = RootShellPolicy.motion(action.direction);
     if (motion.dockDuration === 0) {
       this.tabDirection = action.direction;
@@ -381,6 +392,23 @@ struct Index {
     .borderRadius(UiTokens.CONTROL_RADIUS)
     .accessibilityGroup(true)
     .accessibilityText(this.activeTab === index ? selectedLabel : label)
+    .scale({
+      x: this.dockPressedIndex === index && !MotionPolicy.reduceMotion ? PressGesturePolicy.SCALE : 1,
+      y: this.dockPressedIndex === index && !MotionPolicy.reduceMotion ? PressGesturePolicy.SCALE : 1,
+    })
+    .onTouch((event: TouchEvent): void => {
+      const previous = this.dockPressStates[index];
+      const next = PressGesturePolicy.next(previous, pressGestureEventOf(event));
+      if (next.pressed !== previous.pressed) {
+        this.getUIContext().animateTo({
+          duration: MotionTokens.DURATION_SHORT4,
+          curve: MotionTokens.springSettle(),
+        }, (): void => {
+          this.dockPressedIndex = next.pressed ? index : -1;
+        });
+      }
+      this.dockPressStates[index] = next;
+    })
     .onClick((): void => this.switchTab(index))
   }
 

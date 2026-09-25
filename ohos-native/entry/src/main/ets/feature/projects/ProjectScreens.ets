@@ -405,6 +405,7 @@ export struct ProjectEditorScreen {
       const savedProjectId = await ProjectEditorSaveExecutor.persistEditor(store, snapshot);
       runtime.notifyDataChanged();
       if (this.saveAction.isCurrent(actionToken)) {
+        Haptics.lightImpact();
         if (!snapshot.editing) runtime.selectedProjectId = savedProjectId;
         this.pathStack.pop();
       }
@@ -1014,6 +1015,8 @@ export struct ProjectDetailScreen {
         `${this.selectedIds.length === 1 ? 'record' : 'records'}`), false);
       return;
     }
+    // The destructive action is going through on this second tap.
+    Haptics.heavyImpact();
     await this.runBatch((id: string): Promise<void> => AppRuntime.require().deleteCapture(id),
       tr('所选记录已删除', 'Selected records deleted'));
   }
@@ -1144,6 +1147,7 @@ export struct ProjectDetailScreen {
     if (operationToken === null) return;
     try {
       await AppRuntime.require().deleteProject(projectId);
+      Haptics.heavyImpact();
       if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) this.pathStack.pop();
     } catch (_) {
       if (this.pageState.isActive() && this.projectOperations.isCurrent(operationToken)) {
@@ -1526,6 +1530,7 @@ export struct ProjectSettingsScreen {
       await ProjectEditorSaveExecutor.persistWatermark(store, snapshot);
       AppRuntime.require().notifyDataChanged();
       if (this.saveAction.isCurrent(actionToken)) {
+        Haptics.lightImpact();
         this.messageClock.show((next: string): void => {
           this.message = next;
         }, tr('已保存；新拍照片和重新生成的成片会使用这些设置',

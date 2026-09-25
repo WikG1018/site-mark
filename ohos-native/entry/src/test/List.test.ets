@@ -35,6 +35,8 @@ import appearanceSettingsDraftTest from './AppearanceSettingsDraft.test';
 import systemBarsTest from './SystemBars.test';
 import uiTokensTest from './UiTokens.test';
 import motionTokensTest from './MotionTokens.test';
+import pressGestureTest from './PressGesture.test';
+import hapticsTest from './Haptics.test';
 import scrollChromePolicyTest from './ScrollChromePolicy.test';
 
 export default function testsuite(): void {
@@ -75,5 +77,7 @@ export default function testsuite(): void {
   systemBarsTest();
   uiTokensTest();
   motionTokensTest();
+  pressGestureTest();
+  hapticsTest();
   scrollChromePolicyTest();
 }

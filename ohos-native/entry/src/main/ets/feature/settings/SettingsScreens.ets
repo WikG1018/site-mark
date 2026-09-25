@@ -15,7 +15,7 @@ import { BackupResult, ProjectBackupService } from '../backup/BackupService';
 import { ProjectRestoreService } from '../backup/RestoreService';
 import { DiagnosticBundleService } from '../diagnostics/DiagnosticBundleService';
 import { tr, userFacingMessage } from '../../shared/AppText';
-import { ScreenMessageClock } from '../../shared/Feedback';
+import { Haptics, ScreenMessageClock } from '../../shared/Feedback';
 import { SAFE_AREA_BOTTOM_VP } from '../../shared/SystemBars';
 import { RootShellPolicy } from '../../shared/RootShellPolicy';
 import { ScrollChromeCoordinator } from '../../shared/ScrollChromePolicy';
@@ -117,6 +117,7 @@ export struct SettingsView {
       settings.completionNotificationsEnabled = enabled;
       await runtime.database.updateSettings(settings);
       if (!this.notificationCoordinator.isCurrent(token)) return;
+      Haptics.lightImpact();
       this.notificationsEnabled = enabled;
       this.notificationMessage = enabled ? tr('处理完成后会发送一条本机通知',
         'A local notification will be sent when processing completes') : '';
@@ -1071,7 +1072,10 @@ export struct BackupScreen {
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Toggle({ type: ToggleType.Switch, isOn: this.includeOriginals })
                 .selectedColor(UiTokens.PRIMARY).accessibilityText(tr('包含私有原图', 'Include private originals'))
-                .onChange((value: boolean): void => { this.includeOriginals = value; })
+                .onChange((value: boolean): void => {
+                  this.includeOriginals = value;
+                  Haptics.lightImpact();
+                })
             }.padding(14).width('100%').backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
               .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
           }
@@ -1086,7 +1090,10 @@ export struct BackupScreen {
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Toggle({ type: ToggleType.Switch, isOn: this.skipFailed })
                 .selectedColor(UiTokens.PRIMARY).accessibilityText(tr('仅备份已完成记录', 'Back up completed records only'))
-                .onChange((value: boolean): void => { this.skipFailed = value; })
+                .onChange((value: boolean): void => {
+                  this.skipFailed = value;
+                  Haptics.lightImpact();
+                })
             }.padding(14).width('100%').backgroundColor(UiTokens.SURFACE).borderRadius(UiTokens.CARD_RADIUS)
               .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
           }

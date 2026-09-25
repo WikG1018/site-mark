@@ -1,22 +1,36 @@
 import { vibrator } from '@kit.SensorServiceKit';
 
-const SELECTION_CLICK_MS: number = 16;
-const MEDIUM_IMPACT_MS: number = 32;
-
-/** Lightweight haptic feedback, mirroring the Android list/card feedback
- *  (selection click on every toggle, medium impact when selection mode
- *  starts). Requires ohos.permission.VIBRATE. All failures are swallowed —
- *  haptics are decorative and must never surface errors or block the action.
- */
+/** Lightweight haptic feedback mirroring the Android tiers (MiHaptic intent
+ * mapped onto time-type vibrations ★): selection click / light impact on
+ * every toggle and successful submit, medium when selection mode starts,
+ * heavy on destructive batch confirmation. One semantic action = at most one
+ * haptic; navigation surfaces and invalid submits stay silent. Requires
+ * ohos.permission.VIBRATE. All failures are swallowed — haptics are
+ * decorative and must never surface errors or block the action. */
 export class Haptics {
-  /** Short tick for record-selection toggles and light confirmations. */
+  static readonly SELECTION_CLICK_MS: number = 16;
+  static readonly LIGHT_IMPACT_MS: number = 16;
+  static readonly MEDIUM_IMPACT_MS: number = 32;
+  static readonly HEAVY_IMPACT_MS: number = 48;
+
+  /** Short tick for record-selection toggles, switches and segments. */
   static selectionClick(): void {
-    Haptics.vibrate(SELECTION_CLICK_MS);
+    Haptics.vibrate(Haptics.SELECTION_CLICK_MS);
+  }
+
+  /** Light pulse for successful form submits and setting changes. */
+  static lightImpact(): void {
+    Haptics.vibrate(Haptics.LIGHT_IMPACT_MS);
   }
 
   /** Slightly stronger pulse for entering selection mode. */
   static mediumImpact(): void {
-    Haptics.vibrate(MEDIUM_IMPACT_MS);
+    Haptics.vibrate(Haptics.MEDIUM_IMPACT_MS);
+  }
+
+  /** Strong pulse for destructive batch confirmation going through. */
+  static heavyImpact(): void {
+    Haptics.vibrate(Haptics.HEAVY_IMPACT_MS);
   }
 
   private static vibrate(durationMs: number): void {
