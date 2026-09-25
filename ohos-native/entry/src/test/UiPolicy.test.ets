@@ -6,6 +6,7 @@ import { ListPageCoordinator } from '../main/ets/shared/ListPageCoordinator';
 import { MotionPolicy, ReduceMotionQueryPolicy } from '../main/ets/shared/MotionPolicy';
 import { clampFirstVisibleIndex, ScreenStateStore } from '../main/ets/shared/ScreenStateStore';
 import { UiTokens } from '../main/ets/shared/UiTokens';
+import { MotionTokens } from '../main/ets/shared/MotionTokens';
 import { forwardUiMemoryLevel, UiMemoryBroadcaster, UiMemoryCoordinator } from '../main/ets/shared/UiMemoryCoordinator';
 
 function filter(projectId: string, searchText: string): CaptureFilter {
@@ -128,13 +129,13 @@ export default function uiPolicyTest(): void {
 
     it('removes motion duration and blur only when reduce motion is enabled', 0, () => {
       MotionPolicy.reduceMotion = false;
-      expect(MotionPolicy.duration(UiTokens.MOTION_STANDARD)).assertEqual(UiTokens.MOTION_STANDARD);
-      expect(UiTokens.MOTION_CHROME > UiTokens.MOTION_STANDARD).assertTrue();
-      expect(MotionPolicy.duration(UiTokens.MOTION_CHROME)).assertEqual(UiTokens.MOTION_CHROME);
+      expect(MotionPolicy.duration(MotionTokens.DURATION_SHORT4)).assertEqual(MotionTokens.DURATION_SHORT4);
+      expect(MotionTokens.DURATION_MEDIUM2 > MotionTokens.DURATION_SHORT4).assertTrue();
+      expect(MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2)).assertEqual(MotionTokens.DURATION_MEDIUM2);
       expect(MotionPolicy.blur(20)).assertEqual(20);
 
       MotionPolicy.reduceMotion = true;
-      expect(MotionPolicy.duration(UiTokens.MOTION_STANDARD)).assertEqual(0);
+      expect(MotionPolicy.duration(MotionTokens.DURATION_SHORT4)).assertEqual(0);
       expect(MotionPolicy.blur(20)).assertEqual(0);
       MotionPolicy.reduceMotion = false;
     });

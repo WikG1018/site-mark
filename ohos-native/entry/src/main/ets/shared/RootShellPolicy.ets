@@ -1,4 +1,5 @@
 import { MotionPolicy } from './MotionPolicy';
+import { MotionTokens } from './MotionTokens';
 import { UiTokens } from './UiTokens';
 
 export class RootTabTransition {
@@ -212,12 +213,12 @@ export class RootShellPolicy {
 
   static motion(direction: number): RootMotionSpec {
     const normalizedDirection = direction > 0 ? 1 : (direction < 0 ? -1 : 0);
-    const pageDuration = MotionPolicy.duration(UiTokens.MOTION_STANDARD);
+    const pageDuration = MotionPolicy.duration(MotionTokens.DURATION_SHORT4);
     const displacementEnabled = !MotionPolicy.reduceMotion && normalizedDirection !== 0;
     return new RootMotionSpec(
       pageDuration,
-      MotionPolicy.duration(UiTokens.MOTION_STANDARD),
-      MotionPolicy.duration(UiTokens.MOTION_STANDARD),
+      MotionPolicy.duration(MotionTokens.DURATION_SHORT4),
+      MotionPolicy.duration(MotionTokens.DURATION_SHORT4),
       displacementEnabled ? RootShellPolicy.PAGE_ENTER_DISTANCE * normalizedDirection : 0,
       displacementEnabled ? -RootShellPolicy.PAGE_EXIT_DISTANCE * normalizedDirection : 0,
       MotionPolicy.blur(RootShellPolicy.DOCK_BLUR),

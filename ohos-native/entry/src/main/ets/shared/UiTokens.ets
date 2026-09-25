@@ -1,8 +1,8 @@
 export class UiTokens {
   static BACKGROUND: string = '#F5FAF6';
   static SURFACE: string = '#F9FCF9';
-  static GLASS: string = '#ECF1F8F3';
-  static GLASS_STRONG: string = '#F4F6FBF8';
+  static GLASS: string = '#94F9FCF9';
+  static GLASS_STRONG: string = '#ADF9FCF9';
   static PRIMARY: string = '#176B55';
   static ON_PRIMARY: string = '#FFFFFF';
   static ON_DANGER: string = '#FFFFFF';
@@ -25,14 +25,34 @@ export class UiTokens {
   static CARD_SHADOW: string = '#14000000';
   static OVERLAY: string = '#66000000';
   static readonly PAGE_PADDING: number = 16;
-  static readonly CARD_RADIUS: number = 18;
+  /// Six-step radius scale mirroring AppRadius (D-024). Surfaces pick the
+  /// step for their size/role; scattered radius literals are forbidden.
+  static readonly RADIUS_XS: number = 8;
+  static readonly RADIUS_SM: number = 12;
+  static readonly RADIUS_MD: number = 16;
+  static readonly RADIUS_LG: number = 20;
+  static readonly RADIUS_XL: number = 24;
+  /// Legacy aliases kept for existing call sites: cards moved 18 → 20 to
+  /// land on RADIUS_LG (the ±2px AppRadius migration budget).
+  static readonly CARD_RADIUS: number = 20;
   static readonly CONTROL_RADIUS: number = 12;
   static readonly TOP_BAR_HEIGHT: number = 68;
   static readonly TOUCH_TARGET: number = 44;
   static readonly DOCK_HEIGHT: number = 64;
-  static readonly MOTION_FAST: number = 120;
-  static readonly MOTION_STANDARD: number = 180;
-  static readonly MOTION_CHROME: number = 280;
+
+  /// GlassChrome single recipe: surface fill at 0.58 behind live blur, or the
+  /// +0.10 no-blur fallback (GlassSurface parity). GLASS is the blur tier,
+  /// GLASS_STRONG the no-blur tier; both are derived in apply().
+  static readonly GLASS_OPACITY: number = 0.58;
+  static readonly GLASS_OPACITY_NO_BLUR: number = 0.68;
+  static readonly GLASS_BLUR_SIGMA: number = 20;
+
+  /// Single floating-chrome shadow recipe (AppShadow.chrome): shadow @ 8%
+  /// blur 12 in light, shadow @ 14% blur 14 in dark, offset (0, 3). Only
+  /// floating chrome carries a shadow; cards stay flat.
+  static CHROME_SHADOW_COLOR: string = '#14000000';
+  static CHROME_SHADOW_BLUR: number = 12;
+  static readonly CHROME_SHADOW_OFFSET_Y: number = 3;
 
   static apply(dark: boolean, accentArgb: number): void {
     const accent = `#${(accentArgb >>> 0).toString(16).padStart(8, '0')}`;
@@ -41,8 +61,8 @@ export class UiTokens {
     if (dark) {
       UiTokens.BACKGROUND = '#101512';
       UiTokens.SURFACE = '#171D19';
-      UiTokens.GLASS = '#E0222A25';
-      UiTokens.GLASS_STRONG = '#F02A332D';
+      UiTokens.GLASS = UiTokens.glassSurfaceFill(UiTokens.GLASS_OPACITY);
+      UiTokens.GLASS_STRONG = UiTokens.glassSurfaceFill(UiTokens.GLASS_OPACITY_NO_BLUR);
       UiTokens.PRIMARY_CONTAINER = '#314E42';
       UiTokens.TEXT = '#E7EEE9';
       UiTokens.TEXT_SECONDARY = '#AAB8B0';
@@ -55,18 +75,20 @@ export class UiTokens {
       UiTokens.ACCENT_SURFACE = '#29463A';
       UiTokens.DANGER_CONTAINER = '#4A2522';
       UiTokens.DELETE_PANEL = '#3B201D';
-      UiTokens.DOCK = '#E8202823';
+      UiTokens.DOCK = UiTokens.GLASS;
       UiTokens.DOCK_SELECTED = '#80375648';
       UiTokens.IMAGE_PLACEHOLDER = '#202A24';
       UiTokens.SURFACE_MUTED = '#1F2823';
       UiTokens.OUTLINE_SUBTLE = '#38453E';
       UiTokens.CARD_SHADOW = '#3D000000';
+      UiTokens.CHROME_SHADOW_COLOR = '#24000000';
+      UiTokens.CHROME_SHADOW_BLUR = 14;
       UiTokens.OVERLAY = '#66000000';
     } else {
       UiTokens.BACKGROUND = '#F5FAF6';
       UiTokens.SURFACE = '#F9FCF9';
-      UiTokens.GLASS = '#ECF1F8F3';
-      UiTokens.GLASS_STRONG = '#F4F6FBF8';
+      UiTokens.GLASS = UiTokens.glassSurfaceFill(UiTokens.GLASS_OPACITY);
+      UiTokens.GLASS_STRONG = UiTokens.glassSurfaceFill(UiTokens.GLASS_OPACITY_NO_BLUR);
       UiTokens.PRIMARY_CONTAINER = '#C7F1DF';
       UiTokens.TEXT = '#17201C';
       UiTokens.TEXT_SECONDARY = '#526059';
@@ -79,14 +101,23 @@ export class UiTokens {
       UiTokens.ACCENT_SURFACE = '#E5F1EA';
       UiTokens.DANGER_CONTAINER = '#FCE8E6';
       UiTokens.DELETE_PANEL = '#FFF1F0';
-      UiTokens.DOCK = '#F2F7FBF8';
+      UiTokens.DOCK = UiTokens.GLASS;
       UiTokens.DOCK_SELECTED = '#B8C7F1DF';
       UiTokens.IMAGE_PLACEHOLDER = '#E8EEE9';
       UiTokens.SURFACE_MUTED = '#EEF4F0';
       UiTokens.OUTLINE_SUBTLE = '#D9E3DC';
       UiTokens.CARD_SHADOW = '#14000000';
+      UiTokens.CHROME_SHADOW_COLOR = '#14000000';
+      UiTokens.CHROME_SHADOW_BLUR = 12;
       UiTokens.OVERLAY = '#66000000';
     }
+  }
+
+  /// Glass fill derived from the current SURFACE color: `#AARRGGBB` with the
+  /// recipe opacity over the surface RGB. Call after SURFACE is set.
+  static glassSurfaceFill(opacity: number): string {
+    const alpha = Math.round(opacity * 255).toString(16).toUpperCase().padStart(2, '0');
+    return `#${alpha}${UiTokens.SURFACE.substring(1)}`;
   }
 
   /// Text color with the stronger WCAG contrast on [accentArgb]: bright

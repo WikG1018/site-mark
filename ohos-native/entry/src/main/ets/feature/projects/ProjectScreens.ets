@@ -12,6 +12,7 @@ import { AccentSwatches } from '../../shared/AccentSwatches';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
+import { MotionTokens } from '../../shared/MotionTokens';
 import { ProjectBackupService } from '../backup/BackupService';
 import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
 import { AppText, tr } from '../../shared/AppText';
@@ -265,7 +266,7 @@ export struct ProjectListView {
       }
       .width('100%')
       .translate({ y: this.chromeVisible ? 0 : -(UiTokens.TOP_BAR_HEIGHT + 108) })
-      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_CHROME), curve: Curve.EaseOut })
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
       .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
       if (this.message.length > 0 && this.projectCount > 0) {
         Column() {
@@ -1205,7 +1206,7 @@ export struct ProjectDetailScreen {
             onAction: (): void => { if (this.selectionMode) this.setSelectionMode(false);
               else this.editProject(); } })
             .translate({ y: this.chromeVisible ? 0 : -UiTokens.TOP_BAR_HEIGHT })
-            .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_CHROME), curve: Curve.EaseOut })
+            .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
             .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
           if (this.project !== null) {
             List({ space: 10, scroller: this.detailScroller }) {
@@ -1423,7 +1424,7 @@ export struct ProjectDetailScreen {
             .margin({ right: 18, bottom: 18 + this.safeAreaBottomVp }).align(Alignment.BottomEnd)
             .enabled(this.canMutateProject())
             .translate({ y: this.chromeVisible ? 0 : 80 })
-            .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_CHROME), curve: Curve.EaseOut })
+            .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
             .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
             .onClick((): void => { this.beginCapture(); })
         }

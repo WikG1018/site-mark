@@ -14,6 +14,7 @@ import { AboutScreen, AppearanceScreen, BackupScreen, DiagnosticsScreen, Setting
   StorageScreen } from '../feature/settings/SettingsScreens';
 import { NasSyncScreen } from '../feature/settings/NasSyncScreen';
 import { UiTokens } from '../shared/UiTokens';
+import { MotionTokens } from '../shared/MotionTokens';
 import { AccentSwatches } from '../shared/AccentSwatches';
 import { AppText, tr } from '../shared/AppText';
 import { panelTransition } from '../shared/AppComponents';
@@ -411,10 +412,11 @@ struct Index {
     .backdropBlur(this.motionRevision < 0 ? 0 : RootShellPolicy.motion(this.tabDirection).dockBlur)
     .border({ width: 1, color: UiTokens.OUTLINE_SUBTLE })
     .borderRadius(UiTokens.CARD_RADIUS + 8)
-    .shadow({ radius: 12, color: UiTokens.CARD_SHADOW, offsetY: 4 })
+    .shadow({ radius: UiTokens.CHROME_SHADOW_BLUR, color: UiTokens.CHROME_SHADOW_COLOR,
+      offsetY: UiTokens.CHROME_SHADOW_OFFSET_Y })
     .translate({ y: this.chromeVisible ? 0 :
       RootShellPolicy.dockHeight() + RootShellPolicy.dockBottomMargin() + this.safeAreaBottomVp + 24 })
-    .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_CHROME), curve: Curve.EaseOut })
+    .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
     .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
     .transition(panelTransition(28))
   }
@@ -497,7 +499,7 @@ struct Index {
     }
     .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
 .transition(TransitionEffect.opacity(0)
-  .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
+  .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }))
   }
 
   build() {
@@ -509,7 +511,7 @@ struct Index {
         }
         .width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
         .transition(TransitionEffect.opacity(0)
-          .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
+          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }))
       } else if (!this.consentAccepted) {
         this.privacyGate()
       } else if (this.runtimeError.length > 0) {
@@ -521,7 +523,7 @@ struct Index {
             .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
         }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
         .transition(TransitionEffect.opacity(0)
-          .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
+          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }))
       } else if (!this.runtimeReady) {
         Column({ space: 14 }) {
           LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
@@ -529,7 +531,7 @@ struct Index {
             .fontColor(UiTokens.TEXT_SECONDARY)
         }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
         .transition(TransitionEffect.opacity(0)
-          .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }))
+          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }))
       } else {
         Navigation(this.pathStack) {
           this.rootContent()

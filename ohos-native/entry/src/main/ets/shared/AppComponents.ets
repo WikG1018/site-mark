@@ -1,6 +1,7 @@
 import { UiTokens } from './UiTokens';
 import { choiceAccessibilityText, joinAccessibilityText } from './AccessibilityText';
 import { MotionPolicy } from './MotionPolicy';
+import { MotionTokens } from './MotionTokens';
 import { AccentSwatch, AccentSwatches } from './AccentSwatches';
 import { themeSeedAccessibilityText, watermarkAccentAccessibilityText, WatermarkAccentOption }
   from './AccentAccessibility';
@@ -14,9 +15,9 @@ import { SAFE_AREA_TOP_VP, topPaddingVp } from './SystemBars';
 export function panelTransition(distanceVp: number = 24): TransitionEffect {
   return TransitionEffect.asymmetric(
     TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: distanceVp }))
-      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_STANDARD), curve: Curve.EaseOut }),
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }),
     TransitionEffect.opacity(0).combine(TransitionEffect.translate({ y: distanceVp }))
-      .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_FAST), curve: Curve.EaseIn }));
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseIn }));
 }
 
 export class SegmentOption {

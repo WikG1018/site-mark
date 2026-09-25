@@ -8,6 +8,7 @@ import { AccentSwatchRow, AppTopBar, LifecycleSegment, SectionHeader, SegmentOpt
 import { AccentSwatches } from '../../shared/AccentSwatches';
 import { formatBytes, formatDateTime, lifecycleLabel } from '../../shared/Formatters';
 import { UiTokens } from '../../shared/UiTokens';
+import { MotionTokens } from '../../shared/MotionTokens';
 import { ProjectSummary } from '../../domain/Models';
 import { ProjectLifecycleStatus } from '../../domain/StateMachine';
 import { BackupResult, ProjectBackupService } from '../backup/BackupService';
@@ -136,7 +137,7 @@ export struct SettingsView {
       AppTopBar({ title: tr('设置', 'Settings'), subtitle: tr('拍摄、数据与应用偏好',
         'Capture, data, and app preferences') })
         .translate({ y: this.chromeVisible ? 0 : -UiTokens.TOP_BAR_HEIGHT })
-        .animation({ duration: MotionPolicy.duration(UiTokens.MOTION_CHROME), curve: Curve.EaseOut })
+        .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
         .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
       Scroll() {
         Column() {
