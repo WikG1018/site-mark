@@ -7,7 +7,7 @@ import { CaptureCard } from '../records/RecordComponents';
 import { RecordBatchLayoutPolicy, RecordNavigationSeedStore,
   RecordSelectionCoordinator } from '../records/RecordUiCoordinator';
 import { AccentSwatchRow, AppSearchField, AppTopBar, BatchActionBar, BatchActionItem, DateFilterRow, EmptyPanel, InlineErrorPanel,
-  LifecycleSegment, ListSkeleton, SectionHeader, SegmentOption, panelTransition } from '../../shared/AppComponents';
+  LifecycleSegment, ListSkeleton, SectionHeader, SegmentOption, messageTransition, panelTransition } from '../../shared/AppComponents';
 import { AccentSwatches } from '../../shared/AccentSwatches';
 import { FormField, FormTextArea } from '../../shared/FormComponents';
 import { formatDateTime, imageUri, lifecycleLabel } from '../../shared/Formatters';
@@ -266,7 +266,7 @@ export struct ProjectListView {
       }
       .width('100%')
       .translate({ y: this.chromeVisible ? 0 : -(UiTokens.TOP_BAR_HEIGHT + 108) })
-      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
+      .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: MotionTokens.springSnap() })
       .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
       if (this.message.length > 0 && this.projectCount > 0) {
         Column() {
@@ -1210,7 +1210,7 @@ export struct ProjectDetailScreen {
             onAction: (): void => { if (this.selectionMode) this.setSelectionMode(false);
               else this.editProject(); } })
             .translate({ y: this.chromeVisible ? 0 : -UiTokens.TOP_BAR_HEIGHT })
-            .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
+            .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: MotionTokens.springSnap() })
             .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
           if (this.project !== null) {
             List({ space: 10, scroller: this.detailScroller }) {
@@ -1297,7 +1297,7 @@ export struct ProjectDetailScreen {
                     .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING })
                     .width('100%')
                 }
-                .transition(panelTransition(0))
+                .transition(messageTransition())
               }
               ListItem() {
                 Column({ space: 8 }) {
@@ -1428,7 +1428,7 @@ export struct ProjectDetailScreen {
             .margin({ right: 18, bottom: 18 + this.safeAreaBottomVp }).align(Alignment.BottomEnd)
             .enabled(this.canMutateProject())
             .translate({ y: this.chromeVisible ? 0 : 80 })
-            .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
+            .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: MotionTokens.springSnap() })
             .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
             .onClick((): void => { this.beginCapture(); })
         }

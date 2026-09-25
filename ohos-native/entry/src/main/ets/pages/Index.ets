@@ -444,7 +444,7 @@ struct Index {
       offsetY: UiTokens.CHROME_SHADOW_OFFSET_Y })
     .translate({ y: this.chromeVisible ? 0 :
       RootShellPolicy.dockHeight() + RootShellPolicy.dockBottomMargin() + this.safeAreaBottomVp + 24 })
-    .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
+    .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: MotionTokens.springSnap() })
     .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
     .transition(panelTransition(28))
   }
@@ -527,7 +527,7 @@ struct Index {
     }
     .width('100%').height('100%').backgroundColor(UiTokens.BACKGROUND)
 .transition(TransitionEffect.opacity(0)
-  .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }))
+  .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.emphasizedDecelerate() }))
   }
 
   build() {
@@ -539,7 +539,7 @@ struct Index {
         }
         .width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
         .transition(TransitionEffect.opacity(0)
-          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }))
+          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.emphasizedDecelerate() }))
       } else if (!this.consentAccepted) {
         this.privacyGate()
       } else if (this.runtimeError.length > 0) {
@@ -551,7 +551,7 @@ struct Index {
             .onClick((): void => { this.initializeRuntime(this.rootLifecycle.generation()); })
         }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
         .transition(TransitionEffect.opacity(0)
-          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }))
+          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.emphasizedDecelerate() }))
       } else if (!this.runtimeReady) {
         Column({ space: 14 }) {
           LoadingProgress().width(42).height(42).color(UiTokens.PRIMARY)
@@ -559,7 +559,7 @@ struct Index {
             .fontColor(UiTokens.TEXT_SECONDARY)
         }.width('100%').height('100%').justifyContent(FlexAlign.Center).backgroundColor(UiTokens.BACKGROUND)
         .transition(TransitionEffect.opacity(0)
-          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: Curve.EaseOut }))
+          .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_SHORT4), curve: MotionTokens.emphasizedDecelerate() }))
       } else {
         Navigation(this.pathStack) {
           this.rootContent()

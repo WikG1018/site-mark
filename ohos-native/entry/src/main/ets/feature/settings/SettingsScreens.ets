@@ -3,7 +3,7 @@ import { Routes } from '../../app/Routes';
 import { StorageInspector, StorageSnapshot } from '../../core/system/StorageInspector';
 import { DiagnosticSummary } from '../../data/database/AppDatabase';
 import { AppSettingsRecord } from '../../domain/Models';
-import { AccentSwatchRow, AppTopBar, LifecycleSegment, SectionHeader, SegmentOption, SettingRow, ValueTextRow } from
+import { AccentSwatchRow, AppTopBar, LifecycleSegment, messageTransition, SectionHeader, SegmentOption, SettingRow, ValueTextRow } from
   '../../shared/AppComponents';
 import { AccentSwatches } from '../../shared/AccentSwatches';
 import { formatBytes, formatDateTime, lifecycleLabel } from '../../shared/Formatters';
@@ -138,7 +138,7 @@ export struct SettingsView {
       AppTopBar({ title: tr('设置', 'Settings'), subtitle: tr('拍摄、数据与应用偏好',
         'Capture, data, and app preferences') })
         .translate({ y: this.chromeVisible ? 0 : -UiTokens.TOP_BAR_HEIGHT })
-        .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: Curve.EaseOut })
+        .animation({ duration: MotionPolicy.duration(MotionTokens.DURATION_MEDIUM2), curve: MotionTokens.springSnap() })
         .hitTestBehavior(this.chromeVisible ? HitTestMode.Default : HitTestMode.None)
       Scroll() {
         Column() {
@@ -421,6 +421,7 @@ export struct AppearanceScreen {
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
                 .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.SUCCESS).width('100%')
+                .transition(messageTransition())
             }
           }
           .padding(16)
@@ -493,6 +494,7 @@ export struct StorageScreen {
               .onClick((): void => this.clearExports())
             if (this.message.length > 0) {
               Text(this.message).fontSize(13).fontColor(UiTokens.PRIMARY).width('100%')
+                .transition(messageTransition())
             }
           }
           .padding(16)
@@ -736,6 +738,7 @@ export struct DiagnosticsScreen {
             if (this.message.length > 0) {
               Text(this.message).fontSize(13)
                 .fontColor(this.messageError ? UiTokens.DANGER : UiTokens.PRIMARY).width('100%')
+                .transition(messageTransition())
             }
           }
           .padding({ left: UiTokens.PAGE_PADDING, right: UiTokens.PAGE_PADDING, top: 10,
