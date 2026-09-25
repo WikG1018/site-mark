@@ -3,6 +3,15 @@
 > 交接对象：接手"小米澎湃OS 风格动效/材质升级"（Phase A–E + MiSans）的下一个 agent。
 > 用户已批准全部范围："a到e都要，misans也需要"。
 
+> [!IMPORTANT]
+> **状态：Phase A–E 已全部完成并合入 `main`（2026-09-25 归档）。** Phase D 由
+> PR #173 合入（看图物理、内容矩形双击缩放、列表进出场接线），Phase E 由 PR #174
+> 合入（`docs/motion-and-material-spec.md` + MiSans 子集）；`v1.0.28` / `v1.0.29`
+> 已发布，`v1.0.29` 修复照片 Hero 飞行重影（PR #176）。第三节「进行中」与「下一步」
+> 已过时，仅作实现过程记录；当前状态以
+> [`NEXT_AGENT_PROMPT.md`](../../../NEXT_AGENT_PROMPT.md) 与
+> [`docs/current-product-architecture.md`](../../current-product-architecture.md) 为准。
+
 ## 一、任务背景
 
 用户认为 app 质感/动画未达一线大厂水准，要求按小米 HyperOS 审美升级。调研结论：小米未公开数字动效规格，动效参数为工程自选（Flutter iOS 家族默认 spring：mass 0.5 / stiffness 100–140，三档阻尼比）。

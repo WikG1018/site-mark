@@ -293,6 +293,24 @@ CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用
   远程访问（WireGuard/Tailscale/QuickConnect）由用户自行解决；SFTP 密钥认证
   （当前为用户名/密码）。
 
+## D-024 动效与材质收敛为单一 token 体系
+
+**状态：已接受（Phase A–E 已全量合入 main，PR #169–#174）**
+
+用户可见的动效与材质按小米澎湃OS 审美统一升级，并收敛为仓库内单一 token 体系：
+时长与曲线只来自 `lib/motion.dart` 的 `AppMotion`（标准/强调 cubic 与三档弹簧
+`SpringCurve`），圆角与悬浮阴影只来自 `lib/design_tokens.dart`（六档 `AppRadius`、
+单一 `AppShadow.chrome`），玻璃统一 `GlassSurface`/`GlassChrome` 单配方，弹窗与
+底部面板经 `AppMotion.dialogStyleOf` / `sheetStyleOf` 统一转场，按压缩放由
+`PressScale`（原始指针驱动）承接，应用字体内嵌 MiSans 子集（Regular/Medium，
+许可见 `assets/fonts/`）。完整规范见 `docs/motion-and-material-spec.md`，
+鸿蒙原生端后续移植以该文件为对齐源。
+
+关键约束：系统"减少动画"开启时时长归零、按压缩放完全静止（触感承载反馈）；
+Android 实时模糊仅限单点 chrome 显式开启、列表卡片禁用（v1.0.20 掉帧教训）；
+触感契约"一次语义动作至多一次"，导航表面与校验失败静音（`capture_form_screen_test.dart`
+钉死）。跨端移植（鸿蒙 ArkTS）按同一 token 值手工对齐，不引入平台自选参数。
+
 ## 决策变更规则
 
 - 不直接删除已经发布版本遵循的决策；

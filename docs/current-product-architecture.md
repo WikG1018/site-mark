@@ -44,10 +44,40 @@ SiteMark（工程印记）是面向工程现场记录的水印相机。应用负
 | Android 集成层 | Kotlin、Pigeon、FlutterPlugin、ActivityAware | 系统相机、ContentProvider、EXIF 检查、前台定位、MediaStore |
 | iOS 集成层 | Swift、Pigeon、BGTaskScheduler、PHPhotoLibrary | 系统相机桥、EXIF/GPS 检查、前台定位、相册发布与删除、存档、内存压力（见第 10 节） |
 | 图像核心层 | Rust、flutter_rust_bridge | EXIF 方向、SHA-256、全分辨率水印、CSV/JSON/ZIP 导出 |
+| 动效与材质层 | `lib/motion.dart`（AppMotion）、`lib/design_tokens.dart`（AppRadius/AppShadow）、`GlassSurface`、`PressScale` | 时长/曲线/弹簧、圆角/阴影/玻璃单配方、按压缩放与触感的统一 token（见下节） |
 
 Flutter 与 Rust 之间只传文件路径和结构化参数，不把整张全分辨率图片作为 Dart
 字节数组跨 FFI 传递。Android 平台能力集中在仓库内插件
 `packages/sitemark_system_api`，前台 Activity 和后台 FlutterEngine 共用同一接口。
+
+## 动效与材质体系
+
+用户可见的动效与材质由单一 token 体系驱动（澎湃OS 风格升级，决策 D-024）：
+
+- **动效 token**：自定义动画的时长与曲线只来自 `lib/motion.dart` 的 `AppMotion`——
+  标准/强调 cubic 与三档弹簧（`SpringCurve` 采样自弹簧模拟，端点精确 0/1）；
+  系统开启"减少动画"时 `AppMotion.durationOf` 把时长归零。
+- **弹窗与底部面板**：经 `AppMotion.dialogStyleOf` / `sheetStyleOf` 统一转场
+  （弹簧进入、加速退出，减少动画时无动画）。
+- **按压缩放与触感**：`PressScale` / `PressScaleView`（`lib/shared/ui/press_scale.dart`）
+  由原始指针事件驱动，越出滑动阈值即取消。触感契约：一次语义动作至多一次触感，
+  导航表面与校验失败静音；减少动画下按压缩放完全静止，反馈由触感承载。
+- **材质 token**：`lib/design_tokens.dart` 提供六档圆角 `AppRadius`
+  （8/12/16/20/24/999）与单一悬浮阴影 `AppShadow.chrome`；玻璃统一
+  `GlassSurface` / `GlassChrome` 单配方（填充 0.58 / 模糊 σ20）。Android 实时模糊
+  仅限 Dock 等单点 chrome 显式开启（列表卡片禁用，避免逐帧 saveLayer 掉帧），
+  iOS 全量启用。
+- **页面转场**：Android 为自研滑移转场并冻结被覆盖的图片列表（保中端机帧率），
+  iOS 走 SharedAxis / FadeThrough；减少动画时直接切换
+  （`lib/navigation/route_transitions.dart`）。图片查看器带橡皮筋拖拽、释放惯性与
+  弹簧回位；列表→详情的图片 Hero 使用统一 flight shuttle（单一解码缓存键，
+  cover→contain 交叉淡化，防重影）。
+- **字体**：内嵌 MiSans 子集（Regular / Medium）为应用字体，回退系统字体；
+  许可见 `assets/fonts/LICENSE-MiSans.pdf`。
+
+完整规范（含曲线参数与场景映射）见 `docs/motion-and-material-spec.md`。该体系属
+Flutter 共享层，iOS 随 `lib/` 复用自动生效；鸿蒙原生端为独立 ArkTS 实现，尚未移植
+本体系（平台差异见 `ohos-native/docs/deltas.md`）。
 
 ## 4. 数据模型
 
