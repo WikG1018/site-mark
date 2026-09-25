@@ -79,7 +79,7 @@
 
 ### 动效
 
-任何自定义动画的时长与曲线只能来自 `lib/motion.dart` 的 `AppMotion`（见 `CONTRIBUTING.md`）。需要新 token 时先扩展 `AppMotion`，不要在业务文件里写死 `Duration` / `Cubic`。
+任何自定义动画的时长与曲线只能来自 `lib/motion.dart` 的 `AppMotion`（见 `CONTRIBUTING.md`）。需要新 token 时先扩展 `AppMotion`，不要在业务文件里写死 `Duration` / `Cubic`。圆角、悬浮阴影与玻璃配方只能来自 `lib/design_tokens.dart`（`AppRadius` / `AppShadow.chrome`）与 `GlassSurface` 单配方；弹窗与底部面板转场用 `AppMotion.dialogStyleOf` / `sheetStyleOf`。完整动效/材质规范见 `docs/motion-and-material-spec.md`（鸿蒙移植时的对齐源）。
 
 ### 测试与验证
 
