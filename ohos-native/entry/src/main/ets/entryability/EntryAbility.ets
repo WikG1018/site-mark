@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { UIContext, window } from '@kit.ArkUI';
 import { AbilityContextHolder } from '../app/AbilityContextHolder';
 import { AppRuntime } from '../app/AppRuntime';
+import { AppFont } from '../shared/AppFont';
 import { forwardUiMemoryLevel } from '../shared/UiMemoryCoordinator';
 import { captureIdFromWantParameters, PendingNotificationLaunch }
   from '../shared/PendingNotificationLaunch';
@@ -34,6 +35,7 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onWindowStageCreate');
+    AppFont.register();
 
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {

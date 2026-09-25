@@ -38,6 +38,7 @@ import motionTokensTest from './MotionTokens.test';
 import pressGestureTest from './PressGesture.test';
 import hapticsTest from './Haptics.test';
 import viewerTransformPolicyTest from './ViewerTransformPolicy.test';
+import appFontTest from './AppFont.test';
 import scrollChromePolicyTest from './ScrollChromePolicy.test';
 
 export default function testsuite(): void {
@@ -81,5 +82,6 @@ export default function testsuite(): void {
   pressGestureTest();
   hapticsTest();
   viewerTransformPolicyTest();
+  appFontTest();
   scrollChromePolicyTest();
 }
