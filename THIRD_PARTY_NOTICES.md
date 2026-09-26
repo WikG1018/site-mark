@@ -18,7 +18,8 @@ Source: https://github.com/notofonts/noto-cjk
 ## MiSans
 
 The bundled `assets/fonts/MiSans-Regular.ttf` and
-`assets/fonts/MiSans-Medium.ttf` are subsets of MiSans (Xiaomi HyperOS system
+`assets/fonts/MiSans-Medium.ttf` (mirrored into the HarmonyOS native app at
+`ohos-native/entry/src/main/resources/rawfile/font/`) are subsets of MiSans (Xiaomi HyperOS system
 typeface), used as the app UI face.
 
 - Typeface copyright © Xiaomi.

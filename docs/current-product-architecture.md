@@ -1,7 +1,7 @@
 # SiteMark 当前产品边界与总体架构
 
-> 状态：Android v1.0.25 当前设计 + HarmonyOS NEXT 原生（native-v1.0.13）+ iOS Flutter 复用（签名待补）
-> 适用版本：Android v1.0.25；HarmonyOS native 1.0.13；iOS Phase 0–3、5–8 已落地，Phase 4 待 Apple Developer 账号
+> 状态：Android v1.0.29 当前设计 + HarmonyOS NEXT 原生（native-v1.0.14，动效/材质与 NAS 双向已对齐）+ iOS Flutter 复用（签名待补）
+> 适用版本：Android v1.0.29；HarmonyOS native 1.0.14；iOS Phase 0–3、5–8 已落地，Phase 4 待 Apple Developer 账号
 > 本文描述已落地的产品边界；阶段性计划保留在 `docs/superpowers/` 供追溯。
 
 ## 1. 产品定位
@@ -185,14 +185,14 @@ v1.0.0 必须通过 Flutter 全量测试与静态分析、Rust fmt/Clippy/全量
 | 层 | HarmonyOS 原生技术 | 边界 |
 | --- | --- | --- |
 | 界面与导航 | ArkTS、ArkUI、Navigation、自定义悬浮 Dock | 项目/记录/设置三分支、中英文、深浅色、表单与批量交互 |
-| 数据 | RelationalStore schema 14、Preferences | 业务字段对齐 Android schema 11；额外表用于鸿蒙私有文件/媒体清理和中断恢复 |
+| 数据 | RelationalStore schema 16、Preferences | 业务字段对齐 Android schema 14；v15 引入 NAS 配置/上传簿记表，v16 增加双向同步的 sync_mode；另有鸿蒙私有文件/媒体清理与中断恢复表 |
 | 拍摄与系统 | CameraPicker、LocationKit、PhotoAccessHelper、DocumentViewPicker | 系统相机与系统保存面板；声明前台定位权限，以及可选 NAS 同步所需的 INTERNET / GET_NETWORK_INFO |
 | 处理与恢复 | 应用存活期串行队列、启动对账、Preferences 发布日记 | 进程被系统结束后暂停，下次启动幂等收敛，不伪装 WorkManager |
 | 图像与归档 | 同一 `sitemark_core`，C ABI + C++ N-API，`arm64-v8a`/`x86_64` | 与 Android 复用水印、SHA-256、CSV/JSON/ZIP 算法；全分辨率数据不经 ArkTS 字节数组传递 |
 
 鸿蒙数据安全语义继续使用稳定 `captureId` 而不是照片编号或文件名识别发布记录。新发布 URI 先写耐久日记，RDB 提交时同事务加入旧 URI 清理任务；清理前查询全库引用，日记只能按期望 URI 条件清除。
 
-当前完成的是 DevEco API 22 x86_64 模拟器级功能回归和双 ABI 构建；正式签名、HarmonyOS NEXT 真机 CameraPicker/相册授权和高像素性能尚待复验。实测限制以 [`ohos-native/docs/deltas.md`](../ohos-native/docs/deltas.md) 为准。
+当前完成的是 DevEco API 24 模拟器级功能回归和双 ABI 构建（含与 Android v1.0.29 对齐的动效/材质 token 体系与 NAS 双向同步）；正式签名、HarmonyOS NEXT 真机 CameraPicker/相册授权、高像素性能与动效手感尚待复验。实测限制以 [`ohos-native/docs/deltas.md`](../ohos-native/docs/deltas.md) 为准。
 
 ## 10. iOS 适配（Flutter 复用线）
 

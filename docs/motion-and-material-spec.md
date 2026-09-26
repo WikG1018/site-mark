@@ -1,6 +1,6 @@
 # SiteMark 动效 / 材质规范（Phase E）
 
-> 版本：2026-09-23。适用范围：Android / iOS / 鸿蒙（鸿蒙 native 仅作对照，Flutter 线以本文为准）。
+> 版本：2026-09-23（2026-09-26 修订适用范围）。适用范围：Android / iOS / 鸿蒙——鸿蒙原生已按本文对齐（springMotion 的 response 为 ArkUI 换算值，手感验证状态见 `ohos-native/docs/deltas.md`）；Flutter 线以本文为准。
 > 对标：小米澎湃OS「生命感美学」。**重要前提**：小米未公开第三方 App 的动效数值规范；本文所有数值均为**工程选择**（★），不是小米官方要求。可直接引用的一手依据只有 MiSans 授权与 MiHaptic 触感体系（★★★）。
 > 跨项目调研原文（可信度分级、许可细节、MiHaptic 映射表）：交接机桌面 `小米澎湃OS设计规范调研-2026-09.md`（不在仓库内）。
 
