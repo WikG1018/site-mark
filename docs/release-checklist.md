@@ -12,7 +12,7 @@ v1.0 真机回归勾选表见 [`verification-v1.0.0-device.md`](verification-v1.
 - 发布标签必须为 `v<版本号>`，例如 `version: 0.8.1+12` 对应 `v0.8.1`；鸿蒙原生版发布标签为 `native-v<版本号>`，与 `AppScope/app.json5` 的 `versionName` 一致。
 - 标签指向的提交必须已经进入 `main`，不得从未合并的功能分支直接发布。
 - 发布说明准确列出新增功能、修复内容、已知限制和升级注意事项。
-- **v1.0.13 已发布（Latest）。** `v1.0.13`（全屏查看器单指拖动修复）与 `native-v1.0.6` 同步发布并转正；真机增量回归在升级后按本清单补做。后续 `1.0.x` 补丁同样用本清单做回归。
+- **当前状态：Android `v1.0.29` 为 Latest；鸿蒙 `native-v1.0.14` 为最新 Pre-release（2026-09-26，对齐批次 + NAS 双向 + MiSans，未签名 HAP）。** 真机增量回归（拍照/后台、备份恢复、动效手感、NAS 真实网络路径）在拿到设备后按本清单补做；后续 `1.0.x` 同样用本清单回归。
 
 ## 二、自动化检查
 
@@ -88,7 +88,7 @@ flutter build apk --release
 
 - arm64 APK、universal APK 与 `SHA256SUMS.txt` 均已上传到同一 GitHub Release。
 - Release 标题统一为 `SiteMark <标签>`（Android）或 `SiteMark 鸿蒙原生版 <版本号>`（HarmonyOS NEXT）；Android 标题由发布工作流自动生成。
-- 发布资产统一按 `sitemark-<标签>-<变体>.<扩展名>` 命名，例如 `sitemark-v1.0.13-arm64.apk`、`sitemark-native-v1.0.6-unsigned.hap`。
+- 发布资产统一按 `sitemark-<标签>-<变体>.<扩展名>` 命名，例如 `sitemark-v1.0.29-arm64.apk`、`sitemark-native-v1.0.14-unsigned.hap`。
 - `README.md` 与 `README_EN.md` 的版本号、徽章、下载链接和 Latest/Pre-release 状态必须保持一致；更新其中一个时同步另一个。
 - Release 页面显示的标签、版本说明和文件名一致。
 - 随机下载一个发布 APK，重新校验 SHA-256、签名、版本和安装升级。

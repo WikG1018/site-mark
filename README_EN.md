@@ -11,11 +11,11 @@ English | [简体中文](README.md)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
 [![Latest](https://img.shields.io/badge/latest-v1.0.29-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.29)
-[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.13-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13)
+[![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.14-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14)
 
 **Current stable version (Latest): [`v1.0.29`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.29)**
 
-**Current HarmonyOS native version: [`native-v1.0.13`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.13) (HarmonyOS NEXT, unsigned HAP)**
+**Current HarmonyOS native version: [`native-v1.0.14`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14) (HarmonyOS NEXT, unsigned HAP)**
 
 Requires Android 12 (API 31) or later. `v1.0.29` is set as Latest: fixes the ghosted photo Hero flight (original flight restored). `v1.0.28` brought the HyperOS-style motion/material upgrade and the MiSans subset. Back up important projects regularly — including the private original photos — and copy the backup files outside the app's directories.
 
@@ -29,12 +29,12 @@ Requires Android 12 (API 31) or later. `v1.0.29` is set as Latest: fixes the gho
 | universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.29-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/sitemark-v1.0.29-universal.apk) |
 | SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.29/SHA256SUMS.txt) |
 
-### HarmonyOS native (native-v1.0.13)
+### HarmonyOS native (native-v1.0.14)
 
 | Package | Applies to / notes | Download |
 | --- | --- | --- |
-| HarmonyOS HAP | **Unsigned**; sign it yourself in a DevEco/hdc environment before installing. A production signature requires an AGC release certificate (see `tool/ohos-native/sign-hap.ps1`). The published HAP is a debug build variant (an unsigned release build cannot be installed directly) | [sitemark-native-v1.0.13-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.13/sitemark-native-v1.0.13-unsigned.hap) |
-| HarmonyOS SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.13/SHA256SUMS.txt) |
+| HarmonyOS HAP | **Unsigned**; sign it yourself in a DevEco/hdc environment before installing. A production signature requires an AGC release certificate (see `tool/ohos-native/sign-hap.ps1`). The published HAP is a debug build variant (an unsigned release build cannot be installed directly) | [sitemark-native-v1.0.14-unsigned.hap](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.14/sitemark-native-v1.0.14-unsigned.hap) |
+| HarmonyOS SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/native-v1.0.14/SHA256SUMS.txt) |
 
 > [!WARNING]
 > Uninstalling SiteMark deletes the app database, the app-private original photos, and the private watermark files. Watermarked photos already published to the system gallery `Pictures/SiteMark` are usually kept. Before uninstalling, switching devices, or resolving a signature conflict, open "Settings → Backup & restore" first, back up the important projects, and store the ZIP files in a safe place.
@@ -43,7 +43,7 @@ Requires Android 12 (API 31) or later. `v1.0.29` is set as Latest: fixes the gho
 
 `ohos-native/` is an independent Stage + ArkTS + ArkUI implementation. It does not use the community Flutter HarmonyOS adaptation layer and evolves on the same single branch as the Android version. It already runs the main flows — projects, capture processing, record management, watermarking, backup & restore, storage, and diagnostics — on the DevEco NEXT emulator, and it reuses the same Rust core as the Android version for image and ZIP rules.
 
-The current release provides an unsigned HAP of `native-v1.0.13` (see the download table above). **No signed HarmonyOS package is available yet, and the app is not on Huawei AppGallery**; the camera, gallery permissions, and performance still need to be re-verified on HarmonyOS NEXT real devices. Do not interpret the emulator results as an AppGallery release.
+The current release provides an unsigned HAP of `native-v1.0.14` (see the download table above): HyperOS-style motion/material aligned with Android v1.0.29 (springs, press-scale, four haptic tiers, one glass recipe, viewer physics), two-way NAS sync (restore + remote delete), and the embedded MiSans subset (About-screen credit). **No signed HarmonyOS package is available yet, and the app is not on Huawei AppGallery**; the camera, gallery permissions, and performance still need to be re-verified on HarmonyOS NEXT real devices. Do not interpret the emulator results as an AppGallery release.
 
 - [HarmonyOS native version: overview and build](ohos-native/README.md)
 - [Platform deltas and verification boundaries](ohos-native/docs/deltas.md)
@@ -68,6 +68,7 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releases) for the full notes.
 
+- **native-v1.0.14** (Pre-release): aligns with Android v1.0.29's HyperOS-style motion/material — spring engine and unified popup/sheet transitions, press-scale with four haptic tiers, six-step radii and the single glass/shadow recipe, viewer rubber-band/inertia physics, list row entrance; adds two-way NAS sync (restore photos missing locally, best-effort remote delete on local deletes; upload-only stays the default); embeds the MiSans subset (About-screen credit); RDB migrates to v16 (sync-mode column).
 - **v1.0.29** (Latest): fixes the ghosted photo Hero flight — endpoints are plain Heroes again so the destination photo no longer paints under the flying shuttle; drops the content-rect wrap that resized the hero child mid-flight.
 - **v1.0.28**: HyperOS-style motion and material upgrade — spring motion engine and unified popup/sheet transitions, press-scale with semantic haptics, material tokens and one glass recipe, list entrance + unified Hero + viewer rubber-band/fling; motion/material spec doc; MiSans subset as the UI face (About-screen credit).
 - **v1.0.27**: NAS two-way import picker and delete sync; smaller APKs via R8, drop armv7, Rust strip.
