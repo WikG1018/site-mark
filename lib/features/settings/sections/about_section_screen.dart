@@ -1,10 +1,15 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/domain/app_links.dart';
+import 'package:sitemark/domain/release_check.dart';
 import 'package:sitemark/features/settings/settings_section_scaffold.dart';
 import 'package:sitemark/l10n/app_strings.dart';
+import 'package:sitemark/shared/ui/adaptive_segmented_button.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
 
 /// Fallback version/build used when [PackageInfo.fromPlatform] fails (e.g. in
@@ -21,11 +26,16 @@ class AboutSectionScreen extends ConsumerStatefulWidget {
 class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
   String _version = _fallbackPackageInfo.version;
   String _buildNumber = _fallbackPackageInfo.buildNumber;
+  ReleaseCheckMode _mode = ReleaseCheckMode.auto;
+  ReleaseCheckOutcome? _outcome;
+  bool _checking = false;
+  bool _opening = false;
 
   @override
   void initState() {
     super.initState();
     _loadPackageInfo();
+    _loadMode();
   }
 
   Future<void> _loadPackageInfo() async {
@@ -45,6 +55,84 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
     }
   }
 
+  Future<void> _loadMode() async {
+    try {
+      final mode = await ref.read(releaseCheckModeStoreProvider).read();
+      if (!mounted) return;
+      setState(() => _mode = mode);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _mode = ReleaseCheckMode.auto);
+    }
+  }
+
+  Future<void> _setMode(ReleaseCheckMode mode) async {
+    setState(() => _mode = mode);
+    try {
+      await ref.read(releaseCheckModeStoreProvider).write(mode);
+    } catch (_) {
+      // 写失败不发请求。下次打开读失败会回到自动。
+    }
+  }
+
+  Future<void> _onCheckTap(BuildContext context) async {
+    if (_checking || _opening) return;
+    if (_outcome?.hasUpdate == true) {
+      await _openReleasePage(context);
+      return;
+    }
+    await _checkForUpdates();
+  }
+
+  Future<void> _checkForUpdates() async {
+    setState(() {
+      _checking = true;
+      _outcome = null;
+    });
+    try {
+      final outcome = await ref
+          .read(releaseLookupProvider)
+          .check(localVersion: _version, mode: _mode);
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _outcome = outcome;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _outcome = const ReleaseCheckOutcome.failed();
+      });
+    }
+  }
+
+  Future<void> _openReleasePage(BuildContext context) async {
+    final outcome = _outcome;
+    if (outcome == null || _opening) return;
+    setState(() => _opening = true);
+    try {
+      final uri = await ref
+          .read(releaseLookupProvider)
+          .resolveReleasePage(outcome);
+      if (!context.mounted) return;
+      if (uri == null) {
+        showAppToast(context, AppStrings.of(context).openLinkFailed);
+        return;
+      }
+      final opened = await ref.read(externalLinkServiceProvider).open(uri);
+      if (!opened && context.mounted) {
+        showAppToast(context, AppStrings.of(context).openLinkFailed);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        showAppToast(context, AppStrings.of(context).openLinkFailed);
+      }
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
   Future<void> _openRepository(BuildContext context) async {
     try {
       final opened = await ref
@@ -60,9 +148,28 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
     }
   }
 
+  String? _statusText(AppStrings strings) {
+    if (_checking) return strings.checkingForUpdates;
+    final outcome = _outcome;
+    if (outcome == null) return null;
+    return switch (outcome.status) {
+      ReleaseCheckStatus.upToDate => strings.upToDate,
+      ReleaseCheckStatus.updateAvailable => strings.newVersionFound(
+        outcome.versionLabel ?? '',
+      ),
+      ReleaseCheckStatus.failed => strings.checkForUpdatesFailed,
+    };
+  }
+
+  bool get _showIosNote =>
+      !_checking &&
+      _outcome?.hasUpdate == true &&
+      defaultTargetPlatform == TargetPlatform.iOS;
+
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final status = _statusText(strings);
     return SettingsSectionScaffold(
       title: strings.about,
       body: Column(
@@ -72,6 +179,58 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
             leading: const Icon(Icons.info_outline),
             title: Text(strings.version),
             trailing: Text('$_version+$_buildNumber'),
+          ),
+          ListTile(
+            key: const Key('check-for-updates'),
+            leading: const Icon(Icons.system_update_alt_outlined),
+            title: Text(strings.checkForUpdates),
+            subtitle: status == null ? null : Text(status),
+            onTap: () => unawaited(_onCheckTap(context)),
+          ),
+          if (_outcome?.hasUpdate == true)
+            Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: TextButton(
+                key: const Key('open-release-page'),
+                onPressed: _opening
+                    ? null
+                    : () => unawaited(_openReleasePage(context)),
+                child: Text(strings.openReleasePage),
+              ),
+            ),
+          if (_showIosNote)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                strings.iosPackageNote,
+                key: const Key('ios-release-note'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: AdaptiveSegmentedButton<ReleaseCheckMode>(
+              key: const Key('release-check-mode'),
+              style: segmentTapTargetStyle,
+              segments: [
+                ButtonSegment(
+                  value: ReleaseCheckMode.auto,
+                  label: Text(strings.releaseCheckAutomatic),
+                ),
+                ButtonSegment(
+                  value: ReleaseCheckMode.official,
+                  label: Text(strings.releaseCheckOfficialOnly),
+                ),
+                ButtonSegment(
+                  value: ReleaseCheckMode.mirror,
+                  label: Text(strings.releaseCheckMirrorFirst),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (selection) {
+                unawaited(_setMode(selection.single));
+              },
+            ),
           ),
           ListTile(
             leading: const Icon(Icons.shield_outlined),

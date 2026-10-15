@@ -1,13 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Security boundary (D-023): SiteMark stays offline-first with no ads,
-         analytics, accounts, or cloud services. The ONLY network surface is
-         the opt-in NAS sync: WebDAV uploads to a server the user configures
-         and that speaks to no third party. INTERNET + ACCESS_NETWORK_STATE
-         exist solely for that feature (ACCESS_NETWORK_STATE additionally
-         backs the "upload over Wi-Fi only" preference) and are asserted by
-         the CI/release permission gates. WAKE_LOCK, RECEIVE_BOOT_COMPLETED,
+    <!-- Security boundary (D-023, D-025): SiteMark stays offline-first with no ads,
+         analytics, accounts, or cloud services. Network is used for the opt-in
+         NAS sync (WebDAV/SFTP/SMB to a server the user configures) and for
+         Check for updates after a tap on the About page. Check for updates
+         reuses INTERNET; it does not add a permission. INTERNET +
+         ACCESS_NETWORK_STATE exist for those features (ACCESS_NETWORK_STATE
+         additionally backs the "upload over Wi-Fi only" preference) and are
+         asserted by the CI/release permission gates. WAKE_LOCK, RECEIVE_BOOT_COMPLETED,
          and FOREGROUND_SERVICE remain for WorkManager's local on-device
          background processing and boot reconciliation. -->
     <uses-permission android:name="android.permission.INTERNET" />

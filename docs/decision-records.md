@@ -21,9 +21,9 @@
 发布 APK 曾移除 `INTERNET` 和 `ACCESS_NETWORK_STATE`，不加入账号、广告、分析、
 云同步或远程 API。GitHub 链接只交给外部浏览器打开。
 
-D-023 修订了该边界：唯一的网络出口是用户主动配置并启用的 NAS 同步，发布包为此
-声明 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`）。无账号、
-广告、分析、第三方云同步和远程 API 的约束仍然有效。
+D-023 修订了该边界：网络用于用户主动配置并启用的 NAS 同步，以及关于页点击后的检查更新
+（D-025）。发布包为此声明 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`）。
+无账号、广告、分析、第三方云同步和远程 API 的约束仍然有效。
 
 ## D-003 私有保留原图，公开发布水印成片
 
@@ -259,10 +259,10 @@ CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用
 这条决策修订了"无网络发布面"边界（D-00x 系列中的离线原则）——这是本应用第一次
 申请网络权限，变更范围被刻意压到最小：
 
-- **唯一网络面**：NAS 同步。应用只向用户在设置中明确配置的服务器发起连接
+- **唯一网络面（NAS）**：NAS 同步。应用只向用户在设置中明确配置的服务器发起连接
   （WebDAV：PUT/MKCOL/HEAD/DELETE；SFTP：SFTP 子系统；SMB：SMB2/3），不连接
-  任何第三方服务，无遥测、无检查更新、无在线内容。不配置即不存在任何网络行为
-  （默认关闭）。
+  任何第三方服务，无遥测、无在线内容。检查更新不再属于这条禁令，见 D-025。
+  不配置 NAS 即不存在同步流量（默认关闭）。
 - **三端共用一个 Rust 核心**：协议客户端只实现一次（`sitemark_core` 的 `nas`
   模块：WebDAV 基于 ureq、SFTP 基于 russh、SMB 基于纯 Rust smb2），经
   flutter_rust_bridge 服务 Android/iOS、经既有 JSON C ABI 服务鸿蒙。远程路径
@@ -278,8 +278,8 @@ CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用
   `INTERNET` 隐式授予）；鸿蒙新增 `GET_NETWORK_INFO`（normal 级）。CI/release
   门禁从"禁止网络权限"改为"必须有这些权限、且不得出现其余网络/相机/存储权限"。
 - **明文 HTTP**：局域网 NAS 常见明文 HTTP，Android `usesCleartextTraffic=true`、
-  iOS `NSAllowsLocalNetworking`。代价与理由：应用内除 NAS 同步外不存在任何网络
-  调用点（构造性保证），明文只影响用户自选的局域网目标；设置中提供"允许自签名
+  iOS `NSAllowsLocalNetworking`。代价与理由：NAS 同步是唯一可能走明文 HTTP 的
+  网络调用点（检查更新只用 HTTPS，见 D-025），明文只影响用户自选的局域网目标；设置中提供"允许自签名
   证书"开关（iOS/Android 的 WebDAV 线，基于 rustls 的显式接受验证器）。
 - **SFTP 主机密钥**：信任于首次使用（TOFU）在 Rust 侧强制——首次连接返回指纹
   交用户确认保存，此后指纹不匹配即拒绝上传（`host_key_changed`），需要重新
@@ -310,6 +310,34 @@ CupertinoAlertDialog，Android 分支保持原有 Material 组合不变。应用
 Android 实时模糊仅限单点 chrome 显式开启、列表卡片禁用（v1.0.20 掉帧教训）；
 触感契约"一次语义动作至多一次"，导航表面与校验失败静音（`capture_form_screen_test.dart`
 钉死）。跨端移植（鸿蒙 ArkTS）按同一 token 值手工对齐，不引入平台自选参数。
+
+## D-025 关于页手动检查更新
+
+**状态：已接受**
+
+修订 D-023 里「无检查更新」这一句。NAS 同步规则不变，不新增权限（复用已有
+`INTERNET` / 鸿蒙 `INTERNET`）。
+
+- 只有用户在关于页点击「检查更新」后才发请求。打开页面、启动和后台都不检查。
+- 默认「自动」：先读 `https://api.github.com` 公开发布列表（超时 4 秒）。连不上、
+  非 200、非 JSON、没有合法标签，或重定向到其他主机时，再试固定公开镜像
+  `https://gh-proxy.com`（超时 6 秒，只代理同一条 API 路径）。用户可以改成
+  「仅官方」或「优先镜像」。选择记在应用私有目录的小文件里
+  （`auto` / `official` / `mirror`），不改数据库。读失败当作自动。
+- 不向镜像发送 token、Cookie、照片、账号或诊断。响应不是 JSON，或没有合法
+  `tag_name`，只算这个源失败，继续下一个。全部失败只显示无法检查，不得显示
+  已是最新，也不把服务器原文给用户。
+- 只解析 `tag_name`（以及 `draft` / `prerelease`）。不采用响应里的 `html_url`。
+  标签必须匹配 `^v\d+\.\d+\.\d+$`（Flutter）或 `^native-v\d+\.\d+\.\d+$`（鸿蒙）。
+  Flutter 对照 `/releases/latest` 的非预发布标签，忽略本机 `+build`。鸿蒙不得用
+  `/releases/latest`，只在 `releases?per_page=30` 里取最高 `native-v`，与
+  `versionName` 比较。远程版本更高才算有更新；相等或本机更高显示已是最新。
+- 不在应用内下载或安装 APK/HAP。官方检查成功时，外部浏览器直接打开
+  `https://github.com/WikG1018/site-mark/releases/tag/` 加解析出的标签。镜像检查
+  成功时不用 `gh-proxy.com` 打开发布页（该前缀对发布页返回 403），按
+  `ghproxy.net`、`gh.llkk.cc`、`ghfast.top`、`g.blfrp.cn`、`fastgit.cc` 的顺序试，
+  只拼接代码里的官方发布页。前缀必须来自这份固定名单。
+- iOS 仍可打开发布页，但说明安装包尚未提供、发布页目前只有 Android 安装包。
 
 ## 决策变更规则
 

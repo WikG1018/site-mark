@@ -117,7 +117,7 @@ I built SiteMark because recording on a jobsite takes more than stamping text on
 
 I deliberately did not re-implement a camera or embed a third-party camera SDK — manufacturers have spent years tuning their own lenses, and an app-level rework only makes things worse. SiteMark invokes the system/vendor camera through standard platform APIs, leaving focus, HDR, stabilization, and image quality to the system, and does three things itself: engineering fields before the shot, local watermarking after it, and record/project management.
 
-The published APK has no ads, accounts, third-party cloud sync, or analytics uploads; repository links open in the external browser. The only network surface is the NAS sync you configure and enable yourself (WebDAV/SFTP/SMB, see D-023 in `docs/decision-records.md`): uploads go exclusively to the server you enter, and the feature is off by default. Offline remains the default state — the network is an exception the user explicitly opens.
+The published APK has no ads, accounts, third-party cloud sync, or analytics uploads; repository links open in the external browser. Network is used for NAS sync and for Check for updates after you tap it on the About page (D-023 and D-025 in `docs/decision-records.md`): NAS uploads go exclusively to the server you enter and stay off by default; Check for updates reads the public GitHub release version only after a tap, and in Automatic mode tries a fixed public mirror only if GitHub cannot be reached. Offline remains the default state — the network is an exception the user explicitly opens.
 
 ## Quick start
 

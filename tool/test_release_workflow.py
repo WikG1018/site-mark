@@ -9,7 +9,8 @@ APP_GRADLE = REPOSITORY_ROOT / "android" / "app" / "build.gradle.kts"
 EXPECTED_TARGET_SDK = "37"
 
 # D-023: INTERNET and ACCESS_NETWORK_STATE are required since the opt-in
-# NAS sync feature (WebDAV upload to a user-configured server). They are the
+# NAS sync feature (WebDAV upload to a user-configured server). Check for
+# updates reuses INTERNET and does not add a permission. They are the
 # ONLY network permissions allowed; every broader or unrelated one stays
 # forbidden.
 REQUIRED_PERMISSIONS = (

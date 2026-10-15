@@ -14,9 +14,11 @@ class HarmonyNativeManifestTest(unittest.TestCase):
         permissions = set(re.findall(r'"name"\s*:\s*"(ohos\.permission\.[A-Z_]+)"', module))
         # VIBRATE is a system-grant permission backing the selection haptics.
         # INTERNET + GET_NETWORK_INFO serve the opt-in NAS sync (D-023
-        # revision, 2026-09-02): uploads go only to the server the user
-        # configures. The camera/media surface must stay empty — captures
-        # go through the system camera app.
+        # revision, 2026-09-02) and Check for updates on the About page
+        # (D-025). Check for updates reuses INTERNET and does not add a
+        # permission. Uploads go only to the server the user configures.
+        # The camera/media surface must stay empty — captures go through
+        # the system camera app.
         self.assertEqual(
             permissions,
             {

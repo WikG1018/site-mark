@@ -29,6 +29,7 @@ import { UiMemoryCoordinator } from '../shared/UiMemoryCoordinator';
 import { cancelSystemSuspendDelay, requestSystemSuspendDelay, SuspendDelayWindow }
   from '../shared/SuspendDelayWindow';
 import { StorageInspector } from '../core/system/StorageInspector';
+import { ReleasePageOpener } from '../shared/ReleaseCheck';
 
 const RUNTIME_DOMAIN = 0x0000;
 const RUNTIME_TAG = 'SiteMarkRuntime';
@@ -120,6 +121,11 @@ export class AppRuntime {
       throw new Error('AppRuntime is not initialized');
     }
     return AppRuntime.current;
+  }
+
+  openReleasePage(url: string): Promise<void> {
+    const opener = new ReleasePageOpener((target: string): Promise<void> => this.context.openLink(target));
+    return opener.open(url);
   }
 
   subscribe(listener: RuntimeListener): void {
