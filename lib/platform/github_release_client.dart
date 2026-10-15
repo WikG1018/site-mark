@@ -21,11 +21,12 @@ class ReleaseFetch {
       !redirected && !truncated && statusCode == 200 && body.isNotEmpty;
 }
 
-typedef ReleaseFetcher = Future<ReleaseFetch> Function(
-  Uri uri, {
-  required Duration timeout,
-  required String accept,
-});
+typedef ReleaseFetcher =
+    Future<ReleaseFetch> Function(
+      Uri uri, {
+      required Duration timeout,
+      required String accept,
+    });
 
 abstract interface class ReleaseLookup {
   Future<ReleaseCheckOutcome> check({
