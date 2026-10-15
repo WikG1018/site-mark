@@ -1,4 +1,5 @@
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,9 +8,12 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sitemark/app.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/app_links.dart';
+import 'package:sitemark/domain/release_check.dart';
 import 'package:sitemark/features/settings/sections/about_section_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/external_link_service.dart';
+import 'package:sitemark/platform/github_release_client.dart';
+import 'package:sitemark/platform/release_check_mode_store.dart';
 
 void main() {
   late AppDatabase database;
@@ -25,6 +29,8 @@ void main() {
   Future<void> pumpScreen(
     WidgetTester tester, {
     ExternalLinkService? externalLinks,
+    ReleaseLookup? lookup,
+    ReleaseCheckModeStore? modeStore,
     Locale locale = const Locale('zh'),
   }) async {
     await database.getAppSettings();
@@ -32,6 +38,10 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(database),
+          releaseCheckModeStoreProvider.overrideWithValue(
+            modeStore ?? MemoryReleaseCheckModeStore(),
+          ),
+          if (lookup != null) releaseLookupProvider.overrideWithValue(lookup),
           if (externalLinks != null)
             externalLinkServiceProvider.overrideWithValue(externalLinks),
         ],
@@ -60,7 +70,11 @@ void main() {
         find.text(locale.languageCode == 'en' ? 'Version' : '版本'),
         findsOneWidget,
       );
-      expect(find.text('1.0.29+44'), findsOneWidget);
+      expect(find.text('1.0.30+45'), findsOneWidget);
+      expect(
+        find.text(locale.languageCode == 'en' ? 'Check for updates' : '检查更新'),
+        findsOneWidget,
+      );
       expect(
         find.text(
           locale.languageCode == 'en'
@@ -73,15 +87,21 @@ void main() {
       expect(
         find.text(
           locale.languageCode == 'en'
-              ? 'Offline by default. The only network surface is optional '
-                    'NAS sync (WebDAV, SFTP or SMB) that you enable yourself; '
-                    'it connects only to the server you configure. GitHub '
-                    'links open in an external browser. Foreground location '
-                    'is used only when requested, and a diagnostic bundle '
-                    'reaches the system share sheet only after confirmation.'
-              : '默认离线。唯一的网络出口是你主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB），'
-                    '只连接你自己的服务器。GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，'
-                    '诊断包仅在用户确认后交给系统分享面板。',
+              ? 'Offline by default. Network is used only when you open it: NAS '
+                    'sync (WebDAV, SFTP or SMB) connects only to the server you '
+                    'configure. Check for updates on the About page reads the '
+                    'public GitHub release version first by default; in '
+                    'Automatic mode it tries a fixed public mirror only if '
+                    'GitHub cannot be reached, and you can switch to Official '
+                    'only or Mirror first. It does not upload photos or an '
+                    'account. GitHub links open in an external browser. '
+                    'Foreground location is used only when requested, and a '
+                    'diagnostic bundle reaches the system share sheet only '
+                    'after confirmation.'
+              : '默认离线。网络只在你主动打开时使用：NAS 同步（WebDAV/SFTP/SMB）只连接你配置的服务器；'
+                    '关于页的检查更新默认先读取 GitHub 公开版本号，自动模式下连不上才试固定的公开镜像，'
+                    '也可以改成仅官方或优先镜像，不上传照片或账号。GitHub 链接交给外部浏览器。'
+                    '前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。',
         ),
         findsOneWidget,
       );
@@ -136,6 +156,124 @@ void main() {
     expect(find.text('9.8.7+654'), findsOneWidget);
     expect(find.text('1.0.29+44'), findsNothing);
   });
+
+  testWidgets('about does not check for updates until the tile is tapped', (
+    tester,
+  ) async {
+    final lookup = _FakeReleaseLookup();
+    await pumpScreen(tester, lookup: lookup);
+    expect(lookup.checks, 0);
+    expect(find.text('正在检查…'), findsNothing);
+    expect(find.text('已是最新版本'), findsNothing);
+    expect(find.text('无法检查更新。请检查网络后再试。'), findsNothing);
+  });
+
+  testWidgets('check reports up to date without an open button', (
+    tester,
+  ) async {
+    final lookup = _FakeReleaseLookup(
+      outcome: const ReleaseCheckOutcome(
+        status: ReleaseCheckStatus.upToDate,
+        versionLabel: '1.0.29',
+        tag: 'v1.0.29',
+        source: ReleaseSource.official,
+      ),
+    );
+    await pumpScreen(tester, lookup: lookup);
+    await tester.tap(find.byKey(const Key('check-for-updates')));
+    await tester.pumpAndSettle();
+    expect(lookup.checks, 1);
+    expect(lookup.modes, [ReleaseCheckMode.auto]);
+    expect(find.text('已是最新版本'), findsOneWidget);
+    expect(find.byKey(const Key('open-release-page')), findsNothing);
+  });
+
+  testWidgets('an update opens the Uri from the lookup', (tester) async {
+    final page = Uri.parse(
+      'https://gh.llkk.cc/https://github.com/WikG1018/site-mark/releases/tag/v1.0.30',
+    );
+    final links = _RecordingExternalLinkService();
+    final lookup = _FakeReleaseLookup(
+      outcome: const ReleaseCheckOutcome(
+        status: ReleaseCheckStatus.updateAvailable,
+        versionLabel: '1.0.30',
+        tag: 'v1.0.30',
+        source: ReleaseSource.apiMirror,
+      ),
+      page: page,
+    );
+    await pumpScreen(tester, lookup: lookup, externalLinks: links);
+    await tester.tap(find.byKey(const Key('check-for-updates')));
+    await tester.pumpAndSettle();
+    expect(find.text('发现新版本 1.0.30'), findsOneWidget);
+    expect(find.text('已是最新版本'), findsNothing);
+    expect(find.byKey(const Key('ios-release-note')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('open-release-page')));
+    await tester.pumpAndSettle();
+    expect(links.opened, [page]);
+
+    await tester.tap(find.byKey(const Key('check-for-updates')));
+    await tester.pumpAndSettle();
+    expect(links.opened, [page, page]);
+    expect(lookup.checks, 1);
+  });
+
+  testWidgets('a thrown check does not claim the app is up to date', (
+    tester,
+  ) async {
+    final lookup = _FakeReleaseLookup(throwOnCheck: true);
+    await pumpScreen(tester, lookup: lookup);
+    await tester.tap(find.byKey(const Key('check-for-updates')));
+    await tester.pumpAndSettle();
+    expect(find.text('无法检查更新。请检查网络后再试。'), findsOneWidget);
+    expect(find.text('已是最新版本'), findsNothing);
+    expect(find.byKey(const Key('open-release-page')), findsNothing);
+  });
+
+  testWidgets('changing the source does not send a request', (tester) async {
+    final lookup = _FakeReleaseLookup();
+    final modes = MemoryReleaseCheckModeStore();
+    await pumpScreen(tester, lookup: lookup, modeStore: modes);
+    await tester.tap(find.text('仅官方'));
+    await tester.pumpAndSettle();
+    expect(lookup.checks, 0);
+    expect(modes.mode, ReleaseCheckMode.official);
+    await tester.tap(find.text('优先镜像'));
+    await tester.pumpAndSettle();
+    expect(lookup.checks, 0);
+    expect(modes.mode, ReleaseCheckMode.mirror);
+  });
+
+  testWidgets('iOS still opens the release page and says no iOS package', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      final page = Uri.parse(
+        'https://github.com/WikG1018/site-mark/releases/tag/v1.0.30',
+      );
+      final links = _RecordingExternalLinkService();
+      final lookup = _FakeReleaseLookup(
+        outcome: const ReleaseCheckOutcome(
+          status: ReleaseCheckStatus.updateAvailable,
+          versionLabel: '1.0.30',
+          tag: 'v1.0.30',
+          source: ReleaseSource.official,
+        ),
+        page: page,
+      );
+      await pumpScreen(tester, lookup: lookup, externalLinks: links);
+      await tester.tap(find.byKey(const Key('check-for-updates')));
+      await tester.pumpAndSettle();
+      expect(find.text('iOS 安装包尚未提供，发布页目前只有 Android 安装包。'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('open-release-page')));
+      await tester.pumpAndSettle();
+      expect(links.opened, [page]);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }
 
 class _RecordingExternalLinkService implements ExternalLinkService {
@@ -149,4 +287,28 @@ class _RecordingExternalLinkService implements ExternalLinkService {
     opened.add(uri);
     return result;
   }
+}
+
+class _FakeReleaseLookup implements ReleaseLookup {
+  _FakeReleaseLookup({this.outcome, this.page, this.throwOnCheck = false});
+
+  final ReleaseCheckOutcome? outcome;
+  final Uri? page;
+  final bool throwOnCheck;
+  int checks = 0;
+  final List<ReleaseCheckMode> modes = [];
+
+  @override
+  Future<ReleaseCheckOutcome> check({
+    required String localVersion,
+    required ReleaseCheckMode mode,
+  }) async {
+    checks += 1;
+    modes.add(mode);
+    if (throwOnCheck) throw StateError('network');
+    return outcome ?? const ReleaseCheckOutcome.failed();
+  }
+
+  @override
+  Future<Uri?> resolveReleasePage(ReleaseCheckOutcome outcome) async => page;
 }

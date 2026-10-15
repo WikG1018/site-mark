@@ -498,6 +498,21 @@ class AppStrings {
   String get appThemeColor => _english ? 'App theme color' : '应用主题色';
   String get about => _english ? 'About' : '关于';
   String get version => _english ? 'Version' : '版本';
+  String get checkForUpdates => _english ? 'Check for updates' : '检查更新';
+  String get checkingForUpdates => _english ? 'Checking…' : '正在检查…';
+  String get upToDate => _english ? 'You are up to date' : '已是最新版本';
+  String newVersionFound(String version) =>
+      _english ? 'New version $version' : '发现新版本 $version';
+  String get checkForUpdatesFailed => _english
+      ? 'Could not check for updates. Check the network and try again.'
+      : '无法检查更新。请检查网络后再试。';
+  String get openReleasePage => _english ? 'Open release page' : '打开发布页';
+  String get iosPackageNote => _english
+      ? 'No iOS package is published yet. The release page currently has Android packages only.'
+      : 'iOS 安装包尚未提供，发布页目前只有 Android 安装包。';
+  String get releaseCheckAutomatic => _english ? 'Automatic' : '自动（推荐）';
+  String get releaseCheckOfficialOnly => _english ? 'Official only' : '仅官方';
+  String get releaseCheckMirrorFirst => _english ? 'Mirror first' : '优先镜像';
   String get privacyStatements => _english
       ? 'No ads · No account · No third-party cloud · Optional NAS sync · System camera'
       : '无广告 · 无账号 · 无第三方云同步 · 可选 NAS 同步 · 调用系统相机';
@@ -506,8 +521,8 @@ class AppStrings {
   String get openLinkFailed =>
       _english ? 'Could not open the browser' : '无法打开浏览器';
   String get privacySummary => _english
-      ? 'Offline by default. The only network surface is optional NAS sync (WebDAV, SFTP or SMB) that you enable yourself; it connects only to the server you configure. GitHub links open in an external browser. Foreground location is used only when requested, and a diagnostic bundle reaches the system share sheet only after confirmation.'
-      : '默认离线。唯一的网络出口是你主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB），只连接你自己的服务器。GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。';
+      ? 'Offline by default. Network is used only when you open it: NAS sync (WebDAV, SFTP or SMB) connects only to the server you configure. Check for updates on the About page reads the public GitHub release version first by default; in Automatic mode it tries a fixed public mirror only if GitHub cannot be reached, and you can switch to Official only or Mirror first. It does not upload photos or an account. GitHub links open in an external browser. Foreground location is used only when requested, and a diagnostic bundle reaches the system share sheet only after confirmation.'
+      : '默认离线。网络只在你主动打开时使用：NAS 同步（WebDAV/SFTP/SMB）只连接你配置的服务器；关于页的检查更新默认先读取 GitHub 公开版本号，自动模式下连不上才试固定的公开镜像，也可以改成仅官方或优先镜像，不上传照片或账号。GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。';
   String get license => _english ? 'License' : '许可证';
   String get licenseValue => 'Apache-2.0';
   String get licenses => _english ? 'Open-source licenses' : '开源许可证';

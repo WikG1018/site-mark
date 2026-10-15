@@ -26,7 +26,7 @@
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | Android `io.github.wikg1018.sitemark`；鸿蒙原生 `io.github.wikg1018.sitemark.native` |
 | 默认基础分支 | `main`（唯一开发分支，Android 与鸿蒙原生同线演进；见第 0 节） |
-| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.14`）；Android 见 `pubspec.yaml`（`1.0.29+44`） |
+| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.14`）；Android 见 `pubspec.yaml`（`1.0.30+45`） |
 | 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中；iOS 复用线 Phase 0–3、5–8 已全部合入（Swift 桥/BGTaskScheduler/界面全量 iOS 26/27 形态/深色桥接），仅剩 Phase 4（TestFlight/签名）等 Apple Developer 账号与真机验证项 |
 | 数据库 | 鸿蒙 RDB 契约测试见 `tool/test_ohos_capture_database_contract*`；Android Drift schema 见 `lib/data/app_database.dart` |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
@@ -59,7 +59,7 @@
 这些决策已写入 `docs/decision-records.md`，默认视为硬约束：
 
 - **系统/厂商相机**：通过 `ACTION_IMAGE_CAPTURE`；不申请 `CAMERA`，不内置相机 SDK。  
-- **网络边界（D-023，2026-09-02 修订）**：唯一的网络出口是用户主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB，Rust 核心 `sitemark_core::nas` 三线共用），默认关闭；发布包为此声明 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`；Android 17 局域网 NAS 另声明并在设置页运行时申请 `ACCESS_LOCAL_NETWORK`）。密码只存系统安全存储（Keystore / Keychain / 鸿蒙 asset），不进数据库、备份或诊断。无账号、广告、分析、第三方云同步、远程 API。  
+- **网络边界（D-023，2026-09-02 修订；D-025 检查更新）**：网络用于用户主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB，Rust 核心 `sitemark_core::nas` 三线共用，默认关闭），以及关于页点击后的检查更新。发布包为此声明 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`；Android 17 局域网 NAS 另声明并在设置页运行时申请 `ACCESS_LOCAL_NETWORK`）。检查更新复用已有 `INTERNET`，不新增权限。密码只存系统安全存储（Keystore / Keychain / 鸿蒙 asset），不进数据库、备份或诊断。无账号、广告、分析、第三方云同步。检查更新不上传照片、账号或诊断；失败不得显示已是最新。  
 - **定位**：仅前台、可拒绝；不申请后台定位。优先原图 EXIF GPS。  
 - **存储**：原图与中间文件在应用私有目录；水印成片经 MediaStore 到 `Pictures/SiteMark`。不申请广泛媒体权限。  
 - **后台处理**：全分辨率串行队列（WorkManager）；幂等、可恢复；强行停止后需用户再打开应用。iOS 由 BGTaskScheduler 机会性补拍承接，不模拟 Android 节奏。  
@@ -144,7 +144,7 @@ cargo test --manifest-path rust/Cargo.toml
 ## 7. 发布与维护（背景）
 
 - 发布步骤与自动化门禁：`docs/release-checklist.md`。  
-- **`v1.0.29` 是 Latest**（修复照片 Hero 飞行重影）；`native-v1.0.14` 为当前鸿蒙原生版本（未签名 HAP；动效/材质对齐 Android v1.0.29、NAS 双向同步、MiSans）。后续发版按清单完成拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。
+- **`v1.0.30` 是 Latest**（关于页手动检查更新；本次未做真机回归）；`native-v1.0.14` 为当前鸿蒙原生版本（未签名 HAP；动效/材质对齐 Android v1.0.29、NAS 双向同步、MiSans）。后续发版按清单完成拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。
 - **iOS 第三条产品线：** Phase 0–3、5–8 已全部合入 `main`（PR #119–#128，含实施记录见 `docs/superpowers/plans/2026-08-30-ios-adaptation.md`）。下一步是 Phase 4（TestFlight/签名），在用户提供 Apple Developer 账号之前不启动；真机项（深色启动屏/滑动手感/相机实拍）待设备。  
 - **NAS 同步（D-023 修订，三线功能）：** Android/iOS 走 flutter_rust_bridge，鸿蒙走 JSON C ABI；schema Android/iOS v14、鸿蒙 RDB v15。鸿蒙端 WebDAV 仅明文 HTTP（`ohos-native` feature 保持无 C 依赖，TLS 被编译门控排除，HTTPS 返回 `tls_unsupported`）；SFTP/SMB 三线全加密。上传为串行队列 + 5 次尝试预算，失败可手动重试。  
 - Agent **默认不**创建 GitHub Release、不上传签名密钥、不在未授权时合并 `main`。

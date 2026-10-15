@@ -30,6 +30,9 @@ import { DiagnosticsGenerationOutcome, DiagnosticsGenerationOutcomeStore, Diagno
   from './DiagnosticsActionOutcome';
 import { ExportDeliveryChannel } from '../backup/ExportDeliveryPolicy';
 import { loadAppVersion } from '../../shared/AppVersion';
+import { normalizeReleaseCheckMode, RELEASE_FAILED, RELEASE_UPDATE, RELEASE_UP_TO_DATE } from '../../shared/ReleaseCheck';
+import { checkHarmonyRelease, resolveHarmonyReleasePage } from '../../platform/GithubReleaseClient';
+import { readReleaseCheckModeFile, writeReleaseCheckModeFile } from '../../platform/ReleaseCheckModeFile';
 
 const notificationActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
 const appearanceActionCoordinator: ScreenLifecycleActionCoordinator = new ScreenLifecycleActionCoordinator();
@@ -756,11 +759,21 @@ export struct AboutScreen {
   @Consume('pathStack') pathStack: NavPathStack;
   @StorageLink(SAFE_AREA_BOTTOM_VP) safeAreaBottomVp: number = 0;
   @State private versionLabel: string = tr('正在读取版本…', 'Loading version…');
+  @State private versionName: string = '';
+  @State private checkPhase: string = 'idle';
+  @State private statusText: string = '';
+  @State private modeWire: string = 'auto';
+  @State private updateTag: string = '';
+  @State private updateSource: string = '';
+  @State private checking: boolean = false;
+  @State private opening: boolean = false;
+  @State private openError: string = '';
   private versionGeneration: number = 0;
 
   aboutToAppear(): void {
     const generation = ++this.versionGeneration;
     this.loadVersion(generation);
+    this.loadMode();
   }
 
   aboutToDisappear(): void {
@@ -772,9 +785,116 @@ export struct AboutScreen {
     if (generation !== this.versionGeneration) {
       return;
     }
+    this.versionName = version.versionName;
     this.versionLabel = version.versionName === 'unknown' ? tr('版本信息不可用', 'Version unavailable') :
       tr(`版本 ${version.versionName}（${version.versionCode}）`,
         `Version ${version.versionName} (${version.versionCode})`);
+  }
+
+  private loadMode(): void {
+    try {
+      this.modeWire = readReleaseCheckModeFile(AppRuntime.require().context.filesDir);
+    } catch (_) {
+      this.modeWire = 'auto';
+    }
+  }
+
+  private setMode(mode: string): void {
+    const normalized = normalizeReleaseCheckMode(mode);
+    this.modeWire = normalized;
+    try {
+      writeReleaseCheckModeFile(AppRuntime.require().context.filesDir, normalized);
+    } catch (_) {
+    }
+  }
+
+  private onCheck(): void {
+    if (this.checking || this.opening) {
+      return;
+    }
+    if (this.checkPhase === RELEASE_UPDATE) {
+      this.openPage();
+      return;
+    }
+    this.checking = true;
+    this.checkPhase = 'checking';
+    this.openError = '';
+    this.statusText = tr('正在检查…', 'Checking…');
+    this.updateTag = '';
+    this.updateSource = '';
+    const local = this.versionName;
+    const mode = this.modeWire;
+    const generation = this.versionGeneration;
+    this.runCheck(local, mode, generation);
+  }
+
+  private async runCheck(local: string, mode: string, generation: number): Promise<void> {
+    let kind = RELEASE_FAILED;
+    let label = '';
+    let tag = '';
+    let source = '';
+    try {
+      const outcome = await checkHarmonyRelease(local, mode);
+      kind = outcome.kind;
+      label = outcome.versionLabel;
+      tag = outcome.tag;
+      source = outcome.source;
+    } catch (_) {
+      kind = RELEASE_FAILED;
+    }
+    if (generation !== this.versionGeneration) {
+      return;
+    }
+    this.checking = false;
+    if (kind === RELEASE_UPDATE) {
+      this.checkPhase = RELEASE_UPDATE;
+      this.updateTag = tag;
+      this.updateSource = source;
+      this.statusText = tr(`发现新版本 ${label}`, `New version ${label}`);
+      return;
+    }
+    if (kind === RELEASE_UP_TO_DATE) {
+      this.checkPhase = RELEASE_UP_TO_DATE;
+      this.statusText = tr('已是最新版本', 'You are up to date');
+      return;
+    }
+    this.checkPhase = RELEASE_FAILED;
+    this.statusText = tr('无法检查更新。请检查网络后再试。',
+      'Could not check for updates. Check the network and try again.');
+  }
+
+  private openPage(): void {
+    if (this.opening || this.updateTag.length === 0) {
+      return;
+    }
+    this.opening = true;
+    this.openError = '';
+    const tag = this.updateTag;
+    const source = this.updateSource;
+    const generation = this.versionGeneration;
+    this.runOpen(tag, source, generation);
+  }
+
+  private async runOpen(tag: string, source: string, generation: number): Promise<void> {
+    try {
+      const url = await resolveHarmonyReleasePage(tag, source);
+      if (generation !== this.versionGeneration) {
+        return;
+      }
+      if (url.length === 0) {
+        this.openError = tr('无法打开浏览器', 'Could not open the browser');
+        return;
+      }
+      await AppRuntime.require().openReleasePage(url);
+    } catch (_) {
+      if (generation === this.versionGeneration) {
+        this.openError = tr('无法打开浏览器', 'Could not open the browser');
+      }
+    } finally {
+      if (generation === this.versionGeneration) {
+        this.opening = false;
+      }
+    }
   }
 
   build() {
@@ -794,6 +914,43 @@ export struct AboutScreen {
               .fontWeight(FontWeight.Medium).fontFamily(AppFont.FAMILY_MEDIUM)
             Text(this.versionLabel).fontSize(14).fontColor(UiTokens.TEXT_SECONDARY)
               .fontFamily(AppFont.FAMILY)
+            Button(tr('检查更新', 'Check for updates'))
+              .height(48).width('100%').fontSize(14).fontColor(UiTokens.PRIMARY)
+              .backgroundColor(UiTokens.PRIMARY_CONTAINER)
+              .enabled(!this.checking && !this.opening)
+              .onClick((): void => { this.onCheck(); })
+            if (this.statusText.length > 0) {
+              Text(this.statusText).fontSize(13).fontColor(UiTokens.TEXT_SECONDARY)
+                .textAlign(TextAlign.Center).width('100%')
+            }
+            if (this.checkPhase === RELEASE_UPDATE) {
+              Button(tr('打开发布页', 'Open release page'))
+                .height(44).width('100%').fontSize(14).fontColor(UiTokens.PRIMARY)
+                .backgroundColor(UiTokens.SURFACE)
+                .enabled(!this.opening)
+                .onClick((): void => { this.openPage(); })
+            }
+            if (this.openError.length > 0) {
+              Text(this.openError).fontSize(12).fontColor(UiTokens.DANGER)
+                .textAlign(TextAlign.Center).width('100%')
+            }
+            Row({ space: 8 }) {
+              Button(tr('自动（推荐）', 'Automatic'))
+                .layoutWeight(1).height(40).fontSize(12)
+                .fontColor(this.modeWire === 'auto' ? Color.White : UiTokens.PRIMARY)
+                .backgroundColor(this.modeWire === 'auto' ? UiTokens.PRIMARY : UiTokens.PRIMARY_CONTAINER)
+                .onClick((): void => { this.setMode('auto'); })
+              Button(tr('仅官方', 'Official only'))
+                .layoutWeight(1).height(40).fontSize(12)
+                .fontColor(this.modeWire === 'official' ? Color.White : UiTokens.PRIMARY)
+                .backgroundColor(this.modeWire === 'official' ? UiTokens.PRIMARY : UiTokens.PRIMARY_CONTAINER)
+                .onClick((): void => { this.setMode('official'); })
+              Button(tr('优先镜像', 'Mirror first'))
+                .layoutWeight(1).height(40).fontSize(12)
+                .fontColor(this.modeWire === 'mirror' ? Color.White : UiTokens.PRIMARY)
+                .backgroundColor(this.modeWire === 'mirror' ? UiTokens.PRIMARY : UiTokens.PRIMARY_CONTAINER)
+                .onClick((): void => { this.setMode('mirror'); })
+            }.width('100%')
             Text(tr('面向工程现场记录的原生 ArkTS 水印相机。调用系统相机，无广告、无账号、无第三方云同步；照片和项目数据在本机处理。可选 NAS 默认同步关闭。',
               'A native ArkTS watermark camera for engineering site records. It uses the system camera with no ads, accounts, or third-party cloud sync; photos and project data are processed on-device. Optional NAS sync stays off by default.'))
               .fontSize(14).fontColor(UiTokens.TEXT).lineHeight(22).textAlign(TextAlign.Center)
@@ -805,8 +962,8 @@ export struct AboutScreen {
               .backgroundColor(UiTokens.PRIMARY_CONTAINER)
               .accessibilityText(tr('打开 GitHub 代码仓库', 'Open GitHub repository'))
               .onClick((): void => { AppRuntime.require().services.openRepository(); })
-            Text(tr('默认离线。唯一的网络出口是你主动配置并启用的 NAS 同步，只连接你自己的服务器。点击仓库链接时会交给系统浏览器。',
-              'Offline by default. The only network surface is optional NAS sync that you enable yourself; it connects only to the server you configure. Repository links open in the system browser.'))
+            Text(tr('默认离线。网络只在你主动打开时使用：NAS 同步只连接你配置的服务器；检查更新默认先读取 GitHub 公开版本号，自动模式下连不上才试固定的公开镜像，也可以改成仅官方或优先镜像，不上传照片或账号。仓库链接交给系统浏览器。',
+              'Offline by default. Network is used only when you open it: NAS sync connects only to the server you configure. Check for updates reads the public GitHub release version first by default; in Automatic mode it tries a fixed public mirror only if GitHub cannot be reached, and you can switch to Official only or Mirror first. It does not upload photos or an account. Repository links open in the system browser.'))
               .fontSize(12).fontColor(UiTokens.TEXT_SECONDARY).textAlign(TextAlign.Center)
             Divider().color(UiTokens.OUTLINE_SUBTLE).margin({ top: 8, bottom: 4 })
             Text(tr('本项目以 Apache-2.0 许可证开源，第三方组件声明见仓库 THIRD_PARTY_NOTICES.md。',

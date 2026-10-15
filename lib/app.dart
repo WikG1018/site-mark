@@ -41,6 +41,8 @@ import 'package:sitemark/navigation/root_navigation_scaffold.dart';
 import 'package:sitemark/navigation/route_transitions.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/external_link_service.dart';
+import 'package:sitemark/platform/github_release_client.dart';
+import 'package:sitemark/platform/release_check_mode_store.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
@@ -310,6 +312,14 @@ final storageUsageProvider = FutureProvider((ref) {
 
 final externalLinkServiceProvider = Provider<ExternalLinkService>(
   (ref) => const UrlLauncherExternalLinkService(),
+);
+
+final releaseLookupProvider = Provider<ReleaseLookup>(
+  (ref) => GithubReleaseClient(),
+);
+
+final releaseCheckModeStoreProvider = Provider<ReleaseCheckModeStore>(
+  (ref) => FileReleaseCheckModeStore(),
 );
 
 final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {

@@ -41,6 +41,7 @@ import viewerTransformPolicyTest from './ViewerTransformPolicy.test';
 import appFontTest from './AppFont.test';
 import nasTwoWayPolicyTest from './NasTwoWayPolicy.test';
 import scrollChromePolicyTest from './ScrollChromePolicy.test';
+import releaseCheckTest from './ReleaseCheck.test';
 
 export default function testsuite(): void {
   domainRulesTest();
@@ -86,4 +87,5 @@ export default function testsuite(): void {
   appFontTest();
   nasTwoWayPolicyTest();
   scrollChromePolicyTest();
+  releaseCheckTest();
 }
