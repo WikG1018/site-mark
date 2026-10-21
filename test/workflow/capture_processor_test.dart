@@ -3,6 +3,10 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/capture_processing_diagnostics.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
+import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
+import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -102,6 +106,46 @@ void main() {
     expect(images.lastRenderRequest?.sourcePath, '/private/capture-1.jpg');
     expect(images.lastRenderRequest?.photoNumber, '东区厂房改造-SM-20260716-001');
   });
+
+  test(
+    'persists render and hash failures before returning to the worker',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'processor-diagnostics-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final store = DiagnosticEventStore(directory: root);
+      processor = CaptureProcessor(
+        database: database,
+        platform: platform,
+        images: images,
+        outputPaths: _ProcessorOutputPaths(),
+        diagnostics: CaptureProcessingDiagnostics(DiagnosticRecorder(store)),
+      );
+      await seedCaptured();
+      images.renderError = const ImagePipelineException(
+        ImagePipelineFailureKind.invalidData,
+        'unable to detect image format',
+      );
+      expect(await processor.process('capture-1'), CaptureProcessResult.failed);
+      var events = await store.readRecent();
+      expect(events.single.stage, DiagnosticStage.rendering);
+      expect(events.single.code, DiagnosticCode.unsupportedImageFormat);
+      expect(events.single.retryCount, 0);
+      expect(
+        (await database.captureById('capture-1'))!.status,
+        CaptureStatus.failed,
+      );
+
+      await database.resetCaptureForRetry('capture-1');
+      images.sha256Error = const FileSystemException('private path error');
+      expect(await processor.process('capture-1'), CaptureProcessResult.retry);
+      events = await store.readRecent();
+      expect(events, hasLength(2));
+      expect(events.last.stage, DiagnosticStage.originalHash);
+      expect(events.last.code, DiagnosticCode.localIo);
+    },
+  );
 
   // Regression: when the new gallery row is finalized but deleting the old
   // row fails, the publish has already succeeded. The record must be `ready`

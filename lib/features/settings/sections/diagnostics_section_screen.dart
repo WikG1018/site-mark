@@ -136,6 +136,6 @@ class DiagnosticsSectionScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
     final service = await ref.read(diagnosticBundleServiceProvider.future);
-    await service.store.clear();
+    await service.clear();
   }
 }

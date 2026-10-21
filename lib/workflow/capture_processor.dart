@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/capture_processing_diagnostics.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -64,12 +66,14 @@ final class CaptureProcessor {
     required this.platform,
     required this.images,
     required this.outputPaths,
+    this.diagnostics,
   });
 
   final AppDatabase database;
   final PlatformServices platform;
   final ImagePipeline images;
   final CaptureOutputPaths outputPaths;
+  final CaptureProcessingDiagnostics? diagnostics;
 
   /// Maximum number of processing attempts before a transient failure becomes
   /// permanent. The third failed attempt (i.e. `processingAttempts >= 3` after
@@ -114,6 +118,15 @@ final class CaptureProcessor {
     // These are permanent failures regardless of attempt budget.
     final evidenceFailure = _validateEvidence(attempted);
     if (evidenceFailure != null) {
+      await diagnostics?.failed(
+        stage: DiagnosticStage.evidence,
+        error: StateError('Missing capture evidence'),
+        sourcePath: attempted.originalPath,
+        attempts: attempts,
+        code: evidenceFailure == CaptureFailureCode.originalMissing
+            ? DiagnosticCode.originalMissing
+            : DiagnosticCode.unexpected,
+      );
       await _failPermanently(captureId, evidenceFailure);
       return CaptureProcessResult.failed;
     }
@@ -129,6 +142,12 @@ final class CaptureProcessor {
     try {
       hashResult = await _resolveOriginalSha256(attempted);
     } catch (error) {
+      await diagnostics?.failed(
+        stage: DiagnosticStage.originalHash,
+        error: error,
+        sourcePath: attempted.originalPath,
+        attempts: attempts,
+      );
       if (_isTransient(error) && attempts < maxAttempts) {
         return CaptureProcessResult.retry;
       }
@@ -136,18 +155,27 @@ final class CaptureProcessor {
       return CaptureProcessResult.failed;
     }
     if (hashResult.isMismatch) {
+      await diagnostics?.failed(
+        stage: DiagnosticStage.originalHash,
+        error: StateError('Original changed'),
+        sourcePath: attempted.originalPath,
+        attempts: attempts,
+        code: DiagnosticCode.originalModified,
+      );
       await _failPermanently(captureId, CaptureFailureCode.originalModified);
       return CaptureProcessResult.failed;
     }
 
     // Steps 7-8: mark rendering, render, publish, mark ready. Transient errors
     // here are retried until the attempt budget is exhausted.
+    var stage = DiagnosticStage.commit;
     try {
       final rendering = await database.markRendering(
         captureId: captureId,
         originalSha256: hashResult.sha256,
       );
       final renderedPath = await outputPaths.renderedPhotoPath(captureId);
+      stage = DiagnosticStage.rendering;
       final renderResult = await images.render(
         RenderPhotoRequest(
           sourcePath: rendering.originalPath,
@@ -168,11 +196,13 @@ final class CaptureProcessor {
           localeCode: rendering.watermarkLocaleCode,
         ),
       );
+      stage = DiagnosticStage.commit;
       final settings = await database.getAppSettings();
       if (!settings.autoPublishToGallery) {
         await database.markReady(captureId: captureId);
         return CaptureProcessResult.succeeded;
       }
+      stage = DiagnosticStage.publishing;
       final publishOutcome = await platform.publishJpeg(
         renderResult.outputPath,
         rendering.photoNumber!,
@@ -184,6 +214,7 @@ final class CaptureProcessor {
       // can no longer lose the tracking of a duplicate, and a write failure
       // fails the whole pass so it is retried (rather than silently
       // accepting an untracked duplicate).
+      stage = DiagnosticStage.commit;
       await database.markReady(
         captureId: captureId,
         publishedUri: publishOutcome.contentUri,
@@ -207,6 +238,12 @@ final class CaptureProcessor {
       } catch (_) {}
       return CaptureProcessResult.succeeded;
     } catch (error) {
+      await diagnostics?.failed(
+        stage: stage,
+        error: error,
+        sourcePath: attempted.originalPath,
+        attempts: attempts,
+      );
       // Step 9: classify the error and decide retry vs. final failure.
       //
       // `PathNotFoundException` on the original at render time is a permanent

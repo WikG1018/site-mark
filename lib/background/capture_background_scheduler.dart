@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:sitemark/background/nas_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
+import 'package:sitemark/diagnostics/capture_processing_diagnostics.dart';
+import 'package:sitemark/diagnostics/diagnostic_event.dart';
 import 'package:sitemark/platform/local_notification_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -208,12 +210,16 @@ class WorkmanagerBackgroundWorkClient implements BackgroundWorkClient {
 /// Kept as a top-level function so the dispatcher can build a fresh processor
 /// with a dedicated database handle on every invocation without retaining UI
 /// state.
-CaptureProcessor buildHeadlessCaptureProcessor(AppDatabase database) {
+CaptureProcessor buildHeadlessCaptureProcessor(
+  AppDatabase database, {
+  CaptureProcessingDiagnostics? diagnostics,
+}) {
   return CaptureProcessor(
     database: database,
     platform: PigeonPlatformServices(),
     images: RustImagePipeline(),
     outputPaths: AppCaptureOutputPaths(),
+    diagnostics: diagnostics ?? createCaptureProcessingDiagnostics(),
   );
 }
 
@@ -323,6 +329,7 @@ Future<void> reconcilePendingCapturesForBackground({
 void captureCallbackDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
     AppDatabase? database;
+    CaptureProcessingDiagnostics? diagnostics;
     try {
       WidgetsFlutterBinding.ensureInitialized();
       // WorkManager has one top-level dispatcher; NAS periodic/BG tasks are
@@ -354,15 +361,18 @@ void captureCallbackDispatcher() {
       if (!isCaptureTaskName(taskName)) return true;
       final captureId = inputData?['captureId'] as String?;
       if (captureId == null || captureId.isEmpty) return true;
+      diagnostics = createCaptureProcessingDiagnostics();
       database = AppDatabase();
       final result = await buildHeadlessCaptureProcessor(
         database,
+        diagnostics: diagnostics,
       ).process(captureId);
       if (result == CaptureProcessResult.succeeded) {
         await _notifyCaptureReady(database, captureId);
       }
       return result != CaptureProcessResult.retry;
-    } catch (_) {
+    } catch (error) {
+      await diagnostics?.failed(stage: DiagnosticStage.worker, error: error);
       // Keep the task retryable even when database creation/opening, Rust
       // initialization or other processor-adjacent code throws unexpectedly.
       return false;

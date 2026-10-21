@@ -70,7 +70,7 @@ void main() {
         find.text(locale.languageCode == 'en' ? 'Version' : '版本'),
         findsOneWidget,
       );
-      expect(find.text('1.0.30+45'), findsOneWidget);
+      expect(find.text('1.0.31+46'), findsOneWidget);
       expect(
         find.text(locale.languageCode == 'en' ? 'Check for updates' : '检查更新'),
         findsOneWidget,

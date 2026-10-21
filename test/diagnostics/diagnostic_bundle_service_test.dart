@@ -11,6 +11,50 @@ import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 
 void main() {
+  test('bundle and clear include the background processing log', () async {
+    final root = await Directory.systemTemp.createTemp('background-bundle-');
+    addTearDown(() => root.delete(recursive: true));
+    final foreground = DiagnosticEventStore(
+      directory: Directory('${root.path}/fg'),
+    );
+    final background = DiagnosticEventStore(
+      directory: Directory('${root.path}/bg'),
+    );
+    await background.append(
+      DiagnosticEvent(
+        timestamp: DateTime.now().toUtc(),
+        category: DiagnosticCategory.processing,
+        outcome: DiagnosticOutcome.failed,
+        code: DiagnosticCode.invalidImage,
+        stage: DiagnosticStage.rendering,
+        sourceFormat: DiagnosticImageFormat.empty,
+        sourceSizeBytes: 0,
+      ),
+    );
+    final service = DiagnosticBundleService(
+      store: foreground,
+      processingStore: background,
+      supportDirectory: () async => root,
+      packageInfo: () async => PackageInfo(
+        appName: 'SiteMark',
+        packageName: 'io.github.wikg1018.sitemark',
+        version: '1.0.30',
+        buildNumber: '45',
+      ),
+    );
+    final archive = ZipDecoder().decodeBytes(
+      await File(await service.generate()).readAsBytes(),
+    );
+    final events = utf8.decode(
+      archive.findFile('events.jsonl')!.content as List<int>,
+    );
+    expect(jsonDecode(events), containsPair('stage', 'rendering'));
+    expect(jsonDecode(events), containsPair('source_size_bytes', 0));
+    await service.clear();
+    expect(await foreground.readRecent(), isEmpty);
+    expect(await background.readRecent(), isEmpty);
+  });
+
   test('summary.txt is bilingual and omits private content', () async {
     final root = await Directory.systemTemp.createTemp(
       'sitemark-diag-bundle-test-',

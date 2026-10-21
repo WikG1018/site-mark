@@ -19,10 +19,17 @@ class DiagnosticRecorder {
   int get droppedCount => _droppedCount;
 
   void record(DiagnosticEvent event) {
-    unawaited(
-      _store.then((store) => store.append(event)).catchError((_) {
-        _droppedCount++;
-      }),
-    );
+    unawaited(recordAndFlush(event));
+  }
+
+  /// Background isolates must finish the write before returning to WorkManager.
+  /// Diagnostic storage failures must never change the capture's outcome.
+  Future<void> recordAndFlush(DiagnosticEvent event) async {
+    try {
+      final store = await _store;
+      await store.append(event);
+    } catch (_) {
+      _droppedCount++;
+    }
   }
 }
