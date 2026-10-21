@@ -12,11 +12,13 @@ import 'package:sitemark/l10n/app_strings.dart';
 class DiagnosticBundleService {
   const DiagnosticBundleService({
     required this.store,
+    this.processingStore,
     this.supportDirectory,
     this.packageInfo,
   });
 
   final DiagnosticEventStore store;
+  final DiagnosticEventStore? processingStore;
   final Future<Directory> Function()? supportDirectory;
   final Future<PackageInfo> Function()? packageInfo;
 
@@ -30,7 +32,10 @@ class DiagnosticBundleService {
     );
     await outputDirectory.create(recursive: true);
     final info = await (packageInfo ?? PackageInfo.fromPlatform)();
-    final events = await store.readRecent();
+    final events = [
+      ...await store.readRecent(),
+      ...?await processingStore?.readRecent(),
+    ]..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     final generatedAt = DateTime.now().toUtc().toIso8601String();
     final environment = jsonEncode({
       'app_version': info.version,
@@ -53,7 +58,7 @@ class DiagnosticBundleService {
       'schema_version': 1,
       'generated_at': generatedAt,
       'retention_days': 7,
-      'max_event_bytes': 2 * 1024 * 1024,
+      'max_event_bytes': store.maxBytes + (processingStore?.maxBytes ?? 0),
       'dropped_event_count': droppedEventCount ?? 0,
     });
     final archive = Archive()
@@ -66,5 +71,10 @@ class DiagnosticBundleService {
     final bytes = ZipEncoder().encode(archive);
     await File(path).writeAsBytes(bytes, flush: true);
     return path;
+  }
+
+  Future<void> clear() async {
+    await store.clear();
+    await processingStore?.clear();
   }
 }

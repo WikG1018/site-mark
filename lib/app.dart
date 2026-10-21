@@ -15,6 +15,7 @@ import 'package:sitemark/data/nas_sync_database.dart';
 import 'package:sitemark/data/capture_query_repository.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/diagnostics/diagnostic_bundle_service.dart';
+import 'package:sitemark/diagnostics/capture_processing_diagnostics.dart';
 import 'package:sitemark/diagnostics/diagnostic_event_store.dart';
 import 'package:sitemark/diagnostics/diagnostic_recorder.dart';
 import 'package:sitemark/features/capture/all_captures_screen.dart';
@@ -263,11 +264,15 @@ final diagnosticBundleServiceProvider = FutureProvider<DiagnosticBundleService>(
 ) async {
   final root = await getApplicationSupportDirectory();
   final store = DiagnosticEventStore(
+    maxBytes: 1024 * 1024,
     directory: Directory(
       '${root.path}${Platform.pathSeparator}diagnostics${Platform.pathSeparator}events',
     ),
   );
-  return DiagnosticBundleService(store: store);
+  return DiagnosticBundleService(
+    store: store,
+    processingStore: captureProcessingDiagnosticStore(root),
+  );
 });
 
 final diagnosticRecorderProvider = Provider<DiagnosticRecorder>(

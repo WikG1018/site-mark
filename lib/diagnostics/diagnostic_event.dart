@@ -23,6 +23,34 @@ enum DiagnosticCode {
   permissionDenied,
   platformUnavailable,
   unexpected,
+  originalMissing,
+  originalModified,
+  invalidImage,
+  imageTooLarge,
+  unsupportedImageFormat,
+  localIo,
+}
+
+enum DiagnosticStage {
+  evidence,
+  originalHash,
+  rendering,
+  publishing,
+  commit,
+  worker,
+}
+
+enum DiagnosticImageFormat {
+  jpeg,
+  png,
+  heif,
+  avif,
+  webp,
+  gif,
+  unknown,
+  empty,
+  missing,
+  unreadable,
 }
 
 class DiagnosticEvent {
@@ -34,6 +62,9 @@ class DiagnosticEvent {
     this.durationMs,
     this.count,
     this.retryCount,
+    this.stage,
+    this.sourceFormat,
+    this.sourceSizeBytes,
   });
 
   final DateTime timestamp;
@@ -43,6 +74,9 @@ class DiagnosticEvent {
   final int? durationMs;
   final int? count;
   final int? retryCount;
+  final DiagnosticStage? stage;
+  final DiagnosticImageFormat? sourceFormat;
+  final int? sourceSizeBytes;
 
   Map<String, Object> toJson() => {
     'timestamp': timestamp.toUtc().toIso8601String(),
@@ -52,6 +86,9 @@ class DiagnosticEvent {
     'duration_ms': ?durationMs,
     'count': ?count,
     'retry_count': ?retryCount,
+    'stage': ?stage?.name,
+    'source_format': ?sourceFormat?.name,
+    'source_size_bytes': ?sourceSizeBytes,
   };
 
   String encode() => jsonEncode(toJson());
@@ -67,6 +104,15 @@ class DiagnosticEvent {
         durationMs: value['duration_ms'] as int?,
         count: value['count'] as int?,
         retryCount: value['retry_count'] as int?,
+        stage: value['stage'] == null
+            ? null
+            : DiagnosticStage.values.byName(value['stage'] as String),
+        sourceFormat: value['source_format'] == null
+            ? null
+            : DiagnosticImageFormat.values.byName(
+                value['source_format'] as String,
+              ),
+        sourceSizeBytes: value['source_size_bytes'] as int?,
       );
     } catch (_) {
       return null;

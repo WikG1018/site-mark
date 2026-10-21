@@ -826,10 +826,10 @@ class AppStrings {
   String get shareDiagnosticBundleTitle =>
       _english ? 'Share diagnostic bundle?' : '分享诊断包？';
   String get shareDiagnosticBundleContent => _english
-      ? 'Includes: app version, system environment, storage statistics, operation results, and timings.\n\n'
+      ? 'Includes: app version, system environment, storage statistics, processing stages, error categories, image formats and file sizes, operation results, and timings.\n\n'
             'Does not include: photos, project names, work content, photographers, coordinates, file paths, or raw exceptions.\n\n'
             'The system share sheet opens only after you confirm.'
-      : '包含：应用版本、系统环境、存储统计、操作结果与耗时。\n\n'
+      : '包含：应用版本、系统环境、存储统计、处理步骤、错误类别、图片格式与文件大小、操作结果与耗时。\n\n'
             '不包含：照片、项目名称、工程内容、拍摄人、位置坐标、文件路径和原始异常。\n\n'
             '确认后才会打开系统分享面板。';
   String get confirmGenerate => _english ? 'Generate' : '确认生成';

@@ -24,7 +24,13 @@ class CaptureContentProvider : ContentProvider() {
                 ParcelFileDescriptor.MODE_CREATE or
                     ParcelFileDescriptor.MODE_TRUNCATE or
                     ParcelFileDescriptor.MODE_WRITE_ONLY
-            "rw", "rwt" ->
+            // Cameras may reopen the output to update EXIF after writing the
+            // JPEG. Android's "rw" contract preserves the existing bytes;
+            // only an explicit "t" requests truncation.
+            "rw" ->
+                ParcelFileDescriptor.MODE_CREATE or
+                    ParcelFileDescriptor.MODE_READ_WRITE
+            "rwt" ->
                 ParcelFileDescriptor.MODE_CREATE or
                     ParcelFileDescriptor.MODE_TRUNCATE or
                     ParcelFileDescriptor.MODE_READ_WRITE
