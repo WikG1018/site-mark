@@ -92,6 +92,20 @@ CaptureRecord record({
 }
 
 void main() {
+  testWidgets('status does not force a date that fits alone onto two lines', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(440, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpCard(
+      tester,
+      capture: record(id: 'date-layout', status: CaptureStatus.ready),
+    );
+    final title = find.text('2026-07-16 · 001');
+    expect(tester.getSize(title).height, lessThan(35));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('ready card passes its photo tag to the preview', (tester) async {
     await pumpCard(
       tester,

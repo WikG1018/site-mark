@@ -65,6 +65,23 @@ void main() {
   });
 
   test(
+    'separates invalid render parameters from corrupted image data',
+    () async {
+      await diagnostics.failed(
+        stage: DiagnosticStage.rendering,
+        error: const ImagePipelineException(
+          ImagePipelineFailureKind.invalidData,
+          'validate render request: private-field exceeds private-limit',
+        ),
+      );
+      final event = (await store.readRecent()).single;
+      expect(event.code, DiagnosticCode.invalidRenderRequest);
+      expect(event.encode(), isNot(contains('private-')));
+      expect(DiagnosticEvent.tryDecode(event.encode())?.code, event.code);
+    },
+  );
+
+  test(
     'recognizes JPEG, size limits, missing files and platform failures',
     () async {
       final original = File('${root.path}/original.jpg');

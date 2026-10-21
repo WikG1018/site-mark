@@ -165,6 +165,22 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('detail preview respects reduced motion', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await pumpReadyDetail(tester, originalExists: true);
+    final switcher = find.ancestor(
+      of: find.byType(CaptureImagePreview),
+      matching: find.byType(AnimatedSwitcher),
+    );
+    expect(
+      tester.widget<AnimatedSwitcher>(switcher.first).duration,
+      Duration.zero,
+    );
+    await disposeDetail(tester);
+  });
+
   testWidgets('detail uses short title, tabs, and file metadata section', (
     tester,
   ) async {

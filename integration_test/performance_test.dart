@@ -6,6 +6,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_status.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
+import 'package:sitemark/features/capture/capture_paged_list.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/platform_services.dart';
 
@@ -34,12 +35,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CaptureRecordCard), findsWidgets);
 
-      await tester.fling(find.byType(ListView), const Offset(0, -1800), 3000);
+      final list = find.descendant(
+        of: find.byType(CapturePagedList),
+        matching: find.byType(CustomScrollView),
+      );
+      await tester.fling(list, const Offset(0, -1800), 3000);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('filter-year')));
+      // Restore overlay chrome after the downward scroll, then use the
+      // current filter sheet rather than the removed inline year dropdown.
+      await tester.fling(list, const Offset(0, 1800), 3000);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('2026').last);
+      await tester.tap(find.byKey(const Key('filter-sheet-trigger')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-year-2026')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('filter-apply')));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('edit-captures')));

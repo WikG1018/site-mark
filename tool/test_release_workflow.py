@@ -32,6 +32,14 @@ FORBIDDEN_PERMISSIONS = (
 
 
 class ReleaseWorkflowTest(unittest.TestCase):
+    def test_release_requires_explicit_update_install_permission(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("android.permission.REQUEST_INSTALL_PACKAGES", workflow)
+
+    def test_ci_requires_explicit_update_install_permission(self) -> None:
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("android.permission.REQUEST_INSTALL_PACKAGES", workflow)
+
     def test_arm64_split_uses_flutter_version_code_offset(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
 

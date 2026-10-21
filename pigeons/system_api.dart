@@ -15,6 +15,21 @@ enum CameraOutcome { captured, cancelled, failed }
 
 enum ArchiveSaveOutcome { saved, cancelled }
 
+enum ApkInstallOutcome { launched, permissionRequired }
+
+/// Android-only explicit self-update flow. Never used by a background worker.
+@HostApi()
+abstract class AppUpdateApi {
+  @async
+  ApkInstallOutcome openInstaller(
+    String apkPath,
+    String expectedSha256,
+    String expectedVersion,
+  );
+
+  void openInstallPermissionSettings();
+}
+
 enum LocationOutcome {
   precise,
   approximate,

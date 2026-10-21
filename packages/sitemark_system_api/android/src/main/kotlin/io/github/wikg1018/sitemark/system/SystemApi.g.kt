@@ -215,6 +215,17 @@ enum class ArchiveSaveOutcome(val raw: Int) {
   }
 }
 
+enum class ApkInstallOutcome(val raw: Int) {
+  LAUNCHED(0),
+  PERMISSION_REQUIRED(1);
+
+  companion object {
+    fun ofRaw(raw: Int): ApkInstallOutcome? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 enum class LocationOutcome(val raw: Int) {
   PRECISE(0),
   APPROXIMATE(1),
@@ -569,40 +580,45 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
       }
       131.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          LocationOutcome.ofRaw(it.toInt())
+          ApkInstallOutcome.ofRaw(it.toInt())
         }
       }
       132.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          LocationPermissionState.ofRaw(it.toInt())
+          LocationOutcome.ofRaw(it.toInt())
         }
       }
       133.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          CameraCaptureResult.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          LocationPermissionState.ofRaw(it.toInt())
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RecoveredCameraCapture.fromList(it)
+          CameraCaptureResult.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          LocationResult.fromList(it)
+          RecoveredCameraCapture.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ImageMetadataResult.fromList(it)
+          LocationResult.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MediaPublishResult.fromList(it)
+          ImageMetadataResult.fromList(it)
         }
       }
       138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          MediaPublishResult.fromList(it)
+        }
+      }
+      139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           RecoveredPublishJournal.fromList(it)
         }
@@ -620,36 +636,40 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
         stream.write(130)
         writeValue(stream, value.raw.toLong())
       }
-      is LocationOutcome -> {
+      is ApkInstallOutcome -> {
         stream.write(131)
         writeValue(stream, value.raw.toLong())
       }
-      is LocationPermissionState -> {
+      is LocationOutcome -> {
         stream.write(132)
         writeValue(stream, value.raw.toLong())
       }
-      is CameraCaptureResult -> {
+      is LocationPermissionState -> {
         stream.write(133)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is RecoveredCameraCapture -> {
+      is CameraCaptureResult -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is LocationResult -> {
+      is RecoveredCameraCapture -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is ImageMetadataResult -> {
+      is LocationResult -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is MediaPublishResult -> {
+      is ImageMetadataResult -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is RecoveredPublishJournal -> {
+      is MediaPublishResult -> {
         stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is RecoveredPublishJournal -> {
+        stream.write(139)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -658,6 +678,65 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
 }
 
 
+/**
+ * Android-only explicit self-update flow. Never used by a background worker.
+ *
+ * Generated interface from Pigeon that represents a handler of messages from Flutter.
+ */
+interface AppUpdateApi {
+  fun openInstaller(apkPath: String, expectedSha256: String, expectedVersion: String, callback: (Result<ApkInstallOutcome>) -> Unit)
+  fun openInstallPermissionSettings()
+
+  companion object {
+    /** The codec used by AppUpdateApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      SystemApiPigeonCodec()
+    }
+    /** Sets up an instance of `AppUpdateApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: AppUpdateApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.AppUpdateApi.openInstaller$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val apkPathArg = args[0] as String
+            val expectedSha256Arg = args[1] as String
+            val expectedVersionArg = args[2] as String
+            api.openInstaller(apkPathArg, expectedSha256Arg, expectedVersionArg) { result: Result<ApkInstallOutcome> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SystemApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SystemApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.AppUpdateApi.openInstallPermissionSettings$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.openInstallPermissionSettings()
+              listOf(null)
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface SiteMarkSystemApi {
   fun createCameraTarget(captureId: String): String

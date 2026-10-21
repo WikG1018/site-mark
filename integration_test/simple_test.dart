@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +9,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_display_name.dart';
+import 'package:sitemark/domain/photo_number.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
@@ -68,6 +73,62 @@ void main() {
       );
     },
   );
+
+  testWidgets('real Rust renders Dart-generated long photo numbers', (
+    tester,
+  ) async {
+    final directory = await Directory.systemTemp.createTemp('render-contract-');
+    try {
+      final recorder = ui.PictureRecorder();
+      Canvas(recorder).drawColor(const Color(0xffceddd4), BlendMode.src);
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(1200, 900);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      picture.dispose();
+      final source = File('${directory.path}/source.png');
+      await source.writeAsBytes(bytes!.buffer.asUint8List());
+      final images = RustImagePipeline();
+      final originalHash = await images.sha256(source.path);
+      for (final projectName in [
+        'Release-Upgrade-Audit',
+        '东' * 120,
+        '😀' * 60,
+      ]) {
+        final number = formatPhotoNumber(
+          projectName: projectName,
+          capturedAt: DateTime(2026, 10, 21),
+          sequence: 1,
+        );
+        expect(number.runes.length, greaterThan(32));
+        expect(utf8.encode('$number.jpg').length, lessThanOrEqualTo(255));
+        final output = File('${directory.path}/watermarked.jpg');
+        final result = await images.render(
+          RenderPhotoRequest(
+            sourcePath: source.path,
+            outputPath: output.path,
+            projectName: projectName,
+            workLocation: 'Test-Area',
+            workContent: 'Upgrade-Check',
+            photographer: 'Test-Operator',
+            photoNumber: number,
+            capturedAt: '2026-10-21 16:34:00 +00:00',
+            position: WatermarkPosition.bottomLeft,
+            opacity: 0.78,
+            accentColorArgb: 0xff37c58b,
+            fontScale: 1.0,
+            localeCode: 'en',
+          ),
+        );
+        expect((result.width, result.height), (1200, 900));
+        expect(await output.length(), greaterThan(0));
+        expect(await images.sha256(output.path), result.outputSha256);
+        expect(await images.sha256(source.path), originalHash);
+      }
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
 }
 
 /// Creates a project named `东区厂房改造`, taps into its detail screen, and

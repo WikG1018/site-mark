@@ -181,18 +181,19 @@ class _CaptureRecordCardState extends ConsumerState<CaptureRecordCard> {
     final details = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
           children: [
-            Expanded(
-              child: Text(
-                captureListDisplayName(
-                  capturedAt: capture.capturedAt,
-                  photoNumber: capture.photoNumber,
-                  fallback: capture.workLocation,
-                ),
-                style: Theme.of(context).textTheme.titleMedium,
+            Text(
+              captureListDisplayName(
+                capturedAt: capture.capturedAt,
+                photoNumber: capture.photoNumber,
+                fallback: capture.workLocation,
               ),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             Semantics(
               label: '${strings.statusSemanticsPrefix}: $label',

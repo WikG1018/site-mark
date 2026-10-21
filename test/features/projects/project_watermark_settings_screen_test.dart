@@ -41,6 +41,26 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets(
+    'preview skips opacity animation when system motion is disabled',
+    (tester) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await pumpWatermarkSettings(tester);
+      expect(
+        tester
+            .widget<AnimatedOpacity>(
+              find.byKey(const Key('watermark-preview-opacity')),
+            )
+            .duration,
+        Duration.zero,
+      );
+    },
+  );
+
   testWidgets('preview reflects the persisted watermark parameters', (
     tester,
   ) async {

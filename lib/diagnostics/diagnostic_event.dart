@@ -29,6 +29,7 @@ enum DiagnosticCode {
   imageTooLarge,
   unsupportedImageFormat,
   localIo,
+  invalidRenderRequest,
 }
 
 enum DiagnosticStage {

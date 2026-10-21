@@ -20,6 +20,13 @@ void main() {
 
   setUp(() {
     database = AppDatabase.forTesting(NativeDatabase.memory());
+    PackageInfo.setMockInitialValues(
+      appName: 'SiteMark',
+      packageName: 'io.github.wikg1018.sitemark',
+      version: '1.0.32',
+      buildNumber: '47',
+      buildSignature: 'test',
+    );
   });
 
   tearDown(() async {
@@ -32,6 +39,7 @@ void main() {
     ReleaseLookup? lookup,
     ReleaseCheckModeStore? modeStore,
     Locale locale = const Locale('zh'),
+    double textScale = 1,
   }) async {
     await database.getAppSettings();
     await tester.pumpWidget(
@@ -46,6 +54,12 @@ void main() {
             externalLinkServiceProvider.overrideWithValue(externalLinks),
         ],
         child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
           locale: locale,
           supportedLocales: AppStrings.supportedLocales,
           localizationsDelegates: const [
@@ -62,6 +76,18 @@ void main() {
   }
 
   for (final locale in const [Locale('zh'), Locale('en')]) {
+    testWidgets('about fits 320dp with 2x text in ${locale.languageCode}', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpScreen(tester, locale: locale, textScale: 2);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final locale in const [Locale('zh'), Locale('en')]) {
     testWidgets('about section shows v1.0 fallback in ${locale.languageCode}', (
       tester,
     ) async {
@@ -70,7 +96,13 @@ void main() {
         find.text(locale.languageCode == 'en' ? 'Version' : '版本'),
         findsOneWidget,
       );
-      expect(find.text('1.0.31+46'), findsOneWidget);
+      expect(find.text('1.0.32+47'), findsOneWidget);
+      final privacy = find.text(
+        locale.languageCode == 'en' ? 'Privacy details' : '隐私说明',
+      );
+      await tester.ensureVisible(privacy);
+      await tester.tap(privacy);
+      await tester.pumpAndSettle();
       expect(
         find.text(locale.languageCode == 'en' ? 'Check for updates' : '检查更新'),
         findsOneWidget,
@@ -215,8 +247,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('check-for-updates')));
     await tester.pumpAndSettle();
-    expect(links.opened, [page, page]);
-    expect(lookup.checks, 1);
+    expect(links.opened, [page]);
+    expect(lookup.checks, 2);
   });
 
   testWidgets('a thrown check does not claim the app is up to date', (

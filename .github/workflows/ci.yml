@@ -124,7 +124,8 @@ jobs:
           for REQUIRED in \
             android.permission.INTERNET \
             android.permission.ACCESS_NETWORK_STATE \
-            android.permission.ACCESS_LOCAL_NETWORK; do
+            android.permission.ACCESS_LOCAL_NETWORK \
+            android.permission.REQUEST_INSTALL_PACKAGES; do
             if ! grep -Fq "$REQUIRED" <<<"$PERMISSIONS"; then
               echo "APK is missing required permission $REQUIRED" >&2
               exit 1

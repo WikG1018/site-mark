@@ -1469,6 +1469,12 @@ mod watermark_tests {
 
     #[test]
     fn render_request_fields_enforce_length_caps() {
+        let mut number_boundary = sample_request("zh", 1.0, "东区厂房改造");
+        number_boundary.photo_number = "A".repeat(MAX_PHOTO_NUMBER_CHARS);
+        assert!(validate_render_request(&number_boundary).is_ok());
+        number_boundary.photo_number.push('A');
+        assert!(validate_render_request(&number_boundary).is_err());
+
         let mut oversized_notes = sample_request("zh", 1.0, "东区厂房改造");
         oversized_notes.notes = Some("否".repeat(MAX_NOTES_CHARS + 1));
         assert!(validate_render_request(&oversized_notes).is_err());
@@ -2004,7 +2010,12 @@ const MAX_PHOTOGRAPHER_CHARS: usize = 80;
 // input crosses the FFI unvalidated and wrap_text is O(n²) per field, so an
 // oversized field would stall the calling thread.
 const MAX_PROJECT_NAME_CHARS: usize = 120;
-const MAX_PHOTO_NUMBER_CHARS: usize = 32;
+// Dart includes the project prefix and limits the *whole JPEG filename* to
+// 255 UTF-8 bytes. The old 32-character cap rejected ordinary valid captures.
+// This identifier is not drawn; keep a bounded render input while accepting
+// every current filename and legacy project/UUID-prefixed identifier. Filename
+// byte/path safety remains the publisher/exporter's separate responsibility.
+const MAX_PHOTO_NUMBER_CHARS: usize = 255;
 const MAX_CAPTURED_AT_CHARS: usize = 32;
 const MAX_NOTES_CHARS: usize = 240;
 const MAX_ADDRESS_CHARS: usize = 200;

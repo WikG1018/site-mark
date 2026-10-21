@@ -307,7 +307,14 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                     alignment: Alignment.centerLeft,
                     children: [...previousChildren, ?currentChild],
                   ),
-                  child: project != null && _searching
+                  child: editing
+                      ? Text(
+                          strings.selectedCount(
+                            _selectionController.selectedIds.length,
+                          ),
+                          key: const ValueKey('capture-selection-title'),
+                        )
+                      : project != null && _searching
                       ? CaptureSearchField(
                           key: const ValueKey('capture-search-title'),
                           initialText: _searchText,
@@ -355,6 +362,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   builder: (context) => FloatingDockLayout(
                     dock: project != null && editing
                         ? CaptureBatchActionBar(
+                            showSelectionCount: false,
                             key: const Key('batch-bar'),
                             controller: _selectionController,
                             mediaService: ref.watch(

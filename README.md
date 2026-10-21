@@ -2,10 +2,10 @@
 
 [English](README_EN.md) | 简体中文
 
-> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.31`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
+> 面向工程现场记录的本地水印相机：Android 版稳定发布（Latest `v1.0.32`，targetSdk 37 / Android 17），HarmonyOS NEXT 原生 ArkTS 版同步发布当前版本（未签名 HAP），iOS 版复用同一套 Flutter 代码完成全量适配（iOS 26/27 界面形态、后台补拍、深色模式），等待 Apple Developer 账号进入签名发布，当前无可安装包。仓库单分支维护三条产品线。
 
 An offline-first engineering watermark camera with a stable Android release
-(Latest `v1.0.31`, targeting Android 17), a native HarmonyOS NEXT implementation published
+(Latest `v1.0.32`, targeting Android 17), a native HarmonyOS NEXT implementation published
 alongside it, and an iOS build on the shared Flutter codebase that is fully adapted
 (iOS 26/27-style UI, background catch-up, dark mode) and awaits an Apple Developer
 account for signed distribution — no installable package yet. All product lines live on a
@@ -17,14 +17,14 @@ single branch.
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.31-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.31)
+[![Latest](https://img.shields.io/badge/latest-v1.0.32-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.32)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.14-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14)
 
-**当前稳定版本（Latest）：[`v1.0.31`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.31)**
+**当前稳定版本（Latest）：[`v1.0.32`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.32)**
 
 **鸿蒙原生版当前版本：[`native-v1.0.14`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14)（HarmonyOS NEXT，未签名 HAP）**
 
-支持 Android 12（API 31）及以上系统。`v1.0.31` 修复系统相机以读写模式重新打开照片时可能截断原图的问题，并补齐后台处理的脱敏诊断。文件模式缺陷已由回归测试确认，具体故障手机仍需覆盖升级后新拍验证；已经损坏的原图无法由更新恢复。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
+支持 Android 12（API 31）及以上系统。`v1.0.32` 支持在关于页查看下载进度、取消/重试并打开系统安装界面，同时改善大字体布局、减少动画和诊断稳定性。包含上一版相机读写重开保留原图的修复，具体故障手机仍需新拍验证，已经损坏的原图无法由更新恢复。重要项目请定期创建包含私有原图的备份，并把备份文件复制到应用目录之外。
 
 
 ## 下载
@@ -33,9 +33,9 @@ single branch.
 
 | 安装包 | 适用设备 | 下载 |
 | --- | --- | --- |
-| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.31-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.31/sitemark-v1.0.31-arm64.apk) |
-| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.31-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.31/sitemark-v1.0.31-universal.apk) |
-| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.31/SHA256SUMS.txt) |
+| arm64 | 推荐；绝大多数近年 Android 手机 | [sitemark-v1.0.32-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.32/sitemark-v1.0.32-arm64.apk) |
+| universal | 不确定处理器架构或 arm64 无法安装时使用；文件更大 | [sitemark-v1.0.32-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.32/sitemark-v1.0.32-universal.apk) |
+| SHA-256 | 校验下载文件是否完整 | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.32/SHA256SUMS.txt) |
 
 ### 鸿蒙原生版（native-v1.0.14）
 
@@ -71,12 +71,24 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 3. 正式 Release 使用同一签名，可以直接覆盖升级并保留应用数据。
 4. Debug APK 与正式版签名不同，通常不能直接覆盖安装。
 5. 如果 Android 提示签名冲突，不要直接卸载保存着重要数据的旧版本；先完成项目备份并确认备份文件已复制到应用目录之外。
+6. 升级到 `v1.0.32` 后，可从“设置 → 关于 → 检查更新”下载后续版本。下载完成会验证大小、SHA-256、包名和签名，再打开系统安装确认；首次需允许工程印记安装更新。安装包类型自动保持一致，不能把 arm64 split 随意换成低版本代码的 universal。
 
 ## 近期更新
 
+### v1.0.32：安全更新与界面适配
+
+- 安卓关于页支持应用内下载进度、取消/重试和系统安装引导；只下载与当前安装类型匹配的正式 APK。
+- 下载校验 SHA-256 与大小，安装前再次验证包名、版本和签名。首次安装更新需在系统设置中允许此来源，不会静默安装或要求卸载旧版。
+- 窄屏/大字体选择控件自动调整排列；照片日期不再与状态挤占同一行；多选数量移到标题，底部保留四个带文字的玻璃操作按钮。
+- 修复诊断读写并发，补充模拟器截图验收和当前列表的性能测试路径。
+
+本轮的验证结果和未覆盖边界见[审查记录](docs/verification-2026-10-21-android-update-ui.md)。
+
+以下为已发布版本记录：
+
 完整说明见各版本 [GitHub Release](https://github.com/WikG1018/site-mark/releases)。
 
-- **v1.0.31**（Latest）：修复相机以 `rw` 重新打开输出文件时意外清空原图；后台处理失败记录步骤、错误类别、图片格式与文件大小，诊断包汇总前后台日志并保持脱敏；关于页版本同步更新。故障手机仍需新拍验证。
+- **v1.0.31**：修复相机以 `rw` 重新打开输出文件时意外清空原图；后台处理失败记录步骤、错误类别、图片格式与文件大小，诊断包汇总前后台日志并保持脱敏；关于页版本同步更新。故障手机仍需新拍验证。
 - **v1.0.30**：关于页增加手动检查更新。默认先读 GitHub 公开发布版本，连不上再试固定镜像；可改成仅官方或优先镜像。不在应用内下载安装包。本次没有做真机回归。
 - **v1.0.29**：修复照片 Hero 飞行重影——终点恢复为裸 Hero，飞行时不再把目的地图叠在 shuttle 下；去掉会在飞行中改尺寸的 content-rect 包裹。
 - **v1.0.28**：澎湃OS 风格动效/材质升级——弹簧动效引擎与统一弹窗/面板转场、按压缩放+语义触感、材质 token 与统一玻璃配方、列表进出场 + Hero 统一 + 看图橡皮筋/惯性；新增动效材质规范文档；UI 字体嵌入 MiSans 子集（About 页署名）。
@@ -128,6 +140,8 @@ iOS 与 Android 共用同一套 Flutter 界面、业务逻辑、数据库 schema
 我刻意不在应用里重新实现相机，也不嵌第三方相机 SDK——厂商对着自家镜头调校了多年，应用层重做一遍只会更差。SiteMark 通过系统标准能力调用手机系统/厂商相机，把对焦、HDR、防抖和画质留给系统；自己只做三件事：拍摄前的工程信息、拍摄后的本地水印处理、以及记录与项目备份。
 
 发布 APK 没有广告、账号、第三方云同步或统计上传；点击 GitHub 仓库链接时交给外部浏览器处理。网络用于 NAS 同步，以及关于页点击后的检查更新（见 `docs/decision-records.md` D-023、D-025）：NAS 上传只发往你自己填写的服务器，默认关闭；检查更新只在点击后先读 GitHub 公开版本号，自动模式下连不上才试固定公开镜像。离线仍是默认状态，网络是用户手中显式打开的例外。
+
+自 v1.0.32 起支持用户主动下载公开 APK（D-026），不上传工程数据；安装需系统来源授权和最终确认。旧版需先手动覆盖升级一次，才能使用这一入口。
 
 ## 快速使用
 
@@ -292,7 +306,7 @@ HarmonyOS NEXT 原生线使用 Stage + ArkTS + ArkUI、RelationalStore、Prefere
 
 涉及鸿蒙原生代码时，同时检查鸿蒙 manifest 的最小权限集、双 ABI 配置，并以 `ohos-native` feature 单独执行 Rust Clippy/测试。ArkTS 测试与 HAP 打包需要 DevEco Studio SDK，当前在本地 DevEco 环境验证。
 
-正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.31` 为当前 Android 热修版本；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
+正式安装包由版本标签触发 GitHub Actions 完成签名构建。`v1.0.32` 为当前 Android 版本；鸿蒙原生版仍为未签名 debug 构建 HAP，AGC 证书材料到位后提供正式签名包。下载和校验以对应 GitHub Release 中的实际资源为准。
 
 ## 本地构建
 
