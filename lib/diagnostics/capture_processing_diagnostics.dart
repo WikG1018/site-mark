@@ -77,6 +77,9 @@ class CaptureProcessingDiagnostics {
         case ImagePipelineFailureKind.transientIo:
           return DiagnosticCode.localIo;
         case ImagePipelineFailureKind.invalidData:
+          if (error.message.trimLeft().startsWith('validate render request:')) {
+            return DiagnosticCode.invalidRenderRequest;
+          }
           if (error.message.contains('megapixel limit') ||
               error.message.contains('edge limit')) {
             return DiagnosticCode.imageTooLarge;

@@ -608,6 +608,41 @@ fn rejects_png_header_claiming_more_than_64_megapixels() {
 }
 
 #[test]
+fn renders_project_prefixed_and_legacy_photo_numbers_longer_than_32_characters() {
+    let directory = tempdir().unwrap();
+    let source = directory.path().join("source.jpg");
+    let output = directory.path().join("watermarked.jpg");
+    ImageBuffer::from_pixel(1200, 900, Rgb([210u8, 215u8, 220u8]))
+        .save(&source)
+        .unwrap();
+    let original_hash = sha256_file(source.to_string_lossy().into_owned()).unwrap();
+
+    for number in [
+        "Release-Upgrade-Audit-SM-20261021-001".to_string(),
+        format!("{}-SM-20261021-001", "A".repeat(120)),
+        format!("{}-SM-20261021-001", "项目".repeat(39)),
+        format!("{}-SM-20261021-001", "😀".repeat(58)),
+        "云湖之城~daaf7abe-737b-4aa9-beb1-06333f04006a-SM-20260717-003".to_string(),
+    ] {
+        assert!(number.chars().count() > 32);
+        assert!(format!("{number}.jpg").len() <= 255);
+        let mut request = sample_render_request(&source, &output);
+        request.photo_number = number.clone();
+        let result = render_photo(request).unwrap_or_else(|error| panic!("{number}: {error}"));
+        assert_eq!((result.width, result.height), (1200, 900));
+        assert_eq!(
+            result.output_sha256,
+            sha256_file(output.to_string_lossy().into_owned()).unwrap()
+        );
+        assert_eq!(
+            original_hash,
+            sha256_file(source.to_string_lossy().into_owned()).unwrap(),
+            "rendering must not mutate the camera original"
+        );
+    }
+}
+
+#[test]
 fn renders_a_full_resolution_jpeg_with_a_watermark_card() {
     let directory = tempdir().unwrap();
     let source = directory.path().join("source.jpg");
