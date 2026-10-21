@@ -195,6 +195,11 @@ enum ArchiveSaveOutcome: Int, CaseIterable {
   case cancelled = 1
 }
 
+enum ApkInstallOutcome: Int, CaseIterable {
+  case launched = 0
+  case permissionRequired = 1
+}
+
 enum LocationOutcome: Int, CaseIterable {
   case precise = 0
   case approximate = 1
@@ -538,26 +543,32 @@ private class SystemApiPigeonCodecReader: FlutterStandardReader {
     case 131:
       let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
       if let enumResultAsInt = enumResultAsInt {
-        return LocationOutcome(rawValue: enumResultAsInt)
+        return ApkInstallOutcome(rawValue: enumResultAsInt)
       }
       return nil
     case 132:
       let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
       if let enumResultAsInt = enumResultAsInt {
-        return LocationPermissionState(rawValue: enumResultAsInt)
+        return LocationOutcome(rawValue: enumResultAsInt)
       }
       return nil
     case 133:
-      return CameraCaptureResult.fromList(self.readValue() as! [Any?])
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return LocationPermissionState(rawValue: enumResultAsInt)
+      }
+      return nil
     case 134:
-      return RecoveredCameraCapture.fromList(self.readValue() as! [Any?])
+      return CameraCaptureResult.fromList(self.readValue() as! [Any?])
     case 135:
-      return LocationResult.fromList(self.readValue() as! [Any?])
+      return RecoveredCameraCapture.fromList(self.readValue() as! [Any?])
     case 136:
-      return ImageMetadataResult.fromList(self.readValue() as! [Any?])
+      return LocationResult.fromList(self.readValue() as! [Any?])
     case 137:
-      return MediaPublishResult.fromList(self.readValue() as! [Any?])
+      return ImageMetadataResult.fromList(self.readValue() as! [Any?])
     case 138:
+      return MediaPublishResult.fromList(self.readValue() as! [Any?])
+    case 139:
       return RecoveredPublishJournal.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -573,29 +584,32 @@ private class SystemApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? ArchiveSaveOutcome {
       super.writeByte(130)
       super.writeValue(value.rawValue)
-    } else if let value = value as? LocationOutcome {
+    } else if let value = value as? ApkInstallOutcome {
       super.writeByte(131)
       super.writeValue(value.rawValue)
-    } else if let value = value as? LocationPermissionState {
+    } else if let value = value as? LocationOutcome {
       super.writeByte(132)
       super.writeValue(value.rawValue)
-    } else if let value = value as? CameraCaptureResult {
+    } else if let value = value as? LocationPermissionState {
       super.writeByte(133)
-      super.writeValue(value.toList())
-    } else if let value = value as? RecoveredCameraCapture {
+      super.writeValue(value.rawValue)
+    } else if let value = value as? CameraCaptureResult {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? LocationResult {
+    } else if let value = value as? RecoveredCameraCapture {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? ImageMetadataResult {
+    } else if let value = value as? LocationResult {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? MediaPublishResult {
+    } else if let value = value as? ImageMetadataResult {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? RecoveredPublishJournal {
+    } else if let value = value as? MediaPublishResult {
       super.writeByte(138)
+      super.writeValue(value.toList())
+    } else if let value = value as? RecoveredPublishJournal {
+      super.writeByte(139)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -618,6 +632,54 @@ class SystemApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
 }
 
 
+/// Android-only explicit self-update flow. Never used by a background worker.
+///
+/// Generated protocol from Pigeon that represents a handler of messages from Flutter.
+protocol AppUpdateApi {
+  func openInstaller(apkPath: String, expectedSha256: String, expectedVersion: String, completion: @escaping (Result<ApkInstallOutcome, Error>) -> Void)
+  func openInstallPermissionSettings() throws
+}
+
+/// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
+class AppUpdateApiSetup {
+  static var codec: FlutterStandardMessageCodec { SystemApiPigeonCodec.shared }
+  /// Sets up an instance of `AppUpdateApi` to handle messages through the `binaryMessenger`.
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: AppUpdateApi?, messageChannelSuffix: String = "") {
+    let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+    let openInstallerChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sitemark_system_api.AppUpdateApi.openInstaller\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      openInstallerChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let apkPathArg = args[0] as! String
+        let expectedSha256Arg = args[1] as! String
+        let expectedVersionArg = args[2] as! String
+        api.openInstaller(apkPath: apkPathArg, expectedSha256: expectedSha256Arg, expectedVersion: expectedVersionArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      openInstallerChannel.setMessageHandler(nil)
+    }
+    let openInstallPermissionSettingsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sitemark_system_api.AppUpdateApi.openInstallPermissionSettings\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      openInstallPermissionSettingsChannel.setMessageHandler { _, reply in
+        do {
+          try api.openInstallPermissionSettings()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      openInstallPermissionSettingsChannel.setMessageHandler(nil)
+    }
+  }
+}
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol SiteMarkSystemApi {
   func createCameraTarget(captureId: String) throws -> String

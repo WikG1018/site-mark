@@ -32,12 +32,14 @@ class CaptureBatchActionBar extends StatefulWidget {
     required this.mediaService,
     required this.exportService,
     required this.shareService,
+    this.showSelectionCount = true,
   });
 
   final CaptureSelectionController controller;
   final CaptureMediaService mediaService;
   final ProjectExportService exportService;
   final ShareFileService shareService;
+  final bool showSelectionCount;
 
   @override
   State<CaptureBatchActionBar> createState() => _CaptureBatchActionBarState();
@@ -291,27 +293,35 @@ class _CaptureBatchActionBarState extends State<CaptureBatchActionBar> {
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: 56,
-                      child: _busy
-                          ? _CompactProgress(
-                              exporting: _exporting,
-                              completed: _completed,
-                              total: _total,
-                            )
-                          : Semantics(
-                              label: selectedLabel,
-                              child: Text(
-                                useCountOnly ? '${ids.length}' : selectedLabel,
-                                key: const Key('batch-selected-count'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.labelSmall,
+                    if (widget.showSelectionCount || _busy) ...[
+                      SizedBox(
+                        width: 56,
+                        child: _busy
+                            ? _CompactProgress(
+                                exporting: _exporting,
+                                completed: _completed,
+                                total: _total,
+                              )
+                            : Semantics(
+                                label: selectedLabel,
+                                child: Text(
+                                  useCountOnly
+                                      ? '${ids.length}'
+                                      : selectedLabel,
+                                  key: const Key('batch-selected-count'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
                               ),
-                            ),
-                    ),
-                    const VerticalDivider(width: 6, indent: 14, endIndent: 14),
+                      ),
+                      const VerticalDivider(
+                        width: 6,
+                        indent: 14,
+                        endIndent: 14,
+                      ),
+                    ],
                     Expanded(
                       child: Row(
                         children: [

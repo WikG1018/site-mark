@@ -120,7 +120,10 @@ class _ProjectWatermarkSettingsScreenState
                         AnimatedOpacity(
                           key: const Key('watermark-preview-opacity'),
                           opacity: _opacity!,
-                          duration: AppMotion.short4,
+                          duration: AppMotion.durationOf(
+                            context,
+                            AppMotion.short4,
+                          ),
                           child: Align(
                             alignment: _position == 'bottomRight'
                                 ? Alignment.bottomRight

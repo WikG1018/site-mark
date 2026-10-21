@@ -247,7 +247,11 @@ void main() {
         await tester.tap(find.byKey(const Key('edit-captures')));
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('select-all-captures')), findsOneWidget);
-        expect(find.byKey(const Key('capture-search-field')), findsOneWidget);
+        expect(
+          find.byKey(const Key('capture-selection-title')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('capture-search-field')), findsNothing);
 
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();

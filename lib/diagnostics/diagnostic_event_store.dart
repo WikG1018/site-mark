@@ -19,15 +19,21 @@ class DiagnosticEventStore {
   File get _file =>
       File('${directory.path}${Platform.pathSeparator}events.jsonl');
 
-  Future<void> append(DiagnosticEvent event) {
-    final operation = _pending.then((_) => _appendLocked(event));
-    _pending = operation.catchError((_) {});
+  Future<T> _enqueue<T>(Future<T> Function() action) {
+    final operation = _pending.then((_) => action());
+    _pending = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
     return operation;
   }
 
+  Future<void> append(DiagnosticEvent event) =>
+      _enqueue(() => _appendLocked(event));
+
   Future<void> _appendLocked(DiagnosticEvent event) async {
     await directory.create(recursive: true);
-    final existing = await readRecent();
+    final existing = await _readRecent();
     final events = [...existing, event]
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
     var lines = events.map((value) => value.encode()).toList();
@@ -46,7 +52,9 @@ class DiagnosticEventStore {
     }
   }
 
-  Future<List<DiagnosticEvent>> readRecent() async {
+  Future<List<DiagnosticEvent>> readRecent() => _enqueue(_readRecent);
+
+  Future<List<DiagnosticEvent>> _readRecent() async {
     if (!await _file.exists()) return const [];
     final cutoff = _clock().toUtc().subtract(retention);
     final lines = await _file.readAsLines();
@@ -57,10 +65,10 @@ class DiagnosticEventStore {
         .toList(growable: false);
   }
 
-  Future<int> sizeBytes() async => await _file.exists() ? _file.length() : 0;
+  Future<int> sizeBytes() =>
+      _enqueue(() async => await _file.exists() ? _file.length() : 0);
 
-  Future<void> clear() async {
-    await _pending;
+  Future<void> clear() => _enqueue(() async {
     if (await _file.exists()) await _file.delete();
-  }
+  });
 }

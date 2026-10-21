@@ -1,8 +1,8 @@
 /// Pure release-check rules. No Flutter, no HTTP, no I/O.
 ///
-/// The About page is the only caller, and only after a tap. Official success
-/// opens the GitHub release page built from the tag. A gh-proxy.com API
-/// success never uses that host to open the page.
+/// The About page is the only caller, and only after a tap. Release-page and
+/// APK links are built locally from a validated tag. Download assets require
+/// a fixed variant, bounded size and SHA-256; see the platform installer too.
 library;
 
 import 'dart:convert';
@@ -14,6 +14,28 @@ enum ReleaseProduct { flutter, harmony }
 enum ReleaseSource { official, apiMirror }
 
 enum ReleaseCheckStatus { upToDate, updateAvailable, failed }
+
+enum ReleaseApkVariant { arm64, universal }
+
+/// Only the two APK variants published by our release workflow are accepted.
+/// URLs are constructed locally, never taken from a remote response.
+class ReleaseDownload {
+  const ReleaseDownload({
+    required this.tag,
+    required this.variant,
+    required this.sizeBytes,
+    required this.sha256,
+  });
+
+  final String tag;
+  final ReleaseApkVariant variant;
+  final int sizeBytes;
+  final String sha256;
+
+  String get fileName => 'sitemark-$tag-${variant.name}.apk';
+  Uri get officialUri =>
+      Uri.parse('$officialReleaseOrigin/releases/download/$tag/$fileName');
+}
 
 const releaseCheckUserAgent = 'SiteMark';
 const releaseCheckAccept = 'application/vnd.github+json';
@@ -65,20 +87,42 @@ class ReleaseCheckOutcome {
     this.versionLabel,
     this.tag,
     this.source,
+    this.downloads = const [],
   });
 
   const ReleaseCheckOutcome.failed()
     : status = ReleaseCheckStatus.failed,
       versionLabel = null,
       tag = null,
-      source = null;
+      source = null,
+      downloads = const [];
 
   final ReleaseCheckStatus status;
   final String? versionLabel;
   final String? tag;
   final ReleaseSource? source;
+  final List<ReleaseDownload> downloads;
 
   bool get hasUpdate => status == ReleaseCheckStatus.updateAvailable;
+
+  /// Flutter split APKs use ABI offsets. Never offer the universal APK to an
+  /// installed arm64 split: its lower versionCode would reject an upgrade.
+  ReleaseDownload? downloadForBuild(String buildNumber) {
+    if (!hasUpdate) return null;
+    final code = int.tryParse(buildNumber);
+    final variant = switch (code) {
+      final int code when code > 0 && code < 1000 =>
+        ReleaseApkVariant.universal,
+      final int code when code >= 2000 && code < 3000 =>
+        ReleaseApkVariant.arm64,
+      _ => null,
+    };
+    if (variant == null) return null;
+    for (final asset in downloads) {
+      if (asset.variant == variant && asset.tag == tag) return asset;
+    }
+    return null;
+  }
 }
 
 class ReleaseAttempt {
@@ -96,12 +140,20 @@ class ReleaseAttempt {
 }
 
 class ReleaseRead {
-  const ReleaseRead.unusable() : tag = null, versionLabel = null;
+  const ReleaseRead.unusable()
+    : tag = null,
+      versionLabel = null,
+      downloads = const [];
 
-  const ReleaseRead.ok({required this.tag, required this.versionLabel});
+  const ReleaseRead.ok({
+    required this.tag,
+    required this.versionLabel,
+    this.downloads = const [],
+  });
 
   final String? tag;
   final String? versionLabel;
+  final List<ReleaseDownload> downloads;
 
   bool get usable => tag != null && versionLabel != null;
 }
@@ -209,7 +261,34 @@ ReleaseRead readFlutterLatest(String body) {
   return ReleaseRead.ok(
     tag: tag,
     versionLabel: '${match.group(1)}.${match.group(2)}.${match.group(3)}',
+    downloads: _readDownloads(json['assets'], tag),
   );
+}
+
+List<ReleaseDownload> _readDownloads(Object? value, String tag) {
+  if (value is! List) return const [];
+  final assets = <ReleaseApkVariant, ReleaseDownload>{};
+  for (final item in value) {
+    if (item is! Map || item['state'] != 'uploaded') continue;
+    final size = item['size'];
+    final digest = item['digest'];
+    if (size is! int || size <= 0 || size > 200 * 1024 * 1024) continue;
+    if (digest is! String ||
+        !RegExp(r'^sha256:[0-9a-fA-F]{64}$').hasMatch(digest)) {
+      continue;
+    }
+    for (final variant in ReleaseApkVariant.values) {
+      if (item['name'] == 'sitemark-$tag-${variant.name}.apk') {
+        assets[variant] = ReleaseDownload(
+          tag: tag,
+          variant: variant,
+          sizeBytes: size,
+          sha256: digest.substring(7).toLowerCase(),
+        );
+      }
+    }
+  }
+  return List.unmodifiable(assets.values);
 }
 
 ReleaseRead readHarmonyReleases(String body) {
@@ -266,6 +345,7 @@ ReleaseCheckOutcome outcomeFromRead({
     versionLabel: read.versionLabel,
     tag: read.tag,
     source: source,
+    downloads: read.downloads,
   );
 }
 

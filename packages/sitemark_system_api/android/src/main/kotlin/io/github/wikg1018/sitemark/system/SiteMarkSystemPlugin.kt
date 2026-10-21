@@ -23,6 +23,7 @@ class SiteMarkSystemPlugin :
     PluginRegistry.RequestPermissionsResultListener {
 
     private var api: AndroidSystemApi? = null
+    private var updateApi: AndroidAppUpdateApi? = null
     private var messenger: io.flutter.plugin.common.BinaryMessenger? = null
     private var binding: ActivityPluginBinding? = null
 
@@ -31,11 +32,14 @@ class SiteMarkSystemPlugin :
         val instance = AndroidSystemApi(binding.applicationContext)
         api = instance
         SiteMarkSystemApi.setUp(binding.binaryMessenger, instance)
+        updateApi = AndroidAppUpdateApi(binding.applicationContext)
+        AppUpdateApi.setUp(binding.binaryMessenger, updateApi)
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         this.binding = binding
         api?.attachActivity(binding.activity)
+        updateApi?.attachActivity(binding.activity)
         binding.addActivityResultListener(this)
         binding.addRequestPermissionsResultListener(this)
     }
@@ -52,10 +56,14 @@ class SiteMarkSystemPlugin :
         binding?.removeRequestPermissionsResultListener(this)
         binding = null
         api?.detachActivity()
+        updateApi?.detachActivity()
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         SiteMarkSystemApi.setUp(binding.binaryMessenger, null)
+        AppUpdateApi.setUp(binding.binaryMessenger, null)
+        updateApi?.dispose()
+        updateApi = null
         api?.dispose()
         api = null
         messenger = null

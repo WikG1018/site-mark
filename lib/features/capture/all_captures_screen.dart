@@ -274,7 +274,14 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                     alignment: Alignment.centerLeft,
                     children: [...previousChildren, ?currentChild],
                   ),
-                  child: _searching
+                  child: editing
+                      ? Text(
+                          strings.selectedCount(
+                            _selectionController.selectedIds.length,
+                          ),
+                          key: const ValueKey('capture-selection-title'),
+                        )
+                      : _searching
                       ? CaptureSearchField(
                           key: const ValueKey('capture-search-title'),
                           initialText: _searchText,
@@ -350,6 +357,7 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
                     animateDock: false,
                     dock: editing
                         ? CaptureBatchActionBar(
+                            showSelectionCount: false,
                             key: const Key('batch-bar'),
                             controller: _selectionController,
                             mediaService: ref.watch(
@@ -431,59 +439,106 @@ class _AllCapturesScreenState extends ConsumerState<AllCapturesScreen> {
     List<Project> projects,
   ) {
     final dateKey = _exactFilteredDateKey ?? _visibleDateKey;
+    final dateStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+      fontWeight: FontWeight.w600,
+    );
+    double textWidth(String text, TextStyle? style) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
+
+    final dateWidth = dateKey == null ? 0.0 : textWidth(dateKey, dateStyle);
+    final triggerWidth =
+        textWidth(
+          strings.filterAction,
+          Theme.of(context).textTheme.labelLarge,
+        ) +
+        64;
+    final date = dateKey == null
+        ? null
+        : Semantics(
+            label: strings.currentVisibleDate(dateKey),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                dateKey,
+                key: const Key('visible-capture-date'),
+                maxLines: 1,
+                softWrap: false,
+                style: dateStyle,
+              ),
+            ),
+          );
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Row(
-        children: [
-          OutlinedButton.icon(
-            key: const Key('filter-sheet-trigger'),
-            onPressed: () => unawaited(_openFilterSheet(projects)),
-            icon: const Icon(Icons.filter_list_outlined),
-            label: Text(strings.filterAction),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Row(
-              children: [
-                if (_hasFilter)
-                  Expanded(
-                    child: CaptureActiveFilterChips(
-                      filter: _filter,
-                      projects: projects,
-                      onChanged: _onFilterChanged,
-                    ),
-                  )
-                else
-                  const Spacer(),
-                if (dateKey != null) ...[
-                  if (_hasFilter) const SizedBox(width: 8),
-                  Flexible(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Semantics(
-                        label: strings.currentVisibleDate(dateKey),
-                        child: Text(
-                          dateKey,
-                          key: const Key('visible-capture-date'),
-                          maxLines: 1,
-                          overflow: TextOverflow.fade,
-                          softWrap: false,
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w600,
-                              ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact =
+              date != null &&
+              triggerWidth + dateWidth + 8 + (_hasFilter ? 64 : 0) >
+                  constraints.maxWidth;
+          return Row(
+            children: [
+              if (compact)
+                IconButton.outlined(
+                  key: const Key('filter-sheet-trigger'),
+                  tooltip: strings.filterAction,
+                  onPressed: () => unawaited(_openFilterSheet(projects)),
+                  icon: const Icon(Icons.filter_list_outlined),
+                )
+              else
+                OutlinedButton.icon(
+                  key: const Key('filter-sheet-trigger'),
+                  onPressed: () => unawaited(_openFilterSheet(projects)),
+                  icon: const Icon(Icons.filter_list_outlined),
+                  label: Text(strings.filterAction),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, remaining) => Row(
+                    children: [
+                      if (_hasFilter)
+                        Expanded(
+                          child: CaptureActiveFilterChips(
+                            filter: _filter,
+                            projects: projects,
+                            onChanged: _onFilterChanged,
+                          ),
                         ),
-                      ),
-                    ),
+                      if (date != null) ...[
+                        if (_hasFilter) const SizedBox(width: 8),
+                        if (_hasFilter)
+                          SizedBox(
+                            width: dateWidth.clamp(
+                              0.0,
+                              remaining.maxWidth * .7,
+                            ),
+                            child: date,
+                          )
+                        else
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: date,
+                            ),
+                          ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
-            ),
-          ),
-        ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

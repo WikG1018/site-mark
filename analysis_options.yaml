@@ -12,6 +12,9 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - rust_builder/cargokit/build_tool/**
+    # Cargokit writes a separate generated Dart package beneath build/.
+    # Do not analyze build output as application source after an APK build.
+    - build/**
   language:
     strict-casts: true
     strict-inference: true

@@ -61,6 +61,7 @@
 - **系统/厂商相机**：通过 `ACTION_IMAGE_CAPTURE`；不申请 `CAMERA`，不内置相机 SDK。  
 - **网络边界（D-023，2026-09-02 修订；D-025 检查更新）**：网络用于用户主动配置并启用的 NAS 同步（WebDAV/SFTP/SMB，Rust 核心 `sitemark_core::nas` 三线共用，默认关闭），以及关于页点击后的检查更新。发布包为此声明 `INTERNET` / `ACCESS_NETWORK_STATE`（鸿蒙另加 `GET_NETWORK_INFO`；Android 17 局域网 NAS 另声明并在设置页运行时申请 `ACCESS_LOCAL_NETWORK`）。检查更新复用已有 `INTERNET`，不新增权限。密码只存系统安全存储（Keystore / Keychain / 鸿蒙 asset），不进数据库、备份或诊断。无账号、广告、分析、第三方云同步。检查更新不上传照片、账号或诊断；失败不得显示已是最新。  
 - **定位**：仅前台、可拒绝；不申请后台定位。优先原图 EXIF GPS。  
+- **Android 应用内更新（D-026，开发分支未发布）**：用户主动下载匹配当前安装变体的 APK；显示进度/取消/重试，大小和 SHA-256 校验后才可安装。原生层还校验包名、递增版本代码及签名。新增 `REQUEST_INSTALL_PACKAGES` 仅用于用户授权来源、系统最终确认的安装；不静默安装、不自动检查，不修改 iOS/鸿蒙更新方式。
 - **存储**：原图与中间文件在应用私有目录；水印成片经 MediaStore 到 `Pictures/SiteMark`。不申请广泛媒体权限。  
 - **后台处理**：全分辨率串行队列（WorkManager）；幂等、可恢复；强行停止后需用户再打开应用。iOS 由 BGTaskScheduler 机会性补拍承接，不模拟 Android 节奏。  
 - **图像核心**：Rust + flutter_rust_bridge；跨 FFI 只传路径与结构化参数。  

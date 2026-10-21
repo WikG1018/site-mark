@@ -66,6 +66,15 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 ## Recent updates
 
+### Development branch (not released yet)
+
+- Android updates can download in-app with progress, cancellation/retry, and an explicit system installer flow. APK selection preserves the installed variant.
+- Size and SHA-256 are checked after download; package identity, increasing version code, and signing certificates are verified before installation. Android asks the user to allow this install source; updates never install silently or require uninstalling the current app.
+- Responsive segmented controls, readable photo-date/status layout, and selection counts in the toolbar leave more room for labeled batch actions.
+- Diagnostic reads are serialized with writes; emulator visual checks and the current paginated-list performance path are covered.
+
+Published release history:
+
 See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releases) for the full notes.
 
 - **native-v1.0.14** (Pre-release): aligns with Android v1.0.29's HyperOS-style motion/material — spring engine and unified popup/sheet transitions, press-scale with four haptic tiers, six-step radii and the single glass/shadow recipe, viewer rubber-band/inertia physics, list row entrance; adds two-way NAS sync (restore photos missing locally, best-effort remote delete on local deletes; upload-only stays the default); embeds the MiSans subset (About-screen credit); RDB migrates to v16 (sync-mode column).
@@ -120,6 +129,8 @@ I built SiteMark because recording on a jobsite takes more than stamping text on
 I deliberately did not re-implement a camera or embed a third-party camera SDK — manufacturers have spent years tuning their own lenses, and an app-level rework only makes things worse. SiteMark invokes the system/vendor camera through standard platform APIs, leaving focus, HDR, stabilization, and image quality to the system, and does three things itself: engineering fields before the shot, local watermarking after it, and record/project management.
 
 The published APK has no ads, accounts, third-party cloud sync, or analytics uploads; repository links open in the external browser. Network is used for NAS sync and for Check for updates after you tap it on the About page (D-023 and D-025 in `docs/decision-records.md`): NAS uploads go exclusively to the server you enter and stay off by default; Check for updates reads the public GitHub release version only after a tap, and in Automatic mode tries a fixed public mirror only if GitHub cannot be reached. Offline remains the default state — the network is an exception the user explicitly opens.
+
+The development branch also supports user-initiated public APK downloads (D-026, not released yet). Project data is not uploaded; installation needs Android source permission and final confirmation. Existing installations need one manual in-place upgrade to gain this feature. See the [validation report and remaining limits (Chinese)](docs/verification-2026-10-21-android-update-ui.md).
 
 ## Quick start
 

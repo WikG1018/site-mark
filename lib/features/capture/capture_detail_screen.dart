@@ -229,7 +229,10 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
                   child: ClipRRect(
                     borderRadius: const BorderRadius.all(AppRadius.sm),
                     child: AnimatedSwitcher(
-                      duration: AppMotion.medium2,
+                      duration: AppMotion.durationOf(
+                        context,
+                        AppMotion.medium2,
+                      ),
                       child: CaptureImagePreview(
                         // Keep the destination element alive if an unexpected
                         // missing original makes bestAvailable resolve to the

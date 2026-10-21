@@ -25,6 +25,7 @@ v1.0 真机回归勾选表见 [`verification-v1.0.0-device.md`](verification-v1.
 - Android 系统桥接模块单元测试。
 - CI 同时构建 Debug APK 和无正式签名的 Release 变体，提前发现仅发布构建才出现的问题。
 - 标签发布时构建正式签名的 arm64 与 universal APK。
+- Android 应用内更新（D-026）：验证两种已安装变体各自匹配；完整下载/取消/断网/磁盘不足/摘要失败有明确反馈；首次授权、拒绝授权、返回后安装可继续；错误包名、签名及较低版本代码必须阻止安装。检查 `REQUEST_INSTALL_PACKAGES` 仅用于用户主动确认的系统安装。
 - 使用 `apksigner` 验证两个 APK 的签名有效且证书一致。
 - 使用 `aapt2` 验证包名、版本号、版本代码、最低/目标 Android 版本和 ABI。
 - 验证发布 APK 包含 NAS 同步所需的 `INTERNET` / `ACCESS_NETWORK_STATE`（D-023 修订），且不含相机、后台定位或广泛读取相册权限。

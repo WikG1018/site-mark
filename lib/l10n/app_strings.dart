@@ -507,6 +507,43 @@ class AppStrings {
       ? 'Could not check for updates. Check the network and try again.'
       : '无法检查更新。请检查网络后再试。';
   String get openReleasePage => _english ? 'Open release page' : '打开发布页';
+  String get downloadUpdate => _english ? 'Download update' : '下载更新';
+  String get installUpdate => _english ? 'Install update' : '安装更新';
+  String get updateVerifying => _english ? 'Verifying package…' : '正在校验安装包…';
+  String get updateInstalling =>
+      _english ? 'Opening system installer…' : '正在打开系统安装界面…';
+  String get updateReady =>
+      _english ? 'Download complete. Ready to install.' : '下载完成，可以安装更新。';
+  String get updateCancelled => _english ? 'Download cancelled.' : '下载已取消。';
+  String get updateDownloadNote => _english
+      ? 'The download stays in app-private storage. You can leave this page and return. Android may stop it if the app is closed; retry then. Installation always requires your confirmation. Do not uninstall the current app.'
+      : '安装包保存在应用私有空间，可离开此页后返回查看。应用被系统关闭时下载可能中断，重新下载即可。安装须由你确认，请勿卸载当前应用。';
+  String get updateNetworkFailed => _english
+      ? 'Download failed. Check your network and retry, or switch the source.'
+      : '下载失败，请检查网络后重试，或切换更新来源。';
+  String get updateIntegrityFailed => _english
+      ? 'The package is incomplete or failed verification. Please download it again.'
+      : '安装包不完整或校验未通过，请重新下载。';
+  String get updateStorageFailed => _english
+      ? 'Could not save the update. Free up device storage and retry.'
+      : '无法保存安装包，请释放手机存储空间后重试。';
+  String get updateInstallationFailed => _english
+      ? 'The package does not match this app or the installer could not open. Keep the current app and check the release page.'
+      : '安装包与当前应用不匹配，或无法打开安装界面。请保留当前应用并查看发布说明。';
+  String get updatePermissionNote => _english
+      ? 'Android requires permission to install updates from SiteMark. Allow this source in Settings, then return and tap Install update.'
+      : 'Android 要求允许工程印记安装更新。请在系统设置中允许此来源，然后返回点击“安装更新”。';
+  String get updatePermissionAction =>
+      _english ? 'Allow update installation' : '允许安装更新';
+  String get updatePackageUnavailable => _english
+      ? 'No verified package matches this installation. Open the release page for help; do not uninstall the current app.'
+      : '未找到与当前安装类型匹配且可校验的安装包，请查看发布页；不要卸载当前应用。';
+  String get updateSource => _english ? 'Update source' : '更新来源';
+  String get privacyDetails => _english ? 'Privacy details' : '隐私说明';
+  String get updateUniversal => _english ? 'Universal' : '通用版';
+  String get updatePrivacyNotice => _english
+      ? 'Android update downloads fetch only the public installation package and its verification metadata. The file stays in app-private cache. Installation requires Android source permission and your confirmation; photos and project data are not uploaded.'
+      : '安卓更新下载只获取公开安装包及校验信息，文件保存在应用私有缓存。安装需系统来源授权并由你确认，不上传照片或项目数据。';
   String get iosPackageNote => _english
       ? 'No iOS package is published yet. The release page currently has Android packages only.'
       : 'iOS 安装包尚未提供，发布页目前只有 Android 安装包。';

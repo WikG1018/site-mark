@@ -3,6 +3,7 @@ import 'dart:math' show max, min;
 import 'dart:ui' show SemanticsAction;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1239,6 +1240,37 @@ void main() {
 
     expect(find.text('2026-07-17 · 001'), findsOneWidget);
     expect(find.text('云湖之城-SM-20260717-001'), findsNothing);
+    await unmountTree(tester);
+  });
+
+  testWidgets('all records date stays readable at 320dp with 2x text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 800);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final database = AppDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(database.close);
+    await database.createProject(id: 'project-1', name: '示例项目');
+    await seedReadyCaptureForFilterTest(
+      database,
+      id: 'capture-a',
+      projectId: 'project-1',
+      capturedAt: DateTime(2026, 10, 21, 9),
+    );
+    await tester.pumpWidget(pumpAllCaptures(database));
+    await tester.pumpAndSettle();
+    final date = tester.renderObject<RenderParagraph>(
+      find.byKey(const Key('visible-capture-date')),
+    );
+    expect(date.didExceedMaxLines, isFalse);
+    expect(
+      date.getMaxIntrinsicWidth(double.infinity),
+      lessThanOrEqualTo(date.size.width + 1),
+    );
+    expect(tester.takeException(), isNull);
     await unmountTree(tester);
   });
 
