@@ -129,7 +129,8 @@ jobs:
             for REQUIRED in \
               android.permission.INTERNET \
               android.permission.ACCESS_NETWORK_STATE \
-              android.permission.ACCESS_LOCAL_NETWORK; do
+              android.permission.ACCESS_LOCAL_NETWORK \
+              android.permission.REQUEST_INSTALL_PACKAGES; do
               if ! grep -Fq "$REQUIRED" <<<"$PERMISSIONS"; then
                 fail_metadata "$APK missing required permission $REQUIRED"
               fi

@@ -18,7 +18,11 @@ void main() {
   ) async {
     final cache = await getTemporaryDirectory();
     final directory = Directory('${cache.path}/sitemark-updates');
-    final apk = File('${directory.path}/sitemark-v1.0.32-universal.apk');
+    const version = String.fromEnvironment(
+      'UPDATE_TEST_VERSION',
+      defaultValue: '1.0.33',
+    );
+    final apk = File('${directory.path}/sitemark-v$version-universal.apk');
     expect(
       await apk.exists(),
       isTrue,
@@ -32,7 +36,7 @@ void main() {
     final outcome = await AppUpdateApi().openInstaller(
       apk.path,
       digest.toString(),
-      '1.0.32',
+      version,
     );
     expect(
       outcome,

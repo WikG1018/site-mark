@@ -125,7 +125,7 @@ void main() {
         tester.element(find.byType(AboutSectionScreen)),
       ).read(appUpdateControllerProvider);
       updates.download = ReleaseDownload(
-        tag: 'v1.0.32',
+        tag: 'v1.0.33',
         variant: ReleaseApkVariant.universal,
         sizeBytes: 80000000,
         sha256: 'a' * 64,

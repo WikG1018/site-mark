@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.31`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.32`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -10,14 +10,14 @@ English | [简体中文](README.md)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.31-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.31)
+[![Latest](https://img.shields.io/badge/latest-v1.0.32-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.32)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.14-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14)
 
-**Current stable version (Latest): [`v1.0.31`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.31)**
+**Current stable version (Latest): [`v1.0.32`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.32)**
 
 **Current HarmonyOS native version: [`native-v1.0.14`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14) (HarmonyOS NEXT, unsigned HAP)**
 
-Requires Android 12 (API 31) or later. `v1.0.31` fixes original-photo truncation when a system camera reopens its output in read-write mode, and adds sanitized background-processing diagnostics. Regression tests confirm the file-mode defect; the affected phone still needs an in-place upgrade and a new capture to verify the result. The update cannot reconstruct an already damaged original. Back up important projects regularly, including the private original photos, and copy backups outside the app's directories.
+Requires Android 12 (API 31) or later. `v1.0.32` adds in-app update progress, cancellation/retry and a verified system-installer handoff, plus large-text, reduced-motion and diagnostics fixes. It includes the previous camera read-write reopen fix; the affected phone still needs a new capture to verify the result. The update cannot reconstruct an already damaged original. Back up important projects regularly, including private originals, and copy backups outside the app's directories.
 
 ## Download
 
@@ -25,9 +25,9 @@ Requires Android 12 (API 31) or later. `v1.0.31` fixes original-photo truncation
 
 | Package | Applies to | Download |
 | --- | --- | --- |
-| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.31-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.31/sitemark-v1.0.31-arm64.apk) |
-| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.31-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.31/sitemark-v1.0.31-universal.apk) |
-| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.31/SHA256SUMS.txt) |
+| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.32-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.32/sitemark-v1.0.32-arm64.apk) |
+| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.32-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.32/sitemark-v1.0.32-universal.apk) |
+| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.32/SHA256SUMS.txt) |
 
 ### HarmonyOS native (native-v1.0.14)
 
@@ -63,10 +63,11 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 3. Official releases share one signature, so they upgrade in place and keep app data.
 4. Debug APKs are signed differently from official builds and usually cannot upgrade in place.
 5. If Android reports a signature conflict, do not uninstall the old version that holds important data; back up the projects first and confirm the backup files are outside the app's directories.
+6. After upgrading to `v1.0.32`, use Settings → About → Check for updates to download future versions. The app verifies size, SHA-256, package identity and signing certificate before opening Android's installer. Allow SiteMark as an install source when asked. The installed APK variant is preserved to avoid a lower version code.
 
 ## Recent updates
 
-### Development branch (not released yet)
+### v1.0.32: verified updates and adaptive layout
 
 - Android updates can download in-app with progress, cancellation/retry, and an explicit system installer flow. APK selection preserves the installed variant.
 - Size and SHA-256 are checked after download; package identity, increasing version code, and signing certificates are verified before installation. Android asks the user to allow this install source; updates never install silently or require uninstalling the current app.
@@ -78,7 +79,7 @@ Published release history:
 See each version's [GitHub Release](https://github.com/WikG1018/site-mark/releases) for the full notes.
 
 - **native-v1.0.14** (Pre-release): aligns with Android v1.0.29's HyperOS-style motion/material — spring engine and unified popup/sheet transitions, press-scale with four haptic tiers, six-step radii and the single glass/shadow recipe, viewer rubber-band/inertia physics, list row entrance; adds two-way NAS sync (restore photos missing locally, best-effort remote delete on local deletes; upload-only stays the default); embeds the MiSans subset (About-screen credit); RDB migrates to v16 (sync-mode column).
-- **v1.0.31** (Latest): fixes original truncation when a camera reopens its output with `rw`; records background-processing stages, error categories, image formats and file sizes in the sanitized diagnostic bundle; updates the About version. A new capture on the affected device is still required for field validation.
+- **v1.0.31**: fixes original truncation when a camera reopens its output with `rw`; records background-processing stages, error categories, image formats and file sizes in the sanitized diagnostic bundle; updates the About version. A new capture on the affected device is still required for field validation.
 - **v1.0.30**: About page can check for updates. It reads the public GitHub release first, then a fixed mirror if GitHub cannot be reached; Official only and Mirror first are optional. It does not download or install a package. Device regression was not run.
 - **v1.0.29**: fixes the ghosted photo Hero flight — endpoints are plain Heroes again so the destination photo no longer paints under the flying shuttle; drops the content-rect wrap that resized the hero child mid-flight.
 - **v1.0.28**: HyperOS-style motion and material upgrade — spring motion engine and unified popup/sheet transitions, press-scale with semantic haptics, material tokens and one glass recipe, list entrance + unified Hero + viewer rubber-band/fling; motion/material spec doc; MiSans subset as the UI face (About-screen credit).
@@ -130,7 +131,7 @@ I deliberately did not re-implement a camera or embed a third-party camera SDK �
 
 The published APK has no ads, accounts, third-party cloud sync, or analytics uploads; repository links open in the external browser. Network is used for NAS sync and for Check for updates after you tap it on the About page (D-023 and D-025 in `docs/decision-records.md`): NAS uploads go exclusively to the server you enter and stay off by default; Check for updates reads the public GitHub release version only after a tap, and in Automatic mode tries a fixed public mirror only if GitHub cannot be reached. Offline remains the default state — the network is an exception the user explicitly opens.
 
-The development branch also supports user-initiated public APK downloads (D-026, not released yet). Project data is not uploaded; installation needs Android source permission and final confirmation. Existing installations need one manual in-place upgrade to gain this feature. See the [validation report and remaining limits (Chinese)](docs/verification-2026-10-21-android-update-ui.md).
+Since v1.0.32, user-initiated public APK downloads are supported (D-026). Project data is not uploaded; installation needs Android source permission and final confirmation. Existing installations need one manual in-place upgrade to gain this feature. See the [validation report and remaining limits (Chinese)](docs/verification-2026-10-21-android-update-ui.md).
 
 ## Quick start
 
@@ -295,7 +296,7 @@ The release gates for the current version include:
 
 When HarmonyOS native code is involved, the checks additionally cover the HarmonyOS manifest's minimal permission set and dual-ABI configuration, and run Rust Clippy/tests for the `ohos-native` feature separately. ArkTS tests and HAP packaging need the DevEco Studio SDK and are currently verified in a local DevEco environment.
 
-Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.31` is the current Android hotfix; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
+Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.32` is the current Android release; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
 
 ## Local build
 

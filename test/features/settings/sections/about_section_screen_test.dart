@@ -23,8 +23,8 @@ void main() {
     PackageInfo.setMockInitialValues(
       appName: 'SiteMark',
       packageName: 'io.github.wikg1018.sitemark',
-      version: '1.0.31',
-      buildNumber: '46',
+      version: '1.0.32',
+      buildNumber: '47',
       buildSignature: 'test',
     );
   });
@@ -96,7 +96,7 @@ void main() {
         find.text(locale.languageCode == 'en' ? 'Version' : '版本'),
         findsOneWidget,
       );
-      expect(find.text('1.0.31+46'), findsOneWidget);
+      expect(find.text('1.0.32+47'), findsOneWidget);
       final privacy = find.text(
         locale.languageCode == 'en' ? 'Privacy details' : '隐私说明',
       );
