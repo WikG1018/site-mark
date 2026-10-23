@@ -52,6 +52,7 @@ class FloatingDockLayout extends StatelessWidget {
         Positioned.fill(child: child),
         if (floatingActionButton case final action?)
           Positioned(
+            key: const ValueKey('floating-action-position'),
             right: 16,
             bottom:
                 bottomSafeArea +
@@ -66,6 +67,9 @@ class FloatingDockLayout extends StatelessWidget {
             ),
           ),
         Positioned(
+          // The optional FAB must not shift this subtree's identity. Losing
+          // the Dock State on a tab switch discards its in-flight lens.
+          key: const ValueKey('floating-dock-position'),
           left: floatingDockHorizontalInset,
           right: floatingDockHorizontalInset,
           bottom: bottomSafeArea + floatingDockBottomInset,
@@ -78,6 +82,13 @@ class FloatingDockLayout extends StatelessWidget {
               duration: duration,
               switchInCurve: AppMotion.springSlideRise,
               switchOutCurve: AppMotion.emphasizedAccelerate,
+              // An outgoing child retains the duration it was created with.
+              // Explicitly omit it for immediate replacements/nested routes;
+              // otherwise the home Dock lingers over project details.
+              layoutBuilder: (current, previous) => Stack(
+                alignment: Alignment.center,
+                children: [if (animateDock) ...previous, ?current],
+              ),
               transitionBuilder: (child, animation) => FadeTransition(
                 opacity: animation,
                 child: SlideTransition(
@@ -111,7 +122,7 @@ Widget _slideChrome({
 }) {
   return AnimatedSlide(
     duration: duration,
-    curve: AppMotion.springSnapBack,
+    curve: AppMotion.scrollChromeGlide,
     offset: visible ? Offset.zero : hiddenOffset,
     child: IgnorePointer(ignoring: !visible, child: child),
   );

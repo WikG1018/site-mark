@@ -1,6 +1,6 @@
 /// Pure release-check rules. No Flutter, no HTTP, no I/O.
 ///
-/// The About page is the only caller, and only after a tap. Release-page and
+/// Used by About and the opt-out, foreground-only Android check. Release-page and
 /// APK links are built locally from a validated tag. Download assets require
 /// a fixed variant, bounded size and SHA-256; see the platform installer too.
 library;

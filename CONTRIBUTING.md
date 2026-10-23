@@ -6,7 +6,8 @@ Thank you for helping improve SiteMark.
 2. Keep the Android release manifest free of CAMERA, background location,
    broad storage, advertising, and analytics permissions/dependencies.
    `INTERNET`, `ACCESS_NETWORK_STATE`, and `ACCESS_LOCAL_NETWORK` exist only
-   for the opt-in NAS sync (D-023) and must stay in the release APK. Android 17
+   for the opt-in NAS sync (D-023) and public release checks/downloads
+   (D-025/D-026/D-028), and must stay in the release APK. Android 17
    LAN NAS also runtime-requests `ACCESS_LOCAL_NETWORK` from the settings
    screen.
 3. Add a failing focused test before changing product behavior.

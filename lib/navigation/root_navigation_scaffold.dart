@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sitemark/app.dart' show automaticUpdateControllerProvider;
+import 'package:sitemark/features/settings/automatic_update_host.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
@@ -81,43 +83,66 @@ class RootNavigationScaffold extends ConsumerWidget {
         // to the launcher instead of cancelling the selection.
         return ScrollChromeHost(
           resetKey: (path, navigationShell.currentIndex),
-          child: PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (didPop, result) {
-              if (didPop) return;
-              SystemNavigator.pop();
-            },
-            child: Scaffold(
-              body: FloatingDockLayout(
-                animateDock: path != '/records',
-                dock: showRootNavigation && !hideForSelection
-                    ? RootNavigationDock(
-                        key: const Key('root-dock'),
-                        selectedIndex: navigationShell.currentIndex,
-                        onDestinationSelected: (index) =>
-                            navigationShell.goBranch(
-                              index,
-                              initialLocation:
-                                  index == navigationShell.currentIndex,
-                            ),
-                      )
-                    : null,
-                floatingActionButton:
-                    showRootNavigation && navigationShell.currentIndex == 0
-                    ? AdaptiveFloatingButton(
-                        key: const Key('new-project-fab'),
-                        heroTag: 'new-project-fab',
-                        onPressed: () => context.push('/projects/new'),
-                        tooltip: strings.newProject,
-                        icon: Icons.add,
-                      )
-                    : null,
-                child: navigationShell,
+          child: _withAutomaticUpdates(
+            context,
+            ref,
+            active: showRootNavigation && !hideForSelection,
+            onOpen: () => router.go('/settings/about'),
+            child: PopScope(
+              canPop: false,
+              onPopInvokedWithResult: (didPop, result) {
+                if (didPop) return;
+                SystemNavigator.pop();
+              },
+              child: Scaffold(
+                body: FloatingDockLayout(
+                  animateDock: showRootNavigation && path != '/records',
+                  dock: showRootNavigation && !hideForSelection
+                      ? RootNavigationDock(
+                          key: const Key('root-dock'),
+                          selectedIndex: navigationShell.currentIndex,
+                          onDestinationSelected: (index) =>
+                              navigationShell.goBranch(
+                                index,
+                                initialLocation:
+                                    index == navigationShell.currentIndex,
+                              ),
+                        )
+                      : null,
+                  floatingActionButton:
+                      showRootNavigation && navigationShell.currentIndex == 0
+                      ? AdaptiveFloatingButton(
+                          key: const Key('new-project-fab'),
+                          heroTag: 'new-project-fab',
+                          onPressed: () => context.push('/projects/new'),
+                          tooltip: strings.newProject,
+                          icon: Icons.add,
+                        )
+                      : null,
+                  child: navigationShell,
+                ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _withAutomaticUpdates(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool active,
+    required VoidCallback onOpen,
+    required Widget child,
+  }) {
+    if (defaultTargetPlatform != TargetPlatform.android) return child;
+    return AutomaticUpdateHost(
+      controller: ref.watch(automaticUpdateControllerProvider),
+      active: active,
+      avoidFloatingActionButton: navigationShell.currentIndex == 0,
+      onOpen: onOpen,
+      child: child,
     );
   }
 }

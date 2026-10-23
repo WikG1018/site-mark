@@ -526,6 +526,17 @@ class AppStrings {
   String get about => _english ? 'About' : '关于';
   String get version => _english ? 'Version' : '版本';
   String get checkForUpdates => _english ? 'Check for updates' : '检查更新';
+  String get automaticUpdateChecks =>
+      _english ? 'Check automatically' : '自动检查更新';
+  String get automaticUpdateChecksHint => _english
+      ? 'At most once every 24 hours while open. No automatic downloads or installs.'
+      : '前台每 24 小时最多检查一次，不自动下载或安装。';
+  String get viewUpdate => _english ? 'View update' : '查看更新';
+  String get dismissUpdateReminder =>
+      _english ? 'Dismiss update reminder' : '关闭更新提醒';
+  String get updatePreferenceSaveFailed => _english
+      ? 'Could not save this preference. Please try again; it may reset after restarting.'
+      : '未能保存此设置，请重试；重新打开应用后可能恢复原设置。';
   String get checkingForUpdates => _english ? 'Checking…' : '正在检查…';
   String get upToDate => _english ? 'You are up to date' : '已是最新版本';
   String newVersionFound(String version) =>
@@ -585,8 +596,8 @@ class AppStrings {
   String get openLinkFailed =>
       _english ? 'Could not open the browser' : '无法打开浏览器';
   String get privacySummary => _english
-      ? 'Offline by default. Network is used only when you open it: NAS sync (WebDAV, SFTP or SMB) connects only to the server you configure. Check for updates on the About page reads the public GitHub release version first by default; in Automatic mode it tries a fixed public mirror only if GitHub cannot be reached, and you can switch to Official only or Mirror first. It does not upload photos or an account. GitHub links open in an external browser. Foreground location is used only when requested, and a diagnostic bundle reaches the system share sheet only after confirmation.'
-      : '默认离线。网络只在你主动打开时使用：NAS 同步（WebDAV/SFTP/SMB）只连接你配置的服务器；关于页的检查更新默认先读取 GitHub 公开版本号，自动模式下连不上才试固定的公开镜像，也可以改成仅官方或优先镜像，不上传照片或账号。GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。';
+      ? 'Photos and projects work offline. NAS sync (WebDAV, SFTP or SMB) connects only to the server you configure. Android checks public release information while the app is open, at most once every 24 hours; you can disable automatic checks in About. Manual checks remain available. The Automatic update source tries GitHub first, then a fixed public mirror on failure; Official only and Mirror first are also available. No photos, project data or account are uploaded. Downloads and installation require your action. GitHub links open in an external browser. Foreground location is used only when requested; diagnostic bundles are shared only after confirmation.'
+      : '照片和项目可离线使用。NAS 同步（WebDAV/SFTP/SMB）只连接你配置的服务器。安卓版在应用打开时每 24 小时最多读取一次公开版本信息，可在关于页关闭自动检查，仍可手动检查。更新来源为自动时先访问 GitHub，失败后才试固定公开镜像，也可改为仅官方或优先镜像；不上传照片、项目数据或账号。下载和安装必须由你操作。GitHub 链接交给外部浏览器。前台定位仅在用户主动请求时使用，诊断包仅在用户确认后分享。';
   String get license => _english ? 'License' : '许可证';
   String get licenseValue => 'Apache-2.0';
   String get licenses => _english ? 'Open-source licenses' : '开源许可证';

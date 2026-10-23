@@ -32,14 +32,20 @@ class _RootNavigationDockState extends State<RootNavigationDock>
   late double _to;
   double _shapeFrom = 0;
   bool _reduceMotion = false;
+  double? _dragPosition;
+  double _dragOrigin = 0;
+  double _pointerOrigin = 0;
+  bool _pointerCancelled = false;
 
   double get _position =>
-      lerpDouble(_from, _to, AppMotion.emphasized.transform(_travel.value))!;
+      _dragPosition ??
+      lerpDouble(_from, _to, AppMotion.dockGlide.transform(_travel.value))!;
 
   double get _deformation {
     if (_reduceMotion) return 0;
+    if (_dragPosition != null) return .35;
     final progress = _travel.value;
-    return (_shapeFrom * (1 - AppMotion.emphasized.transform(progress)) +
+    return (_shapeFrom * (1 - AppMotion.dockGlide.transform(progress)) +
             AppMotion.dockLensDeformation(progress) *
                 math.min((_to - _from).abs(), 1.5))
         .clamp(0.0, 1.8);
@@ -51,7 +57,7 @@ class _RootNavigationDockState extends State<RootNavigationDock>
     _from = _to = widget.selectedIndex.toDouble();
     _travel = AnimationController(
       vsync: this,
-      duration: AppMotion.rootSwitch,
+      duration: AppMotion.dockTravel,
       value: 1,
     );
     _press = AnimationController(vsync: this, duration: AppMotion.short4);
@@ -71,16 +77,32 @@ class _RootNavigationDockState extends State<RootNavigationDock>
   void didUpdateWidget(covariant RootNavigationDock oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.selectedIndex == oldWidget.selectedIndex) return;
+    if (_dragPosition == null && _to == widget.selectedIndex.toDouble()) return;
+    _animateTo(widget.selectedIndex);
+  }
+
+  void _animateTo(int index) {
     // Sample the real visible position before retargeting rapid taps.
     final position = _position;
     _shapeFrom = _deformation;
     _from = position;
-    _to = widget.selectedIndex.toDouble();
+    _dragPosition = null;
+    _to = index.toDouble();
     _press.value = 0;
     if (_reduceMotion) {
       _travel.value = 1;
     } else {
       _travel.forward(from: 0);
+    }
+  }
+
+  void _finishDrag({bool cancelled = false}) {
+    if (_dragPosition == null) return;
+    final index = cancelled ? widget.selectedIndex : _dragPosition!.round();
+    setState(() => _animateTo(index));
+    if (!cancelled && index != widget.selectedIndex) {
+      HapticFeedback.selectionClick();
+      widget.onDestinationSelected(index);
     }
   }
 
@@ -154,66 +176,108 @@ class _RootNavigationDockState extends State<RootNavigationDock>
                       final slotWidth =
                           constraints.maxWidth / destinations.length;
                       final restingWidth = slotWidth - AppDock.lensInset * 2;
-                      return AnimatedBuilder(
-                        animation: Listenable.merge([_travel, _press]),
-                        child: Row(
-                          children: [
-                            for (final (index, destination)
-                                in destinations.indexed)
-                              Expanded(
-                                child: _RootDestinationButton(
-                                  destination: destination,
-                                  selected: widget.selectedIndex == index,
-                                  onPressedChanged: (pressed) =>
-                                      _setPressed(index, pressed),
-                                  onTap: () =>
-                                      widget.onDestinationSelected(index),
-                                ),
-                              ),
-                          ],
-                        ),
-                        builder: (context, buttons) {
-                          final position = _position;
-                          final center = slotWidth * (position + .5);
-                          final centerX = rtl
-                              ? constraints.maxWidth - center
-                              : center;
-                          final deformation = _deformation;
-                          final pressed = _reduceMotion ? 0.0 : _press.value;
-                          final width = math.min(
-                            restingWidth *
-                                (1 + deformation * .14 + pressed * .035),
-                            math.min(centerX, constraints.maxWidth - centerX) *
-                                2,
-                          );
-                          final height =
-                              constraints.maxHeight *
-                              (1 - deformation * .035 - pressed * .05);
-                          final direction = (_to - _from).sign * (rtl ? -1 : 1);
-                          return Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Positioned(
-                                left: centerX - width / 2,
-                                top: (constraints.maxHeight - height) / 2,
-                                width: width,
-                                height: height,
-                                child: IgnorePointer(
-                                  child: GlassSurface(
-                                    key: const Key('root-dock-glass-indicator'),
-                                    style: GlassSurfaceStyle.lens,
-                                    lightDirection: direction * deformation,
-                                    borderRadius: AppDock.radius,
-                                    blurSigma: 0,
-                                    boxShadow: AppShadow.glassLens(context),
-                                    child: const SizedBox.expand(),
+                      return Listener(
+                        // Flutter ends an accepted drag on PointerCancel;
+                        // distinguish it from a genuine release before that
+                        // recognizer callback can commit navigation.
+                        onPointerCancel: (_) => _pointerCancelled = true,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onHorizontalDragDown: (details) {
+                            _pointerCancelled = false;
+                          },
+                          onHorizontalDragStart: (details) {
+                            _pointerOrigin = details.localPosition.dx;
+                            _dragOrigin = _position;
+                            _travel.stop();
+                            setState(() => _dragPosition = _position);
+                          },
+                          onHorizontalDragUpdate: (details) {
+                            setState(() {
+                              final distance =
+                                  (details.localPosition.dx - _pointerOrigin) /
+                                  slotWidth *
+                                  (rtl ? -1 : 1);
+                              _dragPosition = (_dragOrigin + distance).clamp(
+                                0.0,
+                                2.0,
+                              );
+                            });
+                          },
+                          onHorizontalDragEnd: (_) =>
+                              _finishDrag(cancelled: _pointerCancelled),
+                          onHorizontalDragCancel: () =>
+                              _finishDrag(cancelled: true),
+                          child: AnimatedBuilder(
+                            animation: Listenable.merge([_travel, _press]),
+                            child: Row(
+                              children: [
+                                for (final (index, destination)
+                                    in destinations.indexed)
+                                  Expanded(
+                                    child: _RootDestinationButton(
+                                      destination: destination,
+                                      selected: widget.selectedIndex == index,
+                                      onPressedChanged: (pressed) =>
+                                          _setPressed(index, pressed),
+                                      onTap: () =>
+                                          widget.onDestinationSelected(index),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              buttons!,
-                            ],
-                          );
-                        },
+                              ],
+                            ),
+                            builder: (context, buttons) {
+                              final position = _position;
+                              final center = slotWidth * (position + .5);
+                              final centerX = rtl
+                                  ? constraints.maxWidth - center
+                                  : center;
+                              final deformation = _deformation;
+                              final pressed = _reduceMotion
+                                  ? 0.0
+                                  : _press.value;
+                              final width = math.min(
+                                restingWidth *
+                                    (1 + deformation * .14 + pressed * .035),
+                                math.min(
+                                      centerX,
+                                      constraints.maxWidth - centerX,
+                                    ) *
+                                    2,
+                              );
+                              final height =
+                                  constraints.maxHeight *
+                                  (1 - deformation * .035 - pressed * .05);
+                              final direction =
+                                  (_to - _from).sign * (rtl ? -1 : 1);
+                              return Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Positioned(
+                                    left: centerX - width / 2,
+                                    top: (constraints.maxHeight - height) / 2,
+                                    width: width,
+                                    height: height,
+                                    child: IgnorePointer(
+                                      child: GlassSurface(
+                                        key: const Key(
+                                          'root-dock-glass-indicator',
+                                        ),
+                                        style: GlassSurfaceStyle.lens,
+                                        lightDirection: direction * deformation,
+                                        borderRadius: AppDock.radius,
+                                        blurSigma: 0,
+                                        boxShadow: AppShadow.glassLens(context),
+                                        child: const SizedBox.expand(),
+                                      ),
+                                    ),
+                                  ),
+                                  buttons!,
+                                ],
+                              );
+                            },
+                          ),
+                        ),
                       );
                     },
                   ),
