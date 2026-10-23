@@ -5,13 +5,29 @@ setlocal ENABLEDELAYEDEXPANSION
 
 SET BASEDIR=%~dp0
 
+REM A missing Flutter SDK must fail the build, not produce an APK without Rust.
+if not defined FLUTTER_ROOT (
+    echo FLUTTER_ROOT is required to build the native image library. 1>&2
+    exit /b 1
+)
+SET "DART=%FLUTTER_ROOT%\bin\cache\dart-sdk\bin\dart.exe"
+if not exist "%DART%" (
+    echo Dart SDK executable was not found. 1>&2
+    exit /b 1
+)
+if not defined CARGOKIT_TOOL_TEMP_DIR (
+    echo CARGOKIT_TOOL_TEMP_DIR is required. 1>&2
+    exit /b 1
+)
+
 if not exist "%CARGOKIT_TOOL_TEMP_DIR%" (
     mkdir "%CARGOKIT_TOOL_TEMP_DIR%"
 )
 cd /D "%CARGOKIT_TOOL_TEMP_DIR%"
+if errorlevel 1 exit /b 1
+if not exist .dart_tool mkdir .dart_tool
 
 SET BUILD_TOOL_PKG_DIR=%BASEDIR%build_tool
-SET DART=%FLUTTER_ROOT%\bin\cache\dart-sdk\bin\dart
 
 set BUILD_TOOL_PKG_DIR_POSIX=%BUILD_TOOL_PKG_DIR:\=/%
 
@@ -78,14 +94,21 @@ REM which means  we need to do pub get and precompile
 if not exist "%PRECOMPILED%" (
     echo Running pub get in "%cd%"
     "%DART%" pub get --no-precompile
+    if errorlevel 1 exit /b 1
     "%DART%" compile kernel bin/build_tool_runner.dart
+    if errorlevel 1 exit /b 1
 )
 
 "%DART%" "%PRECOMPILED%" %*
+set "RESULT=!ERRORLEVEL!"
 
 REM 253 means invalid snapshot version.
-If %ERRORLEVEL% equ 253 (
+If !RESULT! equ 253 (
     "%DART%" pub get --no-precompile
+    if errorlevel 1 exit /b 1
     "%DART%" compile kernel bin/build_tool_runner.dart
+    if errorlevel 1 exit /b 1
     "%DART%" "%PRECOMPILED%" %*
+    set "RESULT=!ERRORLEVEL!"
 )
+exit /b !RESULT!

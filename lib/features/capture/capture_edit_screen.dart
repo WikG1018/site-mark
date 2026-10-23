@@ -8,6 +8,7 @@ import 'package:sitemark/shared/ui/adaptive_progress.dart';
 import 'package:sitemark/shared/ui/adaptive_toast.dart';
 import 'package:sitemark/shared/ui/adaptive_page_scaffold.dart';
 import 'package:sitemark/workflow/capture_workflow.dart';
+import 'package:sitemark/features/capture/watermark_time_field.dart';
 
 class CaptureEditScreen extends ConsumerStatefulWidget {
   const CaptureEditScreen({
@@ -31,6 +32,7 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
   final _notes = TextEditingController();
   bool _initialized = false;
   bool _working = false;
+  DateTime? _watermarkTime;
   late Future<CaptureRecord?> _captureFuture;
 
   @override
@@ -64,6 +66,7 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
     _content.text = capture.workContent;
     _photographer.text = capture.photographer;
     _notes.text = capture.notes ?? '';
+    _watermarkTime = capture.watermarkTime;
   }
 
   Future<void> _save() async {
@@ -79,6 +82,8 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
               workContent: _content.text,
               photographer: _photographer.text,
               notes: _notes.text.trim().isEmpty ? null : _notes.text,
+              watermarkTime: _watermarkTime,
+              updateWatermarkTime: true,
             ),
           );
       if (!mounted) return;
@@ -113,6 +118,18 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
         if (capture != null) _initialize(capture);
         return AdaptivePageScaffold.raw(
           title: strings.editRecord,
+          bottomNavigationBar: capture == null
+              ? null
+              : SafeArea(
+                  minimum: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                  child: FilledButton.icon(
+                    onPressed: _working ? null : _save,
+                    icon: _working
+                        ? const AdaptiveProgressIndicator(size: 18)
+                        : const Icon(Icons.auto_awesome_outlined),
+                    label: Text(strings.regenerateWatermark),
+                  ),
+                ),
           body: waitingForCapture
               ? const Center(child: AdaptiveProgressIndicator())
               : captureLoadFailed
@@ -168,14 +185,14 @@ class _CaptureEditScreenState extends ConsumerState<CaptureEditScreen> {
                           child: Text(strings.immutableEvidence),
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      FilledButton.icon(
-                        onPressed: _working ? null : _save,
-                        icon: _working
-                            ? const AdaptiveProgressIndicator(size: 18)
-                            : const Icon(Icons.auto_awesome_outlined),
-                        label: Text(strings.regenerateWatermark),
+                      WatermarkTimeField(
+                        value: _watermarkTime,
+                        originalTime: capture!.capturedAt,
+                        enabled: !_working,
+                        onChanged: (value) =>
+                            setState(() => _watermarkTime = value),
                       ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ),

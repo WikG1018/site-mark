@@ -254,6 +254,47 @@ enum class LocationPermissionState(val raw: Int) {
 }
 
 /** Generated class from Pigeon that represents data sent in messages. */
+data class GalleryImageCopy (
+  val originalPath: String,
+  val capturedAtMillis: Long? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): GalleryImageCopy {
+      val originalPath = pigeonVar_list[0] as String
+      val capturedAtMillis = pigeonVar_list[1] as Long?
+      return GalleryImageCopy(originalPath, capturedAtMillis)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      originalPath,
+      capturedAtMillis,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as GalleryImageCopy
+    return SystemApiPigeonUtils.deepEquals(this.originalPath, other.originalPath) && SystemApiPigeonUtils.deepEquals(this.capturedAtMillis, other.capturedAtMillis)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.originalPath)
+    result = 31 * result + SystemApiPigeonUtils.deepHash(this.capturedAtMillis)
+    return result
+  }
+  override fun toString(): String {
+    return "GalleryImageCopy(originalPath=$originalPath, capturedAtMillis=$capturedAtMillis)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
 data class CameraCaptureResult (
   val outcome: CameraOutcome,
   val outputPath: String,
@@ -595,30 +636,35 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          CameraCaptureResult.fromList(it)
+          GalleryImageCopy.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RecoveredCameraCapture.fromList(it)
+          CameraCaptureResult.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          LocationResult.fromList(it)
+          RecoveredCameraCapture.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ImageMetadataResult.fromList(it)
+          LocationResult.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          MediaPublishResult.fromList(it)
+          ImageMetadataResult.fromList(it)
         }
       }
       139.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          MediaPublishResult.fromList(it)
+        }
+      }
+      140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           RecoveredPublishJournal.fromList(it)
         }
@@ -648,28 +694,32 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
         stream.write(133)
         writeValue(stream, value.raw.toLong())
       }
-      is CameraCaptureResult -> {
+      is GalleryImageCopy -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is RecoveredCameraCapture -> {
+      is CameraCaptureResult -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is LocationResult -> {
+      is RecoveredCameraCapture -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is ImageMetadataResult -> {
+      is LocationResult -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is MediaPublishResult -> {
+      is ImageMetadataResult -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is RecoveredPublishJournal -> {
+      is MediaPublishResult -> {
         stream.write(139)
+        writeValue(stream, value.toList())
+      }
+      is RecoveredPublishJournal -> {
+        stream.write(140)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -678,6 +728,85 @@ private open class SystemApiPigeonCodec : StandardMessageCodec() {
 }
 
 
+/**
+ * Android photo picker; grants access only to explicitly selected images.
+ *
+ * Generated interface from Pigeon that represents a handler of messages from Flutter.
+ */
+interface GalleryImportApi {
+  fun pickImages(callback: (Result<List<String>>) -> Unit)
+  fun copyImage(sourceUri: String, captureId: String, callback: (Result<GalleryImageCopy>) -> Unit)
+  fun releaseImages(sourceUris: List<String>)
+
+  companion object {
+    /** The codec used by GalleryImportApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      SystemApiPigeonCodec()
+    }
+    /** Sets up an instance of `GalleryImportApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: GalleryImportApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.pickImages$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.pickImages{ result: Result<List<String>> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SystemApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SystemApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.copyImage$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceUriArg = args[0] as String
+            val captureIdArg = args[1] as String
+            api.copyImage(sourceUriArg, captureIdArg) { result: Result<GalleryImageCopy> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(SystemApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(SystemApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.releaseImages$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceUrisArg = args[0] as List<String>
+            val wrapped: List<Any?> = try {
+              api.releaseImages(sourceUrisArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              SystemApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
 /**
  * Android-only explicit self-update flow. Never used by a background worker.
  *

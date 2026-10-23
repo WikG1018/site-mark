@@ -19,6 +19,7 @@ CaptureSummary _summary(int index, {String projectId = 'project-1'}) {
   final time = DateTime(2026, 7, 16, 12).subtract(Duration(minutes: index));
   return CaptureSummary(
     capture: CaptureRecord(
+      captureSource: 'camera',
       id: 'capture-$index',
       projectId: projectId,
       photoNumber: 'SM-20260716-${index + 1}',

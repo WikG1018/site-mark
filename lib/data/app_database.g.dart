@@ -936,6 +936,42 @@ class $CaptureRecordsTable extends CaptureRecords
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _watermarkTimeMeta = const VerificationMeta(
+    'watermarkTime',
+  );
+  @override
+  late final GeneratedColumn<DateTime> watermarkTime =
+      GeneratedColumn<DateTime>(
+        'watermark_time',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _captureSourceMeta = const VerificationMeta(
+    'captureSource',
+  );
+  @override
+  late final GeneratedColumn<String> captureSource = GeneratedColumn<String>(
+    'capture_source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('camera'),
+  );
+  static const VerificationMeta _sourceCapturedAtMeta = const VerificationMeta(
+    'sourceCapturedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> sourceCapturedAt =
+      GeneratedColumn<DateTime>(
+        'source_captured_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _latitudeMeta = const VerificationMeta(
     'latitude',
   );
@@ -1054,6 +1090,9 @@ class $CaptureRecordsTable extends CaptureRecords
     failureReason,
     createdAt,
     capturedAt,
+    watermarkTime,
+    captureSource,
+    sourceCapturedAt,
     latitude,
     longitude,
     accuracyMeters,
@@ -1187,6 +1226,33 @@ class $CaptureRecordsTable extends CaptureRecords
       context.handle(
         _capturedAtMeta,
         capturedAt.isAcceptableOrUnknown(data['captured_at']!, _capturedAtMeta),
+      );
+    }
+    if (data.containsKey('watermark_time')) {
+      context.handle(
+        _watermarkTimeMeta,
+        watermarkTime.isAcceptableOrUnknown(
+          data['watermark_time']!,
+          _watermarkTimeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('capture_source')) {
+      context.handle(
+        _captureSourceMeta,
+        captureSource.isAcceptableOrUnknown(
+          data['capture_source']!,
+          _captureSourceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('source_captured_at')) {
+      context.handle(
+        _sourceCapturedAtMeta,
+        sourceCapturedAt.isAcceptableOrUnknown(
+          data['source_captured_at']!,
+          _sourceCapturedAtMeta,
+        ),
       );
     }
     if (data.containsKey('latitude')) {
@@ -1328,6 +1394,18 @@ class $CaptureRecordsTable extends CaptureRecords
         DriftSqlType.dateTime,
         data['${effectivePrefix}captured_at'],
       ),
+      watermarkTime: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}watermark_time'],
+      ),
+      captureSource: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}capture_source'],
+      )!,
+      sourceCapturedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}source_captured_at'],
+      ),
       latitude: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}latitude'],
@@ -1391,6 +1469,13 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
   final String? failureReason;
   final DateTime createdAt;
   final DateTime? capturedAt;
+
+  /// Display-only override. Never changes original bytes, numbering or sorting.
+  final DateTime? watermarkTime;
+  final String captureSource;
+
+  /// EXIF capture time for gallery imports; null means the source has none.
+  final DateTime? sourceCapturedAt;
   final double? latitude;
   final double? longitude;
   final double? accuracyMeters;
@@ -1415,6 +1500,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     this.failureReason,
     required this.createdAt,
     this.capturedAt,
+    this.watermarkTime,
+    required this.captureSource,
+    this.sourceCapturedAt,
     this.latitude,
     this.longitude,
     this.accuracyMeters,
@@ -1457,6 +1545,13 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || capturedAt != null) {
       map['captured_at'] = Variable<DateTime>(capturedAt);
+    }
+    if (!nullToAbsent || watermarkTime != null) {
+      map['watermark_time'] = Variable<DateTime>(watermarkTime);
+    }
+    map['capture_source'] = Variable<String>(captureSource);
+    if (!nullToAbsent || sourceCapturedAt != null) {
+      map['source_captured_at'] = Variable<DateTime>(sourceCapturedAt);
     }
     if (!nullToAbsent || latitude != null) {
       map['latitude'] = Variable<double>(latitude);
@@ -1510,6 +1605,13 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       capturedAt: capturedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(capturedAt),
+      watermarkTime: watermarkTime == null && nullToAbsent
+          ? const Value.absent()
+          : Value(watermarkTime),
+      captureSource: Value(captureSource),
+      sourceCapturedAt: sourceCapturedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceCapturedAt),
       latitude: latitude == null && nullToAbsent
           ? const Value.absent()
           : Value(latitude),
@@ -1554,6 +1656,11 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       failureReason: serializer.fromJson<String?>(json['failureReason']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       capturedAt: serializer.fromJson<DateTime?>(json['capturedAt']),
+      watermarkTime: serializer.fromJson<DateTime?>(json['watermarkTime']),
+      captureSource: serializer.fromJson<String>(json['captureSource']),
+      sourceCapturedAt: serializer.fromJson<DateTime?>(
+        json['sourceCapturedAt'],
+      ),
       latitude: serializer.fromJson<double?>(json['latitude']),
       longitude: serializer.fromJson<double?>(json['longitude']),
       accuracyMeters: serializer.fromJson<double?>(json['accuracyMeters']),
@@ -1589,6 +1696,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       'failureReason': serializer.toJson<String?>(failureReason),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'capturedAt': serializer.toJson<DateTime?>(capturedAt),
+      'watermarkTime': serializer.toJson<DateTime?>(watermarkTime),
+      'captureSource': serializer.toJson<String>(captureSource),
+      'sourceCapturedAt': serializer.toJson<DateTime?>(sourceCapturedAt),
       'latitude': serializer.toJson<double?>(latitude),
       'longitude': serializer.toJson<double?>(longitude),
       'accuracyMeters': serializer.toJson<double?>(accuracyMeters),
@@ -1616,6 +1726,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     Value<String?> failureReason = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> capturedAt = const Value.absent(),
+    Value<DateTime?> watermarkTime = const Value.absent(),
+    String? captureSource,
+    Value<DateTime?> sourceCapturedAt = const Value.absent(),
     Value<double?> latitude = const Value.absent(),
     Value<double?> longitude = const Value.absent(),
     Value<double?> accuracyMeters = const Value.absent(),
@@ -1644,6 +1757,13 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
         : this.failureReason,
     createdAt: createdAt ?? this.createdAt,
     capturedAt: capturedAt.present ? capturedAt.value : this.capturedAt,
+    watermarkTime: watermarkTime.present
+        ? watermarkTime.value
+        : this.watermarkTime,
+    captureSource: captureSource ?? this.captureSource,
+    sourceCapturedAt: sourceCapturedAt.present
+        ? sourceCapturedAt.value
+        : this.sourceCapturedAt,
     latitude: latitude.present ? latitude.value : this.latitude,
     longitude: longitude.present ? longitude.value : this.longitude,
     accuracyMeters: accuracyMeters.present
@@ -1694,6 +1814,15 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
       capturedAt: data.capturedAt.present
           ? data.capturedAt.value
           : this.capturedAt,
+      watermarkTime: data.watermarkTime.present
+          ? data.watermarkTime.value
+          : this.watermarkTime,
+      captureSource: data.captureSource.present
+          ? data.captureSource.value
+          : this.captureSource,
+      sourceCapturedAt: data.sourceCapturedAt.present
+          ? data.sourceCapturedAt.value
+          : this.sourceCapturedAt,
       latitude: data.latitude.present ? data.latitude.value : this.latitude,
       longitude: data.longitude.present ? data.longitude.value : this.longitude,
       accuracyMeters: data.accuracyMeters.present
@@ -1735,6 +1864,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
           ..write('failureReason: $failureReason, ')
           ..write('createdAt: $createdAt, ')
           ..write('capturedAt: $capturedAt, ')
+          ..write('watermarkTime: $watermarkTime, ')
+          ..write('captureSource: $captureSource, ')
+          ..write('sourceCapturedAt: $sourceCapturedAt, ')
           ..write('latitude: $latitude, ')
           ..write('longitude: $longitude, ')
           ..write('accuracyMeters: $accuracyMeters, ')
@@ -1764,6 +1896,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
     failureReason,
     createdAt,
     capturedAt,
+    watermarkTime,
+    captureSource,
+    sourceCapturedAt,
     latitude,
     longitude,
     accuracyMeters,
@@ -1792,6 +1927,9 @@ class CaptureRecord extends DataClass implements Insertable<CaptureRecord> {
           other.failureReason == this.failureReason &&
           other.createdAt == this.createdAt &&
           other.capturedAt == this.capturedAt &&
+          other.watermarkTime == this.watermarkTime &&
+          other.captureSource == this.captureSource &&
+          other.sourceCapturedAt == this.sourceCapturedAt &&
           other.latitude == this.latitude &&
           other.longitude == this.longitude &&
           other.accuracyMeters == this.accuracyMeters &&
@@ -1818,6 +1956,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
   final Value<String?> failureReason;
   final Value<DateTime> createdAt;
   final Value<DateTime?> capturedAt;
+  final Value<DateTime?> watermarkTime;
+  final Value<String> captureSource;
+  final Value<DateTime?> sourceCapturedAt;
   final Value<double?> latitude;
   final Value<double?> longitude;
   final Value<double?> accuracyMeters;
@@ -1843,6 +1984,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     this.failureReason = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.capturedAt = const Value.absent(),
+    this.watermarkTime = const Value.absent(),
+    this.captureSource = const Value.absent(),
+    this.sourceCapturedAt = const Value.absent(),
     this.latitude = const Value.absent(),
     this.longitude = const Value.absent(),
     this.accuracyMeters = const Value.absent(),
@@ -1869,6 +2013,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     this.failureReason = const Value.absent(),
     required DateTime createdAt,
     this.capturedAt = const Value.absent(),
+    this.watermarkTime = const Value.absent(),
+    this.captureSource = const Value.absent(),
+    this.sourceCapturedAt = const Value.absent(),
     this.latitude = const Value.absent(),
     this.longitude = const Value.absent(),
     this.accuracyMeters = const Value.absent(),
@@ -1902,6 +2049,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     Expression<String>? failureReason,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? capturedAt,
+    Expression<DateTime>? watermarkTime,
+    Expression<String>? captureSource,
+    Expression<DateTime>? sourceCapturedAt,
     Expression<double>? latitude,
     Expression<double>? longitude,
     Expression<double>? accuracyMeters,
@@ -1928,6 +2078,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
       if (failureReason != null) 'failure_reason': failureReason,
       if (createdAt != null) 'created_at': createdAt,
       if (capturedAt != null) 'captured_at': capturedAt,
+      if (watermarkTime != null) 'watermark_time': watermarkTime,
+      if (captureSource != null) 'capture_source': captureSource,
+      if (sourceCapturedAt != null) 'source_captured_at': sourceCapturedAt,
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
       if (accuracyMeters != null) 'accuracy_meters': accuracyMeters,
@@ -1957,6 +2110,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     Value<String?>? failureReason,
     Value<DateTime>? createdAt,
     Value<DateTime?>? capturedAt,
+    Value<DateTime?>? watermarkTime,
+    Value<String>? captureSource,
+    Value<DateTime?>? sourceCapturedAt,
     Value<double?>? latitude,
     Value<double?>? longitude,
     Value<double?>? accuracyMeters,
@@ -1983,6 +2139,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
       failureReason: failureReason ?? this.failureReason,
       createdAt: createdAt ?? this.createdAt,
       capturedAt: capturedAt ?? this.capturedAt,
+      watermarkTime: watermarkTime ?? this.watermarkTime,
+      captureSource: captureSource ?? this.captureSource,
+      sourceCapturedAt: sourceCapturedAt ?? this.sourceCapturedAt,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       accuracyMeters: accuracyMeters ?? this.accuracyMeters,
@@ -2043,6 +2202,15 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
     if (capturedAt.present) {
       map['captured_at'] = Variable<DateTime>(capturedAt.value);
     }
+    if (watermarkTime.present) {
+      map['watermark_time'] = Variable<DateTime>(watermarkTime.value);
+    }
+    if (captureSource.present) {
+      map['capture_source'] = Variable<String>(captureSource.value);
+    }
+    if (sourceCapturedAt.present) {
+      map['source_captured_at'] = Variable<DateTime>(sourceCapturedAt.value);
+    }
     if (latitude.present) {
       map['latitude'] = Variable<double>(latitude.value);
     }
@@ -2095,6 +2263,9 @@ class CaptureRecordsCompanion extends UpdateCompanion<CaptureRecord> {
           ..write('failureReason: $failureReason, ')
           ..write('createdAt: $createdAt, ')
           ..write('capturedAt: $capturedAt, ')
+          ..write('watermarkTime: $watermarkTime, ')
+          ..write('captureSource: $captureSource, ')
+          ..write('sourceCapturedAt: $sourceCapturedAt, ')
           ..write('latitude: $latitude, ')
           ..write('longitude: $longitude, ')
           ..write('accuracyMeters: $accuracyMeters, ')
@@ -5329,6 +5500,225 @@ class NasUploadStatesCompanion extends UpdateCompanion<NasUploadState> {
   }
 }
 
+class $GalleryImportTasksTable extends GalleryImportTasks
+    with TableInfo<$GalleryImportTasksTable, GalleryImportTask> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GalleryImportTasksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _captureIdMeta = const VerificationMeta(
+    'captureId',
+  );
+  @override
+  late final GeneratedColumn<String> captureId = GeneratedColumn<String>(
+    'capture_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceUriMeta = const VerificationMeta(
+    'sourceUri',
+  );
+  @override
+  late final GeneratedColumn<String> sourceUri = GeneratedColumn<String>(
+    'source_uri',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [captureId, sourceUri];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gallery_import_tasks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<GalleryImportTask> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('capture_id')) {
+      context.handle(
+        _captureIdMeta,
+        captureId.isAcceptableOrUnknown(data['capture_id']!, _captureIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_captureIdMeta);
+    }
+    if (data.containsKey('source_uri')) {
+      context.handle(
+        _sourceUriMeta,
+        sourceUri.isAcceptableOrUnknown(data['source_uri']!, _sourceUriMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceUriMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {captureId};
+  @override
+  GalleryImportTask map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GalleryImportTask(
+      captureId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}capture_id'],
+      )!,
+      sourceUri: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_uri'],
+      )!,
+    );
+  }
+
+  @override
+  $GalleryImportTasksTable createAlias(String alias) {
+    return $GalleryImportTasksTable(attachedDatabase, alias);
+  }
+}
+
+class GalleryImportTask extends DataClass
+    implements Insertable<GalleryImportTask> {
+  final String captureId;
+  final String sourceUri;
+  const GalleryImportTask({required this.captureId, required this.sourceUri});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['capture_id'] = Variable<String>(captureId);
+    map['source_uri'] = Variable<String>(sourceUri);
+    return map;
+  }
+
+  GalleryImportTasksCompanion toCompanion(bool nullToAbsent) {
+    return GalleryImportTasksCompanion(
+      captureId: Value(captureId),
+      sourceUri: Value(sourceUri),
+    );
+  }
+
+  factory GalleryImportTask.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GalleryImportTask(
+      captureId: serializer.fromJson<String>(json['captureId']),
+      sourceUri: serializer.fromJson<String>(json['sourceUri']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'captureId': serializer.toJson<String>(captureId),
+      'sourceUri': serializer.toJson<String>(sourceUri),
+    };
+  }
+
+  GalleryImportTask copyWith({String? captureId, String? sourceUri}) =>
+      GalleryImportTask(
+        captureId: captureId ?? this.captureId,
+        sourceUri: sourceUri ?? this.sourceUri,
+      );
+  GalleryImportTask copyWithCompanion(GalleryImportTasksCompanion data) {
+    return GalleryImportTask(
+      captureId: data.captureId.present ? data.captureId.value : this.captureId,
+      sourceUri: data.sourceUri.present ? data.sourceUri.value : this.sourceUri,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GalleryImportTask(')
+          ..write('captureId: $captureId, ')
+          ..write('sourceUri: $sourceUri')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(captureId, sourceUri);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GalleryImportTask &&
+          other.captureId == this.captureId &&
+          other.sourceUri == this.sourceUri);
+}
+
+class GalleryImportTasksCompanion extends UpdateCompanion<GalleryImportTask> {
+  final Value<String> captureId;
+  final Value<String> sourceUri;
+  final Value<int> rowid;
+  const GalleryImportTasksCompanion({
+    this.captureId = const Value.absent(),
+    this.sourceUri = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GalleryImportTasksCompanion.insert({
+    required String captureId,
+    required String sourceUri,
+    this.rowid = const Value.absent(),
+  }) : captureId = Value(captureId),
+       sourceUri = Value(sourceUri);
+  static Insertable<GalleryImportTask> custom({
+    Expression<String>? captureId,
+    Expression<String>? sourceUri,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (captureId != null) 'capture_id': captureId,
+      if (sourceUri != null) 'source_uri': sourceUri,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GalleryImportTasksCompanion copyWith({
+    Value<String>? captureId,
+    Value<String>? sourceUri,
+    Value<int>? rowid,
+  }) {
+    return GalleryImportTasksCompanion(
+      captureId: captureId ?? this.captureId,
+      sourceUri: sourceUri ?? this.sourceUri,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (captureId.present) {
+      map['capture_id'] = Variable<String>(captureId.value);
+    }
+    if (sourceUri.present) {
+      map['source_uri'] = Variable<String>(sourceUri.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GalleryImportTasksCompanion(')
+          ..write('captureId: $captureId, ')
+          ..write('sourceUri: $sourceUri, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5344,6 +5734,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $NasUploadStatesTable nasUploadStates = $NasUploadStatesTable(
     this,
   );
+  late final $GalleryImportTasksTable galleryImportTasks =
+      $GalleryImportTasksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5356,6 +5748,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     captureMediaCleanups,
     nasSyncConfigs,
     nasUploadStates,
+    galleryImportTasks,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -5958,6 +6351,9 @@ typedef $$CaptureRecordsTableCreateCompanionBuilder =
       Value<String?> failureReason,
       required DateTime createdAt,
       Value<DateTime?> capturedAt,
+      Value<DateTime?> watermarkTime,
+      Value<String> captureSource,
+      Value<DateTime?> sourceCapturedAt,
       Value<double?> latitude,
       Value<double?> longitude,
       Value<double?> accuracyMeters,
@@ -5985,6 +6381,9 @@ typedef $$CaptureRecordsTableUpdateCompanionBuilder =
       Value<String?> failureReason,
       Value<DateTime> createdAt,
       Value<DateTime?> capturedAt,
+      Value<DateTime?> watermarkTime,
+      Value<String> captureSource,
+      Value<DateTime?> sourceCapturedAt,
       Value<double?> latitude,
       Value<double?> longitude,
       Value<double?> accuracyMeters,
@@ -6115,6 +6514,21 @@ class $$CaptureRecordsTableFilterComposer
 
   ColumnFilters<DateTime> get capturedAt => $composableBuilder(
     column: $table.capturedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get watermarkTime => $composableBuilder(
+    column: $table.watermarkTime,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get captureSource => $composableBuilder(
+    column: $table.captureSource,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get sourceCapturedAt => $composableBuilder(
+    column: $table.sourceCapturedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6286,6 +6700,21 @@ class $$CaptureRecordsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get watermarkTime => $composableBuilder(
+    column: $table.watermarkTime,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get captureSource => $composableBuilder(
+    column: $table.captureSource,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get sourceCapturedAt => $composableBuilder(
+    column: $table.sourceCapturedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get latitude => $composableBuilder(
     column: $table.latitude,
     builder: (column) => ColumnOrderings(column),
@@ -6421,6 +6850,21 @@ class $$CaptureRecordsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get watermarkTime => $composableBuilder(
+    column: $table.watermarkTime,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get captureSource => $composableBuilder(
+    column: $table.captureSource,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get sourceCapturedAt => $composableBuilder(
+    column: $table.sourceCapturedAt,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<double> get latitude =>
       $composableBuilder(column: $table.latitude, builder: (column) => column);
 
@@ -6553,6 +6997,9 @@ class $$CaptureRecordsTableTableManager
                 Value<String?> failureReason = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> capturedAt = const Value.absent(),
+                Value<DateTime?> watermarkTime = const Value.absent(),
+                Value<String> captureSource = const Value.absent(),
+                Value<DateTime?> sourceCapturedAt = const Value.absent(),
                 Value<double?> latitude = const Value.absent(),
                 Value<double?> longitude = const Value.absent(),
                 Value<double?> accuracyMeters = const Value.absent(),
@@ -6578,6 +7025,9 @@ class $$CaptureRecordsTableTableManager
                 failureReason: failureReason,
                 createdAt: createdAt,
                 capturedAt: capturedAt,
+                watermarkTime: watermarkTime,
+                captureSource: captureSource,
+                sourceCapturedAt: sourceCapturedAt,
                 latitude: latitude,
                 longitude: longitude,
                 accuracyMeters: accuracyMeters,
@@ -6605,6 +7055,9 @@ class $$CaptureRecordsTableTableManager
                 Value<String?> failureReason = const Value.absent(),
                 required DateTime createdAt,
                 Value<DateTime?> capturedAt = const Value.absent(),
+                Value<DateTime?> watermarkTime = const Value.absent(),
+                Value<String> captureSource = const Value.absent(),
+                Value<DateTime?> sourceCapturedAt = const Value.absent(),
                 Value<double?> latitude = const Value.absent(),
                 Value<double?> longitude = const Value.absent(),
                 Value<double?> accuracyMeters = const Value.absent(),
@@ -6630,6 +7083,9 @@ class $$CaptureRecordsTableTableManager
                 failureReason: failureReason,
                 createdAt: createdAt,
                 capturedAt: capturedAt,
+                watermarkTime: watermarkTime,
+                captureSource: captureSource,
+                sourceCapturedAt: sourceCapturedAt,
                 latitude: latitude,
                 longitude: longitude,
                 accuracyMeters: accuracyMeters,
@@ -8505,6 +8961,162 @@ typedef $$NasUploadStatesTableProcessedTableManager =
       NasUploadState,
       PrefetchHooks Function({bool captureId})
     >;
+typedef $$GalleryImportTasksTableCreateCompanionBuilder =
+    GalleryImportTasksCompanion Function({
+      required String captureId,
+      required String sourceUri,
+      Value<int> rowid,
+    });
+typedef $$GalleryImportTasksTableUpdateCompanionBuilder =
+    GalleryImportTasksCompanion Function({
+      Value<String> captureId,
+      Value<String> sourceUri,
+      Value<int> rowid,
+    });
+
+class $$GalleryImportTasksTableFilterComposer
+    extends Composer<_$AppDatabase, $GalleryImportTasksTable> {
+  $$GalleryImportTasksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get captureId => $composableBuilder(
+    column: $table.captureId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceUri => $composableBuilder(
+    column: $table.sourceUri,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$GalleryImportTasksTableOrderingComposer
+    extends Composer<_$AppDatabase, $GalleryImportTasksTable> {
+  $$GalleryImportTasksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get captureId => $composableBuilder(
+    column: $table.captureId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceUri => $composableBuilder(
+    column: $table.sourceUri,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$GalleryImportTasksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $GalleryImportTasksTable> {
+  $$GalleryImportTasksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get captureId =>
+      $composableBuilder(column: $table.captureId, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceUri =>
+      $composableBuilder(column: $table.sourceUri, builder: (column) => column);
+}
+
+class $$GalleryImportTasksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $GalleryImportTasksTable,
+          GalleryImportTask,
+          $$GalleryImportTasksTableFilterComposer,
+          $$GalleryImportTasksTableOrderingComposer,
+          $$GalleryImportTasksTableAnnotationComposer,
+          $$GalleryImportTasksTableCreateCompanionBuilder,
+          $$GalleryImportTasksTableUpdateCompanionBuilder,
+          (
+            GalleryImportTask,
+            BaseReferences<
+              _$AppDatabase,
+              $GalleryImportTasksTable,
+              GalleryImportTask
+            >,
+          ),
+          GalleryImportTask,
+          PrefetchHooks Function()
+        > {
+  $$GalleryImportTasksTableTableManager(
+    _$AppDatabase db,
+    $GalleryImportTasksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GalleryImportTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GalleryImportTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GalleryImportTasksTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> captureId = const Value.absent(),
+                Value<String> sourceUri = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => GalleryImportTasksCompanion(
+                captureId: captureId,
+                sourceUri: sourceUri,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String captureId,
+                required String sourceUri,
+                Value<int> rowid = const Value.absent(),
+              }) => GalleryImportTasksCompanion.insert(
+                captureId: captureId,
+                sourceUri: sourceUri,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$GalleryImportTasksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $GalleryImportTasksTable,
+      GalleryImportTask,
+      $$GalleryImportTasksTableFilterComposer,
+      $$GalleryImportTasksTableOrderingComposer,
+      $$GalleryImportTasksTableAnnotationComposer,
+      $$GalleryImportTasksTableCreateCompanionBuilder,
+      $$GalleryImportTasksTableUpdateCompanionBuilder,
+      (
+        GalleryImportTask,
+        BaseReferences<
+          _$AppDatabase,
+          $GalleryImportTasksTable,
+          GalleryImportTask
+        >,
+      ),
+      GalleryImportTask,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8523,4 +9135,6 @@ class $AppDatabaseManager {
       $$NasSyncConfigsTableTableManager(_db, _db.nasSyncConfigs);
   $$NasUploadStatesTableTableManager get nasUploadStates =>
       $$NasUploadStatesTableTableManager(_db, _db.nasUploadStates);
+  $$GalleryImportTasksTableTableManager get galleryImportTasks =>
+      $$GalleryImportTasksTableTableManager(_db, _db.galleryImportTasks);
 }

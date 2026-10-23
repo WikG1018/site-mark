@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `commit_render_temporary`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_dart_regexp_whitespace`, `is_dart_trim_whitespace`, `is_leap_year`, `is_valid_exported_timestamp`, `is_valid_lifecycle_status`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `normalize_lifecycle_fields`, `normalized_template_name`, `open_zip`, `parse_two_digits`, `read_project_bundle_manifest`, `read_project_manifest`, `read_text_failure`, `render_photo_with_before_commit`, `safe_archive_component`, `safe_photo_number_component`, `safe_project_export_folder`, `template_name_key`, `tokenize`, `trimmed_template_field`, `unix_time_millis`, `validate_archive_templates`, `validate_project_bundle`, `validate_render_request`, `validate_source_dimensions`, `validate_source_format`, `verify_file`, `wrap_text`, `zip_failure`
+// These functions are ignored because they are not marked as `pub`: `add_file_to_zip`, `argb_to_rgba`, `blend_rect`, `commit_bundle_temporary_no_replace`, `commit_render_temporary`, `compute_rendered_lines`, `copy_bundle_entry_to`, `copy_capped`, `draw_watermark_card`, `expected_bundle_archive_path`, `extract_entry_to`, `extract_project_bundle_entry_with_before_commit`, `find_archive_entries`, `hash_bundle_entry`, `image_failure`, `invalid_data`, `io_failure`, `is_dart_regexp_whitespace`, `is_dart_trim_whitespace`, `is_leap_year`, `is_valid_exported_timestamp`, `is_valid_lifecycle_status`, `is_valid_sha256`, `labels`, `layout_for_request`, `logical_watermark_lines`, `non_empty`, `normalize_lifecycle_fields`, `normalized_template_name`, `open_zip`, `parse_two_digits`, `read_project_bundle_manifest`, `read_project_manifest`, `read_text_failure`, `render_photo_with_before_commit`, `safe_archive_component`, `safe_photo_number_component`, `safe_project_export_folder`, `template_name_key`, `tokenize`, `trimmed_template_field`, `unix_time_millis`, `validate_archive_templates`, `validate_photo_provenance`, `validate_project_bundle`, `validate_render_request`, `validate_source_dimensions`, `validate_source_format`, `verify_file`, `wrap_text`, `zip_failure`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `CsvRow`, `ExportManifest`, `ManifestCaptureTemplate`, `ManifestPhoto`, `ManifestWatermark`, `ProjectBundleManifestEntry`, `ProjectBundleManifest`, `ProjectManifestFile`, `WatermarkLabels`, `WatermarkLayout`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
@@ -124,6 +124,9 @@ class ArchivePhotoPreview {
   final double? longitude;
   final double? accuracyMeters;
   final String? watermarkLocaleCode;
+  final String? captureSource;
+  final String? sourceCapturedAt;
+  final String? watermarkTime;
 
   const ArchivePhotoPreview({
     required this.photoNumber,
@@ -139,6 +142,9 @@ class ArchivePhotoPreview {
     this.longitude,
     this.accuracyMeters,
     this.watermarkLocaleCode,
+    this.captureSource,
+    this.sourceCapturedAt,
+    this.watermarkTime,
   });
 
   @override
@@ -155,7 +161,10 @@ class ArchivePhotoPreview {
       latitude.hashCode ^
       longitude.hashCode ^
       accuracyMeters.hashCode ^
-      watermarkLocaleCode.hashCode;
+      watermarkLocaleCode.hashCode ^
+      captureSource.hashCode ^
+      sourceCapturedAt.hashCode ^
+      watermarkTime.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -174,7 +183,10 @@ class ArchivePhotoPreview {
           latitude == other.latitude &&
           longitude == other.longitude &&
           accuracyMeters == other.accuracyMeters &&
-          watermarkLocaleCode == other.watermarkLocaleCode;
+          watermarkLocaleCode == other.watermarkLocaleCode &&
+          captureSource == other.captureSource &&
+          sourceCapturedAt == other.sourceCapturedAt &&
+          watermarkTime == other.watermarkTime;
 }
 
 /// Watermark template recovered from a v2 manifest.
@@ -320,6 +332,9 @@ class ExportPhotoRecord {
   final double? longitude;
   final double? accuracyMeters;
   final String? watermarkLocaleCode;
+  final String? captureSource;
+  final String? sourceCapturedAt;
+  final String? watermarkTime;
 
   const ExportPhotoRecord({
     required this.photoNumber,
@@ -337,6 +352,9 @@ class ExportPhotoRecord {
     this.longitude,
     this.accuracyMeters,
     this.watermarkLocaleCode,
+    this.captureSource,
+    this.sourceCapturedAt,
+    this.watermarkTime,
   });
 
   @override
@@ -355,7 +373,10 @@ class ExportPhotoRecord {
       latitude.hashCode ^
       longitude.hashCode ^
       accuracyMeters.hashCode ^
-      watermarkLocaleCode.hashCode;
+      watermarkLocaleCode.hashCode ^
+      captureSource.hashCode ^
+      sourceCapturedAt.hashCode ^
+      watermarkTime.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -376,7 +397,10 @@ class ExportPhotoRecord {
           latitude == other.latitude &&
           longitude == other.longitude &&
           accuracyMeters == other.accuracyMeters &&
-          watermarkLocaleCode == other.watermarkLocaleCode;
+          watermarkLocaleCode == other.watermarkLocaleCode &&
+          captureSource == other.captureSource &&
+          sourceCapturedAt == other.sourceCapturedAt &&
+          watermarkTime == other.watermarkTime;
 }
 
 class ExportProjectBundleRequest {

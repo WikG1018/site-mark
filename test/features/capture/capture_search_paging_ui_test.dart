@@ -34,6 +34,7 @@ CaptureSummary _summary(
       DateTime(2026, 7, 16, 12).subtract(Duration(minutes: index));
   return CaptureSummary(
     capture: CaptureRecord(
+      captureSource: 'camera',
       id: 'capture-$index',
       projectId: projectId,
       photoNumber: photoNumber ?? 'SM-20260716-${index + 1}',

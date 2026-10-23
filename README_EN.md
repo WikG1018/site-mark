@@ -67,6 +67,13 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 ## Recent updates
 
+### Next version (unreleased): watermark time and gallery import
+
+- Capture and edit forms support a separate watermark display time with an automatic-time reset. Original bytes, original capture information, numbering and filenames do not change. A manual time applies only to the current capture/import.
+- Android can import up to 20 JPEG/PNG photos from the system picker (100 MB / 64 MP each), copying them privately before using the existing background watermark queue. Gallery originals are never overwritten or deleted; broad gallery permission is not requested.
+- Each imported photo uses its own EXIF time/location where available; missing time falls back to import time with an explicit detail label. Current device location is never attached to an older import. Details identify gallery origin and manually adjusted display time.
+- Backups and shared manifests retain provenance. Projects with gallery imports or manual times use backup schema v6 and require the new app; others retain v5. Older archives remain readable. The current HarmonyOS app rejects v6 instead of silently losing fields. This change does not add an iOS/HarmonyOS gallery picker.
+
 ### v1.0.32: verified updates and adaptive layout
 
 - Android updates can download in-app with progress, cancellation/retry, and an explicit system installer flow. APK selection preserves the installed variant.

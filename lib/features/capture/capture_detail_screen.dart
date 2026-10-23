@@ -433,11 +433,28 @@ class _CaptureDetailScreenState extends ConsumerState<CaptureDetailScreen> {
       _DetailRow(
         icon: Icons.schedule_outlined,
         label: strings.capturedAt,
-        value: capture.capturedAt == null
+        value:
+            capture.captureSource == 'gallery' &&
+                capture.sourceCapturedAt == null
+            ? strings.unknownSourceTime
+            : capture.capturedAt == null
             ? '-'
             : DateFormat.yMMMd(
                 Localizations.localeOf(context).toString(),
               ).add_Hm().format(capture.capturedAt!),
+      ),
+      _DetailRow(
+        icon: Icons.photo_library_outlined,
+        label: strings.photoSource,
+        value: capture.captureSource == 'gallery'
+            ? strings.gallerySource
+            : strings.systemCameraSource,
+      ),
+      _DetailRow(
+        icon: Icons.edit_calendar_outlined,
+        label: strings.watermarkTime,
+        value:
+            '${DateFormat('yyyy-MM-dd HH:mm').format(capture.watermarkTime ?? capture.capturedAt ?? capture.createdAt)}${capture.watermarkTime == null ? '' : ' · ${strings.manuallyAdjusted}'}',
       ),
       if (capture.latitude != null && capture.longitude != null)
         _DetailRow(

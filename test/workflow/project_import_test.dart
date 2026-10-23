@@ -13,6 +13,54 @@ import 'package:sitemark/workflow/project_import_service.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 void main() {
+  test(
+    'v6 restores source timestamp and manual display time separately',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final service = _service(
+        database: database,
+        files: _RecordingFileStore(),
+        images: _ImportImagePipeline(
+          _previewWithTemplates(
+            [],
+            schemaVersion: 6,
+            photos: [
+              ArchivePhotoPreview(
+                photoNumber: 'Test-SM-20240102-001',
+                hasOriginal: true,
+                originalSha256: 'a' * 64,
+                capturedAt: '2024-01-02 03:04:05 +08:00',
+                workLocation: 'A',
+                workContent: 'Inspection',
+                photographer: 'B',
+                captureSource: 'gallery',
+                sourceCapturedAt: '2024-01-02 03:04:05 +08:00',
+                watermarkTime: '2024-02-03 08:30:00 +08:00',
+              ),
+            ],
+          ),
+        ),
+      );
+      final result = await service.importProject(
+        zipPath: '/backups/v6.zip',
+        projectName: 'Test',
+      );
+      final capture = (await database.capturesForProject(
+        result.projectId,
+      )).single;
+      expect(capture.captureSource, 'gallery');
+      expect(
+        capture.sourceCapturedAt,
+        parseExportedTimestamp('2024-01-02 03:04:05 +08:00'),
+      );
+      expect(
+        capture.watermarkTime,
+        parseExportedTimestamp('2024-02-03 08:30:00 +08:00'),
+      );
+      expect(capture.capturedAt, capture.sourceCapturedAt);
+    },
+  );
   test('v4 restore normalizes lifecycle to active and unpinned', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
@@ -304,7 +352,7 @@ void main() {
         (
           label: 'a preview newer than schema v5',
           templates: const [],
-          schemaVersion: 6,
+          schemaVersion: 7,
         ),
       ];
   for (final invalid in invalidTemplateCases) {

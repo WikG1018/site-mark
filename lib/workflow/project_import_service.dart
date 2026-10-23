@@ -451,6 +451,13 @@ class ProjectImportService implements ProjectArchiveImporter {
     final preview = await inspect(zipPath);
     final capturedTimes = <DateTime>[];
     for (final photo in preview.photos) {
+      if (!{'camera', 'gallery'}.contains(photo.captureSource ?? 'camera') ||
+          (photo.sourceCapturedAt != null &&
+              parseExportedTimestamp(photo.sourceCapturedAt!) == null) ||
+          (photo.watermarkTime != null &&
+              parseExportedTimestamp(photo.watermarkTime!) == null)) {
+        throw const InvalidArchiveException('Invalid photo provenance');
+      }
       final parsed = parseExportedTimestamp(photo.capturedAt);
       if (parsed == null) {
         throw InvalidArchiveException(
@@ -560,6 +567,13 @@ class ProjectImportService implements ProjectArchiveImporter {
           originalSha256: photo.originalSha256,
           createdAt: capturedTimes[index],
           capturedAt: capturedTimes[index],
+          captureSource: photo.captureSource ?? 'camera',
+          sourceCapturedAt: photo.sourceCapturedAt == null
+              ? null
+              : parseExportedTimestamp(photo.sourceCapturedAt!),
+          watermarkTime: photo.watermarkTime == null
+              ? null
+              : parseExportedTimestamp(photo.watermarkTime!),
         );
       }
       if (restoredTemplates.isNotEmpty) {
@@ -783,7 +797,7 @@ class ProjectImportService implements ProjectArchiveImporter {
   ({ProjectLifecycleStatus status, bool isPinned}) _validatedLifecycle(
     rust.ProjectArchivePreview preview,
   ) {
-    if (preview.schemaVersion < 1 || preview.schemaVersion > 5) {
+    if (preview.schemaVersion < 1 || preview.schemaVersion > 6) {
       throw const InvalidArchiveException(
         'Unsupported project archive schema version',
       );
@@ -807,7 +821,7 @@ class ProjectImportService implements ProjectArchiveImporter {
     required rust.ProjectArchivePreview preview,
     required String projectId,
   }) {
-    if (preview.schemaVersion < 1 || preview.schemaVersion > 5) {
+    if (preview.schemaVersion < 1 || preview.schemaVersion > 6) {
       throw const InvalidArchiveException(
         'Unsupported project archive schema version',
       );
