@@ -93,6 +93,7 @@ void main() {
   }
 
   CaptureRecord mediaRecord({DateTime? originalDeletedAt}) => CaptureRecord(
+    captureSource: 'camera',
     id: 'capture-1',
     projectId: 'project-1',
     photoNumber: 'SM-20260716-001',

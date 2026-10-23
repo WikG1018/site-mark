@@ -525,6 +525,40 @@ QueryExecutor openMigratedV11Fixture() {
   return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
 }
 
+// Genuine pre-feature v16 shape: v10 plus the v11-v16 table additions.
+QueryExecutor openMigratedV16Fixture() {
+  final db = buildV10Schema();
+  db.execute(
+    "ALTER TABLE projects ADD COLUMN lifecycle_status TEXT NOT NULL DEFAULT 'active'",
+  );
+  db.execute(
+    'ALTER TABLE projects ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0',
+  );
+  db.execute(
+    'ALTER TABLE app_settings ADD COLUMN auto_publish_to_gallery INTEGER NOT NULL DEFAULT 1',
+  );
+  db.execute(
+    'ALTER TABLE app_settings ADD COLUMN location_capture_enabled INTEGER NOT NULL DEFAULT 1',
+  );
+  db.execute('''CREATE TABLE capture_media_cleanups (
+    published_uri TEXT NOT NULL PRIMARY KEY, capture_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL, retry_count INTEGER NOT NULL DEFAULT 0,
+    last_attempt_at INTEGER, stalled_at INTEGER)''');
+  db.execute('''CREATE TABLE nas_sync_configs (
+    id TEXT NOT NULL PRIMARY KEY DEFAULT 'global', protocol TEXT NOT NULL DEFAULT 'webdav',
+    host TEXT NOT NULL DEFAULT '', port INTEGER, username TEXT NOT NULL DEFAULT '',
+    root_path TEXT NOT NULL DEFAULT '/', secure_tls INTEGER NOT NULL DEFAULT 1,
+    accept_invalid_tls INTEGER NOT NULL DEFAULT 0, known_sftp_fingerprint TEXT,
+    wifi_only INTEGER NOT NULL DEFAULT 1, enabled INTEGER NOT NULL DEFAULT 0,
+    sync_mode TEXT NOT NULL DEFAULT 'upload_only', updated_at INTEGER)''');
+  db.execute('''CREATE TABLE nas_upload_states (
+    capture_id TEXT NOT NULL PRIMARY KEY REFERENCES captures(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+    failure_code TEXT, last_attempt_at INTEGER, uploaded_at INTEGER)''');
+  db.execute('PRAGMA user_version = 16');
+  return NativeDatabase.opened(db, closeUnderlyingOnClose: true);
+}
+
 /// Opens a raw in-memory sqlite database with the genuine v12 schema: the
 /// v11 shape plus the v12 superseded-cleanup queue WITHOUT the v13 retry
 /// columns, with one seeded pending task. `PRAGMA user_version = 12`, so
@@ -878,6 +912,26 @@ Future<void> expectCaptureIndexes(AppDatabase database) async {
 }
 
 void main() {
+  test(
+    'v16 to v17 preserves capture evidence and defaults to camera source',
+    () async {
+      final database = AppDatabase.forTesting(openMigratedV16Fixture());
+      addTearDown(database.close);
+      final record = (await database.captureById('capture-1'))!;
+      expect(record.photoNumber, 'SM-20260803-001');
+      expect(record.captureSource, 'camera');
+      expect(record.watermarkTime, isNull);
+      expect(record.sourceCapturedAt, isNull);
+      expect(await database.select(database.galleryImportTasks).get(), isEmpty);
+      expect(
+        (await database.customSelect('PRAGMA user_version').getSingle())
+            .data
+            .values
+            .single,
+        17,
+      );
+    },
+  );
   test('v2 migration preserves captures and inserts defaults', () async {
     final database = AppDatabase.forTesting(openMigratedV2Fixture());
     addTearDown(database.close);
@@ -1102,7 +1156,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV10Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 16);
+    expect(database.schemaVersion, 17);
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);
@@ -1112,7 +1166,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV11Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 16);
+    expect(database.schemaVersion, 17);
     // The v11 lifecycle columns survive the v11→v12-only upgrade path.
     final project = await database.projectById('existing');
     expect(project!.lifecycleStatus, ProjectLifecycleStatus.active);
@@ -1144,7 +1198,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV12Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 16);
+    expect(database.schemaVersion, 17);
 
     // The seeded v12 task survives with a FULL budget: retry count 0 and
     // not stalled, so automatic processing keeps serving it.
@@ -1172,7 +1226,7 @@ void main() {
     final database = AppDatabase.forTesting(openMigratedV12Fixture());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 16);
+    expect(database.schemaVersion, 17);
 
     // Pre-existing data survives the two-step upgrade.
     expect(
@@ -1229,7 +1283,7 @@ void main() {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 
-    expect(database.schemaVersion, 16);
+    expect(database.schemaVersion, 17);
     final project = await database.createProject(id: 'fresh', name: '新项目');
     expect(project.lifecycleStatus, ProjectLifecycleStatus.active);
     expect(project.isPinned, isFalse);

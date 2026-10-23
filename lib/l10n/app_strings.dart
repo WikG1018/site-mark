@@ -22,6 +22,33 @@ class AppStrings {
 
   bool get _english => locale.languageCode == 'en';
 
+  String get watermarkTime => _english ? 'Watermark time' : '水印显示时间';
+  String get automaticPhotoTime =>
+      _english ? 'Automatic · photo time' : '自动 · 使用照片时间';
+  String get restoreAutomaticTime =>
+      _english ? 'Restore automatic time' : '恢复自动时间';
+  String get watermarkTimeHint => _english
+      ? 'Changes only the watermark text, not the original photo, capture time or photo number. A custom time applies to this capture/import only.'
+      : '仅修改水印文字，不改原图、原始拍摄信息或照片编号。自定义时间只用于本次拍摄或导入。';
+  String get manuallyAdjusted => _english ? 'Manually adjusted' : '已手动调整';
+  String get photoSource => _english ? 'Photo source' : '照片来源';
+  String get systemCameraSource => _english ? 'System camera' : '系统相机拍摄';
+  String get gallerySource => _english ? 'Imported from gallery' : '相册导入';
+  String get unknownSourceTime =>
+      _english ? 'Not provided by the photo' : '照片未提供拍摄时间';
+  String get importFromGallery => _english ? 'Import photos' : '从相册导入';
+  String get galleryImportHint => _english
+      ? 'Select up to 20 JPEG/PNG images (100 MB / 64 MP each). Uses each photo’s timestamp and location when available; otherwise uses import time and no location. Originals in your gallery stay unchanged.'
+      : '每次最多选择 20 张 JPEG/PNG（每张不超过 100 MB / 6400 万像素）。优先使用各照片自身的时间和位置；没有时使用导入时间，不补当前定位。不会改动相册中的原照片。';
+  String galleryImportProgress(int completed, int total) =>
+      _english ? 'Copying $completed / $total' : '正在导入 $completed / $total';
+  String galleryImportSummary(int imported, int failed) => _english
+      ? '$imported queued for watermarking; $failed not imported.${failed > 0 ? ' Use readable JPEG/PNG images within the size limit, check free space, then select again.' : ''}'
+      : '$imported 张已加入水印处理，$failed 张未导入。${failed > 0 ? '请确认照片为可打开的 JPEG/PNG、未超出大小限制且空间充足，再重新选择。' : ''}';
+  String get galleryImportFailed => _english
+      ? 'Could not import photos. Check free space and select accessible JPEG/PNG images again. Your gallery originals are unchanged.'
+      : '未能完成导入。请检查剩余空间，重新选择可读取的 JPEG/PNG 图片；相册原照片不受影响。';
+
   String get appName => _english ? 'SiteMark' : '工程印记';
   String get appTitleFull =>
       _english ? 'SiteMark Engineering Marks' : 'SiteMark 工程印记';
@@ -428,8 +455,8 @@ class AppStrings {
   String get yellow => _english ? 'Yellow' : '黄色';
   String get indigo => _english ? 'Indigo' : '靛蓝';
   String get immutableEvidence => _english
-      ? 'Capture time, location result, photo number, and original hash remain unchanged.'
-      : '拍摄时间、定位结果、照片编号和原图哈希不会被修改。';
+      ? 'Original capture information, location, photo number, and original hash remain unchanged. Watermark display time is stored separately.'
+      : '原始拍摄信息、定位结果、照片编号和原图哈希不会被修改。水印显示时间单独保存。';
   String get regenerationFailed => _english ? 'Regeneration failed' : '重新生成失败';
   String get allRecords => _english ? 'All records' : '全部记录';
   String get projects => _english ? 'Projects' : '项目';

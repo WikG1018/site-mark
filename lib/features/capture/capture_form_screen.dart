@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sitemark/app.dart';
@@ -9,6 +10,7 @@ import 'package:sitemark/domain/capture_failure.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/capture_recent_suggestions.dart';
+import 'package:sitemark/features/capture/watermark_time_field.dart';
 import 'package:sitemark/features/capture/capture_template_sheet.dart';
 import 'package:sitemark/features/capture/location_permission_prompt.dart';
 import 'package:sitemark/features/settings/app_setting_controller.dart';
@@ -42,6 +44,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
   final _contentFocusNode = FocusNode();
   final _photographerFocusNode = FocusNode();
   bool _working = false;
+  DateTime? _watermarkTime;
+  String? _importProgress;
 
   /// Detaches the KILL-persistence hook registered in [initState]. Null
   /// until the hook is attached (or after [dispose]).
@@ -163,6 +167,8 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     _photographerController.clear();
     _notesController.clear();
     _working = false;
+    _watermarkTime = null;
+    _importProgress = null;
     _killHookDetach?.call();
     _killHookDetach = null;
     _attachKillHook();
@@ -330,6 +336,80 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
     setState(() => _permissionState = state);
   }
 
+  Future<void> _importGallery(Project project) async {
+    if (_working || !_formKey.currentState!.validate()) return;
+    final projectId = project.id;
+    final generation = _initGeneration;
+    final strings = AppStrings.of(context);
+    final draft = CaptureDraft(
+      projectId: projectId,
+      projectName: project.name,
+      workLocation: _locationController.text.trim(),
+      workContent: _contentController.text.trim(),
+      photographer: _photographerController.text.trim(),
+      notes: _notesController.text.trim().isEmpty
+          ? null
+          : _notesController.text.trim(),
+      watermarkLocaleCode: Localizations.localeOf(context).languageCode == 'en'
+          ? 'en'
+          : 'zh',
+      watermarkTime: _watermarkTime,
+      useLocationFallback: false,
+    );
+    bool current() =>
+        mounted &&
+        widget.projectId == projectId &&
+        _initGeneration == generation;
+    setState(() => _working = true);
+    try {
+      final result = await ref
+          .read(galleryImportServiceProvider)
+          .pickAndImport(
+            draft,
+            onProgress: (completed, total) {
+              if (current()) {
+                setState(
+                  () => _importProgress = strings.galleryImportProgress(
+                    completed,
+                    total,
+                  ),
+                );
+              }
+            },
+          );
+      if (!current()) return;
+      if (result.imported > 0) {
+        _notesController.clear();
+        _watermarkTime = null;
+        try {
+          await ref.read(captureFormDraftStoreProvider).clear(projectId);
+        } catch (_) {}
+      }
+      if (mounted && current() && !result.cancelled) {
+        showAppToast(
+          context,
+          strings.galleryImportSummary(result.imported, result.failed),
+          replace: true,
+        );
+      }
+    } on ProjectReadOnlyException {
+      if (mounted && current()) {
+        showAppToast(context, strings.captureReadOnlyMessage, replace: true);
+      }
+    } catch (_) {
+      if (mounted && current()) {
+        showAppToast(context, strings.galleryImportFailed, replace: true);
+      }
+    } finally {
+      if (current()) {
+        setState(() {
+          _working = false;
+          _importProgress = null;
+        });
+      }
+    }
+  }
+
   Future<void> _capture(Project project) async {
     if (_working) return;
     if (!_formKey.currentState!.validate()) return;
@@ -366,6 +446,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                   ? null
                   : _notesController.text.trim(),
               watermarkLocaleCode: watermarkLocaleCode,
+              watermarkTime: _watermarkTime,
               // The capture button path must never trigger a runtime permission
               // request, so only attempt a location read when permission is
               // already granted.
@@ -414,6 +495,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         // button, and surface the background-queue confirmation. Replace any
         // in-flight snackbar so burst captures never queue a stack of them.
         _notesController.clear();
+        _watermarkTime = null;
         setState(() => _working = false);
         showAppToast(
           context,
@@ -430,6 +512,7 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
         if (!mounted) return;
         if (!isCurrent()) return;
         _notesController.clear();
+        _watermarkTime = null;
         setState(() => _working = false);
         showAppToast(
           context,
@@ -527,6 +610,48 @@ class _CaptureFormScreenState extends ConsumerState<CaptureFormScreen>
                           strings: strings,
                           onTemplates: _openTemplates,
                           permissionPrompt: prompt,
+                          watermarkTimeField: WatermarkTimeField(
+                            value: _watermarkTime,
+                            enabled: !_working,
+                            onChanged: (value) =>
+                                setState(() => _watermarkTime = value),
+                          ),
+                          importButton:
+                              !kIsWeb &&
+                                  defaultTargetPlatform ==
+                                      TargetPlatform.android
+                              ? Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    const SizedBox(height: 16),
+                                    OutlinedButton.icon(
+                                      key: const Key('import-gallery-button'),
+                                      onPressed: _working
+                                          ? null
+                                          : () => _importGallery(project!),
+                                      icon: _importProgress == null
+                                          ? const Icon(
+                                              Icons
+                                                  .add_photo_alternate_outlined,
+                                            )
+                                          : const AdaptiveProgressIndicator(
+                                              size: 18,
+                                            ),
+                                      label: Text(
+                                        _importProgress ??
+                                            strings.importFromGallery,
+                                      ),
+                                    ),
+                                    Text(
+                                      strings.galleryImportHint,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                )
+                              : null,
                         ),
                       ),
                     ),
@@ -637,6 +762,8 @@ class _CaptureFormBody extends StatelessWidget {
     required this.strings,
     required this.onTemplates,
     this.permissionPrompt,
+    required this.watermarkTimeField,
+    this.importButton,
   });
 
   final TextEditingController locationController;
@@ -655,6 +782,8 @@ class _CaptureFormBody extends StatelessWidget {
   /// form when the host permission is not granted and the user has not
   /// dismissed the explanation.
   final Widget? permissionPrompt;
+  final Widget watermarkTimeField;
+  final Widget? importButton;
 
   @override
   Widget build(BuildContext context) {
@@ -721,6 +850,9 @@ class _CaptureFormBody extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         CaptureNotesField(controller: notesController),
+        const SizedBox(height: 8),
+        watermarkTimeField,
+        ?importButton,
       ],
     );
   }

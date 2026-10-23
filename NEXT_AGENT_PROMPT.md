@@ -67,7 +67,8 @@
 - **图像核心**：Rust + flutter_rust_bridge；跨 FFI 只传路径与结构化参数。  
 - **SQLite 为状态事实源**：Drift/SQLite；schema 变更必须可迁移且不丢用户数据。  
 - **iOS 线（D-022）**：Flutter 复用 + Swift 桥；相机维持系统桥（UIImagePickerController，不做 AVCaptureSession）。界面已按 iOS 26/27 形态全量落地（大标题导航/Cupertino 动作表与对话框/玻璃胶囊 Toast/CupertinoPage 边缘返回/深色主题桥接），改动必须保持 Android 分支行为零变化。  
-- **不做**：图库导入、自由拖拽水印、多人协作、云备份。
+- **水印时间与图库（D-027，下一版本）**：Android 使用系统照片选择器导入用户指定的 JPEG/PNG，最多 20 张；原图不改动，不申请广泛媒体权限。水印显示时间可单独修改，原始时间、来源和编号保留；导入不使用当前手机位置补旧图定位。其他平台未新增图库入口。
+- **不做**：自由拖拽水印、多人协作、云备份。
 
 ## 4. 工程约定
 

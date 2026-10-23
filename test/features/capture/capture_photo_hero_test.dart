@@ -68,6 +68,7 @@ final class _NoAdjacentQuerySource implements CaptureQuerySource {
 }
 
 CaptureRecord _readyRecord(String path) => CaptureRecord(
+  captureSource: 'camera',
   id: 'capture-1',
   projectId: 'project-1',
   photoNumber: 'SM-20260804-001',

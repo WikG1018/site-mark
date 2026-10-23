@@ -20,6 +20,7 @@ class CaptureDraft {
     required this.watermarkLocaleCode,
     this.notes,
     this.useLocationFallback = true,
+    this.watermarkTime,
   });
 
   final String projectId;
@@ -28,6 +29,7 @@ class CaptureDraft {
   final String workContent;
   final String photographer;
   final String? notes;
+  final DateTime? watermarkTime;
 
   /// Whether the capture workflow may attempt a foreground location read.
   ///
@@ -48,12 +50,16 @@ class CaptureEdits {
     required this.workContent,
     required this.photographer,
     this.notes,
+    this.watermarkTime,
+    this.updateWatermarkTime = false,
   });
 
   final String workLocation;
   final String workContent;
   final String photographer;
   final String? notes;
+  final DateTime? watermarkTime;
+  final bool updateWatermarkTime;
 }
 
 /// Outcome of a foreground capture coordination step.
@@ -157,6 +163,7 @@ class CaptureWorkflow {
         watermarkLocaleCode: draft.watermarkLocaleCode,
         notes: draft.notes,
         createdAt: _now(),
+        watermarkTime: draft.watermarkTime,
       );
       _reportLaunchTiming(
         CaptureLaunchPhase.pendingRecordPersisted,
@@ -336,17 +343,26 @@ class CaptureWorkflow {
       throw StateError('Original photo is not available');
     }
     // Apply the descriptive edits first so they survive the state reset.
-    await database.updateCaptureDescription(
-      captureId: captureId,
-      workLocation: edits.workLocation,
-      workContent: edits.workContent,
-      photographer: edits.photographer,
-      notes: edits.notes,
-    );
-    // Reset attempts and state to `captured` so the processor re-renders from
-    // scratch (clearing the stale published URI and hash). The edited
-    // description fields persist because the reset does not touch them.
-    final reset = await database.resetCaptureForRetry(captureId);
+    final reset = await database.transaction(() async {
+      final latest = await database.captureById(captureId);
+      if (latest == null ||
+          (latest.status != CaptureStatus.ready &&
+              latest.status != CaptureStatus.failed)) {
+        throw StateError('Capture is no longer editable');
+      }
+      await database.updateCaptureDescription(
+        captureId: captureId,
+        workLocation: edits.workLocation,
+        workContent: edits.workContent,
+        photographer: edits.photographer,
+        notes: edits.notes,
+        watermarkTime: edits.watermarkTime,
+        updateWatermarkTime: edits.updateWatermarkTime,
+      );
+      // Re-render from the unchanged original. Keep its evidence hash and
+      // old published URI until the replacement has committed successfully.
+      return database.resetCaptureForRetry(captureId);
+    });
     // The rendered JPEG will change, so any previous NAS copy is stale.
     // Re-queue immediately so the next ready transition uploads the new bytes.
     await database.requeueNasUploadForContentChange(captureId);

@@ -74,6 +74,7 @@ CaptureRecord record({
   String? failureReason,
 }) {
   return CaptureRecord(
+    captureSource: 'camera',
     id: id,
     projectId: 'project-1',
     photoNumber: 'SM-20260716-001',

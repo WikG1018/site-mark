@@ -24,6 +24,7 @@ class SiteMarkSystemPlugin :
 
     private var api: AndroidSystemApi? = null
     private var updateApi: AndroidAppUpdateApi? = null
+    private var galleryApi: AndroidGalleryImportApi? = null
     private var messenger: io.flutter.plugin.common.BinaryMessenger? = null
     private var binding: ActivityPluginBinding? = null
 
@@ -34,12 +35,15 @@ class SiteMarkSystemPlugin :
         SiteMarkSystemApi.setUp(binding.binaryMessenger, instance)
         updateApi = AndroidAppUpdateApi(binding.applicationContext)
         AppUpdateApi.setUp(binding.binaryMessenger, updateApi)
+        galleryApi = AndroidGalleryImportApi(binding.applicationContext)
+        GalleryImportApi.setUp(binding.binaryMessenger, galleryApi)
     }
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         this.binding = binding
         api?.attachActivity(binding.activity)
         updateApi?.attachActivity(binding.activity)
+        galleryApi?.attachActivity(binding.activity)
         binding.addActivityResultListener(this)
         binding.addRequestPermissionsResultListener(this)
     }
@@ -57,11 +61,15 @@ class SiteMarkSystemPlugin :
         binding = null
         api?.detachActivity()
         updateApi?.detachActivity()
+        galleryApi?.detachActivity()
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         SiteMarkSystemApi.setUp(binding.binaryMessenger, null)
         AppUpdateApi.setUp(binding.binaryMessenger, null)
+        GalleryImportApi.setUp(binding.binaryMessenger, null)
+        galleryApi?.dispose()
+        galleryApi = null
         updateApi?.dispose()
         updateApi = null
         api?.dispose()
@@ -70,6 +78,10 @@ class SiteMarkSystemPlugin :
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?): Boolean {
+        if (requestCode == AndroidGalleryImportApi.REQUEST_PICK_IMAGES) {
+            galleryApi?.onActivityResult(resultCode, data)
+            return true
+        }
         if (requestCode == AndroidSystemApi.REQUEST_CAMERA_CAPTURE) {
             api?.onCameraActivityResult(resultCode)
             return true

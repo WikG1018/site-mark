@@ -114,6 +114,52 @@ enum LocationOutcome {
 
 enum LocationPermissionState { granted, denied, permanentlyDenied }
 
+class GalleryImageCopy {
+  GalleryImageCopy({required this.originalPath, this.capturedAtMillis});
+
+  String originalPath;
+
+  int? capturedAtMillis;
+
+  List<Object?> _toList() {
+    return <Object?>[originalPath, capturedAtMillis];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static GalleryImageCopy decode(Object result) {
+    result as List<Object?>;
+    return GalleryImageCopy(
+      originalPath: result[0]! as String,
+      capturedAtMillis: result[1] as int?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! GalleryImageCopy || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(originalPath, other.originalPath) &&
+        _deepEquals(capturedAtMillis, other.capturedAtMillis);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'GalleryImageCopy(originalPath: $originalPath, capturedAtMillis: $capturedAtMillis)';
+  }
+}
+
 class CameraCaptureResult {
   CameraCaptureResult({
     required this.outcome,
@@ -510,23 +556,26 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is LocationPermissionState) {
       buffer.putUint8(133);
       writeValue(buffer, value.index);
-    } else if (value is CameraCaptureResult) {
+    } else if (value is GalleryImageCopy) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is RecoveredCameraCapture) {
+    } else if (value is CameraCaptureResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is LocationResult) {
+    } else if (value is RecoveredCameraCapture) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is ImageMetadataResult) {
+    } else if (value is LocationResult) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    } else if (value is MediaPublishResult) {
+    } else if (value is ImageMetadataResult) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    } else if (value is RecoveredPublishJournal) {
+    } else if (value is MediaPublishResult) {
       buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    } else if (value is RecoveredPublishJournal) {
+      buffer.putUint8(140);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -552,20 +601,101 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : LocationPermissionState.values[value];
       case 134:
-        return CameraCaptureResult.decode(readValue(buffer)!);
+        return GalleryImageCopy.decode(readValue(buffer)!);
       case 135:
-        return RecoveredCameraCapture.decode(readValue(buffer)!);
+        return CameraCaptureResult.decode(readValue(buffer)!);
       case 136:
-        return LocationResult.decode(readValue(buffer)!);
+        return RecoveredCameraCapture.decode(readValue(buffer)!);
       case 137:
-        return ImageMetadataResult.decode(readValue(buffer)!);
+        return LocationResult.decode(readValue(buffer)!);
       case 138:
-        return MediaPublishResult.decode(readValue(buffer)!);
+        return ImageMetadataResult.decode(readValue(buffer)!);
       case 139:
+        return MediaPublishResult.decode(readValue(buffer)!);
+      case 140:
         return RecoveredPublishJournal.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
+  }
+}
+
+/// Android photo picker; grants access only to explicitly selected images.
+class GalleryImportApi {
+  /// Constructor for [GalleryImportApi]. The [binaryMessenger] named argument is
+  /// available for dependency injection. If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  GalleryImportApi({
+    BinaryMessenger? binaryMessenger,
+    String messageChannelSuffix = '',
+  }) : pigeonVar_binaryMessenger = binaryMessenger,
+       pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty
+           ? '.$messageChannelSuffix'
+           : '';
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+  Future<List<String>> pickImages() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.pickImages$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as List<Object?>).cast<String>();
+  }
+
+  Future<GalleryImageCopy> copyImage(String sourceUri, String captureId) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.copyImage$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[sourceUri, captureId],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return pigeonVar_replyValue! as GalleryImageCopy;
+  }
+
+  Future<void> releaseImages(List<String> sourceUris) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.releaseImages$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[sourceUris],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
   }
 }
 

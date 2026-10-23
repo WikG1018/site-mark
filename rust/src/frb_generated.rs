@@ -633,6 +633,9 @@ impl SseDecode for crate::api::image_core::ArchivePhotoPreview {
         let mut var_longitude = <Option<f64>>::sse_decode(deserializer);
         let mut var_accuracyMeters = <Option<f64>>::sse_decode(deserializer);
         let mut var_watermarkLocaleCode = <Option<String>>::sse_decode(deserializer);
+        let mut var_captureSource = <Option<String>>::sse_decode(deserializer);
+        let mut var_sourceCapturedAt = <Option<String>>::sse_decode(deserializer);
+        let mut var_watermarkTime = <Option<String>>::sse_decode(deserializer);
         return crate::api::image_core::ArchivePhotoPreview {
             photo_number: var_photoNumber,
             has_original: var_hasOriginal,
@@ -647,6 +650,9 @@ impl SseDecode for crate::api::image_core::ArchivePhotoPreview {
             longitude: var_longitude,
             accuracy_meters: var_accuracyMeters,
             watermark_locale_code: var_watermarkLocaleCode,
+            capture_source: var_captureSource,
+            source_captured_at: var_sourceCapturedAt,
+            watermark_time: var_watermarkTime,
         };
     }
 }
@@ -742,6 +748,9 @@ impl SseDecode for crate::api::image_core::ExportPhotoRecord {
         let mut var_longitude = <Option<f64>>::sse_decode(deserializer);
         let mut var_accuracyMeters = <Option<f64>>::sse_decode(deserializer);
         let mut var_watermarkLocaleCode = <Option<String>>::sse_decode(deserializer);
+        let mut var_captureSource = <Option<String>>::sse_decode(deserializer);
+        let mut var_sourceCapturedAt = <Option<String>>::sse_decode(deserializer);
+        let mut var_watermarkTime = <Option<String>>::sse_decode(deserializer);
         return crate::api::image_core::ExportPhotoRecord {
             photo_number: var_photoNumber,
             watermarked_path: var_watermarkedPath,
@@ -758,6 +767,9 @@ impl SseDecode for crate::api::image_core::ExportPhotoRecord {
             longitude: var_longitude,
             accuracy_meters: var_accuracyMeters,
             watermark_locale_code: var_watermarkLocaleCode,
+            capture_source: var_captureSource,
+            source_captured_at: var_sourceCapturedAt,
+            watermark_time: var_watermarkTime,
         };
     }
 }
@@ -1510,6 +1522,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ArchivePhotoPrevi
             self.longitude.into_into_dart().into_dart(),
             self.accuracy_meters.into_into_dart().into_dart(),
             self.watermark_locale_code.into_into_dart().into_dart(),
+            self.capture_source.into_into_dart().into_dart(),
+            self.source_captured_at.into_into_dart().into_dart(),
+            self.watermark_time.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1637,6 +1652,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::image_core::ExportPhotoRecord
             self.longitude.into_into_dart().into_dart(),
             self.accuracy_meters.into_into_dart().into_dart(),
             self.watermark_locale_code.into_into_dart().into_dart(),
+            self.capture_source.into_into_dart().into_dart(),
+            self.source_captured_at.into_into_dart().into_dart(),
+            self.watermark_time.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2232,6 +2250,9 @@ impl SseEncode for crate::api::image_core::ArchivePhotoPreview {
         <Option<f64>>::sse_encode(self.longitude, serializer);
         <Option<f64>>::sse_encode(self.accuracy_meters, serializer);
         <Option<String>>::sse_encode(self.watermark_locale_code, serializer);
+        <Option<String>>::sse_encode(self.capture_source, serializer);
+        <Option<String>>::sse_encode(self.source_captured_at, serializer);
+        <Option<String>>::sse_encode(self.watermark_time, serializer);
     }
 }
 
@@ -2301,6 +2322,9 @@ impl SseEncode for crate::api::image_core::ExportPhotoRecord {
         <Option<f64>>::sse_encode(self.longitude, serializer);
         <Option<f64>>::sse_encode(self.accuracy_meters, serializer);
         <Option<String>>::sse_encode(self.watermark_locale_code, serializer);
+        <Option<String>>::sse_encode(self.capture_source, serializer);
+        <Option<String>>::sse_encode(self.source_captured_at, serializer);
+        <Option<String>>::sse_encode(self.watermark_time, serializer);
     }
 }
 

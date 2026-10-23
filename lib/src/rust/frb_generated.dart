@@ -667,8 +667,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ArchivePhotoPreview dco_decode_archive_photo_preview(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 16)
+      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
     return ArchivePhotoPreview(
       photoNumber: dco_decode_String(arr[0]),
       hasOriginal: dco_decode_bool(arr[1]),
@@ -683,6 +683,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       longitude: dco_decode_opt_box_autoadd_f_64(arr[10]),
       accuracyMeters: dco_decode_opt_box_autoadd_f_64(arr[11]),
       watermarkLocaleCode: dco_decode_opt_String(arr[12]),
+      captureSource: dco_decode_opt_String(arr[13]),
+      sourceCapturedAt: dco_decode_opt_String(arr[14]),
+      watermarkTime: dco_decode_opt_String(arr[15]),
     );
   }
 
@@ -845,8 +848,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ExportPhotoRecord dco_decode_export_photo_record(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 15)
-      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    if (arr.length != 18)
+      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
     return ExportPhotoRecord(
       photoNumber: dco_decode_String(arr[0]),
       watermarkedPath: dco_decode_String(arr[1]),
@@ -863,6 +866,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       longitude: dco_decode_opt_box_autoadd_f_64(arr[12]),
       accuracyMeters: dco_decode_opt_box_autoadd_f_64(arr[13]),
       watermarkLocaleCode: dco_decode_opt_String(arr[14]),
+      captureSource: dco_decode_opt_String(arr[15]),
+      sourceCapturedAt: dco_decode_opt_String(arr[16]),
+      watermarkTime: dco_decode_opt_String(arr[17]),
     );
   }
 
@@ -1383,6 +1389,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_longitude = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_accuracyMeters = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_watermarkLocaleCode = sse_decode_opt_String(deserializer);
+    var var_captureSource = sse_decode_opt_String(deserializer);
+    var var_sourceCapturedAt = sse_decode_opt_String(deserializer);
+    var var_watermarkTime = sse_decode_opt_String(deserializer);
     return ArchivePhotoPreview(
       photoNumber: var_photoNumber,
       hasOriginal: var_hasOriginal,
@@ -1397,6 +1406,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       longitude: var_longitude,
       accuracyMeters: var_accuracyMeters,
       watermarkLocaleCode: var_watermarkLocaleCode,
+      captureSource: var_captureSource,
+      sourceCapturedAt: var_sourceCapturedAt,
+      watermarkTime: var_watermarkTime,
     );
   }
 
@@ -1598,6 +1610,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_longitude = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_accuracyMeters = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_watermarkLocaleCode = sse_decode_opt_String(deserializer);
+    var var_captureSource = sse_decode_opt_String(deserializer);
+    var var_sourceCapturedAt = sse_decode_opt_String(deserializer);
+    var var_watermarkTime = sse_decode_opt_String(deserializer);
     return ExportPhotoRecord(
       photoNumber: var_photoNumber,
       watermarkedPath: var_watermarkedPath,
@@ -1614,6 +1629,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       longitude: var_longitude,
       accuracyMeters: var_accuracyMeters,
       watermarkLocaleCode: var_watermarkLocaleCode,
+      captureSource: var_captureSource,
+      sourceCapturedAt: var_sourceCapturedAt,
+      watermarkTime: var_watermarkTime,
     );
   }
 
@@ -2263,6 +2281,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_f_64(self.longitude, serializer);
     sse_encode_opt_box_autoadd_f_64(self.accuracyMeters, serializer);
     sse_encode_opt_String(self.watermarkLocaleCode, serializer);
+    sse_encode_opt_String(self.captureSource, serializer);
+    sse_encode_opt_String(self.sourceCapturedAt, serializer);
+    sse_encode_opt_String(self.watermarkTime, serializer);
   }
 
   @protected
@@ -2452,6 +2473,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_f_64(self.longitude, serializer);
     sse_encode_opt_box_autoadd_f_64(self.accuracyMeters, serializer);
     sse_encode_opt_String(self.watermarkLocaleCode, serializer);
+    sse_encode_opt_String(self.captureSource, serializer);
+    sse_encode_opt_String(self.sourceCapturedAt, serializer);
+    sse_encode_opt_String(self.watermarkTime, serializer);
   }
 
   @protected

@@ -170,7 +170,7 @@ void main() {
     ]);
   });
 
-  for (final failingStage in ['camera', 'location', 'queue']) {
+  for (final failingStage in ['camera', 'gallery', 'location', 'queue']) {
     test(
       '$failingStage recovery failure does not block later stages',
       () async {
@@ -182,6 +182,7 @@ void main() {
 
         final recovery = AppStartupRecovery(
           recoverCamera: () => stage('camera'),
+          recoverGallery: () => stage('gallery'),
           resolveLocations: () => stage('location'),
           reconcileQueue: () => stage('queue'),
           cleanupInterruptedExports: () => stage('exports'),
@@ -200,6 +201,7 @@ void main() {
           'deletions',
           'media',
           'camera',
+          'gallery',
           'location',
           'queue',
         ]);

@@ -722,6 +722,9 @@ fn exports_watermarked_photos_bom_csv_and_versioned_manifest() {
             longitude: Some(117.6471),
             accuracy_meters: Some(8.0),
             watermark_locale_code: Some("zh".to_string()),
+            capture_source: None,
+            source_captured_at: None,
+            watermark_time: None,
         }],
         templates: vec![],
     })
@@ -816,7 +819,43 @@ fn first_photo_for(photo: &std::path::Path) -> ExportPhotoRecord {
         longitude: None,
         accuracy_meters: None,
         watermark_locale_code: Some("zh".to_string()),
+        capture_source: None,
+        source_captured_at: None,
+        watermark_time: None,
     }
+}
+
+#[test]
+fn schema_six_round_trip_keeps_gallery_provenance_and_manual_time() {
+    let directory = tempdir().unwrap();
+    let photo = directory.path().join("photo.jpg");
+    fs::write(&photo, b"rendered-bytes").unwrap();
+    let zip = directory.path().join("backup.zip");
+    let mut request = export_request_for(&zip, &photo);
+    request.photos[0].capture_source = Some("gallery".into());
+    request.photos[0].source_captured_at = Some("2024-01-02 03:04:05 +08:00".into());
+    request.photos[0].watermark_time = Some("2024-01-03 08:30:00 +08:00".into());
+    export_project(request.clone()).unwrap();
+    let preview = read_project_archive(zip.to_string_lossy().into_owned()).unwrap();
+    assert_eq!(preview.schema_version, 6);
+    let restored = &preview.photos[0];
+    assert_eq!(restored.capture_source, request.photos[0].capture_source);
+    assert_eq!(
+        restored.source_captured_at,
+        request.photos[0].source_captured_at
+    );
+    assert_eq!(restored.watermark_time, request.photos[0].watermark_time);
+    assert_eq!(restored.captured_at, request.photos[0].captured_at);
+    let digest = sha256_file(zip.to_string_lossy().into_owned()).unwrap();
+    request.photos[0].watermark_time = Some("2024-02-30 10:00:00 +08:00".into());
+    assert!(export_project(request.clone()).is_err());
+    assert_eq!(
+        sha256_file(zip.to_string_lossy().into_owned()).unwrap(),
+        digest
+    );
+    request.photos[0].watermark_time = None;
+    request.photos[0].capture_source = Some("unknown".into());
+    assert!(export_project(request).is_err());
 }
 
 #[test]
@@ -1133,6 +1172,9 @@ fn exports_selection_zip_of_photos_grouped_by_project_folder() {
                     longitude: None,
                     accuracy_meters: None,
                     watermark_locale_code: None,
+                    capture_source: None,
+                    source_captured_at: None,
+                    watermark_time: None,
                 }],
             },
             ExportSelectionProject {
@@ -1154,6 +1196,9 @@ fn exports_selection_zip_of_photos_grouped_by_project_folder() {
                     longitude: None,
                     accuracy_meters: None,
                     watermark_locale_code: None,
+                    capture_source: None,
+                    source_captured_at: None,
+                    watermark_time: None,
                 }],
             },
         ],
@@ -1213,6 +1258,9 @@ fn rejects_path_navigation_in_project_id() {
                 longitude: None,
                 accuracy_meters: None,
                 watermark_locale_code: None,
+                capture_source: None,
+                source_captured_at: None,
+                watermark_time: None,
             }],
         }],
     });
@@ -1263,6 +1311,9 @@ fn restores_a_v4_project_archive_round_trip() {
             longitude: Some(117.6471),
             accuracy_meters: Some(8.0),
             watermark_locale_code: Some("zh".to_string()),
+            capture_source: None,
+            source_captured_at: None,
+            watermark_time: None,
         }],
         templates: vec![],
     })
@@ -1834,6 +1885,9 @@ fn rejects_selection_archives_for_restore() {
                 longitude: None,
                 accuracy_meters: None,
                 watermark_locale_code: None,
+                capture_source: None,
+                source_captured_at: None,
+                watermark_time: None,
             }],
         }],
     })
@@ -2038,6 +2092,9 @@ fn build_restorable_zip(directory: &tempfile::TempDir) -> std::path::PathBuf {
             longitude: None,
             accuracy_meters: None,
             watermark_locale_code: None,
+            capture_source: None,
+            source_captured_at: None,
+            watermark_time: None,
         }],
         templates: vec![],
     })
