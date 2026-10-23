@@ -2,7 +2,7 @@
 
 English | [简体中文](README.md)
 
-> An offline-first watermark camera for engineering site records: the Android version is published as a stable release (Latest `v1.0.33`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and the iOS build reuses the same Flutter codebase and is fully adapted (iOS 26/27-style UI, background catch-up, dark mode) — it now waits on an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
+> An offline-first watermark camera for engineering site records: Android has a stable release (current source `v1.0.34`, targetSdk 37 / Android 17), the native HarmonyOS NEXT ArkTS version is published alongside it (unsigned HAP), and iOS reuses the same Flutter codebase with iOS 26/27-style UI, background catch-up and dark mode. iOS awaits an Apple Developer account for signed distribution and has no installable package yet. All product lines live on a single branch.
 
 [![CI](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml/badge.svg)](https://github.com/WikG1018/site-mark/actions/workflows/ci.yml)
 ![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)
@@ -10,24 +10,26 @@ English | [简体中文](README.md)
 [![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 ![No ads](https://img.shields.io/badge/Ads-none-176B55)
 ![NAS sync](https://img.shields.io/badge/NAS_sync-WebDAV%20%2F%20SFTP%20%2F%20SMB-176B55)
-[![Latest](https://img.shields.io/badge/latest-v1.0.33-176B55)](https://github.com/WikG1018/site-mark/releases/tag/v1.0.33)
+[![Latest](https://img.shields.io/github/v/release/WikG1018/site-mark?label=latest&color=176B55)](https://github.com/WikG1018/site-mark/releases/latest)
 [![HarmonyOS](https://img.shields.io/badge/HarmonyOS-native--v1.0.14-E60012)](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14)
 
-**Current stable version (Latest): [`v1.0.33`](https://github.com/WikG1018/site-mark/releases/tag/v1.0.33)**
+**Current source: `v1.0.34`. See [Latest Release](https://github.com/WikG1018/site-mark/releases/latest) for the verified stable download.**
 
 **Current HarmonyOS native version: [`native-v1.0.14`](https://github.com/WikG1018/site-mark/releases/tag/native-v1.0.14) (HarmonyOS NEXT, unsigned HAP)**
 
-Requires Android 12 (API 31) or later. `v1.0.33` adds a separate watermark display time, Android gallery imports and a redesigned colorless glass dock. Original files, original capture times and numbering are preserved; source gallery photos are never modified. Verified in-app updates and camera compatibility fixes are retained. Back up important projects regularly, including private originals, and copy backups outside the app's directories.
+Requires Android 12 (API 31) or later. `v1.0.34` fixes Dock indicator gliding, adds drag-to-switch, calms scroll chrome and introduces optional foreground update reminders. Separate watermark time, gallery imports and verified downloads remain available. Original files, times and numbering stay unchanged. Back up important projects regularly, including private originals, outside the app's directories.
 
 ## Download
 
 ### Stable (Latest, recommended)
 
+The table targets v1.0.34. Until its build and verification finish, use the existing stable assets on the Latest page above.
+
 | Package | Applies to | Download |
 | --- | --- | --- |
-| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.33-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.33/sitemark-v1.0.33-arm64.apk) |
-| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.33-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.33/sitemark-v1.0.33-universal.apk) |
-| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.33/SHA256SUMS.txt) |
+| arm64 | Recommended; almost all recent Android phones | [sitemark-v1.0.34-arm64.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.34/sitemark-v1.0.34-arm64.apk) |
+| universal | Use when the processor architecture is unknown or arm64 cannot be installed; larger file | [sitemark-v1.0.34-universal.apk](https://github.com/WikG1018/site-mark/releases/download/v1.0.34/sitemark-v1.0.34-universal.apk) |
+| SHA-256 | Verify the integrity of downloaded files | [SHA256SUMS.txt](https://github.com/WikG1018/site-mark/releases/download/v1.0.34/SHA256SUMS.txt) |
 
 ### HarmonyOS native (native-v1.0.14)
 
@@ -67,11 +69,13 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 ## Recent updates
 
-### Current source improvements (unreleased; stable remains v1.0.33)
+### v1.0.34: Dock gestures, calmer scroll chrome and update reminders
 
 - Preserve the Dock state across root tabs so the colorless lens glides instead of jumping. Drag the indicator horizontally and release to select; cancellation never navigates.
 - Top and bottom chrome respond to deliberate finger travel, not tiny adjustments or momentum, with calmer 360ms transitions.
 - Android checks public releases on opening/resuming, at most once every 24 hours. A dismissible reminder leads directly to the existing download panel. Disable automatic checks in Settings → About; downloads and installation always require your action.
+
+See the [v1.0.34 release notes](docs/release-v1.0.34.md) and [validation record](docs/verification-2026-10-23-dock-scroll-update.md) (Chinese).
 
 ### v1.0.33: watermark time, gallery import and a colorless glass dock
 
@@ -145,7 +149,7 @@ I built SiteMark because recording on a jobsite takes more than stamping text on
 
 I deliberately did not re-implement a camera or embed a third-party camera SDK — manufacturers have spent years tuning their own lenses, and an app-level rework only makes things worse. SiteMark invokes the system/vendor camera through standard platform APIs, leaving focus, HDR, stabilization, and image quality to the system, and does three things itself: engineering fields before the shot, local watermarking after it, and record/project management.
 
-The app has no ads, accounts, third-party cloud sync or analytics uploads; repository links open externally. Network use is limited to opt-in NAS sync, public release checks and user-requested update downloads. Current source adds Android foreground automatic checks (D-028, unreleased), at most once every 24 hours, with an About-page opt-out; stable v1.0.33 still checks manually. Automatic source selection tries GitHub first, then a fixed public mirror on failure. No photos or project data are uploaded. Photography, projects and watermark processing work offline.
+The app has no ads, accounts, third-party cloud sync or analytics uploads; repository links open externally. Network use is limited to opt-in NAS sync, public release checks and user-requested update downloads. Since v1.0.34, Android offers foreground automatic checks (D-028), at most once every 24 hours, with an About-page opt-out; manual checks remain available. Automatic source selection tries GitHub first, then a fixed public mirror on failure. No photos or project data are uploaded. Photography, projects and watermark processing work offline.
 
 Since v1.0.32, user-initiated public APK downloads are supported (D-026). Project data is not uploaded; installation needs Android source permission and final confirmation. Existing installations need one manual in-place upgrade to gain this feature. See the [validation report and remaining limits (Chinese)](docs/verification-2026-10-21-android-update-ui.md).
 
@@ -312,7 +316,7 @@ The release gates for the current version include:
 
 When HarmonyOS native code is involved, the checks additionally cover the HarmonyOS manifest's minimal permission set and dual-ABI configuration, and run Rust Clippy/tests for the `ohos-native` feature separately. ArkTS tests and HAP packaging need the DevEco Studio SDK and are currently verified in a local DevEco environment.
 
-Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.33` is the current Android release; the HarmonyOS native version remains an unsigned debug-build HAP until the AGC certificate materials are available. Downloads and verification should always follow the actual assets on the corresponding GitHub Release.
+Official packages are built and signed by GitHub Actions triggered by version tags. `v1.0.34` is the current Android source version; HarmonyOS remains an unsigned debug-build HAP until AGC certificate materials are available. Downloads, Latest status and verification follow the actual assets on the corresponding GitHub Release.
 
 ## Local build
 
