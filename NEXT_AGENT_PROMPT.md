@@ -26,7 +26,7 @@
 | 仓库 | https://github.com/WikG1018/site-mark |
 | 应用 ID | Android `io.github.wikg1018.sitemark`；鸿蒙原生 `io.github.wikg1018.sitemark.native` |
 | 默认基础分支 | `main`（唯一开发分支，Android 与鸿蒙原生同线演进；见第 0 节） |
-| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.14`）；Android 见 `pubspec.yaml`（`1.0.32+47`） |
+| 当前版本 | 鸿蒙原生见 `ohos-native/AppScope/app.json5`（`1.0.14`）；Android 见 `pubspec.yaml`（`1.0.33+48`） |
 | 平台 | Android 12+（API 31+）稳定发布；HarmonyOS NEXT（ArkTS 原生）验证中；iOS 复用线 Phase 0–3、5–8 已全部合入（Swift 桥/BGTaskScheduler/界面全量 iOS 26/27 形态/深色桥接），仅剩 Phase 4（TestFlight/签名）等 Apple Developer 账号与真机验证项 |
 | 数据库 | 鸿蒙 RDB 契约测试见 `tool/test_ohos_capture_database_contract*`；Android Drift schema 见 `lib/data/app_database.dart` |
 | 语言 | 简体中文 + English；用户可见文案必须双语同步 |
@@ -67,7 +67,7 @@
 - **图像核心**：Rust + flutter_rust_bridge；跨 FFI 只传路径与结构化参数。  
 - **SQLite 为状态事实源**：Drift/SQLite；schema 变更必须可迁移且不丢用户数据。  
 - **iOS 线（D-022）**：Flutter 复用 + Swift 桥；相机维持系统桥（UIImagePickerController，不做 AVCaptureSession）。界面已按 iOS 26/27 形态全量落地（大标题导航/Cupertino 动作表与对话框/玻璃胶囊 Toast/CupertinoPage 边缘返回/深色主题桥接），改动必须保持 Android 分支行为零变化。  
-- **水印时间与图库（D-027，下一版本）**：Android 使用系统照片选择器导入用户指定的 JPEG/PNG，最多 20 张；原图不改动，不申请广泛媒体权限。水印显示时间可单独修改，原始时间、来源和编号保留；导入不使用当前手机位置补旧图定位。其他平台未新增图库入口。
+- **水印时间与图库（D-027，v1.0.33 起）**：Android 使用系统照片选择器导入用户指定的 JPEG/PNG，最多 20 张；原图不改动，不申请广泛媒体权限。水印显示时间可单独修改，原始时间、来源和编号保留；导入不使用当前手机位置补旧图定位。其他平台未新增图库入口。
 - **不做**：自由拖拽水印、多人协作、云备份。
 
 ## 4. 工程约定
@@ -81,7 +81,7 @@
 
 ### 动效
 
-任何自定义动画的时长与曲线只能来自 `lib/motion.dart` 的 `AppMotion`（见 `CONTRIBUTING.md`）。需要新 token 时先扩展 `AppMotion`，不要在业务文件里写死 `Duration` / `Cubic`。圆角、悬浮阴影与玻璃配方只能来自 `lib/design_tokens.dart`（`AppRadius` / `AppShadow.chrome`）与 `GlassSurface` 单配方；弹窗与底部面板转场用 `AppMotion.dialogStyleOf` / `sheetStyleOf`。完整动效/材质规范见 `docs/motion-and-material-spec.md`（鸿蒙移植时的对齐源）。
+任何自定义动画的时长与曲线只能来自 `lib/motion.dart` 的 `AppMotion`（见 `CONTRIBUTING.md`）。需要新 token 时先扩展 `AppMotion`，不要在业务文件里写死 `Duration` / `Cubic`。圆角、悬浮阴影与玻璃材质角色集中定义在 `lib/design_tokens.dart`（`AppRadius` / `AppShadow` / `AppDock`）与 `GlassSurface`；Dock 使用无色玻璃透镜，禁止淡绿色或主题色选中底，其余表面保留标准配方。弹窗与底部面板转场用 `AppMotion.dialogStyleOf` / `sheetStyleOf`。完整动效/材质规范见 `docs/motion-and-material-spec.md`；本轮 Dock 样式不自动同步到鸿蒙。
 
 ### 测试与验证
 
@@ -146,7 +146,7 @@ cargo test --manifest-path rust/Cargo.toml
 ## 7. 发布与维护（背景）
 
 - 发布步骤与自动化门禁：`docs/release-checklist.md`。  
-- **`v1.0.32` 为当前 Android 版本**（安全的应用内下载更新、大字体适配、减少动画及诊断稳定性修复；包含 v1.0.31 相机兼容性修复）。故障手机仍需覆盖升级后新拍验证；`native-v1.0.14` 为当前鸿蒙原生版本（未签名 HAP；动效/材质对齐 Android v1.0.29、NAS 双向同步、MiSans）。后续发版按清单完成拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。
+- **`v1.0.33` 为当前 Android 版本**（独立水印显示时间、Android 相册导入、无色玻璃 Dock；保留安全更新和相机兼容性修复）。真机确认与发布资产状态以对应 Release 和验证记录为准，不把模拟器结果当作真机验收；`native-v1.0.14` 仍为当前鸿蒙原生版本（未签名 HAP）。后续发版按清单完成拍照/后台与备份恢复**真机**回归，并覆盖有代表性的厂商相机（小米/OPPO/vivo/三星/Pixel 等）。
 - **iOS 第三条产品线：** Phase 0–3、5–8 已全部合入 `main`（PR #119–#128，含实施记录见 `docs/superpowers/plans/2026-08-30-ios-adaptation.md`）。下一步是 Phase 4（TestFlight/签名），在用户提供 Apple Developer 账号之前不启动；真机项（深色启动屏/滑动手感/相机实拍）待设备。  
 - **NAS 同步（D-023 修订，三线功能）：** Android/iOS 走 flutter_rust_bridge，鸿蒙走 JSON C ABI；schema Android/iOS v14、鸿蒙 RDB v15。鸿蒙端 WebDAV 仅明文 HTTP（`ohos-native` feature 保持无 C 依赖，TLS 被编译门控排除，HTTPS 返回 `tls_unsupported`）；SFTP/SMB 三线全加密。上传为串行队列 + 5 次尝试预算，失败可手动重试。  
 - Agent **默认不**创建 GitHub Release、不上传签名密钥、不在未授权时合并 `main`。
