@@ -73,6 +73,12 @@ pub struct ExportPhotoRecord {
     pub accuracy_meters: Option<f64>,
     #[serde(default)]
     pub watermark_locale_code: Option<String>,
+    #[serde(default)]
+    pub capture_source: Option<String>,
+    #[serde(default)]
+    pub source_captured_at: Option<String>,
+    #[serde(default)]
+    pub watermark_time: Option<String>,
 }
 
 /// Project-level watermark template persisted in v2 manifests so a restored
@@ -220,6 +226,9 @@ struct CsvRow<'a> {
     project_name: &'a str,
     photo_number: &'a str,
     captured_at: &'a str,
+    capture_source: &'a str,
+    source_captured_at: &'a str,
+    watermark_time: &'a str,
     work_location: &'a str,
     work_content: &'a str,
     photographer: &'a str,
@@ -470,6 +479,11 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
     // failed export never disturbs an existing archive.
     let mut seen_numbers = std::collections::HashSet::new();
     for photo in &request.photos {
+        validate_photo_provenance(
+            photo.capture_source.as_deref(),
+            photo.source_captured_at.as_deref(),
+            photo.watermark_time.as_deref(),
+        )?;
         let safe_number = safe_photo_number_component(&photo.photo_number)?;
         if !seen_numbers.insert(safe_number) {
             return Err(invalid_data(
@@ -544,6 +558,12 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
                     project_name: &request.project_name,
                     photo_number: &photo.photo_number,
                     captured_at: &photo.captured_at,
+                    capture_source: photo.capture_source.as_deref().unwrap_or("camera"),
+                    source_captured_at: photo.source_captured_at.as_deref().unwrap_or(""),
+                    watermark_time: photo
+                        .watermark_time
+                        .as_deref()
+                        .unwrap_or(&photo.captured_at),
                     work_location: &photo.work_location,
                     work_content: &photo.work_content,
                     photographer: &photo.photographer,
@@ -568,7 +588,14 @@ pub fn export_project(request: ExportProjectRequest) -> Result<ExportProjectResu
         // records lifecycle status and pin flag with the watermark template.
         // Selection archives intentionally stay at v1 and are not restorable.
         let manifest = serde_json::to_vec_pretty(&ExportManifest {
-            schema_version: 5,
+            schema_version: if request.photos.iter().any(|p| {
+                p.watermark_time.is_some()
+                    || p.capture_source.as_deref().is_some_and(|s| s != "camera")
+            }) {
+                6
+            } else {
+                5
+            },
             app: "SiteMark",
             project_id: &request.project_id,
             project_name: &request.project_name,
@@ -1816,6 +1843,9 @@ pub struct ArchivePhotoPreview {
     pub longitude: Option<f64>,
     pub accuracy_meters: Option<f64>,
     pub watermark_locale_code: Option<String>,
+    pub capture_source: Option<String>,
+    pub source_captured_at: Option<String>,
+    pub watermark_time: Option<String>,
 }
 
 /// Watermark template recovered from a v2 manifest.
@@ -1904,6 +1934,12 @@ struct ManifestPhoto {
     accuracy_meters: Option<f64>,
     #[serde(default)]
     watermark_locale_code: Option<String>,
+    #[serde(default)]
+    capture_source: Option<String>,
+    #[serde(default)]
+    source_captured_at: Option<String>,
+    #[serde(default)]
+    watermark_time: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -2124,6 +2160,26 @@ fn parse_two_digits(bytes: &[u8], start: usize) -> Option<u32> {
 
 fn is_leap_year(year: u32) -> bool {
     year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400))
+}
+
+fn validate_photo_provenance(
+    source: Option<&str>,
+    original_time: Option<&str>,
+    display_time: Option<&str>,
+) -> Result<(), String> {
+    let source = source.unwrap_or("camera");
+    if !matches!(source, "camera" | "gallery") || (source == "camera" && original_time.is_some()) {
+        return Err(invalid_data("validate provenance", "invalid photo source"));
+    }
+    for value in [original_time, display_time].into_iter().flatten() {
+        if !is_valid_exported_timestamp(value) {
+            return Err(invalid_data(
+                "validate provenance",
+                "invalid photo timestamp",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Matches the existing Dart archive timestamp parser's exported shape:
@@ -2694,7 +2750,7 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
     if manifest.app != "SiteMark" {
         return Err(invalid_data("validate manifest", "not a SiteMark archive"));
     }
-    if !(1..=5).contains(&manifest.schema_version) {
+    if !(1..=6).contains(&manifest.schema_version) {
         return Err(invalid_data(
             "validate manifest",
             format!("unsupported schema version {}", manifest.schema_version),
@@ -2736,6 +2792,23 @@ fn read_project_manifest(zip_path: &str) -> Result<ProjectManifestFile, String> 
     validate_archive_templates(&manifest.templates)?;
     let mut seen = std::collections::HashSet::new();
     for photo in &manifest.photos {
+        validate_photo_provenance(
+            photo.capture_source.as_deref(),
+            photo.source_captured_at.as_deref(),
+            photo.watermark_time.as_deref(),
+        )?;
+        if manifest.schema_version < 6
+            && (photo.watermark_time.is_some()
+                || photo
+                    .capture_source
+                    .as_deref()
+                    .is_some_and(|s| s != "camera"))
+        {
+            return Err(invalid_data(
+                "validate manifest",
+                "photo provenance requires schema version 6",
+            ));
+        }
         safe_photo_number_component(&photo.photo_number)?;
         if !seen.insert(photo.photo_number.as_str()) {
             return Err(invalid_data(
@@ -2894,6 +2967,9 @@ pub fn read_project_archive(zip_path: String) -> Result<ProjectArchivePreview, S
             longitude: photo.longitude,
             accuracy_meters: photo.accuracy_meters,
             watermark_locale_code: photo.watermark_locale_code.clone(),
+            capture_source: photo.capture_source.clone(),
+            source_captured_at: photo.source_captured_at.clone(),
+            watermark_time: photo.watermark_time.clone(),
         });
     }
     let templates = manifest

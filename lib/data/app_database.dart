@@ -148,6 +148,14 @@ class CaptureRecords extends Table {
   TextColumn get failureReason => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get capturedAt => dateTime().nullable()();
+
+  /// Display-only override. Never changes original bytes, numbering or sorting.
+  DateTimeColumn get watermarkTime => dateTime().nullable()();
+  TextColumn get captureSource =>
+      text().withDefault(const Constant('camera'))();
+
+  /// EXIF capture time for gallery imports; null means the source has none.
+  DateTimeColumn get sourceCapturedAt => dateTime().nullable()();
   RealColumn get latitude => real().nullable()();
   RealColumn get longitude => real().nullable()();
   RealColumn get accuracyMeters => real().nullable()();
@@ -199,6 +207,16 @@ class CaptureTemplates extends Table {
     'CHECK (instr(photographer, char(0)) = 0 AND '
         'length(photographer) BETWEEN 1 AND 80)',
   ];
+}
+
+/// Temporary, durable access grants for imports not yet copied into originals.
+/// Kept independent of capture FK cascade so startup can release a grant even
+/// when its project was deleted during import.
+class GalleryImportTasks extends Table {
+  TextColumn get captureId => text()();
+  TextColumn get sourceUri => text()();
+  @override
+  Set<Column<Object>> get primaryKey => {captureId};
 }
 
 /// Durable delete-only cleanup queue for superseded MediaStore URIs.
@@ -320,6 +338,7 @@ class NasUploadStates extends Table {
     CaptureMediaCleanups,
     NasSyncConfigs,
     NasUploadStates,
+    GalleryImportTasks,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -358,7 +377,7 @@ class AppDatabase extends _$AppDatabase {
   });
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -494,6 +513,15 @@ class AppDatabase extends _$AppDatabase {
       // the column — otherwise SQLite raises "duplicate column name".
       if (from < 16 && from >= 14) {
         await migrator.addColumn(nasSyncConfigs, nasSyncConfigs.syncMode);
+      }
+      if (from < 17) {
+        await migrator.addColumn(captureRecords, captureRecords.watermarkTime);
+        await migrator.addColumn(captureRecords, captureRecords.captureSource);
+        await migrator.addColumn(
+          captureRecords,
+          captureRecords.sourceCapturedAt,
+        );
+        await migrator.createTable(galleryImportTasks);
       }
       await _ensureGlobalSettingsRow(this);
     },
@@ -755,7 +783,13 @@ ORDER BY
     String? address,
     String? locationOutcome,
     String locationResolution = 'pending',
+    DateTime? watermarkTime,
+    String captureSource = 'camera',
+    DateTime? sourceCapturedAt,
   }) {
+    if (!{'camera', 'gallery'}.contains(captureSource)) {
+      throw ArgumentError.value(captureSource, 'captureSource');
+    }
     if (!{'zh', 'en'}.contains(watermarkLocaleCode)) {
       throw ArgumentError.value(watermarkLocaleCode, 'watermarkLocaleCode');
     }
@@ -788,6 +822,9 @@ ORDER BY
           locationOutcome: Value(locationOutcome),
           watermarkLocaleCode: Value(watermarkLocaleCode),
           locationResolution: Value(locationResolution),
+          watermarkTime: Value(watermarkTime),
+          captureSource: Value(captureSource),
+          sourceCapturedAt: Value(sourceCapturedAt),
         ),
       );
     });
@@ -1084,6 +1121,8 @@ ORDER BY
     required String workContent,
     required String photographer,
     String? notes,
+    DateTime? watermarkTime,
+    bool updateWatermarkTime = false,
   }) async {
     if ([
       workLocation,
@@ -1100,6 +1139,9 @@ ORDER BY
         workContent: Value(workContent.trim()),
         photographer: Value(photographer.trim()),
         notes: Value(notes?.trim()),
+        watermarkTime: updateWatermarkTime
+            ? Value(watermarkTime)
+            : const Value.absent(),
       ),
     );
     return (select(
@@ -1803,7 +1845,13 @@ ORDER BY
     double? accuracyMeters,
     String watermarkLocaleCode = 'zh',
     DateTime? originalDeletedAt,
+    DateTime? watermarkTime,
+    String captureSource = 'camera',
+    DateTime? sourceCapturedAt,
   }) {
+    if (!{'camera', 'gallery'}.contains(captureSource)) {
+      throw ArgumentError.value(captureSource, 'captureSource');
+    }
     if (photoNumber.trim().isEmpty) {
       throw ArgumentError.value(photoNumber, 'photoNumber');
     }
@@ -1848,6 +1896,9 @@ ORDER BY
         watermarkLocaleCode: Value(watermarkLocaleCode),
         locationResolution: Value(hasLocationFix ? 'resolved' : 'unavailable'),
         originalDeletedAt: Value(originalDeletedAt),
+        watermarkTime: Value(watermarkTime),
+        captureSource: Value(captureSource),
+        sourceCapturedAt: Value(sourceCapturedAt),
       ),
     );
   }

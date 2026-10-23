@@ -17,6 +17,24 @@ enum ArchiveSaveOutcome { saved, cancelled }
 
 enum ApkInstallOutcome { launched, permissionRequired }
 
+class GalleryImageCopy {
+  GalleryImageCopy({required this.originalPath, this.capturedAtMillis});
+  String originalPath;
+  int? capturedAtMillis;
+}
+
+/// Android photo picker; grants access only to explicitly selected images.
+@HostApi()
+abstract class GalleryImportApi {
+  @async
+  List<String> pickImages();
+
+  @async
+  GalleryImageCopy copyImage(String sourceUri, String captureId);
+
+  void releaseImages(List<String> sourceUris);
+}
+
 /// Android-only explicit self-update flow. Never used by a background worker.
 @HostApi()
 abstract class AppUpdateApi {

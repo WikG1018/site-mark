@@ -11,6 +11,54 @@ import 'package:sitemark/workflow/project_export_service.dart';
 import 'package:sitemark/workflow/project_import_service.dart';
 
 void main() {
+  test(
+    'backup and selection exports preserve provenance and display time',
+    () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      await database.createProject(id: 'p', name: 'Test');
+      await database.insertRestoredCapture(
+        id: 'c',
+        projectId: 'p',
+        photoNumber: 'Test-SM-20240102-001',
+        originalPath: '/private/c.jpg',
+        workLocation: 'A',
+        workContent: 'Inspection',
+        photographer: 'B',
+        originalSha256: 'a' * 64,
+        createdAt: DateTime(2026),
+        capturedAt: DateTime(2024, 1, 2),
+        captureSource: 'gallery',
+        sourceCapturedAt: DateTime(2024, 1, 2),
+        watermarkTime: DateTime(2024, 2, 3),
+      );
+      final images = _ExportImagePipeline();
+      final service = ProjectExportService(
+        database: database,
+        images: images,
+        capturePaths: _ExportCapturePaths(),
+        exportPaths: _ExportOutputPaths(),
+        selectionExportPaths: _SelectionOutputPaths(),
+      );
+      await service.exportProject(projectId: 'p', includeOriginals: false);
+      expect(images.request!.photos.single.captureSource, 'gallery');
+      expect(
+        parseExportedTimestamp(images.request!.photos.single.watermarkTime!),
+        DateTime(2024, 2, 3),
+      );
+      await service.exportSelection(captureIds: ['c'], includeOriginals: false);
+      final photo = images.selectionRequest!.projects.single.photos.single;
+      expect(photo.captureSource, 'gallery');
+      expect(
+        parseExportedTimestamp(photo.sourceCapturedAt!),
+        DateTime(2024, 1, 2),
+      );
+      expect(
+        parseExportedTimestamp(photo.watermarkTime!),
+        DateTime(2024, 2, 3),
+      );
+    },
+  );
   test('exports ordered templates for a project without photos', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);

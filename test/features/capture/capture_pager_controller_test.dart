@@ -11,6 +11,7 @@ CaptureSummary _summary(String id, {int minute = 0, String? projectName}) {
   final capturedAt = DateTime(2026, 1, 1).add(Duration(minutes: minute));
   return CaptureSummary(
     capture: CaptureRecord(
+      captureSource: 'camera',
       id: id,
       projectId: 'project-1',
       workLocation: 'A 区',

@@ -108,6 +108,34 @@ void main() {
   });
 
   test(
+    'renders the display timestamp while preserving capture identity',
+    () async {
+      await seedCaptured();
+      final before = (await database.captureById('capture-1'))!;
+      await database.updateCaptureDescription(
+        captureId: 'capture-1',
+        workLocation: before.workLocation,
+        workContent: before.workContent,
+        photographer: before.photographer,
+        watermarkTime: DateTime(2024, 2, 3, 4, 5),
+        updateWatermarkTime: true,
+      );
+      expect(
+        await processor.process('capture-1'),
+        CaptureProcessResult.succeeded,
+      );
+      expect(
+        images.lastRenderRequest!.capturedAt,
+        startsWith('2024-02-03 04:05:00'),
+      );
+      final after = (await database.captureById('capture-1'))!;
+      expect(after.capturedAt, before.capturedAt);
+      expect(after.photoNumber, before.photoNumber);
+      expect(after.originalSha256, _digestA);
+    },
+  );
+
+  test(
     'persists render and hash failures before returning to the worker',
     () async {
       final root = await Directory.systemTemp.createTemp(

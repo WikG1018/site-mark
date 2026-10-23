@@ -136,6 +136,7 @@ CaptureRecord _record({
   DateTime? originalDeletedAt,
 }) {
   return CaptureRecord(
+    captureSource: 'camera',
     id: id,
     projectId: 'project-1',
     photoNumber: 'SM-20260716-001',

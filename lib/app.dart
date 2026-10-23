@@ -49,6 +49,9 @@ import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
 import 'package:sitemark/platform/platform_services.dart';
 import 'package:sitemark/workflow/app_startup_recovery.dart';
+import 'package:sitemark/workflow/gallery_import_service.dart';
+import 'package:sitemark_system_api/sitemark_system_api.dart'
+    show GalleryImportApi;
 import 'package:sitemark/workflow/app_storage_service.dart';
 import 'package:sitemark/workflow/capture_location_coordinator.dart';
 import 'package:sitemark/workflow/capture_media_cleanup_store.dart';
@@ -364,6 +367,16 @@ final captureWorkflowProvider = Provider<CaptureWorkflow>((ref) {
   );
 });
 
+final galleryImportServiceProvider = Provider<GalleryImportService>((ref) {
+  return GalleryImportService(
+    database: ref.watch(databaseProvider),
+    api: GalleryImportApi(),
+    paths: ref.watch(originalPhotoPathsProvider),
+    scheduler: ref.watch(captureBackgroundSchedulerProvider),
+    locations: ref.watch(captureLocationCoordinatorProvider),
+  );
+});
+
 final captureMediaServiceProvider = Provider<CaptureMediaService>((ref) {
   return CaptureMediaService(
     database: ref.watch(databaseProvider),
@@ -381,6 +394,11 @@ final appStartupRecoveryProvider = Provider<AppStartupRecovery>((ref) {
   return AppStartupRecovery(
     recoverCamera: () =>
         ref.read(captureWorkflowProvider).recoverPendingCapture(),
+    recoverGallery: () async {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        await ref.read(galleryImportServiceProvider).recover();
+      }
+    },
     resolveLocations: () => ref
         .read(captureLocationCoordinatorProvider)
         .reconcilePendingLocations(),

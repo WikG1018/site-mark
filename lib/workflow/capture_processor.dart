@@ -185,7 +185,9 @@ final class CaptureProcessor {
           workContent: rendering.workContent,
           photographer: rendering.photographer,
           photoNumber: rendering.photoNumber!,
-          capturedAt: _formatLocalTimestamp(rendering.capturedAt!),
+          capturedAt: _formatLocalTimestamp(
+            rendering.watermarkTime ?? rendering.capturedAt!,
+          ),
           address: rendering.address,
           coordinates: _coordinates(rendering),
           notes: rendering.notes,

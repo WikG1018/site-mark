@@ -6,6 +6,7 @@ import 'package:sitemark/data/app_database.dart';
 import 'package:sitemark/domain/capture_template_rules.dart';
 import 'package:sitemark/domain/project_lifecycle.dart';
 import 'package:sitemark/features/capture/capture_form_screen.dart';
+import 'package:sitemark/features/capture/watermark_time_field.dart';
 import 'package:sitemark/features/capture/capture_record_card.dart';
 import 'package:sitemark/main.dart';
 import 'package:sitemark/platform/capture_form_draft_store.dart';
@@ -404,8 +405,26 @@ void main() {
     await tester.enterText(find.byKey(const Key('work-location')), 'A 区三层');
     await tester.enterText(find.byKey(const Key('work-content')), '风管安装检查');
     await tester.enterText(find.byKey(const Key('photographer')), '张工');
+    await tester.scrollUntilVisible(
+      find.byType(WatermarkTimeField),
+      150,
+      scrollable: find.byType(Scrollable).last,
+    );
+    tester
+        .widget<WatermarkTimeField>(find.byType(WatermarkTimeField))
+        .onChanged(DateTime(2024, 2, 3, 8, 30));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('capture-button')));
     await tester.pumpAndSettle();
+    expect(
+      tester.widget<WatermarkTimeField>(find.byType(WatermarkTimeField)).value,
+      isNull,
+    );
+    final timeAdjusted = (await database.capturesForProject(
+      'project-1',
+    )).single;
+    expect(timeAdjusted.watermarkTime, DateTime(2024, 2, 3, 8, 30));
+    expect(timeAdjusted.capturedAt, isNot(DateTime(2024, 2, 3, 8, 30)));
 
     // The capture form now stays open for consecutive shooting and surfaces a
     // queue-confirmation snackbar instead of navigating away. Return to the

@@ -8,9 +8,11 @@ class AppStartupRecovery {
     required this.cleanupInterruptedBundleRestores,
     required this.cleanupInterruptedProjectDeletions,
     required this.cleanupInterruptedCaptureMedia,
+    this.recoverGallery,
   });
 
   final Future<void> Function() recoverCamera;
+  final Future<void> Function()? recoverGallery;
   final Future<void> Function() resolveLocations;
   final Future<void> Function() reconcileQueue;
   final Future<void> Function() cleanupInterruptedExports;
@@ -33,6 +35,7 @@ class AppStartupRecovery {
     // A transient failure in one subsystem must not skip later recovery work or
     // escape into the root post-frame callback.
     await _bestEffort(recoverCamera);
+    if (recoverGallery != null) await _bestEffort(recoverGallery!);
     await _bestEffort(resolveLocations);
     await _bestEffort(reconcileQueue);
   }

@@ -216,6 +216,46 @@ enum LocationPermissionState: Int, CaseIterable {
 }
 
 /// Generated class from Pigeon that represents data sent in messages.
+struct GalleryImageCopy: Hashable, CustomStringConvertible {
+  var originalPath: String
+  var capturedAtMillis: Int64? = nil
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> GalleryImageCopy? {
+    let originalPath = pigeonVar_list[0] as! String
+    let capturedAtMillis: Int64? = nilOrValue(pigeonVar_list[1])
+
+    return GalleryImageCopy(
+      originalPath: originalPath,
+      capturedAtMillis: capturedAtMillis
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      originalPath,
+      capturedAtMillis,
+    ]
+  }
+  static func == (lhs: GalleryImageCopy, rhs: GalleryImageCopy) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return SystemApiPigeonInternal.deepEquals(lhs.originalPath, rhs.originalPath) && SystemApiPigeonInternal.deepEquals(lhs.capturedAtMillis, rhs.capturedAtMillis)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("GalleryImageCopy")
+    SystemApiPigeonInternal.deepHash(value: originalPath, hasher: &hasher)
+    SystemApiPigeonInternal.deepHash(value: capturedAtMillis, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "GalleryImageCopy(originalPath: \(String(describing: originalPath)), capturedAtMillis: \(String(describing: capturedAtMillis)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
 struct CameraCaptureResult: Hashable, CustomStringConvertible {
   var outcome: CameraOutcome
   var outputPath: String
@@ -559,16 +599,18 @@ private class SystemApiPigeonCodecReader: FlutterStandardReader {
       }
       return nil
     case 134:
-      return CameraCaptureResult.fromList(self.readValue() as! [Any?])
+      return GalleryImageCopy.fromList(self.readValue() as! [Any?])
     case 135:
-      return RecoveredCameraCapture.fromList(self.readValue() as! [Any?])
+      return CameraCaptureResult.fromList(self.readValue() as! [Any?])
     case 136:
-      return LocationResult.fromList(self.readValue() as! [Any?])
+      return RecoveredCameraCapture.fromList(self.readValue() as! [Any?])
     case 137:
-      return ImageMetadataResult.fromList(self.readValue() as! [Any?])
+      return LocationResult.fromList(self.readValue() as! [Any?])
     case 138:
-      return MediaPublishResult.fromList(self.readValue() as! [Any?])
+      return ImageMetadataResult.fromList(self.readValue() as! [Any?])
     case 139:
+      return MediaPublishResult.fromList(self.readValue() as! [Any?])
+    case 140:
       return RecoveredPublishJournal.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -593,23 +635,26 @@ private class SystemApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? LocationPermissionState {
       super.writeByte(133)
       super.writeValue(value.rawValue)
-    } else if let value = value as? CameraCaptureResult {
+    } else if let value = value as? GalleryImageCopy {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? RecoveredCameraCapture {
+    } else if let value = value as? CameraCaptureResult {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? LocationResult {
+    } else if let value = value as? RecoveredCameraCapture {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? ImageMetadataResult {
+    } else if let value = value as? LocationResult {
       super.writeByte(137)
       super.writeValue(value.toList())
-    } else if let value = value as? MediaPublishResult {
+    } else if let value = value as? ImageMetadataResult {
       super.writeByte(138)
       super.writeValue(value.toList())
-    } else if let value = value as? RecoveredPublishJournal {
+    } else if let value = value as? MediaPublishResult {
       super.writeByte(139)
+      super.writeValue(value.toList())
+    } else if let value = value as? RecoveredPublishJournal {
+      super.writeByte(140)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -632,6 +677,71 @@ class SystemApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
 }
 
 
+/// Android photo picker; grants access only to explicitly selected images.
+///
+/// Generated protocol from Pigeon that represents a handler of messages from Flutter.
+protocol GalleryImportApi {
+  func pickImages(completion: @escaping (Result<[String], Error>) -> Void)
+  func copyImage(sourceUri: String, captureId: String, completion: @escaping (Result<GalleryImageCopy, Error>) -> Void)
+  func releaseImages(sourceUris: [String]) throws
+}
+
+/// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
+class GalleryImportApiSetup {
+  static var codec: FlutterStandardMessageCodec { SystemApiPigeonCodec.shared }
+  /// Sets up an instance of `GalleryImportApi` to handle messages through the `binaryMessenger`.
+  static func setUp(binaryMessenger: FlutterBinaryMessenger, api: GalleryImportApi?, messageChannelSuffix: String = "") {
+    let channelSuffix = messageChannelSuffix.count > 0 ? ".\(messageChannelSuffix)" : ""
+    let pickImagesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.pickImages\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      pickImagesChannel.setMessageHandler { _, reply in
+        api.pickImages { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      pickImagesChannel.setMessageHandler(nil)
+    }
+    let copyImageChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.copyImage\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      copyImageChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let sourceUriArg = args[0] as! String
+        let captureIdArg = args[1] as! String
+        api.copyImage(sourceUri: sourceUriArg, captureId: captureIdArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      copyImageChannel.setMessageHandler(nil)
+    }
+    let releaseImagesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.sitemark_system_api.GalleryImportApi.releaseImages\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      releaseImagesChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let sourceUrisArg = args[0] as! [String]
+        do {
+          try api.releaseImages(sourceUris: sourceUrisArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      releaseImagesChannel.setMessageHandler(nil)
+    }
+  }
+}
 /// Android-only explicit self-update flow. Never used by a background worker.
 ///
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.

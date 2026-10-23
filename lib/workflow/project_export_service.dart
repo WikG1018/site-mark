@@ -83,6 +83,13 @@ class ProjectExportService implements ProjectArchiveExporter {
           longitude: capture.longitude,
           accuracyMeters: capture.accuracyMeters,
           watermarkLocaleCode: capture.watermarkLocaleCode,
+          captureSource: capture.captureSource,
+          sourceCapturedAt: capture.sourceCapturedAt == null
+              ? null
+              : _formatLocalTimestamp(capture.sourceCapturedAt!),
+          watermarkTime: capture.watermarkTime == null
+              ? null
+              : _formatLocalTimestamp(capture.watermarkTime!),
         ),
       );
     }
@@ -190,6 +197,13 @@ class ProjectExportService implements ProjectArchiveExporter {
             longitude: capture.longitude,
             accuracyMeters: capture.accuracyMeters,
             watermarkLocaleCode: capture.watermarkLocaleCode,
+            captureSource: capture.captureSource,
+            sourceCapturedAt: capture.sourceCapturedAt == null
+                ? null
+                : _formatLocalTimestamp(capture.sourceCapturedAt!),
+            watermarkTime: capture.watermarkTime == null
+                ? null
+                : _formatLocalTimestamp(capture.watermarkTime!),
           ),
         );
       }
