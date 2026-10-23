@@ -49,7 +49,7 @@ SiteMark（工程印记）是面向工程现场记录的水印相机。应用负
 | Android 集成层 | Kotlin、Pigeon、FlutterPlugin、ActivityAware | 系统相机、ContentProvider、EXIF 检查、前台定位、MediaStore |
 | iOS 集成层 | Swift、Pigeon、BGTaskScheduler、PHPhotoLibrary | 系统相机桥、EXIF/GPS 检查、前台定位、相册发布与删除、存档、内存压力（见第 10 节） |
 | 图像核心层 | Rust、flutter_rust_bridge | EXIF 方向、SHA-256、全分辨率水印、CSV/JSON/ZIP 导出 |
-| 动效与材质层 | `lib/motion.dart`（AppMotion）、`lib/design_tokens.dart`（AppRadius/AppShadow）、`GlassSurface`、`PressScale` | 时长/曲线/弹簧、圆角/阴影/玻璃单配方、按压缩放与触感的统一 token（见下节） |
+| 动效与材质层 | `lib/motion.dart`（AppMotion）、`lib/design_tokens.dart`（AppRadius/AppShadow/AppDock）、`GlassSurface`、`PressScale` | 时长/曲线/弹簧、圆角/阴影/玻璃材质角色、按压缩放与触感的统一 token（见下节） |
 
 Flutter 与 Rust 之间只传文件路径和结构化参数，不把整张全分辨率图片作为 Dart
 字节数组跨 FFI 传递。Android 平台能力集中在仓库内插件
@@ -68,10 +68,13 @@ Flutter 与 Rust 之间只传文件路径和结构化参数，不把整张全分
   由原始指针事件驱动，越出滑动阈值即取消。触感契约：一次语义动作至多一次触感，
   导航表面与校验失败静音；减少动画下按压缩放完全静止，反馈由触感承载。
 - **材质 token**：`lib/design_tokens.dart` 提供六档圆角 `AppRadius`
-  （8/12/16/20/24/999）与单一悬浮阴影 `AppShadow.chrome`；玻璃统一
-  `GlassSurface` / `GlassChrome` 单配方（填充 0.58 / 模糊 σ20）。Android 实时模糊
-  仅限 Dock 等单点 chrome 显式开启（列表卡片禁用，避免逐帧 saveLayer 掉帧），
-  iOS 全量启用。
+  （8/12/16/20/24/999）与集中定义的悬浮阴影；普通组件保留 `AppShadow.chrome`
+  和标准玻璃配方（填充 0.58 / 模糊 σ20）。Dock 通过 `AppDock` 使用 64dp 高、
+  最大宽 360dp 的圆角悬浮外壳；选中项为无色玻璃透镜，不用淡绿色或主题色填充。
+  切换时指示器轻微拉伸，快速改选继承当前位置与形变。材质通过
+  `GlassSurfaceStyle.navigation/lens` 集中管理，不在页面内复制。
+  Android 实时模糊仅限 Dock 等单点 chrome 显式开启；外壳模糊一次，透镜不叠加模糊，
+  列表卡片禁用。减少动画时导航不形变，高对比度下使用不透明中性表面。
 - **页面转场**：Android 为自研滑移转场并冻结被覆盖的图片列表（保中端机帧率），
   iOS 走 SharedAxis / FadeThrough；减少动画时直接切换
   （`lib/navigation/route_transitions.dart`）。图片查看器带橡皮筋拖拽、释放惯性与

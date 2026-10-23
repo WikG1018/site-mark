@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:sitemark/design_tokens.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
@@ -13,7 +12,6 @@ import 'package:sitemark/navigation/root_navigation_dock.dart';
 import 'package:sitemark/navigation/scroll_chrome.dart';
 import 'package:sitemark/shared/ui/floating_dock_layout.dart';
 import 'package:sitemark/shared/ui/adaptive_floating_button.dart';
-import 'package:sitemark/shared/ui/glass_surface.dart';
 
 class RootNavigationScaffold extends ConsumerWidget {
   const RootNavigationScaffold({super.key, required this.navigationShell});
@@ -93,25 +91,15 @@ class RootNavigationScaffold extends ConsumerWidget {
               body: FloatingDockLayout(
                 animateDock: path != '/records',
                 dock: showRootNavigation && !hideForSelection
-                    ? GlassSurface(
+                    ? RootNavigationDock(
                         key: const Key('root-dock'),
-                        borderRadius: const BorderRadius.all(AppRadius.xl),
-                        // Defaults carry the one glass recipe; the dock adds
-                        // the Android blur opt-in and the one chrome depth.
-                        blurOnAndroid: true,
-                        boxShadow: AppShadow.chrome(context),
-                        child: SizedBox(
-                          height: floatingDockHeight,
-                          child: RootNavigationDock(
-                            selectedIndex: navigationShell.currentIndex,
-                            onDestinationSelected: (index) =>
-                                navigationShell.goBranch(
-                                  index,
-                                  initialLocation:
-                                      index == navigationShell.currentIndex,
-                                ),
-                          ),
-                        ),
+                        selectedIndex: navigationShell.currentIndex,
+                        onDestinationSelected: (index) =>
+                            navigationShell.goBranch(
+                              index,
+                              initialLocation:
+                                  index == navigationShell.currentIndex,
+                            ),
                       )
                     : null,
                 floatingActionButton:
