@@ -1,9 +1,9 @@
 # SiteMark 当前产品边界与总体架构
 
-> 状态：Android v1.0.33（独立水印时间、相册导入与无色玻璃 Dock）；HarmonyOS NEXT 原生 native-v1.0.14；iOS Flutter 复用（签名待补）
+> 状态：Android v1.0.34（Dock 手势与滚动收放修复、前台自动更新提醒）；HarmonyOS NEXT 原生 native-v1.0.14；iOS Flutter 复用（签名待补）
 > 本轮不改变鸿蒙界面及安装方式，iOS 仍无可分发安装包；安装包状态以对应 GitHub Release 为准。
 > 本文描述已落地的产品边界；阶段性计划保留在 `docs/superpowers/` 供追溯。
-> 当前源码追加（待下一版发布）：Dock 手指拖动、舒缓滚动收放、Android 前台自动更新提醒，见 D-028。稳定下载仍为 v1.0.33。
+> v1.0.34 的 Dock 手指拖动、舒缓滚动收放与 Android 前台自动更新提醒见 D-028；发布状态以 GitHub Release 为准。
 
 ## 1. 产品定位
 

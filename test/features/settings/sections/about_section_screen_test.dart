@@ -24,8 +24,8 @@ void main() {
     PackageInfo.setMockInitialValues(
       appName: 'SiteMark',
       packageName: 'io.github.wikg1018.sitemark',
-      version: '1.0.33',
-      buildNumber: '48',
+      version: '1.0.34',
+      buildNumber: '49',
       buildSignature: 'test',
     );
   });
@@ -100,7 +100,7 @@ void main() {
         find.text(locale.languageCode == 'en' ? 'Version' : '版本'),
         findsOneWidget,
       );
-      expect(find.text('1.0.33+48'), findsOneWidget);
+      expect(find.text('1.0.34+49'), findsOneWidget);
       final privacy = find.text(
         locale.languageCode == 'en' ? 'Privacy details' : '隐私说明',
       );
@@ -190,12 +190,12 @@ void main() {
     final lookup = _FakeReleaseLookup(
       outcome: ReleaseCheckOutcome(
         status: ReleaseCheckStatus.updateAvailable,
-        versionLabel: '1.0.34',
-        tag: 'v1.0.34',
+        versionLabel: '1.0.35',
+        tag: 'v1.0.35',
         source: ReleaseSource.official,
         downloads: [
           ReleaseDownload(
-            tag: 'v1.0.34',
+            tag: 'v1.0.35',
             variant: ReleaseApkVariant.universal,
             sizeBytes: 123,
             sha256: 'a' * 64,
@@ -208,12 +208,12 @@ void main() {
       store: store,
       lookup: lookup,
       modes: MemoryReleaseCheckModeStore(),
-      version: () async => '1.0.33',
+      version: () async => '1.0.34',
     );
     addTearDown(automatic.dispose);
     await automatic.checkOnForeground();
     await pumpScreen(tester, lookup: lookup, automatic: automatic);
-    expect(find.text('发现新版本 1.0.34'), findsWidgets);
+    expect(find.text('发现新版本 1.0.35'), findsWidgets);
     expect(find.text('下载更新'), findsOneWidget);
     expect(
       lookup.checks,
