@@ -3,6 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sitemark/motion.dart';
 
 void main() {
+  test('dock lens shape envelope settles exactly and stays bounded', () {
+    expect(AppMotion.dockLensDeformation(0), 0);
+    expect(AppMotion.dockLensDeformation(1), 0);
+    expect(AppMotion.dockLensDeformation(.5), 1);
+    for (var i = 0; i <= 100; i++) {
+      expect(AppMotion.dockLensDeformation(i / 100), inInclusiveRange(0, 1));
+    }
+  });
+
   test('spring curves hit their endpoints exactly', () {
     for (final curve in <Curve>[
       AppMotion.springSnapBack,

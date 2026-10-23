@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -28,6 +30,14 @@ class SpringCurve extends Curve {
 
 abstract final class AppMotion {
   static const Duration rootSwitch = Duration(milliseconds: 220);
+
+  /// A lens briefly stretches along its travel, then returns exactly to its
+  /// resting shape. This is a shape envelope, not a second position curve.
+  static double dockLensDeformation(double progress) {
+    if (progress <= 0 || progress >= 1) return 0;
+    return math.sin(math.pi * progress).clamp(0.0, 1.0);
+  }
+
   static const Duration pageTransition = Duration(milliseconds: 260);
   static const Duration short4 = Duration(milliseconds: 180);
   static const Duration scrollChrome = Duration(milliseconds: 220);

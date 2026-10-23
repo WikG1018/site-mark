@@ -1,7 +1,7 @@
 # SiteMark 当前产品边界与总体架构
 
-> 状态：Android v1.0.32（安全的应用内更新及界面/诊断修复）；HarmonyOS NEXT 原生 native-v1.0.14；iOS Flutter 复用（签名待补）
-> 待发布变更：Android 相册导入、独立水印显示时间（D-027）；不改变鸿蒙界面及安装方式，iOS 仍无可分发安装包。
+> 状态：Android v1.0.33（独立水印时间、相册导入与无色玻璃 Dock）；HarmonyOS NEXT 原生 native-v1.0.14；iOS Flutter 复用（签名待补）
+> 本轮不改变鸿蒙界面及安装方式，iOS 仍无可分发安装包；安装包状态以对应 GitHub Release 为准。
 > 本文描述已落地的产品边界；阶段性计划保留在 `docs/superpowers/` 供追溯。
 
 ## 1. 产品定位
@@ -20,7 +20,7 @@ SiteMark（工程印记）是面向工程现场记录的水印相机。应用负
 - 支持单项目、多项目备份与恢复；所选记录分享 ZIP 仅用于对外发送，不能恢复；
 - 提供本机诊断包，诊断记录不自动上传，且不包含工程内容、照片、位置或文件标识；
 - iOS 版适配进行中（Flutter 复用线，尚无签名发布，见第 10 节）；
-- 不支持多人协作、第三方云同步和自由拖拽式水印模板；下一版本新增 Android 系统选择器导入图片和独立的水印显示时间（D-027）。
+- 不支持多人协作、第三方云同步和自由拖拽式水印模板；自 v1.0.33 起支持 Android 系统选择器导入图片和独立的水印显示时间（D-027）。
 
 ## 2. 用户主流程
 
@@ -49,7 +49,7 @@ SiteMark（工程印记）是面向工程现场记录的水印相机。应用负
 | Android 集成层 | Kotlin、Pigeon、FlutterPlugin、ActivityAware | 系统相机、ContentProvider、EXIF 检查、前台定位、MediaStore |
 | iOS 集成层 | Swift、Pigeon、BGTaskScheduler、PHPhotoLibrary | 系统相机桥、EXIF/GPS 检查、前台定位、相册发布与删除、存档、内存压力（见第 10 节） |
 | 图像核心层 | Rust、flutter_rust_bridge | EXIF 方向、SHA-256、全分辨率水印、CSV/JSON/ZIP 导出 |
-| 动效与材质层 | `lib/motion.dart`（AppMotion）、`lib/design_tokens.dart`（AppRadius/AppShadow）、`GlassSurface`、`PressScale` | 时长/曲线/弹簧、圆角/阴影/玻璃单配方、按压缩放与触感的统一 token（见下节） |
+| 动效与材质层 | `lib/motion.dart`（AppMotion）、`lib/design_tokens.dart`（AppRadius/AppShadow/AppDock）、`GlassSurface`、`PressScale` | 时长/曲线/弹簧、圆角/阴影/玻璃材质角色、按压缩放与触感的统一 token（见下节） |
 
 Flutter 与 Rust 之间只传文件路径和结构化参数，不把整张全分辨率图片作为 Dart
 字节数组跨 FFI 传递。Android 平台能力集中在仓库内插件
@@ -68,10 +68,13 @@ Flutter 与 Rust 之间只传文件路径和结构化参数，不把整张全分
   由原始指针事件驱动，越出滑动阈值即取消。触感契约：一次语义动作至多一次触感，
   导航表面与校验失败静音；减少动画下按压缩放完全静止，反馈由触感承载。
 - **材质 token**：`lib/design_tokens.dart` 提供六档圆角 `AppRadius`
-  （8/12/16/20/24/999）与单一悬浮阴影 `AppShadow.chrome`；玻璃统一
-  `GlassSurface` / `GlassChrome` 单配方（填充 0.58 / 模糊 σ20）。Android 实时模糊
-  仅限 Dock 等单点 chrome 显式开启（列表卡片禁用，避免逐帧 saveLayer 掉帧），
-  iOS 全量启用。
+  （8/12/16/20/24/999）与集中定义的悬浮阴影；普通组件保留 `AppShadow.chrome`
+  和标准玻璃配方（填充 0.58 / 模糊 σ20）。Dock 通过 `AppDock` 使用 64dp 高、
+  最大宽 360dp 的圆角悬浮外壳；选中项为无色玻璃透镜，不用淡绿色或主题色填充。
+  切换时指示器轻微拉伸，快速改选继承当前位置与形变。材质通过
+  `GlassSurfaceStyle.navigation/lens` 集中管理，不在页面内复制。
+  Android 实时模糊仅限 Dock 等单点 chrome 显式开启；外壳模糊一次，透镜不叠加模糊，
+  列表卡片禁用。减少动画时导航不形变，高对比度下使用不透明中性表面。
 - **页面转场**：Android 为自研滑移转场并冻结被覆盖的图片列表（保中端机帧率），
   iOS 走 SharedAxis / FadeThrough；减少动画时直接切换
   （`lib/navigation/route_transitions.dart`）。图片查看器带橡皮筋拖拽、释放惯性与
@@ -86,7 +89,7 @@ Flutter 共享层，iOS 随 `lib/` 复用自动生效；鸿蒙原生端为独立
 
 ## 4. 数据模型
 
-当前开发版 Drift schema 为版本 17（已发布 v1.0.32 为 16），核心实体如下：
+当前 Drift schema 为版本 17（v1.0.32 为 16），核心实体如下：
 
 - `projects`：项目名称、说明、生命周期状态（`active`/`completed`/`archived`）、置顶标记以及项目级水印设置；
 - `captures`：现场字段、照片编号、时间、定位、路径、哈希、处理状态和原图清理状态；
@@ -137,7 +140,7 @@ U+0000 CHECK 和 `(project_id, name_key)` 唯一约束兜底，不负责文本�
 
 ## 5. 权限与安全边界
 
-下一版本 Android 相册导入采用系统 Photo Picker（不可用时由 AndroidX 回退到系统文档选择器）。
+自 v1.0.33 起，Android 相册导入采用系统 Photo Picker（不可用时由 AndroidX 回退到系统文档选择器）。
 一次最多 20 张 JPEG/PNG，每张最多 100 MB / 6400 万像素；不解码全分辨率数据到 Dart。
 选中后先事务化保存记录草稿与复制任务，再在原生 IO 线程流式复制、同步写盘、校验尺寸及格式，
 最后原子改名；进程中断可从任务恢复，已复制完整的私有原图不会被重写。部分图片不可读取时
@@ -164,7 +167,7 @@ Android 17 局域网 NAS 另声明并在设置页运行时申请 `ACCESS_LOCAL_N
 
 ## 6. 数据保留边界
 
-下一版本中，包含相册来源或手动水印时间的项目备份使用 schema v6，保留来源、原始 EXIF 时间
+自 v1.0.33 起，包含相册来源或手动水印时间的项目备份使用 schema v6，保留来源、原始 EXIF 时间
 与显示时间；不含新字段的项目仍导出 v5。读取兼容 v1–v6，多项目外层保持 v1。当前鸿蒙恢复层
 明确拒绝大于 v5 的项目包，避免丢掉新字段；本次不扩展鸿蒙 RDB 或图库功能。清理原图后仍不能
 重新生成水印，时间编辑不会绕开原图存在性及哈希校验。

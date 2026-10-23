@@ -1,6 +1,6 @@
 # SiteMark 动效 / 材质规范（Phase E）
 
-> 版本：2026-09-23（2026-09-26 修订适用范围）。适用范围：Android / iOS / 鸿蒙——鸿蒙原生已按本文对齐（springMotion 的 response 为 ArkUI 换算值，手感验证状态见 `ohos-native/docs/deltas.md`）；Flutter 线以本文为准。
+> 版本：2026-09-23（2026-10-23 追加 Flutter Dock 无色玻璃透镜）。导航新样式本批只在 Flutter 实现，鸿蒙不自动同步；其他跨平台既有参数仍按原规范。
 > 对标：小米澎湃OS「生命感美学」。**重要前提**：小米未公开第三方 App 的动效数值规范；本文所有数值均为**工程选择**（★），不是小米官方要求。可直接引用的一手依据只有 MiSans 授权与 MiHaptic 触感体系（★★★）。
 > 跨项目调研原文（可信度分级、许可细节、MiHaptic 映射表）：交接机桌面 `小米澎湃OS设计规范调研-2026-09.md`（不在仓库内）。
 
@@ -17,8 +17,8 @@
 「生命感美学」六要点在本应用的落点：
 
 1. **全局圆角** → `AppRadius` 六档（见 §4）。
-2. **模糊混色** → `GlassChrome` 单配方玻璃（见 §5）。
-3. **柔和阴影** → `AppShadow.chrome` 单一悬浮阴影（见 §4）。
+2. **模糊混色** → `GlassChrome` 集中定义材质角色（见 §5）。
+3. **柔和阴影** → `AppShadow` 集中定义悬浮与透镜深度（见 §4）。
 4. **环境色感知** → `DynamicColorBuilder` + `ColorScheme.fromSeed`（既有）。
 5. **灵动光效** → 玻璃顶部高光 + overlay 微光泽（`GlassSurface.enableOverlay`）。
 6. **动效「舞台艺术」** → 三档弹簧曲线 + 统一弹窗/面板转场（见 §3）。
@@ -86,7 +86,7 @@ Flutter iOS 默认弹簧族（mass 0.5 / stiffness 100–140），三档阻尼�
 
 规则：表面尺寸与角色选档，禁止散落魔数。相邻档差 2px 光晕，保持一个形状家族。
 
-### 4.2 阴影 `AppShadow.chrome`（单配方）
+### 4.2 普通悬浮阴影 `AppShadow.chrome`
 
 | 模式 | color | blur | offset |
 | --- | --- | --- | --- |
@@ -95,9 +95,16 @@ Flutter iOS 默认弹簧族（mass 0.5 / stiffness 100–140），三档阻尼�
 
 只有悬浮 chrome 带阴影；卡片内容保持扁平。
 
+### 4.3 Dock 外形（2026-10-23，v1.0.33）
+
+`AppDock`：外壳高 64dp，最大宽 360dp，居中悬浮；外壳与指示器均使用 `AppRadius.pill`。
+图标和文字作为一组居中；每个目标区域高 54dp。保留三个导航入口及原有页面滑移，不改返回逻辑。
+`AppShadow.navigation` 是外壳柔和悬浮影，`glassLens` 只给透明镜片细小接触边，不嵌套卡片级阴影。
+
 ## 5. 玻璃材质（★，`lib/shared/ui/glass_surface.dart`）
 
-**唯一配方 `GlassChrome`**：opacity **0.58** / blurSigma **20**。调材质改配方，禁止 fork。
+**集中配方 `GlassChrome`**：标准材质 opacity **0.58** / blurSigma **20** 保持不变。
+页面不得复制配方；Dock 通过 `GlassSurfaceStyle.navigation/lens` 使用下述明确角色，其余组件仍为 `standard`。
 
 | 层 | 说明 |
 | --- | --- |
@@ -110,6 +117,16 @@ Flutter iOS 默认弹簧族（mass 0.5 / stiffness 100–140），三档阻尼�
 **Android 性能红线**：`BackdropFilter` 是每帧 saveLayer。列表卡片禁用实时 blur（`blurOnAndroid: false` 默认）；仅常驻 chrome（dock 等）可 `blurOnAndroid: true`。v1.0.20 掉帧教训。
 
 **reduce-motion**：关 live blur，保留同色填充与描边；调用方不得依赖 blur 做内容对比度。
+
+### 5.1 无色玻璃灵动指示器（2026-10-23，v1.0.33）
+
+- 用户明确要求无色玻璃，不使用淡绿色或主题主色填充指示器。
+- 外壳中性冷白/炭灰，浅色填充 0.76、深色 0.84；只有外壳使用一次 σ20 背景模糊。
+- 透镜为无色半透明材质，以渐变边缘高光、微弱接触影和移动反光产生玻璃观感；不增加第二次模糊或 overlay 混合层。
+- 位置与页面切换使用同一 `rootSwitch` / `emphasized`；形变包络由 `AppMotion.dockLensDeformation` 提供，移动时横向拉伸、纵向轻压，结束恢复精确静态尺寸。
+- 快速反向切换同时继承当前位置与形变；按压当前项轻微压扁，取消后复原。不得新增拖动导航或改变页面状态生命周期。
+- 减少动画：立即定位、无形变、关闭模糊；高对比度：关闭模糊，使用不透明中性表面。文字对比度覆盖黑/白背景和深浅主题。
+- 此处是 Flutter 自绘玻璃观感，不宣称调用了 iOS 系统 Liquid Glass 或实现物理折射；真机流畅度需单独验证。
 
 ## 6. 按压与触感（★★★ MiHaptic 映射，★ 落地）
 

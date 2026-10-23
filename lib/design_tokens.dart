@@ -29,12 +29,39 @@ abstract final class AppRadius {
 
 /// The app's floating-depth vocabulary.
 ///
-/// One shadow recipe for everything that hovers over content. Per-surface
-/// shadow tuning reads as different materials under the same glass; a single
-/// soft drop keeps every capsule in one depth plane (and keeps dark mode
-/// honest — its slightly stronger, wider shadow is what sells elevation on
-/// a dark backdrop).
+/// Central depth roles rather than per-page shadow copies. Ordinary chrome
+/// keeps its established soft drop; navigation and its clear lens have
+/// separate ambient/contact edges appropriate to their nested geometry.
 abstract final class AppShadow {
+  /// Wide ambient lift and a quiet contact edge for the navigation pill.
+  static List<BoxShadow> navigation(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return [
+      BoxShadow(
+        color: theme.colorScheme.shadow.withValues(alpha: dark ? .24 : .09),
+        blurRadius: 20,
+        offset: const Offset(0, 6),
+      ),
+      BoxShadow(
+        color: theme.colorScheme.shadow.withValues(alpha: dark ? .12 : .04),
+        blurRadius: 4,
+        offset: const Offset(0, 1),
+      ),
+    ];
+  }
+
+  /// The transparent lens needs a small refraction edge, not card elevation.
+  static List<BoxShadow> glassLens(BuildContext context) => [
+    BoxShadow(
+      color: Colors.black.withValues(
+        alpha: Theme.of(context).brightness == Brightness.dark ? .16 : .075,
+      ),
+      blurRadius: 5,
+      offset: const Offset(0, 1),
+    ),
+  ];
+
   /// Soft drop shadow for floating chrome.
   static List<BoxShadow> chrome(BuildContext context) {
     final theme = Theme.of(context);
@@ -47,4 +74,16 @@ abstract final class AppShadow {
       ),
     ];
   }
+}
+
+abstract final class AppDock {
+  static const double height = 64;
+  static const double maxWidth = 360;
+  static const double outerInset = 4;
+  static const double bottomInset = 4;
+  static const double contentInset = 5;
+  static const double lensInset = 2;
+  static const double iconSize = 22;
+  static const double labelSize = 12;
+  static const BorderRadius radius = BorderRadius.all(AppRadius.pill);
 }
