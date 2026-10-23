@@ -110,7 +110,7 @@ void main() {
           builder: (context) {
             expect(
               scrollChromeAnimationOf(context),
-              const Duration(milliseconds: 220),
+              const Duration(milliseconds: 360),
             );
             expect(
               scrollChromeAnimationOf(context).inMilliseconds,
@@ -137,6 +137,28 @@ void main() {
         ),
       ),
     );
+  });
+
+  testWidgets('small independent drags never accumulate into a hide', (
+    tester,
+  ) async {
+    await pumpProbe(tester);
+    for (var i = 0; i < 8; i++) {
+      await tester.drag(
+        find.byKey(const Key('probe-list')),
+        const Offset(0, -48),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('shown'), findsOneWidget);
+    }
+  });
+
+  testWidgets('programmatic scrolling does not hide chrome', (tester) async {
+    await pumpProbe(tester);
+    final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+    scrollable.position.jumpTo(500);
+    await tester.pumpAndSettle();
+    expect(find.text('shown'), findsOneWidget);
   });
 }
 

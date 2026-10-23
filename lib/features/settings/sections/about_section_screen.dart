@@ -36,12 +36,26 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
   bool _metadataAvailable = false;
   bool _modeLoaded = false;
   bool _modeSaving = false;
+  bool _useAutomaticOutcome = true;
+
+  ReleaseCheckOutcome? get _effectiveOutcome =>
+      _outcome ??
+      (_useAutomaticOutcome &&
+              !_checking &&
+              _metadataAvailable &&
+              _modeLoaded &&
+              defaultTargetPlatform == TargetPlatform.android
+          ? ref.read(automaticUpdateControllerProvider).outcome
+          : null);
 
   @override
   void initState() {
     super.initState();
     _loadPackageInfo();
     _loadMode();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(ref.read(automaticUpdateControllerProvider).load());
+    }
   }
 
   Future<void> _loadPackageInfo() async {
@@ -89,6 +103,7 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
     setState(() {
       _mode = mode;
       _outcome = null;
+      _useAutomaticOutcome = false;
       _modeSaving = true;
     });
     try {
@@ -120,6 +135,7 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
     setState(() {
       _checking = true;
       _outcome = null;
+      _useAutomaticOutcome = false;
     });
     try {
       final outcome = await ref
@@ -140,7 +156,7 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
   }
 
   Future<void> _openReleasePage(BuildContext context) async {
-    final outcome = _outcome;
+    final outcome = _effectiveOutcome;
     if (outcome == null || _opening) return;
     setState(() => _opening = true);
     try {
@@ -182,7 +198,7 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
 
   String? _statusText(AppStrings strings) {
     if (_checking) return strings.checkingForUpdates;
-    final outcome = _outcome;
+    final outcome = _effectiveOutcome;
     if (outcome == null) return null;
     return switch (outcome.status) {
       ReleaseCheckStatus.upToDate => strings.upToDate,
@@ -201,177 +217,207 @@ class _AboutSectionScreenState extends ConsumerState<AboutSectionScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final status = _statusText(strings);
     final update = ref.watch(appUpdateControllerProvider);
     final android = defaultTargetPlatform == TargetPlatform.android;
+    final automatic = android
+        ? ref.watch(automaticUpdateControllerProvider)
+        : null;
     return ListenableBuilder(
-      listenable: update,
-      builder: (context, _) => SettingsSectionScaffold(
-        title: strings.about,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: Text(strings.version),
-              trailing: Text('$_version+$_buildNumber'),
-            ),
-            ListTile(
-              key: const Key('check-for-updates'),
-              leading: const Icon(Icons.system_update_alt_outlined),
-              title: Text(strings.checkForUpdates),
-              subtitle: status == null ? null : Text(status),
-              trailing: _checking
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh),
-              onTap:
-                  _checking ||
-                      _opening ||
-                      !_metadataLoaded ||
-                      !_modeLoaded ||
-                      _modeSaving ||
-                      update.busy
-                  ? null
-                  : () => unawaited(_onCheckTap(context)),
-            ),
-            if (android &&
-                (_outcome?.hasUpdate == true || update.download != null)) ...[
-              AppUpdatePanel(
-                controller: update,
-                mode: _mode,
-                available: _outcome?.downloadForBuild(_buildNumber),
+      listenable: Listenable.merge([update, ?automatic]),
+      builder: (context, _) {
+        final status = _statusText(strings);
+        final outcome = _effectiveOutcome;
+        return SettingsSectionScaffold(
+          title: strings.about,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: Text(strings.version),
+                trailing: Text('$_version+$_buildNumber'),
               ),
-              if (_outcome?.hasUpdate == true &&
-                  _outcome?.downloadForBuild(_buildNumber) == null &&
-                  update.download == null)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(strings.updatePackageUnavailable),
-                ),
-            ],
-            if (_outcome?.hasUpdate == true)
-              Padding(
-                padding: const EdgeInsets.only(left: 16),
-                child: TextButton(
-                  key: const Key('open-release-page'),
-                  onPressed: _opening
+              if (automatic != null)
+                SwitchListTile.adaptive(
+                  key: const Key('automatic-update-switch'),
+                  title: Text(strings.automaticUpdateChecks),
+                  subtitle: Text(strings.automaticUpdateChecksHint),
+                  value: automatic.enabled,
+                  onChanged: !automatic.loaded || automatic.saving
                       ? null
-                      : () => unawaited(_openReleasePage(context)),
-                  child: Text(strings.openReleasePage),
+                      : (value) async {
+                          final saved = await automatic.setEnabled(value);
+                          if (!saved && context.mounted) {
+                            showAppToast(
+                              context,
+                              strings.updatePreferenceSaveFailed,
+                            );
+                          }
+                          if (saved && value) {
+                            unawaited(automatic.checkOnForeground());
+                          }
+                        },
+                ),
+              ListTile(
+                key: const Key('check-for-updates'),
+                leading: const Icon(Icons.system_update_alt_outlined),
+                title: Text(strings.checkForUpdates),
+                subtitle: status == null ? null : Text(status),
+                trailing: _checking
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+                onTap:
+                    _checking ||
+                        _opening ||
+                        !_metadataLoaded ||
+                        !_modeLoaded ||
+                        _modeSaving ||
+                        update.busy
+                    ? null
+                    : () => unawaited(_onCheckTap(context)),
+              ),
+              if (android &&
+                  (outcome?.hasUpdate == true || update.download != null)) ...[
+                AppUpdatePanel(
+                  controller: update,
+                  mode: _mode,
+                  available: outcome?.downloadForBuild(_buildNumber),
+                ),
+                if (outcome?.hasUpdate == true &&
+                    outcome?.downloadForBuild(_buildNumber) == null &&
+                    update.download == null)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(strings.updatePackageUnavailable),
+                  ),
+              ],
+              if (outcome?.hasUpdate == true)
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: TextButton(
+                    key: const Key('open-release-page'),
+                    onPressed: _opening
+                        ? null
+                        : () => unawaited(_openReleasePage(context)),
+                    child: Text(strings.openReleasePage),
+                  ),
+                ),
+              if (_showIosNote)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    strings.iosPackageNote,
+                    key: const Key('ios-release-note'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.updateSource,
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    IgnorePointer(
+                      ignoring:
+                          _checking ||
+                          !_modeLoaded ||
+                          _modeSaving ||
+                          update.busy,
+                      child: AdaptiveSegmentedButton<ReleaseCheckMode>(
+                        key: const Key('release-check-mode'),
+                        style: segmentTapTargetStyle,
+                        segments: [
+                          ButtonSegment(
+                            value: ReleaseCheckMode.auto,
+                            label: Text(strings.releaseCheckAutomatic),
+                          ),
+                          ButtonSegment(
+                            value: ReleaseCheckMode.official,
+                            label: Text(strings.releaseCheckOfficialOnly),
+                          ),
+                          ButtonSegment(
+                            value: ReleaseCheckMode.mirror,
+                            label: Text(strings.releaseCheckMirrorFirst),
+                          ),
+                        ],
+                        selected: {_mode},
+                        onSelectionChanged: (selection) {
+                          unawaited(_setMode(selection.single));
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            if (_showIosNote)
+              ListTile(
+                leading: const Icon(Icons.shield_outlined),
+                title: Text(strings.privacyStatements),
+              ),
+              ExpansionTile(
+                title: Text(strings.privacyDetails),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                children: [
+                  Text(
+                    strings.privacySummary,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (android) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      strings.updatePrivacyNotice,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+              ListTile(
+                key: const Key('github-repository-link'),
+                leading: const Icon(Icons.source_outlined),
+                title: Text(strings.repository),
+                subtitle: const Text(siteMarkRepositoryUrl),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => _openRepository(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: Text(strings.license),
+                subtitle: Text(strings.licenseValue),
+              ),
+              ListTile(
+                key: const Key('font-credit'),
+                leading: const Icon(Icons.text_fields_outlined),
+                title: Text(strings.fontCredit),
+                subtitle: Text(strings.fontCreditValue),
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
-                  strings.iosPackageNote,
-                  key: const Key('ios-release-note'),
+                  strings.fontCreditDetail,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    strings.updateSource,
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  IgnorePointer(
-                    ignoring:
-                        _checking || !_modeLoaded || _modeSaving || update.busy,
-                    child: AdaptiveSegmentedButton<ReleaseCheckMode>(
-                      key: const Key('release-check-mode'),
-                      style: segmentTapTargetStyle,
-                      segments: [
-                        ButtonSegment(
-                          value: ReleaseCheckMode.auto,
-                          label: Text(strings.releaseCheckAutomatic),
-                        ),
-                        ButtonSegment(
-                          value: ReleaseCheckMode.official,
-                          label: Text(strings.releaseCheckOfficialOnly),
-                        ),
-                        ButtonSegment(
-                          value: ReleaseCheckMode.mirror,
-                          label: Text(strings.releaseCheckMirrorFirst),
-                        ),
-                      ],
-                      selected: {_mode},
-                      onSelectionChanged: (selection) {
-                        unawaited(_setMode(selection.single));
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.shield_outlined),
-              title: Text(strings.privacyStatements),
-            ),
-            ExpansionTile(
-              title: Text(strings.privacyDetails),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [
-                Text(
-                  strings.privacySummary,
-                  style: Theme.of(context).textTheme.bodySmall,
+              const SizedBox(height: 8),
+              FilledButton.tonalIcon(
+                onPressed: () => showLicensePage(
+                  context: context,
+                  applicationName: strings.appName,
+                  applicationVersion: '$_version+$_buildNumber',
                 ),
-                if (android) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    strings.updatePrivacyNotice,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ],
-            ),
-            ListTile(
-              key: const Key('github-repository-link'),
-              leading: const Icon(Icons.source_outlined),
-              title: Text(strings.repository),
-              subtitle: const Text(siteMarkRepositoryUrl),
-              trailing: const Icon(Icons.open_in_new),
-              onTap: () => _openRepository(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.description_outlined),
-              title: Text(strings.license),
-              subtitle: Text(strings.licenseValue),
-            ),
-            ListTile(
-              key: const Key('font-credit'),
-              leading: const Icon(Icons.text_fields_outlined),
-              title: Text(strings.fontCredit),
-              subtitle: Text(strings.fontCreditValue),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                strings.fontCreditDetail,
-                style: Theme.of(context).textTheme.bodySmall,
+                icon: const Icon(Icons.article_outlined),
+                label: Text(strings.licenses),
               ),
-            ),
-            const SizedBox(height: 8),
-            FilledButton.tonalIcon(
-              onPressed: () => showLicensePage(
-                context: context,
-                applicationName: strings.appName,
-                applicationVersion: '$_version+$_buildNumber',
-              ),
-              icon: const Icon(Icons.article_outlined),
-              label: Text(strings.licenses),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -7,10 +7,13 @@ void main() {
       expect(ScrollChromePolicy().visible, isTrue);
     });
 
-    test('uses a 16px hide/show threshold so light flicks stay put', () {
-      expect(ScrollChromePolicy.hideThreshold, 16);
-      expect(ScrollChromePolicy.showThreshold, 16);
-    });
+    test(
+      'requires deliberate travel and makes revealing easier than hiding',
+      () {
+        expect(ScrollChromePolicy.hideThreshold, 72);
+        expect(ScrollChromePolicy.showThreshold, 36);
+      },
+    );
 
     test('ignores jitter smaller than the hide threshold', () {
       final policy = ScrollChromePolicy();
@@ -44,7 +47,7 @@ void main() {
 
     test('shows again after an upward delta past the show threshold', () {
       final policy = ScrollChromePolicy();
-      policy.apply(delta: 40, offset: 200);
+      policy.apply(delta: 80, offset: 200);
 
       expect(
         policy.apply(delta: -ScrollChromePolicy.showThreshold, offset: 160),

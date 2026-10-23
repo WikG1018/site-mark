@@ -14,6 +14,7 @@ import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/github_release_client.dart';
 import 'package:sitemark/platform/release_check_mode_store.dart';
+import 'package:sitemark/platform/automatic_update_controller.dart';
 
 void main() {
   late AppDatabase database;
@@ -38,6 +39,7 @@ void main() {
     ExternalLinkService? externalLinks,
     ReleaseLookup? lookup,
     ReleaseCheckModeStore? modeStore,
+    AutomaticUpdateController? automatic,
     Locale locale = const Locale('zh'),
     double textScale = 1,
   }) async {
@@ -50,6 +52,8 @@ void main() {
             modeStore ?? MemoryReleaseCheckModeStore(),
           ),
           if (lookup != null) releaseLookupProvider.overrideWithValue(lookup),
+          if (automatic != null)
+            automaticUpdateControllerProvider.overrideWithValue(automatic),
           if (externalLinks != null)
             externalLinkServiceProvider.overrideWithValue(externalLinks),
         ],
@@ -116,27 +120,7 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(
-        find.text(
-          locale.languageCode == 'en'
-              ? 'Offline by default. Network is used only when you open it: NAS '
-                    'sync (WebDAV, SFTP or SMB) connects only to the server you '
-                    'configure. Check for updates on the About page reads the '
-                    'public GitHub release version first by default; in '
-                    'Automatic mode it tries a fixed public mirror only if '
-                    'GitHub cannot be reached, and you can switch to Official '
-                    'only or Mirror first. It does not upload photos or an '
-                    'account. GitHub links open in an external browser. '
-                    'Foreground location is used only when requested, and a '
-                    'diagnostic bundle reaches the system share sheet only '
-                    'after confirmation.'
-              : '默认离线。网络只在你主动打开时使用：NAS 同步（WebDAV/SFTP/SMB）只连接你配置的服务器；'
-                    '关于页的检查更新默认先读取 GitHub 公开版本号，自动模式下连不上才试固定的公开镜像，'
-                    '也可以改成仅官方或优先镜像，不上传照片或账号。GitHub 链接交给外部浏览器。'
-                    '前台定位仅在用户主动请求时使用，诊断包仅在用户确认后交给系统分享面板。',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text(AppStrings(locale).privacySummary), findsOneWidget);
       expect(find.textContaining('无网络权限'), findsNothing);
       expect(find.textContaining('不申请网络权限'), findsNothing);
       expect(find.textContaining('No network permission'), findsNothing);
@@ -198,6 +182,49 @@ void main() {
     expect(find.text('正在检查…'), findsNothing);
     expect(find.text('已是最新版本'), findsNothing);
     expect(find.text('无法检查更新。请检查网络后再试。'), findsNothing);
+  });
+
+  testWidgets('automatic result opens directly into download, with opt-out', (
+    tester,
+  ) async {
+    final lookup = _FakeReleaseLookup(
+      outcome: ReleaseCheckOutcome(
+        status: ReleaseCheckStatus.updateAvailable,
+        versionLabel: '1.0.34',
+        tag: 'v1.0.34',
+        source: ReleaseSource.official,
+        downloads: [
+          ReleaseDownload(
+            tag: 'v1.0.34',
+            variant: ReleaseApkVariant.universal,
+            sizeBytes: 123,
+            sha256: 'a' * 64,
+          ),
+        ],
+      ),
+    );
+    final store = _AutomaticStore();
+    final automatic = AutomaticUpdateController(
+      store: store,
+      lookup: lookup,
+      modes: MemoryReleaseCheckModeStore(),
+      version: () async => '1.0.33',
+    );
+    addTearDown(automatic.dispose);
+    await automatic.checkOnForeground();
+    await pumpScreen(tester, lookup: lookup, automatic: automatic);
+    expect(find.text('发现新版本 1.0.34'), findsWidgets);
+    expect(find.text('下载更新'), findsOneWidget);
+    expect(
+      lookup.checks,
+      1,
+      reason: 'No second request is needed to download.',
+    );
+    await tester.tap(find.byKey(const Key('automatic-update-switch')));
+    await tester.pumpAndSettle();
+    expect(store.state.enabled, isFalse);
+    expect(lookup.checks, 1);
+    expect(find.text('下载更新'), findsOneWidget);
   });
 
   testWidgets('check reports up to date without an open button', (
@@ -306,6 +333,16 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+}
+
+class _AutomaticStore implements AutomaticUpdateStore {
+  AutomaticUpdateState state = const AutomaticUpdateState();
+  @override
+  Future<AutomaticUpdateState> read() async => state;
+  @override
+  Future<void> write(AutomaticUpdateState value) async {
+    state = value;
+  }
 }
 
 class _RecordingExternalLinkService implements ExternalLinkService {

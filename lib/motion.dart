@@ -30,6 +30,8 @@ class SpringCurve extends Curve {
 
 abstract final class AppMotion {
   static const Duration rootSwitch = Duration(milliseconds: 220);
+  static const Duration dockTravel = Duration(milliseconds: 360);
+  static const Cubic dockGlide = Cubic(.22, .1, .3, 1);
 
   /// A lens briefly stretches along its travel, then returns exactly to its
   /// resting shape. This is a shape envelope, not a second position curve.
@@ -40,7 +42,10 @@ abstract final class AppMotion {
 
   static const Duration pageTransition = Duration(milliseconds: 260);
   static const Duration short4 = Duration(milliseconds: 180);
-  static const Duration scrollChrome = Duration(milliseconds: 220);
+  static const Duration scrollChrome = Duration(milliseconds: 360);
+  // Unlike the normalized spring, this keeps motion visible across the
+  // whole interval instead of spending most of it already at the endpoint.
+  static const Cubic scrollChromeGlide = Cubic(.4, 0, .2, 1);
 
   /// Extra off-viewport pixels kept laid out for photo-heavy scrollables.
   ///

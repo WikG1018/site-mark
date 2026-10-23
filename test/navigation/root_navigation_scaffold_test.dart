@@ -15,6 +15,7 @@ import 'package:sitemark/features/settings/global_settings_screen.dart';
 import 'package:sitemark/l10n/app_strings.dart';
 import 'package:sitemark/motion.dart';
 import 'package:sitemark/navigation/root_chrome_controller.dart';
+import 'package:sitemark/navigation/root_navigation_dock.dart';
 import 'package:sitemark/navigation/root_navigation_scaffold.dart';
 
 void main() {
@@ -71,6 +72,36 @@ void main() {
       await tester.runAsync(database.close);
     }
   }
+
+  testWidgets('real shell preserves the moving lens when the FAB changes', (
+    tester,
+  ) async {
+    await runWithRouter(tester, (_) async {
+      final dock = find.byType(RootNavigationDock);
+      final lens = find.byKey(const Key('root-dock-glass-indicator'));
+      final state = tester.state(dock);
+      for (final name in ['records', 'settings', 'projects']) {
+        final before = tester.getCenter(lens).dx;
+        final button = find.byKey(Key('root-destination-$name'));
+        final target = tester.getCenter(button).dx;
+        await tester.tap(button);
+        await tester.pump();
+        expect(tester.state(dock), same(state));
+        expect(tester.getCenter(lens).dx, closeTo(before, .1));
+        await tester.pump(const Duration(milliseconds: 100));
+        final during = tester.getCenter(lens).dx;
+        expect(
+          during,
+          inExclusiveRange(
+            before < target ? before : target,
+            before > target ? before : target,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.getCenter(lens).dx, closeTo(target, .1));
+      }
+    });
+  });
 
   Widget buildBranchContainer(
     int currentIndex, {

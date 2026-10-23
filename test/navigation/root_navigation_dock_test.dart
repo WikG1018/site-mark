@@ -132,6 +132,73 @@ void main() {
     );
   });
 
+  for (final direction in TextDirection.values) {
+    testWidgets(
+      'lens follows horizontal drag before committing in $direction',
+      (tester) async {
+        var selected = 0;
+        var selections = 0;
+        void select(int value) {
+          selected = value;
+          selections++;
+        }
+
+        await tester.pumpWidget(
+          buildDock(selected, select, direction: direction),
+        );
+        final lens = find.byKey(const Key('root-dock-glass-indicator'));
+        final start = tester.getCenter(lens);
+        final target = tester.getCenter(
+          find.byKey(const Key('root-destination-records')),
+        );
+        final gesture = await tester.startGesture(start);
+        await gesture.moveBy(Offset((target.dx - start.dx) * .3, 0));
+        await tester.pump();
+        await gesture.moveTo(Offset(target.dx, start.dy));
+        await tester.pump();
+        expect(selections, 0, reason: 'Navigation waits for finger release.');
+        expect((tester.getCenter(lens).dx - start.dx).abs(), greaterThan(50));
+        await gesture.up();
+        await tester.pumpWidget(
+          buildDock(selected, select, direction: direction),
+        );
+        await tester.pumpAndSettle();
+        expect(selected, 1);
+        expect(selections, 1);
+        expect(tester.getCenter(lens).dx, closeTo(target.dx, .1));
+      },
+    );
+  }
+
+  testWidgets('cancelled drag returns to selected tab without navigation', (
+    tester,
+  ) async {
+    final selections = <int>[];
+    await tester.pumpWidget(buildDock(0, selections.add));
+    final lens = find.byKey(const Key('root-dock-glass-indicator'));
+    final start = tester.getCenter(lens);
+    final gesture = await tester.startGesture(start);
+    await gesture.moveBy(const Offset(30, 0));
+    await gesture.moveBy(const Offset(110, 0));
+    await tester.pump();
+    expect(tester.getCenter(lens).dx, greaterThan(start.dx));
+    await gesture.cancel();
+    await tester.pumpAndSettle();
+    expect(selections, isEmpty);
+    expect(tester.getCenter(lens).dx, closeTo(start.dx, .1));
+  });
+
+  testWidgets('vertical gesture on dock does not change tabs', (tester) async {
+    final selections = <int>[];
+    await tester.pumpWidget(buildDock(0, selections.add));
+    await tester.drag(
+      find.byKey(const Key('root-destination-projects')),
+      const Offset(0, -80),
+    );
+    await tester.pumpAndSettle();
+    expect(selections, isEmpty);
+  });
+
   for (final locale in [const Locale('zh'), const Locale('en')]) {
     testWidgets('narrow $locale dock keeps full labels inside the lens', (
       tester,

@@ -125,7 +125,7 @@ class AdaptivePageScaffold extends StatelessWidget {
         ),
         child: AnimatedSlide(
           duration: scrollChromeAnimationOf(context),
-          curve: AppMotion.springSnapBack,
+          curve: AppMotion.scrollChromeGlide,
           offset: visible ? Offset.zero : const Offset(0, -1),
           child: IgnorePointer(
             ignoring: !visible,

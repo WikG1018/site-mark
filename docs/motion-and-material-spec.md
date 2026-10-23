@@ -33,6 +33,8 @@
 | `pageTransition` / `medium2` | 260ms | 路由转场、面板进出 |
 | `medium4` | 320ms | 缩放动画、列表 entrance |
 | `long2` | 500ms | 惯性收尾、大位移 |
+| `dockTravel` | 360ms | 指示器点击滑移、拖动松手归位 |
+| `scrollChrome` | 360ms | 顶栏与底栏同步收放 |
 
 ### 3.2 曲线与弹簧
 
@@ -46,7 +48,7 @@ Flutter iOS 默认弹簧族（mass 0.5 / stiffness 100–140），三档阻尼�
 
 派生 cubic（与 M3 对齐，用于非弹簧场景）：`emphasized` / `emphasizedDecelerate` / `emphasizedAccelerate` / `standard` 三件套。
 
-**端点精确**：`SpringCurve` 对采样值做端点归一，0/1 精确落在目标上——凡「必须停在终值」的驱动（可见性、scale 目标、dismiss 归位）一律走弹簧曲线，不用裸 cubic。
+**端点精确**：`SpringCurve` 对采样值做端点归一，0/1 精确落在目标上。Dock 使用 `dockGlide`，滚动工具栏使用 `scrollChromeGlide`：两者采用端点精确的 cubic，让位移贯穿可感知的时间段，避免归一弹簧过早贴近终点造成突收。其他既有弹簧不变。
 
 ### 3.3 统一弹窗 / 面板（`AppMotion.dialogStyleOf` / `sheetStyleOf`）
 
@@ -57,7 +59,7 @@ Flutter iOS 默认弹簧族（mass 0.5 / stiffness 100–140），三档阻尼�
 ### 3.4 禁止事项
 
 - 业务代码不得写死 `Duration` / `Curves.xxx`；一律取 `AppMotion.*`。
-- 手势松手（回弹 / 惯性）走 `SpringSimulation` / 物理采样，禁止 tween 硬凑。
+- 图片手势松手（回弹 / 惯性）走 `SpringSimulation` / 物理采样；Dock 离散入口归位按独立的 `dockGlide` 执行，不投射快速甩动以免误切页。
 - reduce-motion 下：按压缩放完全静止（跳变闪烁比动画更刺激），转场塌缩为无动画，触感承载反馈。
 
 ### 3.5 场景落点（Phase A–D 已迁移）
@@ -123,10 +125,14 @@ Flutter iOS 默认弹簧族（mass 0.5 / stiffness 100–140），三档阻尼�
 - 用户明确要求无色玻璃，不使用淡绿色或主题主色填充指示器。
 - 外壳中性冷白/炭灰，浅色填充 0.76、深色 0.84；只有外壳使用一次 σ20 背景模糊。
 - 透镜为无色半透明材质，以渐变边缘高光、微弱接触影和移动反光产生玻璃观感；不增加第二次模糊或 overlay 混合层。
-- 位置与页面切换使用同一 `rootSwitch` / `emphasized`；形变包络由 `AppMotion.dockLensDeformation` 提供，移动时横向拉伸、纵向轻压，结束恢复精确静态尺寸。
-- 快速反向切换同时继承当前位置与形变；按压当前项轻微压扁，取消后复原。不得新增拖动导航或改变页面状态生命周期。
+- 指示器使用 `dockTravel` / `dockGlide`，页面保留 `rootSwitch` / `emphasized`；形变包络由 `AppMotion.dockLensDeformation` 提供，移动时横向拉伸、纵向轻压，结束恢复精确静态尺寸。
+- 快速反向切换同时继承当前位置与形变；横向拖动指示器时跟手，松手归位并切换一次，取消不导航。按压当前项轻微压扁，取消后复原。不改变页面状态生命周期；可选 FAB 增删不能重建 Dock 状态。
 - 减少动画：立即定位、无形变、关闭模糊；高对比度：关闭模糊，使用不透明中性表面。文字对比度覆盖黑/白背景和深浅主题。
 - 此处是 Flutter 自绘玻璃观感，不宣称调用了 iOS 系统 Liquid Glass 或实现物理折射；真机流畅度需单独验证。
+
+### 5.2 滚动收放（2026-10-23 修订）
+
+同一次手指拖动累计 72dp 才隐藏，反向累计 36dp 显示；距顶部 64dp 内保持显示。每次开始/结束拖动清空累计量，不跨手势累加，惯性与程序滚动不改变隐藏意图。搜索、选择和打开筛选面板仍强制显示。顶栏与 Dock 同用 `scrollChrome` / `scrollChromeGlide`，减少动画时立即定位。
 
 ## 6. 按压与触感（★★★ MiHaptic 映射，★ 落地）
 

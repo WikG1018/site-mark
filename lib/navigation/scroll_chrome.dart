@@ -8,14 +8,16 @@ import 'package:sitemark/motion.dart';
 class ScrollChromePolicy {
   /// Accumulated downward scroll before chrome hides.
   ///
-  /// 8 px reacted to light accidental swipes and read as jitter; 16 px keeps
-  /// the bar put on a brief flick while still hiding on an intentional scroll.
-  static const double hideThreshold = 16;
-  static const double showThreshold = 16;
-  static const double topRevealExtent = 24;
+  /// Hiding requires a deliberate drag; revealing takes less effort. Travel
+  /// is per gesture, not accumulated from unrelated reading adjustments.
+  static const double hideThreshold = 72;
+  static const double showThreshold = 36;
+  static const double topRevealExtent = 64;
 
   bool visible = true;
   double _accumulated = 0;
+
+  void resetTravel() => _accumulated = 0;
 
   /// Returns whether [visible] changed.
   bool apply({
@@ -72,6 +74,7 @@ class ScrollChromeController extends ChangeNotifier {
   bool _alive = true;
 
   bool get visible => _forceReasons.isNotEmpty || _policy.visible;
+  bool get forced => _forceReasons.isNotEmpty;
 
   void setForce(Object reason, bool active) {
     final changed = active
@@ -97,10 +100,24 @@ class ScrollChromeController extends ChangeNotifier {
   }
 
   bool handleNotification(ScrollNotification notification) {
+    if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+    if (notification is ScrollStartNotification ||
+        notification is ScrollEndNotification) {
+      _policy.resetTravel();
+      return false;
+    }
     if (notification is! ScrollUpdateNotification) {
       return false;
     }
-    if (notification.metrics.axis != Axis.vertical) {
+    if (notification.metrics.pixels <= ScrollChromePolicy.topRevealExtent) {
+      handleScroll(delta: 0, offset: notification.metrics.pixels);
+      return false;
+    }
+    // Inertia, jumpTo and restoration are not new user intent. They must
+    // never hide/show bars after the finger has already stopped moving.
+    if (notification.dragDetails == null) {
       return false;
     }
     final delta = notification.scrollDelta;

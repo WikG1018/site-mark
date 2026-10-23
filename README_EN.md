@@ -67,6 +67,12 @@ Two things remain, both blocked on external inputs: signing and TestFlight distr
 
 ## Recent updates
 
+### Current source improvements (unreleased; stable remains v1.0.33)
+
+- Preserve the Dock state across root tabs so the colorless lens glides instead of jumping. Drag the indicator horizontally and release to select; cancellation never navigates.
+- Top and bottom chrome respond to deliberate finger travel, not tiny adjustments or momentum, with calmer 360ms transitions.
+- Android checks public releases on opening/resuming, at most once every 24 hours. A dismissible reminder leads directly to the existing download panel. Disable automatic checks in Settings → About; downloads and installation always require your action.
+
 ### v1.0.33: watermark time, gallery import and a colorless glass dock
 
 - Capture and edit forms support a separate watermark display time with an automatic-time reset. Original bytes, original capture information, numbering and filenames do not change. A manual time applies only to the current capture/import.
@@ -139,7 +145,7 @@ I built SiteMark because recording on a jobsite takes more than stamping text on
 
 I deliberately did not re-implement a camera or embed a third-party camera SDK — manufacturers have spent years tuning their own lenses, and an app-level rework only makes things worse. SiteMark invokes the system/vendor camera through standard platform APIs, leaving focus, HDR, stabilization, and image quality to the system, and does three things itself: engineering fields before the shot, local watermarking after it, and record/project management.
 
-The published APK has no ads, accounts, third-party cloud sync, or analytics uploads; repository links open in the external browser. Network is used for NAS sync and for Check for updates after you tap it on the About page (D-023 and D-025 in `docs/decision-records.md`): NAS uploads go exclusively to the server you enter and stay off by default; Check for updates reads the public GitHub release version only after a tap, and in Automatic mode tries a fixed public mirror only if GitHub cannot be reached. Offline remains the default state — the network is an exception the user explicitly opens.
+The app has no ads, accounts, third-party cloud sync or analytics uploads; repository links open externally. Network use is limited to opt-in NAS sync, public release checks and user-requested update downloads. Current source adds Android foreground automatic checks (D-028, unreleased), at most once every 24 hours, with an About-page opt-out; stable v1.0.33 still checks manually. Automatic source selection tries GitHub first, then a fixed public mirror on failure. No photos or project data are uploaded. Photography, projects and watermark processing work offline.
 
 Since v1.0.32, user-initiated public APK downloads are supported (D-026). Project data is not uploaded; installation needs Android source permission and final confirmation. Existing installations need one manual in-place upgrade to gain this feature. See the [validation report and remaining limits (Chinese)](docs/verification-2026-10-21-android-update-ui.md).
 

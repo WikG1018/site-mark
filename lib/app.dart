@@ -8,6 +8,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:sitemark/background/capture_background_scheduler.dart';
 import 'package:sitemark/background/nas_background_scheduler.dart';
 import 'package:sitemark/data/app_database.dart';
@@ -44,6 +45,7 @@ import 'package:sitemark/platform/capture_form_draft_store.dart';
 import 'package:sitemark/platform/external_link_service.dart';
 import 'package:sitemark/platform/github_release_client.dart';
 import 'package:sitemark/platform/release_check_mode_store.dart';
+import 'package:sitemark/platform/automatic_update_controller.dart';
 import 'package:sitemark/platform/memory_pressure_coordinator.dart';
 import 'package:sitemark/platform/memory_pressure_service.dart';
 import 'package:sitemark/platform/notification_service.dart';
@@ -329,6 +331,19 @@ final releaseLookupProvider = Provider<ReleaseLookup>(
 final releaseCheckModeStoreProvider = Provider<ReleaseCheckModeStore>(
   (ref) => FileReleaseCheckModeStore(),
 );
+
+final automaticUpdateControllerProvider = Provider<AutomaticUpdateController>((
+  ref,
+) {
+  final controller = AutomaticUpdateController(
+    store: FileAutomaticUpdateStore(),
+    lookup: ref.watch(releaseLookupProvider),
+    modes: ref.watch(releaseCheckModeStoreProvider),
+    version: () async => (await PackageInfo.fromPlatform()).version,
+  );
+  ref.onDispose(controller.dispose);
+  return controller;
+});
 
 final backgroundWorkClientProvider = Provider<BackgroundWorkClient>((ref) {
   return WorkmanagerBackgroundWorkClient();

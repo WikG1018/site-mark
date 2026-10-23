@@ -449,7 +449,9 @@ void main() {
         router.go('/settings');
         await tester.pumpAndSettle();
         final entry = find.byKey(key);
-        await tester.ensureVisible(entry);
+        // Programmatic scrolling now preserves overlay chrome; align inside
+        // the usable viewport instead of placing the row beneath the AppBar.
+        await Scrollable.ensureVisible(tester.element(entry), alignment: .5);
         await tester.pumpAndSettle();
         await tester.tap(entry);
         expect(router.routeInformationProvider.value.uri.path, route);
